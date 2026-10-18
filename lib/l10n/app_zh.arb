@@ -1656,6 +1656,360 @@
   "@remoteFilesPlaceAppFolder": {
     "description": "File browser: an iPhone's or iPad's root, the app's own Documents folder (Files › On My iPhone › Whisper)."
   },
+  "shareLinkMenuCreate": "创建共享链接…",
+  "@shareLinkMenuCreate": {
+    "description": "File manager menu item / toolbar tooltip that opens the share-link sheet for the selected local items"
+  },
+  "shareLinkCreateTitle": "创建共享链接",
+  "@shareLinkCreateTitle": {
+    "description": "Title of the sheet that creates a LAN download link"
+  },
+  "shareLinkCreateDetail": "同一局域网里的设备用浏览器打开链接就能下载，不用装 Whisper。",
+  "@shareLinkCreateDetail": {
+    "description": "Explains what a share link does, under the sheet title"
+  },
+  "shareLinkDefaultName": "{count, plural, other{{count} 个项目}}",
+  "@shareLinkDefaultName": {
+    "description": "Name of a share link made of several files and folders (shown on the web page and used for the zip)",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shareLinkRoute": "路由",
+  "@shareLinkRoute": {
+    "description": "Label of the field for the path part of the link, e.g. the 'k7qm' in http://host:port/k7qm"
+  },
+  "shareLinkRouteHelp": "不填就用上面这个随机路由",
+  "@shareLinkRouteHelp": {
+    "description": "Helper text under the route field; the placeholder shows a generated route"
+  },
+  "shareLinkShortRoute": "简短路由",
+  "@shareLinkShortRoute": {
+    "description": "Switch that makes the generated route 4 characters long"
+  },
+  "shareLinkShortRouteDetail": "4 个字符，方便口头告诉别人",
+  "@shareLinkShortRouteDetail": {
+    "description": "Subtitle of the short-route switch"
+  },
+  "shareLinkPassword": "密码",
+  "@shareLinkPassword": {
+    "description": "Label of the optional password field; also the placeholder of the password box on the web page"
+  },
+  "shareLinkPasswordOptional": "可不填",
+  "@shareLinkPasswordOptional": {
+    "description": "Placeholder of the optional password field"
+  },
+  "shareLinkShowPassword": "显示密码",
+  "@shareLinkShowPassword": {
+    "description": "Tooltip of the eye button in the password field"
+  },
+  "shareLinkHidePassword": "隐藏密码",
+  "@shareLinkHidePassword": {
+    "description": "Tooltip of the eye button in the password field while the password is visible"
+  },
+  "shareLinkCreate": "创建链接",
+  "@shareLinkCreate": {
+    "description": "Primary button of the share-link sheet"
+  },
+  "shareLinkRouteTaken": "已经有链接在用这个路由了",
+  "@shareLinkRouteTaken": {
+    "description": "Error under the route field"
+  },
+  "shareLinkRouteInvalid": "路由要 2–32 个字符，只能用小写字母、数字、- 和 _",
+  "@shareLinkRouteInvalid": {
+    "description": "Error under the route field"
+  },
+  "shareLinkRouteReserved": "这个路由留作他用了，换一个吧",
+  "@shareLinkRouteReserved": {
+    "description": "Error under the route field when the user typed a reserved word such as zip"
+  },
+  "shareLinkItemsMissing": "要共享的文件已经不在了",
+  "@shareLinkItemsMissing": {
+    "description": "Error when the selected files were moved or deleted before the link was created"
+  },
+  "shareLinkCreateFailed": "没能创建链接",
+  "@shareLinkCreateFailed": {
+    "description": "Generic error when creating a share link fails"
+  },
+  "shareLinkReady": "链接已创建",
+  "@shareLinkReady": {
+    "description": "Title of the sheet after the link was created"
+  },
+  "shareLinkCopy": "复制链接",
+  "@shareLinkCopy": {
+    "description": "Button / tooltip that copies the link address"
+  },
+  "shareLinkCopied": "已复制",
+  "@shareLinkCopied": {
+    "description": "The copy button's label for a moment after copying"
+  },
+  "shareLinkScanHint": "也可以用手机相机扫一扫",
+  "@shareLinkScanHint": {
+    "description": "Caption under the QR code"
+  },
+  "shareLinkAddressPicker": "选择网络地址",
+  "@shareLinkAddressPicker": {
+    "description": "Tooltip of the menu that switches between this device's LAN addresses when it has several"
+  },
+  "shareLinkServiceOffNote": "服务已关闭，打开后链接才能访问",
+  "@shareLinkServiceOffNote": {
+    "description": "Note in the result sheet when the file server switch is off"
+  },
+  "shareLinkNoNetwork": "没有连上局域网，其他设备暂时打不开",
+  "@shareLinkNoNetwork": {
+    "description": "Shown instead of an address when this device has no LAN address"
+  },
+  "shareLinkPasswordProtected": "有密码",
+  "@shareLinkPasswordProtected": {
+    "description": "Badge / tooltip for a link that needs a password"
+  },
+  "shareLinksTitle": "共享链接",
+  "@shareLinksTitle": {
+    "description": "Sidebar row and title of the page that manages share links"
+  },
+  "shareLinksActiveCount": "{count, plural, other{{count} 个链接开着}}",
+  "@shareLinksActiveCount": {
+    "description": "Subtitle of the share links row on phones",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shareLinksService": "文件服务",
+  "@shareLinksService": {
+    "description": "Name of the switch that turns the HTTP file server for share links on or off"
+  },
+  "shareLinksServiceRunning": "正在运行，端口 {port}",
+  "@shareLinksServiceRunning": {
+    "description": "File server status",
+    "placeholders": {
+      "port": {
+        "type": "String"
+      }
+    }
+  },
+  "shareLinksServiceIdle": "没有开着的链接，端口已关闭",
+  "@shareLinksServiceIdle": {
+    "description": "File server status when it is switched on but no link is enabled"
+  },
+  "shareLinksServiceOff": "已关闭。链接都还在，只是暂时打不开。",
+  "@shareLinksServiceOff": {
+    "description": "File server status when switched off"
+  },
+  "shareLinksServiceStarting": "正在启动…",
+  "@shareLinksServiceStarting": {
+    "description": "File server status"
+  },
+  "shareLinksServicePortsBusy": "端口 {from}–{to} 都被占用了",
+  "@shareLinksServicePortsBusy": {
+    "description": "File server status when no port could be opened",
+    "placeholders": {
+      "from": {
+        "type": "String"
+      },
+      "to": {
+        "type": "String"
+      }
+    }
+  },
+  "shareLinksServiceFailed": "启动失败",
+  "@shareLinksServiceFailed": {
+    "description": "File server status when it failed to start for another reason"
+  },
+  "shareLinkStatusOn": "已开启",
+  "@shareLinkStatusOn": {
+    "description": "Status of a share link"
+  },
+  "shareLinkStatusOff": "已关闭",
+  "@shareLinkStatusOff": {
+    "description": "Status of a share link"
+  },
+  "shareLinkStatusMissing": "文件不见了",
+  "@shareLinkStatusMissing": {
+    "description": "Status of a share link whose files were all moved or deleted"
+  },
+  "shareLinkStatusPartlyMissing": "部分文件不见了",
+  "@shareLinkStatusPartlyMissing": {
+    "description": "Status of a share link when some of its files were moved or deleted"
+  },
+  "shareLinkVisits": "{count, plural, other{{count} 次访问}}",
+  "@shareLinkVisits": {
+    "description": "How many times the link's pages were opened",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shareLinkDownloads": "{count, plural, other{{count} 次下载}}",
+  "@shareLinkDownloads": {
+    "description": "How many downloads were started from the link",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shareLinkLastVisit": "最近访问 {time}",
+  "@shareLinkLastVisit": {
+    "description": "When the link was last opened; time is like 今天 10:24",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "shareLinkNeverVisited": "还没人打开过",
+  "@shareLinkNeverVisited": {
+    "description": "Shown instead of the last visit time"
+  },
+  "shareLinkBytesServed": "已发送 {size}",
+  "@shareLinkBytesServed": {
+    "description": "How much data the link has served, e.g. 1.2 GB",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "shareLinkQr": "二维码",
+  "@shareLinkQr": {
+    "description": "Button / tooltip that shows the link's QR code"
+  },
+  "shareLinkTurnOn": "开启链接",
+  "@shareLinkTurnOn": {
+    "description": "Tooltip / semantics of a link's switch"
+  },
+  "shareLinkTurnOff": "关闭链接",
+  "@shareLinkTurnOff": {
+    "description": "Tooltip / semantics of a link's switch"
+  },
+  "shareLinkDelete": "删除链接",
+  "@shareLinkDelete": {
+    "description": "Tooltip of a link's delete button"
+  },
+  "shareLinkDeleteTitle": "删除这个共享链接？",
+  "@shareLinkDeleteTitle": {
+    "description": "Delete confirmation title"
+  },
+  "shareLinkDeleteDetail": "这个地址会马上失效，本机上的文件不受影响。",
+  "@shareLinkDeleteDetail": {
+    "description": "Delete confirmation body"
+  },
+  "shareLinksEmpty": "还没有共享链接",
+  "@shareLinksEmpty": {
+    "description": "Empty state title"
+  },
+  "shareLinksEmptyDetailDesktop": "在本机的文件或文件夹上右键，选“创建共享链接…”。也可以先选好多个再右键。",
+  "@shareLinksEmptyDetailDesktop": {
+    "description": "Empty state detail on desktop"
+  },
+  "shareLinksEmptyDetailPhone": "在本机的文件或文件夹上长按，选“创建共享链接…”。也可以多选后从底部选。",
+  "@shareLinksEmptyDetailPhone": {
+    "description": "Empty state detail on phones"
+  },
+  "shareWebDownload": "下载",
+  "@shareWebDownload": {
+    "description": "Web page: main button of a shared file"
+  },
+  "shareWebOpen": "在浏览器中打开",
+  "@shareWebOpen": {
+    "description": "Web page: opens a previewable file (picture, movie, PDF…) in the browser"
+  },
+  "shareWebDownloadAll": "全部下载（.zip）",
+  "@shareWebDownloadAll": {
+    "description": "Web page: downloads everything shown as one zip"
+  },
+  "shareWebDownloadZip": "下载为 .zip",
+  "@shareWebDownloadZip": {
+    "description": "Web page: label of a folder row's download button"
+  },
+  "shareWebItemCount": "{count, plural, other{{count} 项}}",
+  "@shareWebItemCount": {
+    "description": "Web page: how many items a folder holds",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shareWebEmptyFolder": "这个文件夹是空的",
+  "@shareWebEmptyFolder": {
+    "description": "Web page"
+  },
+  "shareWebModified": "修改于 {date}",
+  "@shareWebModified": {
+    "description": "Web page: when a shared file was last changed",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "shareWebFooter": "来自 {device} · 用 Whisper 共享",
+  "@shareWebFooter": {
+    "description": "Web page footer",
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "shareWebNotFoundTitle": "这个链接打不开",
+  "@shareWebNotFoundTitle": {
+    "description": "Web page for an unknown or switched-off link"
+  },
+  "shareWebNotFoundDetail": "链接可能已经关闭，或者地址输错了。请找分享的人确认一下。",
+  "@shareWebNotFoundDetail": {
+    "description": "Web page for an unknown or switched-off link"
+  },
+  "shareWebMissingTitle": "文件不见了",
+  "@shareWebMissingTitle": {
+    "description": "Web page when a shared file was moved or deleted"
+  },
+  "shareWebMissingDetail": "它可能被移动、改名或删除了。",
+  "@shareWebMissingDetail": {
+    "description": "Web page when a shared file was moved or deleted"
+  },
+  "shareWebBack": "回到共享内容",
+  "@shareWebBack": {
+    "description": "Web page: link from an error page to the link's first page"
+  },
+  "shareWebPasswordTitle": "需要密码",
+  "@shareWebPasswordTitle": {
+    "description": "Web page title for a password-protected link"
+  },
+  "shareWebPasswordDetail": "这个共享链接设置了密码。",
+  "@shareWebPasswordDetail": {
+    "description": "Web page for a password-protected link"
+  },
+  "shareWebContinue": "继续",
+  "@shareWebContinue": {
+    "description": "Web page: submit button of the password form"
+  },
+  "shareWebPasswordWrong": "密码不对，再试一次",
+  "@shareWebPasswordWrong": {
+    "description": "Web page: error after a wrong password"
+  },
+  "shareWebTooManyTitle": "尝试次数太多",
+  "@shareWebTooManyTitle": {
+    "description": "Web page when a client is rate-limited"
+  },
+  "shareWebTooManyDetail": "请等 1 分钟再试。",
+  "@shareWebTooManyDetail": {
+    "description": "Web page when a client is rate-limited"
+  },
+  "shareWebErrorTitle": "出了点问题",
+  "@shareWebErrorTitle": {
+    "description": "Web page for an unexpected server error"
+  },
+  "shareWebErrorDetail": "请稍后再试。",
+  "@shareWebErrorDetail": {
+    "description": "Web page for an unexpected server error"
+  },
   "windowStreamDecoderMissing": "无法显示画面：这台电脑缺少 FFmpeg 视频解码库",
   "@windowStreamDecoderMissing": {
     "description": "Overlay message for a streamed window on Linux when no H.264 decoder can be loaded (native WSN_WINDOW_DECODE_ERROR with a = 1). Dart should set it with wsn_surface_set_visual(WSN_VISUAL_ERROR, message)."
@@ -1684,6 +2038,10 @@
         "type": "String"
       }
     }
+  },
+  "shareLinkBarAction": "共享链接",
+  "@shareLinkBarAction": {
+    "description": "Short label of the share-link button in the phone file manager's selection bar"
   },
   "windowStreamSourceErrorDesktopUnsupported": "这台电脑不支持窗口流转",
   "@windowStreamSourceErrorDesktopUnsupported": {
@@ -1822,6 +2180,68 @@
   "windowStreamClosing": "正在关闭",
   "@windowStreamClosing": {
     "description": "Accessibility label of a recents card whose window is being closed."
+  },
+  "shareWebFrom": "来自 {device}",
+  "@shareWebFrom": {
+    "description": "Web page header: which device shares the files",
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "shareWebFooterLan": "文件直接从这台设备经局域网传来，不经过云端。",
+  "@shareWebFooterLan": {
+    "description": "Web page footer explaining where the files come from"
+  },
+  "shareWebPreviewTruncated": "只显示了前 {size}，下载后可查看全部内容。",
+  "@shareWebPreviewTruncated": {
+    "description": "Under a text preview that was cut short; size is like 32 KB",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "shareWebPrevious": "上一个",
+  "@shareWebPrevious": {
+    "description": "Web page: link to the previous file in the folder"
+  },
+  "shareWebNext": "下一个",
+  "@shareWebNext": {
+    "description": "Web page: link to the next file in the folder"
+  },
+  "shareLinkAllowAccess": "允许访问",
+  "@shareLinkAllowAccess": {
+    "description": "Switch row in a share link's details: whether the link can be opened"
+  },
+  "shareLinkAddress": "地址",
+  "@shareLinkAddress": {
+    "description": "Row label for this device's network address in the share link details"
+  },
+  "shareLinksServiceFooter": "同一局域网里的设备用浏览器打开链接就能下载。服务只在有开着的链接时运行。",
+  "@shareLinksServiceFooter": {
+    "description": "Footer under the file server switch on the share links page"
+  },
+  "shareLinkVisitsLabel": "访问次数",
+  "@shareLinkVisitsLabel": {
+    "description": "Row label in share link details"
+  },
+  "shareLinkDownloadsLabel": "下载次数",
+  "@shareLinkDownloadsLabel": {
+    "description": "Row label in share link details"
+  },
+  "shareLinkLastVisitLabel": "最近访问",
+  "@shareLinkLastVisitLabel": {
+    "description": "Row label in share link details"
+  },
+  "shareLinkSentLabel": "已发送",
+  "@shareLinkSentLabel": {
+    "description": "Row label in share link details: how much data the link served"
+  },
+  "shareLinkNever": "从未",
+  "@shareLinkNever": {
+    "description": "Value of the last-visit row when nobody opened the link yet"
   },
   "androidWindowServiceTitle": "窗口流转服务",
   "@androidWindowServiceTitle": {

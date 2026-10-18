@@ -6,6 +6,7 @@ import 'package:whisper/audio/audio_media_session.dart';
 import 'package:whisper/audio/audio_platform.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:sodium/sodium.dart';
+import 'package:whisper/share_links/share_link_store.dart';
 import 'package:whisper/helper/connection_request_notifications.dart';
 import 'package:whisper/helper/desktop_screenshot.dart';
 import 'package:whisper/helper/folder_transfer_stager.dart';
@@ -159,6 +160,10 @@ Future<void> main(List<String> arguments) async {
     // Streamed windows' sound is decoded in the stream isolate, which opens
     // the copy of libopus this unpacks.
     unawaited(OpusAudioCodec.warmUp().catchError((Object _) {}));
+  }
+  // Share links outlive restarts: the file server comes back with them.
+  if (shareLinksSupported()) {
+    unawaited(ShareLinkStore.shared.initialize());
   }
   if (Platform.isLinux) {
     // Keeps the GNOME helper's allowed-exe pointing at this executable (an

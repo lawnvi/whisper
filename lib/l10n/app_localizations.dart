@@ -4738,6 +4738,450 @@ abstract class AppLocalizations {
   /// **'Whisper 文件夹'**
   String get remoteFilesPlaceAppFolder;
 
+  /// File manager menu item / toolbar tooltip that opens the share-link sheet for the selected local items
+  ///
+  /// In zh, this message translates to:
+  /// **'创建共享链接…'**
+  String get shareLinkMenuCreate;
+
+  /// Title of the sheet that creates a LAN download link
+  ///
+  /// In zh, this message translates to:
+  /// **'创建共享链接'**
+  String get shareLinkCreateTitle;
+
+  /// Explains what a share link does, under the sheet title
+  ///
+  /// In zh, this message translates to:
+  /// **'同一局域网里的设备用浏览器打开链接就能下载，不用装 Whisper。'**
+  String get shareLinkCreateDetail;
+
+  /// Name of a share link made of several files and folders (shown on the web page and used for the zip)
+  ///
+  /// In zh, this message translates to:
+  /// **'{count, plural, other{{count} 个项目}}'**
+  String shareLinkDefaultName(int count);
+
+  /// Label of the field for the path part of the link, e.g. the 'k7qm' in http://host:port/k7qm
+  ///
+  /// In zh, this message translates to:
+  /// **'路由'**
+  String get shareLinkRoute;
+
+  /// Helper text under the route field; the placeholder shows a generated route
+  ///
+  /// In zh, this message translates to:
+  /// **'不填就用上面这个随机路由'**
+  String get shareLinkRouteHelp;
+
+  /// Switch that makes the generated route 4 characters long
+  ///
+  /// In zh, this message translates to:
+  /// **'简短路由'**
+  String get shareLinkShortRoute;
+
+  /// Subtitle of the short-route switch
+  ///
+  /// In zh, this message translates to:
+  /// **'4 个字符，方便口头告诉别人'**
+  String get shareLinkShortRouteDetail;
+
+  /// Label of the optional password field; also the placeholder of the password box on the web page
+  ///
+  /// In zh, this message translates to:
+  /// **'密码'**
+  String get shareLinkPassword;
+
+  /// Placeholder of the optional password field
+  ///
+  /// In zh, this message translates to:
+  /// **'可不填'**
+  String get shareLinkPasswordOptional;
+
+  /// Tooltip of the eye button in the password field
+  ///
+  /// In zh, this message translates to:
+  /// **'显示密码'**
+  String get shareLinkShowPassword;
+
+  /// Tooltip of the eye button in the password field while the password is visible
+  ///
+  /// In zh, this message translates to:
+  /// **'隐藏密码'**
+  String get shareLinkHidePassword;
+
+  /// Primary button of the share-link sheet
+  ///
+  /// In zh, this message translates to:
+  /// **'创建链接'**
+  String get shareLinkCreate;
+
+  /// Error under the route field
+  ///
+  /// In zh, this message translates to:
+  /// **'已经有链接在用这个路由了'**
+  String get shareLinkRouteTaken;
+
+  /// Error under the route field
+  ///
+  /// In zh, this message translates to:
+  /// **'路由要 2–32 个字符，只能用小写字母、数字、- 和 _'**
+  String get shareLinkRouteInvalid;
+
+  /// Error under the route field when the user typed a reserved word such as zip
+  ///
+  /// In zh, this message translates to:
+  /// **'这个路由留作他用了，换一个吧'**
+  String get shareLinkRouteReserved;
+
+  /// Error when the selected files were moved or deleted before the link was created
+  ///
+  /// In zh, this message translates to:
+  /// **'要共享的文件已经不在了'**
+  String get shareLinkItemsMissing;
+
+  /// Generic error when creating a share link fails
+  ///
+  /// In zh, this message translates to:
+  /// **'没能创建链接'**
+  String get shareLinkCreateFailed;
+
+  /// Title of the sheet after the link was created
+  ///
+  /// In zh, this message translates to:
+  /// **'链接已创建'**
+  String get shareLinkReady;
+
+  /// Button / tooltip that copies the link address
+  ///
+  /// In zh, this message translates to:
+  /// **'复制链接'**
+  String get shareLinkCopy;
+
+  /// The copy button's label for a moment after copying
+  ///
+  /// In zh, this message translates to:
+  /// **'已复制'**
+  String get shareLinkCopied;
+
+  /// Caption under the QR code
+  ///
+  /// In zh, this message translates to:
+  /// **'也可以用手机相机扫一扫'**
+  String get shareLinkScanHint;
+
+  /// Tooltip of the menu that switches between this device's LAN addresses when it has several
+  ///
+  /// In zh, this message translates to:
+  /// **'选择网络地址'**
+  String get shareLinkAddressPicker;
+
+  /// Note in the result sheet when the file server switch is off
+  ///
+  /// In zh, this message translates to:
+  /// **'服务已关闭，打开后链接才能访问'**
+  String get shareLinkServiceOffNote;
+
+  /// Shown instead of an address when this device has no LAN address
+  ///
+  /// In zh, this message translates to:
+  /// **'没有连上局域网，其他设备暂时打不开'**
+  String get shareLinkNoNetwork;
+
+  /// Badge / tooltip for a link that needs a password
+  ///
+  /// In zh, this message translates to:
+  /// **'有密码'**
+  String get shareLinkPasswordProtected;
+
+  /// Sidebar row and title of the page that manages share links
+  ///
+  /// In zh, this message translates to:
+  /// **'共享链接'**
+  String get shareLinksTitle;
+
+  /// Subtitle of the share links row on phones
+  ///
+  /// In zh, this message translates to:
+  /// **'{count, plural, other{{count} 个链接开着}}'**
+  String shareLinksActiveCount(int count);
+
+  /// Name of the switch that turns the HTTP file server for share links on or off
+  ///
+  /// In zh, this message translates to:
+  /// **'文件服务'**
+  String get shareLinksService;
+
+  /// File server status
+  ///
+  /// In zh, this message translates to:
+  /// **'正在运行，端口 {port}'**
+  String shareLinksServiceRunning(String port);
+
+  /// File server status when it is switched on but no link is enabled
+  ///
+  /// In zh, this message translates to:
+  /// **'没有开着的链接，端口已关闭'**
+  String get shareLinksServiceIdle;
+
+  /// File server status when switched off
+  ///
+  /// In zh, this message translates to:
+  /// **'已关闭。链接都还在，只是暂时打不开。'**
+  String get shareLinksServiceOff;
+
+  /// File server status
+  ///
+  /// In zh, this message translates to:
+  /// **'正在启动…'**
+  String get shareLinksServiceStarting;
+
+  /// File server status when no port could be opened
+  ///
+  /// In zh, this message translates to:
+  /// **'端口 {from}–{to} 都被占用了'**
+  String shareLinksServicePortsBusy(String from, String to);
+
+  /// File server status when it failed to start for another reason
+  ///
+  /// In zh, this message translates to:
+  /// **'启动失败'**
+  String get shareLinksServiceFailed;
+
+  /// Status of a share link
+  ///
+  /// In zh, this message translates to:
+  /// **'已开启'**
+  String get shareLinkStatusOn;
+
+  /// Status of a share link
+  ///
+  /// In zh, this message translates to:
+  /// **'已关闭'**
+  String get shareLinkStatusOff;
+
+  /// Status of a share link whose files were all moved or deleted
+  ///
+  /// In zh, this message translates to:
+  /// **'文件不见了'**
+  String get shareLinkStatusMissing;
+
+  /// Status of a share link when some of its files were moved or deleted
+  ///
+  /// In zh, this message translates to:
+  /// **'部分文件不见了'**
+  String get shareLinkStatusPartlyMissing;
+
+  /// How many times the link's pages were opened
+  ///
+  /// In zh, this message translates to:
+  /// **'{count, plural, other{{count} 次访问}}'**
+  String shareLinkVisits(int count);
+
+  /// How many downloads were started from the link
+  ///
+  /// In zh, this message translates to:
+  /// **'{count, plural, other{{count} 次下载}}'**
+  String shareLinkDownloads(int count);
+
+  /// When the link was last opened; time is like 今天 10:24
+  ///
+  /// In zh, this message translates to:
+  /// **'最近访问 {time}'**
+  String shareLinkLastVisit(String time);
+
+  /// Shown instead of the last visit time
+  ///
+  /// In zh, this message translates to:
+  /// **'还没人打开过'**
+  String get shareLinkNeverVisited;
+
+  /// How much data the link has served, e.g. 1.2 GB
+  ///
+  /// In zh, this message translates to:
+  /// **'已发送 {size}'**
+  String shareLinkBytesServed(String size);
+
+  /// Button / tooltip that shows the link's QR code
+  ///
+  /// In zh, this message translates to:
+  /// **'二维码'**
+  String get shareLinkQr;
+
+  /// Tooltip / semantics of a link's switch
+  ///
+  /// In zh, this message translates to:
+  /// **'开启链接'**
+  String get shareLinkTurnOn;
+
+  /// Tooltip / semantics of a link's switch
+  ///
+  /// In zh, this message translates to:
+  /// **'关闭链接'**
+  String get shareLinkTurnOff;
+
+  /// Tooltip of a link's delete button
+  ///
+  /// In zh, this message translates to:
+  /// **'删除链接'**
+  String get shareLinkDelete;
+
+  /// Delete confirmation title
+  ///
+  /// In zh, this message translates to:
+  /// **'删除这个共享链接？'**
+  String get shareLinkDeleteTitle;
+
+  /// Delete confirmation body
+  ///
+  /// In zh, this message translates to:
+  /// **'这个地址会马上失效，本机上的文件不受影响。'**
+  String get shareLinkDeleteDetail;
+
+  /// Empty state title
+  ///
+  /// In zh, this message translates to:
+  /// **'还没有共享链接'**
+  String get shareLinksEmpty;
+
+  /// Empty state detail on desktop
+  ///
+  /// In zh, this message translates to:
+  /// **'在本机的文件或文件夹上右键，选“创建共享链接…”。也可以先选好多个再右键。'**
+  String get shareLinksEmptyDetailDesktop;
+
+  /// Empty state detail on phones
+  ///
+  /// In zh, this message translates to:
+  /// **'在本机的文件或文件夹上长按，选“创建共享链接…”。也可以多选后从底部选。'**
+  String get shareLinksEmptyDetailPhone;
+
+  /// Web page: main button of a shared file
+  ///
+  /// In zh, this message translates to:
+  /// **'下载'**
+  String get shareWebDownload;
+
+  /// Web page: opens a previewable file (picture, movie, PDF…) in the browser
+  ///
+  /// In zh, this message translates to:
+  /// **'在浏览器中打开'**
+  String get shareWebOpen;
+
+  /// Web page: downloads everything shown as one zip
+  ///
+  /// In zh, this message translates to:
+  /// **'全部下载（.zip）'**
+  String get shareWebDownloadAll;
+
+  /// Web page: label of a folder row's download button
+  ///
+  /// In zh, this message translates to:
+  /// **'下载为 .zip'**
+  String get shareWebDownloadZip;
+
+  /// Web page: how many items a folder holds
+  ///
+  /// In zh, this message translates to:
+  /// **'{count, plural, other{{count} 项}}'**
+  String shareWebItemCount(int count);
+
+  /// Web page
+  ///
+  /// In zh, this message translates to:
+  /// **'这个文件夹是空的'**
+  String get shareWebEmptyFolder;
+
+  /// Web page: when a shared file was last changed
+  ///
+  /// In zh, this message translates to:
+  /// **'修改于 {date}'**
+  String shareWebModified(String date);
+
+  /// Web page footer
+  ///
+  /// In zh, this message translates to:
+  /// **'来自 {device} · 用 Whisper 共享'**
+  String shareWebFooter(String device);
+
+  /// Web page for an unknown or switched-off link
+  ///
+  /// In zh, this message translates to:
+  /// **'这个链接打不开'**
+  String get shareWebNotFoundTitle;
+
+  /// Web page for an unknown or switched-off link
+  ///
+  /// In zh, this message translates to:
+  /// **'链接可能已经关闭，或者地址输错了。请找分享的人确认一下。'**
+  String get shareWebNotFoundDetail;
+
+  /// Web page when a shared file was moved or deleted
+  ///
+  /// In zh, this message translates to:
+  /// **'文件不见了'**
+  String get shareWebMissingTitle;
+
+  /// Web page when a shared file was moved or deleted
+  ///
+  /// In zh, this message translates to:
+  /// **'它可能被移动、改名或删除了。'**
+  String get shareWebMissingDetail;
+
+  /// Web page: link from an error page to the link's first page
+  ///
+  /// In zh, this message translates to:
+  /// **'回到共享内容'**
+  String get shareWebBack;
+
+  /// Web page title for a password-protected link
+  ///
+  /// In zh, this message translates to:
+  /// **'需要密码'**
+  String get shareWebPasswordTitle;
+
+  /// Web page for a password-protected link
+  ///
+  /// In zh, this message translates to:
+  /// **'这个共享链接设置了密码。'**
+  String get shareWebPasswordDetail;
+
+  /// Web page: submit button of the password form
+  ///
+  /// In zh, this message translates to:
+  /// **'继续'**
+  String get shareWebContinue;
+
+  /// Web page: error after a wrong password
+  ///
+  /// In zh, this message translates to:
+  /// **'密码不对，再试一次'**
+  String get shareWebPasswordWrong;
+
+  /// Web page when a client is rate-limited
+  ///
+  /// In zh, this message translates to:
+  /// **'尝试次数太多'**
+  String get shareWebTooManyTitle;
+
+  /// Web page when a client is rate-limited
+  ///
+  /// In zh, this message translates to:
+  /// **'请等 1 分钟再试。'**
+  String get shareWebTooManyDetail;
+
+  /// Web page for an unexpected server error
+  ///
+  /// In zh, this message translates to:
+  /// **'出了点问题'**
+  String get shareWebErrorTitle;
+
+  /// Web page for an unexpected server error
+  ///
+  /// In zh, this message translates to:
+  /// **'请稍后再试。'**
+  String get shareWebErrorDetail;
+
   /// Overlay message for a streamed window on Linux when no H.264 decoder can be loaded (native WSN_WINDOW_DECODE_ERROR with a = 1). Dart should set it with wsn_surface_set_visual(WSN_VISUAL_ERROR, message).
   ///
   /// In zh, this message translates to:
@@ -4773,6 +5217,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'正在 {device} 上显示'**
   String flowTaskOpenOn(String device);
+
+  /// Short label of the share-link button in the phone file manager's selection bar
+  ///
+  /// In zh, this message translates to:
+  /// **'共享链接'**
+  String get shareLinkBarAction;
 
   /// Window-stream source failure shown to the viewer: the host desktop cannot capture windows at all (reason code = WSN_CAPTURE_ERROR_UNSUPPORTED from the Windows source; Windows is supported, so this is only for very old builds or missing Graphics.Capture).
   ///
@@ -4965,6 +5415,84 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'正在关闭'**
   String get windowStreamClosing;
+
+  /// Web page header: which device shares the files
+  ///
+  /// In zh, this message translates to:
+  /// **'来自 {device}'**
+  String shareWebFrom(String device);
+
+  /// Web page footer explaining where the files come from
+  ///
+  /// In zh, this message translates to:
+  /// **'文件直接从这台设备经局域网传来，不经过云端。'**
+  String get shareWebFooterLan;
+
+  /// Under a text preview that was cut short; size is like 32 KB
+  ///
+  /// In zh, this message translates to:
+  /// **'只显示了前 {size}，下载后可查看全部内容。'**
+  String shareWebPreviewTruncated(String size);
+
+  /// Web page: link to the previous file in the folder
+  ///
+  /// In zh, this message translates to:
+  /// **'上一个'**
+  String get shareWebPrevious;
+
+  /// Web page: link to the next file in the folder
+  ///
+  /// In zh, this message translates to:
+  /// **'下一个'**
+  String get shareWebNext;
+
+  /// Switch row in a share link's details: whether the link can be opened
+  ///
+  /// In zh, this message translates to:
+  /// **'允许访问'**
+  String get shareLinkAllowAccess;
+
+  /// Row label for this device's network address in the share link details
+  ///
+  /// In zh, this message translates to:
+  /// **'地址'**
+  String get shareLinkAddress;
+
+  /// Footer under the file server switch on the share links page
+  ///
+  /// In zh, this message translates to:
+  /// **'同一局域网里的设备用浏览器打开链接就能下载。服务只在有开着的链接时运行。'**
+  String get shareLinksServiceFooter;
+
+  /// Row label in share link details
+  ///
+  /// In zh, this message translates to:
+  /// **'访问次数'**
+  String get shareLinkVisitsLabel;
+
+  /// Row label in share link details
+  ///
+  /// In zh, this message translates to:
+  /// **'下载次数'**
+  String get shareLinkDownloadsLabel;
+
+  /// Row label in share link details
+  ///
+  /// In zh, this message translates to:
+  /// **'最近访问'**
+  String get shareLinkLastVisitLabel;
+
+  /// Row label in share link details: how much data the link served
+  ///
+  /// In zh, this message translates to:
+  /// **'已发送'**
+  String get shareLinkSentLabel;
+
+  /// Value of the last-visit row when nobody opened the link yet
+  ///
+  /// In zh, this message translates to:
+  /// **'从未'**
+  String get shareLinkNever;
 
   /// Android page title: the on-phone service that lets other devices view and control this phone's apps.
   ///

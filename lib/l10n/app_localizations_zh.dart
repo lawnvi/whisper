@@ -2649,6 +2649,277 @@ class AppLocalizationsZh extends AppLocalizations {
   String get remoteFilesPlaceAppFolder => 'Whisper 文件夹';
 
   @override
+  String get shareLinkMenuCreate => '创建共享链接…';
+
+  @override
+  String get shareLinkCreateTitle => '创建共享链接';
+
+  @override
+  String get shareLinkCreateDetail => '同一局域网里的设备用浏览器打开链接就能下载，不用装 Whisper。';
+
+  @override
+  String shareLinkDefaultName(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个项目',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get shareLinkRoute => '路由';
+
+  @override
+  String get shareLinkRouteHelp => '不填就用上面这个随机路由';
+
+  @override
+  String get shareLinkShortRoute => '简短路由';
+
+  @override
+  String get shareLinkShortRouteDetail => '4 个字符，方便口头告诉别人';
+
+  @override
+  String get shareLinkPassword => '密码';
+
+  @override
+  String get shareLinkPasswordOptional => '可不填';
+
+  @override
+  String get shareLinkShowPassword => '显示密码';
+
+  @override
+  String get shareLinkHidePassword => '隐藏密码';
+
+  @override
+  String get shareLinkCreate => '创建链接';
+
+  @override
+  String get shareLinkRouteTaken => '已经有链接在用这个路由了';
+
+  @override
+  String get shareLinkRouteInvalid => '路由要 2–32 个字符，只能用小写字母、数字、- 和 _';
+
+  @override
+  String get shareLinkRouteReserved => '这个路由留作他用了，换一个吧';
+
+  @override
+  String get shareLinkItemsMissing => '要共享的文件已经不在了';
+
+  @override
+  String get shareLinkCreateFailed => '没能创建链接';
+
+  @override
+  String get shareLinkReady => '链接已创建';
+
+  @override
+  String get shareLinkCopy => '复制链接';
+
+  @override
+  String get shareLinkCopied => '已复制';
+
+  @override
+  String get shareLinkScanHint => '也可以用手机相机扫一扫';
+
+  @override
+  String get shareLinkAddressPicker => '选择网络地址';
+
+  @override
+  String get shareLinkServiceOffNote => '服务已关闭，打开后链接才能访问';
+
+  @override
+  String get shareLinkNoNetwork => '没有连上局域网，其他设备暂时打不开';
+
+  @override
+  String get shareLinkPasswordProtected => '有密码';
+
+  @override
+  String get shareLinksTitle => '共享链接';
+
+  @override
+  String shareLinksActiveCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个链接开着',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get shareLinksService => '文件服务';
+
+  @override
+  String shareLinksServiceRunning(String port) {
+    return '正在运行，端口 $port';
+  }
+
+  @override
+  String get shareLinksServiceIdle => '没有开着的链接，端口已关闭';
+
+  @override
+  String get shareLinksServiceOff => '已关闭。链接都还在，只是暂时打不开。';
+
+  @override
+  String get shareLinksServiceStarting => '正在启动…';
+
+  @override
+  String shareLinksServicePortsBusy(String from, String to) {
+    return '端口 $from–$to 都被占用了';
+  }
+
+  @override
+  String get shareLinksServiceFailed => '启动失败';
+
+  @override
+  String get shareLinkStatusOn => '已开启';
+
+  @override
+  String get shareLinkStatusOff => '已关闭';
+
+  @override
+  String get shareLinkStatusMissing => '文件不见了';
+
+  @override
+  String get shareLinkStatusPartlyMissing => '部分文件不见了';
+
+  @override
+  String shareLinkVisits(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 次访问',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String shareLinkDownloads(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 次下载',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String shareLinkLastVisit(String time) {
+    return '最近访问 $time';
+  }
+
+  @override
+  String get shareLinkNeverVisited => '还没人打开过';
+
+  @override
+  String shareLinkBytesServed(String size) {
+    return '已发送 $size';
+  }
+
+  @override
+  String get shareLinkQr => '二维码';
+
+  @override
+  String get shareLinkTurnOn => '开启链接';
+
+  @override
+  String get shareLinkTurnOff => '关闭链接';
+
+  @override
+  String get shareLinkDelete => '删除链接';
+
+  @override
+  String get shareLinkDeleteTitle => '删除这个共享链接？';
+
+  @override
+  String get shareLinkDeleteDetail => '这个地址会马上失效，本机上的文件不受影响。';
+
+  @override
+  String get shareLinksEmpty => '还没有共享链接';
+
+  @override
+  String get shareLinksEmptyDetailDesktop =>
+      '在本机的文件或文件夹上右键，选“创建共享链接…”。也可以先选好多个再右键。';
+
+  @override
+  String get shareLinksEmptyDetailPhone =>
+      '在本机的文件或文件夹上长按，选“创建共享链接…”。也可以多选后从底部选。';
+
+  @override
+  String get shareWebDownload => '下载';
+
+  @override
+  String get shareWebOpen => '在浏览器中打开';
+
+  @override
+  String get shareWebDownloadAll => '全部下载（.zip）';
+
+  @override
+  String get shareWebDownloadZip => '下载为 .zip';
+
+  @override
+  String shareWebItemCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 项',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get shareWebEmptyFolder => '这个文件夹是空的';
+
+  @override
+  String shareWebModified(String date) {
+    return '修改于 $date';
+  }
+
+  @override
+  String shareWebFooter(String device) {
+    return '来自 $device · 用 Whisper 共享';
+  }
+
+  @override
+  String get shareWebNotFoundTitle => '这个链接打不开';
+
+  @override
+  String get shareWebNotFoundDetail => '链接可能已经关闭，或者地址输错了。请找分享的人确认一下。';
+
+  @override
+  String get shareWebMissingTitle => '文件不见了';
+
+  @override
+  String get shareWebMissingDetail => '它可能被移动、改名或删除了。';
+
+  @override
+  String get shareWebBack => '回到共享内容';
+
+  @override
+  String get shareWebPasswordTitle => '需要密码';
+
+  @override
+  String get shareWebPasswordDetail => '这个共享链接设置了密码。';
+
+  @override
+  String get shareWebContinue => '继续';
+
+  @override
+  String get shareWebPasswordWrong => '密码不对，再试一次';
+
+  @override
+  String get shareWebTooManyTitle => '尝试次数太多';
+
+  @override
+  String get shareWebTooManyDetail => '请等 1 分钟再试。';
+
+  @override
+  String get shareWebErrorTitle => '出了点问题';
+
+  @override
+  String get shareWebErrorDetail => '请稍后再试。';
+
+  @override
   String get windowStreamDecoderMissing => '无法显示画面：这台电脑缺少 FFmpeg 视频解码库';
 
   @override
@@ -2667,6 +2938,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String flowTaskOpenOn(String device) {
     return '正在 $device 上显示';
   }
+
+  @override
+  String get shareLinkBarAction => '共享链接';
 
   @override
   String get windowStreamSourceErrorDesktopUnsupported => '这台电脑不支持窗口流转';
@@ -2772,6 +3046,49 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get windowStreamClosing => '正在关闭';
+
+  @override
+  String shareWebFrom(String device) {
+    return '来自 $device';
+  }
+
+  @override
+  String get shareWebFooterLan => '文件直接从这台设备经局域网传来，不经过云端。';
+
+  @override
+  String shareWebPreviewTruncated(String size) {
+    return '只显示了前 $size，下载后可查看全部内容。';
+  }
+
+  @override
+  String get shareWebPrevious => '上一个';
+
+  @override
+  String get shareWebNext => '下一个';
+
+  @override
+  String get shareLinkAllowAccess => '允许访问';
+
+  @override
+  String get shareLinkAddress => '地址';
+
+  @override
+  String get shareLinksServiceFooter => '同一局域网里的设备用浏览器打开链接就能下载。服务只在有开着的链接时运行。';
+
+  @override
+  String get shareLinkVisitsLabel => '访问次数';
+
+  @override
+  String get shareLinkDownloadsLabel => '下载次数';
+
+  @override
+  String get shareLinkLastVisitLabel => '最近访问';
+
+  @override
+  String get shareLinkSentLabel => '已发送';
+
+  @override
+  String get shareLinkNever => '从未';
 
   @override
   String get androidWindowServiceTitle => '窗口流转服务';

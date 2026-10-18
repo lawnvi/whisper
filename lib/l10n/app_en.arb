@@ -1536,6 +1536,360 @@
   "@remoteFilesPlaceAppFolder": {
     "description": "File browser: an iPhone's or iPad's root, the app's own Documents folder (Files › On My iPhone › Whisper)."
   },
+  "shareLinkMenuCreate": "Create Share Link…",
+  "@shareLinkMenuCreate": {
+    "description": "File manager menu item / toolbar tooltip that opens the share-link sheet for the selected local items"
+  },
+  "shareLinkCreateTitle": "Create Share Link",
+  "@shareLinkCreateTitle": {
+    "description": "Title of the sheet that creates a LAN download link"
+  },
+  "shareLinkCreateDetail": "Devices on the same network can open the link in a browser to download. They don't need Whisper.",
+  "@shareLinkCreateDetail": {
+    "description": "Explains what a share link does, under the sheet title"
+  },
+  "shareLinkDefaultName": "{count, plural, =1{1 item} other{{count} items}}",
+  "@shareLinkDefaultName": {
+    "description": "Name of a share link made of several files and folders (shown on the web page and used for the zip)",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shareLinkRoute": "Route",
+  "@shareLinkRoute": {
+    "description": "Label of the field for the path part of the link, e.g. the 'k7qm' in http://host:port/k7qm"
+  },
+  "shareLinkRouteHelp": "Leave blank to use the random one shown",
+  "@shareLinkRouteHelp": {
+    "description": "Helper text under the route field; the placeholder shows a generated route"
+  },
+  "shareLinkShortRoute": "Short Route",
+  "@shareLinkShortRoute": {
+    "description": "Switch that makes the generated route 4 characters long"
+  },
+  "shareLinkShortRouteDetail": "4 characters, easy to say out loud",
+  "@shareLinkShortRouteDetail": {
+    "description": "Subtitle of the short-route switch"
+  },
+  "shareLinkPassword": "Password",
+  "@shareLinkPassword": {
+    "description": "Label of the optional password field; also the placeholder of the password box on the web page"
+  },
+  "shareLinkPasswordOptional": "Optional",
+  "@shareLinkPasswordOptional": {
+    "description": "Placeholder of the optional password field"
+  },
+  "shareLinkShowPassword": "Show Password",
+  "@shareLinkShowPassword": {
+    "description": "Tooltip of the eye button in the password field"
+  },
+  "shareLinkHidePassword": "Hide Password",
+  "@shareLinkHidePassword": {
+    "description": "Tooltip of the eye button in the password field while the password is visible"
+  },
+  "shareLinkCreate": "Create Link",
+  "@shareLinkCreate": {
+    "description": "Primary button of the share-link sheet"
+  },
+  "shareLinkRouteTaken": "Another link already uses this route",
+  "@shareLinkRouteTaken": {
+    "description": "Error under the route field"
+  },
+  "shareLinkRouteInvalid": "Use 2–32 characters: lowercase letters, digits, - or _",
+  "@shareLinkRouteInvalid": {
+    "description": "Error under the route field"
+  },
+  "shareLinkRouteReserved": "This route is reserved. Try another one.",
+  "@shareLinkRouteReserved": {
+    "description": "Error under the route field when the user typed a reserved word such as zip"
+  },
+  "shareLinkItemsMissing": "The items to share are no longer there",
+  "@shareLinkItemsMissing": {
+    "description": "Error when the selected files were moved or deleted before the link was created"
+  },
+  "shareLinkCreateFailed": "Couldn't create the link",
+  "@shareLinkCreateFailed": {
+    "description": "Generic error when creating a share link fails"
+  },
+  "shareLinkReady": "Link Ready",
+  "@shareLinkReady": {
+    "description": "Title of the sheet after the link was created"
+  },
+  "shareLinkCopy": "Copy Link",
+  "@shareLinkCopy": {
+    "description": "Button / tooltip that copies the link address"
+  },
+  "shareLinkCopied": "Copied",
+  "@shareLinkCopied": {
+    "description": "The copy button's label for a moment after copying"
+  },
+  "shareLinkScanHint": "Or scan it with a phone camera",
+  "@shareLinkScanHint": {
+    "description": "Caption under the QR code"
+  },
+  "shareLinkAddressPicker": "Choose Network Address",
+  "@shareLinkAddressPicker": {
+    "description": "Tooltip of the menu that switches between this device's LAN addresses when it has several"
+  },
+  "shareLinkServiceOffNote": "The file server is off. Turn it on so the link can be opened.",
+  "@shareLinkServiceOffNote": {
+    "description": "Note in the result sheet when the file server switch is off"
+  },
+  "shareLinkNoNetwork": "Not connected to a local network, so other devices can't open it yet",
+  "@shareLinkNoNetwork": {
+    "description": "Shown instead of an address when this device has no LAN address"
+  },
+  "shareLinkPasswordProtected": "Password protected",
+  "@shareLinkPasswordProtected": {
+    "description": "Badge / tooltip for a link that needs a password"
+  },
+  "shareLinksTitle": "Share Links",
+  "@shareLinksTitle": {
+    "description": "Sidebar row and title of the page that manages share links"
+  },
+  "shareLinksActiveCount": "{count, plural, =1{1 link on} other{{count} links on}}",
+  "@shareLinksActiveCount": {
+    "description": "Subtitle of the share links row on phones",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shareLinksService": "File Server",
+  "@shareLinksService": {
+    "description": "Name of the switch that turns the HTTP file server for share links on or off"
+  },
+  "shareLinksServiceRunning": "Running on port {port}",
+  "@shareLinksServiceRunning": {
+    "description": "File server status",
+    "placeholders": {
+      "port": {
+        "type": "String"
+      }
+    }
+  },
+  "shareLinksServiceIdle": "No links are on, so the port is closed",
+  "@shareLinksServiceIdle": {
+    "description": "File server status when it is switched on but no link is enabled"
+  },
+  "shareLinksServiceOff": "Off. Links are kept but can't be opened.",
+  "@shareLinksServiceOff": {
+    "description": "File server status when switched off"
+  },
+  "shareLinksServiceStarting": "Starting…",
+  "@shareLinksServiceStarting": {
+    "description": "File server status"
+  },
+  "shareLinksServicePortsBusy": "Ports {from}–{to} are all in use",
+  "@shareLinksServicePortsBusy": {
+    "description": "File server status when no port could be opened",
+    "placeholders": {
+      "from": {
+        "type": "String"
+      },
+      "to": {
+        "type": "String"
+      }
+    }
+  },
+  "shareLinksServiceFailed": "Couldn't start",
+  "@shareLinksServiceFailed": {
+    "description": "File server status when it failed to start for another reason"
+  },
+  "shareLinkStatusOn": "On",
+  "@shareLinkStatusOn": {
+    "description": "Status of a share link"
+  },
+  "shareLinkStatusOff": "Off",
+  "@shareLinkStatusOff": {
+    "description": "Status of a share link"
+  },
+  "shareLinkStatusMissing": "Files missing",
+  "@shareLinkStatusMissing": {
+    "description": "Status of a share link whose files were all moved or deleted"
+  },
+  "shareLinkStatusPartlyMissing": "Some files missing",
+  "@shareLinkStatusPartlyMissing": {
+    "description": "Status of a share link when some of its files were moved or deleted"
+  },
+  "shareLinkVisits": "{count, plural, =1{1 visit} other{{count} visits}}",
+  "@shareLinkVisits": {
+    "description": "How many times the link's pages were opened",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shareLinkDownloads": "{count, plural, =1{1 download} other{{count} downloads}}",
+  "@shareLinkDownloads": {
+    "description": "How many downloads were started from the link",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shareLinkLastVisit": "Last visit {time}",
+  "@shareLinkLastVisit": {
+    "description": "When the link was last opened; time is like 今天 10:24",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "shareLinkNeverVisited": "Not opened yet",
+  "@shareLinkNeverVisited": {
+    "description": "Shown instead of the last visit time"
+  },
+  "shareLinkBytesServed": "{size} sent",
+  "@shareLinkBytesServed": {
+    "description": "How much data the link has served, e.g. 1.2 GB",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "shareLinkQr": "QR Code",
+  "@shareLinkQr": {
+    "description": "Button / tooltip that shows the link's QR code"
+  },
+  "shareLinkTurnOn": "Turn On Link",
+  "@shareLinkTurnOn": {
+    "description": "Tooltip / semantics of a link's switch"
+  },
+  "shareLinkTurnOff": "Turn Off Link",
+  "@shareLinkTurnOff": {
+    "description": "Tooltip / semantics of a link's switch"
+  },
+  "shareLinkDelete": "Delete Link",
+  "@shareLinkDelete": {
+    "description": "Tooltip of a link's delete button"
+  },
+  "shareLinkDeleteTitle": "Delete this share link?",
+  "@shareLinkDeleteTitle": {
+    "description": "Delete confirmation title"
+  },
+  "shareLinkDeleteDetail": "The address stops working right away. Files on this device aren't affected.",
+  "@shareLinkDeleteDetail": {
+    "description": "Delete confirmation body"
+  },
+  "shareLinksEmpty": "No Share Links",
+  "@shareLinksEmpty": {
+    "description": "Empty state title"
+  },
+  "shareLinksEmptyDetailDesktop": "Right-click a file or folder on this device and choose “Create Share Link…”. You can select several first.",
+  "@shareLinksEmptyDetailDesktop": {
+    "description": "Empty state detail on desktop"
+  },
+  "shareLinksEmptyDetailPhone": "Touch and hold a file or folder on this device and choose “Create Share Link…”, or select several and use the bar at the bottom.",
+  "@shareLinksEmptyDetailPhone": {
+    "description": "Empty state detail on phones"
+  },
+  "shareWebDownload": "Download",
+  "@shareWebDownload": {
+    "description": "Web page: main button of a shared file"
+  },
+  "shareWebOpen": "Open in Browser",
+  "@shareWebOpen": {
+    "description": "Web page: opens a previewable file (picture, movie, PDF…) in the browser"
+  },
+  "shareWebDownloadAll": "Download All (.zip)",
+  "@shareWebDownloadAll": {
+    "description": "Web page: downloads everything shown as one zip"
+  },
+  "shareWebDownloadZip": "Download as .zip",
+  "@shareWebDownloadZip": {
+    "description": "Web page: label of a folder row's download button"
+  },
+  "shareWebItemCount": "{count, plural, =1{1 item} other{{count} items}}",
+  "@shareWebItemCount": {
+    "description": "Web page: how many items a folder holds",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shareWebEmptyFolder": "This folder is empty",
+  "@shareWebEmptyFolder": {
+    "description": "Web page"
+  },
+  "shareWebModified": "Modified {date}",
+  "@shareWebModified": {
+    "description": "Web page: when a shared file was last changed",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "shareWebFooter": "Shared from {device} with Whisper",
+  "@shareWebFooter": {
+    "description": "Web page footer",
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "shareWebNotFoundTitle": "This Link Isn't Available",
+  "@shareWebNotFoundTitle": {
+    "description": "Web page for an unknown or switched-off link"
+  },
+  "shareWebNotFoundDetail": "It may have been turned off, or the address may be mistyped. Check with the person who shared it.",
+  "@shareWebNotFoundDetail": {
+    "description": "Web page for an unknown or switched-off link"
+  },
+  "shareWebMissingTitle": "File Not Found",
+  "@shareWebMissingTitle": {
+    "description": "Web page when a shared file was moved or deleted"
+  },
+  "shareWebMissingDetail": "It may have been moved, renamed or deleted.",
+  "@shareWebMissingDetail": {
+    "description": "Web page when a shared file was moved or deleted"
+  },
+  "shareWebBack": "Back to Shared Items",
+  "@shareWebBack": {
+    "description": "Web page: link from an error page to the link's first page"
+  },
+  "shareWebPasswordTitle": "Password Required",
+  "@shareWebPasswordTitle": {
+    "description": "Web page title for a password-protected link"
+  },
+  "shareWebPasswordDetail": "This shared link is protected with a password.",
+  "@shareWebPasswordDetail": {
+    "description": "Web page for a password-protected link"
+  },
+  "shareWebContinue": "Continue",
+  "@shareWebContinue": {
+    "description": "Web page: submit button of the password form"
+  },
+  "shareWebPasswordWrong": "Incorrect password. Try again.",
+  "@shareWebPasswordWrong": {
+    "description": "Web page: error after a wrong password"
+  },
+  "shareWebTooManyTitle": "Too Many Attempts",
+  "@shareWebTooManyTitle": {
+    "description": "Web page when a client is rate-limited"
+  },
+  "shareWebTooManyDetail": "Wait a minute, then try again.",
+  "@shareWebTooManyDetail": {
+    "description": "Web page when a client is rate-limited"
+  },
+  "shareWebErrorTitle": "Something Went Wrong",
+  "@shareWebErrorTitle": {
+    "description": "Web page for an unexpected server error"
+  },
+  "shareWebErrorDetail": "Try again in a moment.",
+  "@shareWebErrorDetail": {
+    "description": "Web page for an unexpected server error"
+  },
   "windowStreamDecoderMissing": "Can't show this window: FFmpeg's video decoder isn't installed on this computer",
   "@windowStreamDecoderMissing": {
     "description": "Overlay message for a streamed window on Linux when no H.264 decoder can be loaded (native WSN_WINDOW_DECODE_ERROR with a = 1). Dart should set it with wsn_surface_set_visual(WSN_VISUAL_ERROR, message)."
@@ -1545,6 +1899,10 @@
   "windowStreamUnmute": "Unmute",
   "windowStreamMovedAway": "This window was opened on another device",
   "flowTaskOpenOn": "Showing on {device}",
+  "shareLinkBarAction": "Share Link",
+  "@shareLinkBarAction": {
+    "description": "Short label of the share-link button in the phone file manager's selection bar"
+  },
   "windowStreamSourceErrorDesktopUnsupported": "This PC can't share windows",
   "@windowStreamSourceErrorDesktopUnsupported": {
     "description": "Window-stream source failure shown to the viewer: the host desktop cannot capture windows at all (reason code = WSN_CAPTURE_ERROR_UNSUPPORTED from the Windows source; Windows is supported, so this is only for very old builds or missing Graphics.Capture)."
@@ -1682,6 +2040,68 @@
   "windowStreamClosing": "Closing",
   "@windowStreamClosing": {
     "description": "Accessibility label of a recents card whose window is being closed."
+  },
+  "shareWebFrom": "From {device}",
+  "@shareWebFrom": {
+    "description": "Web page header: which device shares the files",
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "shareWebFooterLan": "Files come straight from this device over your local network, not through the cloud.",
+  "@shareWebFooterLan": {
+    "description": "Web page footer explaining where the files come from"
+  },
+  "shareWebPreviewTruncated": "Showing the first {size}. Download the file to see all of it.",
+  "@shareWebPreviewTruncated": {
+    "description": "Under a text preview that was cut short; size is like 32 KB",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "shareWebPrevious": "Previous",
+  "@shareWebPrevious": {
+    "description": "Web page: link to the previous file in the folder"
+  },
+  "shareWebNext": "Next",
+  "@shareWebNext": {
+    "description": "Web page: link to the next file in the folder"
+  },
+  "shareLinkAllowAccess": "Allow Access",
+  "@shareLinkAllowAccess": {
+    "description": "Switch row in a share link's details: whether the link can be opened"
+  },
+  "shareLinkAddress": "Address",
+  "@shareLinkAddress": {
+    "description": "Row label for this device's network address in the share link details"
+  },
+  "shareLinksServiceFooter": "Devices on the same network can open a link in any browser. The server only runs while a link is on.",
+  "@shareLinksServiceFooter": {
+    "description": "Footer under the file server switch on the share links page"
+  },
+  "shareLinkVisitsLabel": "Visits",
+  "@shareLinkVisitsLabel": {
+    "description": "Row label in share link details"
+  },
+  "shareLinkDownloadsLabel": "Downloads",
+  "@shareLinkDownloadsLabel": {
+    "description": "Row label in share link details"
+  },
+  "shareLinkLastVisitLabel": "Last Visit",
+  "@shareLinkLastVisitLabel": {
+    "description": "Row label in share link details"
+  },
+  "shareLinkSentLabel": "Data Sent",
+  "@shareLinkSentLabel": {
+    "description": "Row label in share link details: how much data the link served"
+  },
+  "shareLinkNever": "Never",
+  "@shareLinkNever": {
+    "description": "Value of the last-visit row when nobody opened the link yet"
   },
   "androidWindowServiceTitle": "Window flow service",
   "@androidWindowServiceTitle": {

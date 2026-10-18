@@ -2806,6 +2806,292 @@ class AppLocalizationsEn extends AppLocalizations {
   String get remoteFilesPlaceAppFolder => 'Whisper Folder';
 
   @override
+  String get shareLinkMenuCreate => 'Create Share Link…';
+
+  @override
+  String get shareLinkCreateTitle => 'Create Share Link';
+
+  @override
+  String get shareLinkCreateDetail =>
+      'Devices on the same network can open the link in a browser to download. They don\'t need Whisper.';
+
+  @override
+  String shareLinkDefaultName(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count items',
+      one: '1 item',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get shareLinkRoute => 'Route';
+
+  @override
+  String get shareLinkRouteHelp => 'Leave blank to use the random one shown';
+
+  @override
+  String get shareLinkShortRoute => 'Short Route';
+
+  @override
+  String get shareLinkShortRouteDetail => '4 characters, easy to say out loud';
+
+  @override
+  String get shareLinkPassword => 'Password';
+
+  @override
+  String get shareLinkPasswordOptional => 'Optional';
+
+  @override
+  String get shareLinkShowPassword => 'Show Password';
+
+  @override
+  String get shareLinkHidePassword => 'Hide Password';
+
+  @override
+  String get shareLinkCreate => 'Create Link';
+
+  @override
+  String get shareLinkRouteTaken => 'Another link already uses this route';
+
+  @override
+  String get shareLinkRouteInvalid =>
+      'Use 2–32 characters: lowercase letters, digits, - or _';
+
+  @override
+  String get shareLinkRouteReserved =>
+      'This route is reserved. Try another one.';
+
+  @override
+  String get shareLinkItemsMissing => 'The items to share are no longer there';
+
+  @override
+  String get shareLinkCreateFailed => 'Couldn\'t create the link';
+
+  @override
+  String get shareLinkReady => 'Link Ready';
+
+  @override
+  String get shareLinkCopy => 'Copy Link';
+
+  @override
+  String get shareLinkCopied => 'Copied';
+
+  @override
+  String get shareLinkScanHint => 'Or scan it with a phone camera';
+
+  @override
+  String get shareLinkAddressPicker => 'Choose Network Address';
+
+  @override
+  String get shareLinkServiceOffNote =>
+      'The file server is off. Turn it on so the link can be opened.';
+
+  @override
+  String get shareLinkNoNetwork =>
+      'Not connected to a local network, so other devices can\'t open it yet';
+
+  @override
+  String get shareLinkPasswordProtected => 'Password protected';
+
+  @override
+  String get shareLinksTitle => 'Share Links';
+
+  @override
+  String shareLinksActiveCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count links on',
+      one: '1 link on',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get shareLinksService => 'File Server';
+
+  @override
+  String shareLinksServiceRunning(String port) {
+    return 'Running on port $port';
+  }
+
+  @override
+  String get shareLinksServiceIdle => 'No links are on, so the port is closed';
+
+  @override
+  String get shareLinksServiceOff =>
+      'Off. Links are kept but can\'t be opened.';
+
+  @override
+  String get shareLinksServiceStarting => 'Starting…';
+
+  @override
+  String shareLinksServicePortsBusy(String from, String to) {
+    return 'Ports $from–$to are all in use';
+  }
+
+  @override
+  String get shareLinksServiceFailed => 'Couldn\'t start';
+
+  @override
+  String get shareLinkStatusOn => 'On';
+
+  @override
+  String get shareLinkStatusOff => 'Off';
+
+  @override
+  String get shareLinkStatusMissing => 'Files missing';
+
+  @override
+  String get shareLinkStatusPartlyMissing => 'Some files missing';
+
+  @override
+  String shareLinkVisits(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count visits',
+      one: '1 visit',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String shareLinkDownloads(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count downloads',
+      one: '1 download',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String shareLinkLastVisit(String time) {
+    return 'Last visit $time';
+  }
+
+  @override
+  String get shareLinkNeverVisited => 'Not opened yet';
+
+  @override
+  String shareLinkBytesServed(String size) {
+    return '$size sent';
+  }
+
+  @override
+  String get shareLinkQr => 'QR Code';
+
+  @override
+  String get shareLinkTurnOn => 'Turn On Link';
+
+  @override
+  String get shareLinkTurnOff => 'Turn Off Link';
+
+  @override
+  String get shareLinkDelete => 'Delete Link';
+
+  @override
+  String get shareLinkDeleteTitle => 'Delete this share link?';
+
+  @override
+  String get shareLinkDeleteDetail =>
+      'The address stops working right away. Files on this device aren\'t affected.';
+
+  @override
+  String get shareLinksEmpty => 'No Share Links';
+
+  @override
+  String get shareLinksEmptyDetailDesktop =>
+      'Right-click a file or folder on this device and choose “Create Share Link…”. You can select several first.';
+
+  @override
+  String get shareLinksEmptyDetailPhone =>
+      'Touch and hold a file or folder on this device and choose “Create Share Link…”, or select several and use the bar at the bottom.';
+
+  @override
+  String get shareWebDownload => 'Download';
+
+  @override
+  String get shareWebOpen => 'Open in Browser';
+
+  @override
+  String get shareWebDownloadAll => 'Download All (.zip)';
+
+  @override
+  String get shareWebDownloadZip => 'Download as .zip';
+
+  @override
+  String shareWebItemCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count items',
+      one: '1 item',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get shareWebEmptyFolder => 'This folder is empty';
+
+  @override
+  String shareWebModified(String date) {
+    return 'Modified $date';
+  }
+
+  @override
+  String shareWebFooter(String device) {
+    return 'Shared from $device with Whisper';
+  }
+
+  @override
+  String get shareWebNotFoundTitle => 'This Link Isn\'t Available';
+
+  @override
+  String get shareWebNotFoundDetail =>
+      'It may have been turned off, or the address may be mistyped. Check with the person who shared it.';
+
+  @override
+  String get shareWebMissingTitle => 'File Not Found';
+
+  @override
+  String get shareWebMissingDetail =>
+      'It may have been moved, renamed or deleted.';
+
+  @override
+  String get shareWebBack => 'Back to Shared Items';
+
+  @override
+  String get shareWebPasswordTitle => 'Password Required';
+
+  @override
+  String get shareWebPasswordDetail =>
+      'This shared link is protected with a password.';
+
+  @override
+  String get shareWebContinue => 'Continue';
+
+  @override
+  String get shareWebPasswordWrong => 'Incorrect password. Try again.';
+
+  @override
+  String get shareWebTooManyTitle => 'Too Many Attempts';
+
+  @override
+  String get shareWebTooManyDetail => 'Wait a minute, then try again.';
+
+  @override
+  String get shareWebErrorTitle => 'Something Went Wrong';
+
+  @override
+  String get shareWebErrorDetail => 'Try again in a moment.';
+
+  @override
   String get windowStreamDecoderMissing =>
       'Can\'t show this window: FFmpeg\'s video decoder isn\'t installed on this computer';
 
@@ -2826,6 +3112,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String flowTaskOpenOn(String device) {
     return 'Showing on $device';
   }
+
+  @override
+  String get shareLinkBarAction => 'Share Link';
 
   @override
   String get windowStreamSourceErrorDesktopUnsupported =>
@@ -2937,6 +3226,51 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get windowStreamClosing => 'Closing';
+
+  @override
+  String shareWebFrom(String device) {
+    return 'From $device';
+  }
+
+  @override
+  String get shareWebFooterLan =>
+      'Files come straight from this device over your local network, not through the cloud.';
+
+  @override
+  String shareWebPreviewTruncated(String size) {
+    return 'Showing the first $size. Download the file to see all of it.';
+  }
+
+  @override
+  String get shareWebPrevious => 'Previous';
+
+  @override
+  String get shareWebNext => 'Next';
+
+  @override
+  String get shareLinkAllowAccess => 'Allow Access';
+
+  @override
+  String get shareLinkAddress => 'Address';
+
+  @override
+  String get shareLinksServiceFooter =>
+      'Devices on the same network can open a link in any browser. The server only runs while a link is on.';
+
+  @override
+  String get shareLinkVisitsLabel => 'Visits';
+
+  @override
+  String get shareLinkDownloadsLabel => 'Downloads';
+
+  @override
+  String get shareLinkLastVisitLabel => 'Last Visit';
+
+  @override
+  String get shareLinkSentLabel => 'Data Sent';
+
+  @override
+  String get shareLinkNever => 'Never';
 
   @override
   String get androidWindowServiceTitle => 'Window flow service';

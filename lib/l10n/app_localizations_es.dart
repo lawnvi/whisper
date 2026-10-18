@@ -2836,6 +2836,297 @@ class AppLocalizationsEs extends AppLocalizations {
   String get remoteFilesPlaceAppFolder => 'Carpeta de Whisper';
 
   @override
+  String get shareLinkMenuCreate => 'Crear enlace para compartir…';
+
+  @override
+  String get shareLinkCreateTitle => 'Crear enlace para compartir';
+
+  @override
+  String get shareLinkCreateDetail =>
+      'Los dispositivos de la misma red pueden abrir el enlace en un navegador para descargar. No necesitan Whisper.';
+
+  @override
+  String shareLinkDefaultName(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count elementos',
+      one: '1 elemento',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get shareLinkRoute => 'Ruta';
+
+  @override
+  String get shareLinkRouteHelp =>
+      'Déjalo vacío para usar la ruta aleatoria que se muestra';
+
+  @override
+  String get shareLinkShortRoute => 'Ruta corta';
+
+  @override
+  String get shareLinkShortRouteDetail =>
+      '4 caracteres, fácil de decir en voz alta';
+
+  @override
+  String get shareLinkPassword => 'Contraseña';
+
+  @override
+  String get shareLinkPasswordOptional => 'Opcional';
+
+  @override
+  String get shareLinkShowPassword => 'Mostrar contraseña';
+
+  @override
+  String get shareLinkHidePassword => 'Ocultar contraseña';
+
+  @override
+  String get shareLinkCreate => 'Crear enlace';
+
+  @override
+  String get shareLinkRouteTaken => 'Otro enlace ya usa esta ruta';
+
+  @override
+  String get shareLinkRouteInvalid =>
+      'Usa de 2 a 32 caracteres: minúsculas, números, - o _';
+
+  @override
+  String get shareLinkRouteReserved =>
+      'Esta ruta está reservada. Prueba con otra.';
+
+  @override
+  String get shareLinkItemsMissing =>
+      'Los elementos que querías compartir ya no están';
+
+  @override
+  String get shareLinkCreateFailed => 'No se pudo crear el enlace';
+
+  @override
+  String get shareLinkReady => 'Enlace listo';
+
+  @override
+  String get shareLinkCopy => 'Copiar enlace';
+
+  @override
+  String get shareLinkCopied => 'Copiado';
+
+  @override
+  String get shareLinkScanHint => 'O escanéalo con la cámara de un teléfono';
+
+  @override
+  String get shareLinkAddressPicker => 'Elegir dirección de red';
+
+  @override
+  String get shareLinkServiceOffNote =>
+      'El servidor de archivos está desactivado. Actívalo para que se pueda abrir el enlace.';
+
+  @override
+  String get shareLinkNoNetwork =>
+      'Sin conexión a una red local: otros dispositivos aún no pueden abrirlo';
+
+  @override
+  String get shareLinkPasswordProtected => 'Protegido con contraseña';
+
+  @override
+  String get shareLinksTitle => 'Enlaces compartidos';
+
+  @override
+  String shareLinksActiveCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count enlaces activos',
+      one: '1 enlace activo',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get shareLinksService => 'Servidor de archivos';
+
+  @override
+  String shareLinksServiceRunning(String port) {
+    return 'En funcionamiento en el puerto $port';
+  }
+
+  @override
+  String get shareLinksServiceIdle =>
+      'No hay enlaces activos, así que el puerto está cerrado';
+
+  @override
+  String get shareLinksServiceOff =>
+      'Desactivado. Los enlaces se conservan, pero no se pueden abrir.';
+
+  @override
+  String get shareLinksServiceStarting => 'Iniciando…';
+
+  @override
+  String shareLinksServicePortsBusy(String from, String to) {
+    return 'Los puertos $from–$to están ocupados';
+  }
+
+  @override
+  String get shareLinksServiceFailed => 'No se pudo iniciar';
+
+  @override
+  String get shareLinkStatusOn => 'Activado';
+
+  @override
+  String get shareLinkStatusOff => 'Desactivado';
+
+  @override
+  String get shareLinkStatusMissing => 'Faltan archivos';
+
+  @override
+  String get shareLinkStatusPartlyMissing => 'Faltan algunos archivos';
+
+  @override
+  String shareLinkVisits(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count visitas',
+      one: '1 visita',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String shareLinkDownloads(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count descargas',
+      one: '1 descarga',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String shareLinkLastVisit(String time) {
+    return 'Última visita: $time';
+  }
+
+  @override
+  String get shareLinkNeverVisited => 'Aún no se ha abierto';
+
+  @override
+  String shareLinkBytesServed(String size) {
+    return '$size enviados';
+  }
+
+  @override
+  String get shareLinkQr => 'Código QR';
+
+  @override
+  String get shareLinkTurnOn => 'Activar enlace';
+
+  @override
+  String get shareLinkTurnOff => 'Desactivar enlace';
+
+  @override
+  String get shareLinkDelete => 'Eliminar enlace';
+
+  @override
+  String get shareLinkDeleteTitle => '¿Eliminar este enlace?';
+
+  @override
+  String get shareLinkDeleteDetail =>
+      'La dirección dejará de funcionar de inmediato. Los archivos de este dispositivo no se verán afectados.';
+
+  @override
+  String get shareLinksEmpty => 'No hay enlaces compartidos';
+
+  @override
+  String get shareLinksEmptyDetailDesktop =>
+      'Haz clic derecho en un archivo o una carpeta de este dispositivo y elige “Crear enlace para compartir…”. Puedes seleccionar varios antes.';
+
+  @override
+  String get shareLinksEmptyDetailPhone =>
+      'Mantén pulsado un archivo o una carpeta de este dispositivo y elige “Crear enlace para compartir…”, o selecciona varios y usa la barra inferior.';
+
+  @override
+  String get shareWebDownload => 'Descargar';
+
+  @override
+  String get shareWebOpen => 'Abrir en el navegador';
+
+  @override
+  String get shareWebDownloadAll => 'Descargar todo (.zip)';
+
+  @override
+  String get shareWebDownloadZip => 'Descargar como .zip';
+
+  @override
+  String shareWebItemCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count elementos',
+      one: '1 elemento',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get shareWebEmptyFolder => 'Esta carpeta está vacía';
+
+  @override
+  String shareWebModified(String date) {
+    return 'Modificado: $date';
+  }
+
+  @override
+  String shareWebFooter(String device) {
+    return 'Compartido desde $device con Whisper';
+  }
+
+  @override
+  String get shareWebNotFoundTitle => 'Este enlace no está disponible';
+
+  @override
+  String get shareWebNotFoundDetail =>
+      'Puede que se haya desactivado o que la dirección esté mal escrita. Consúltalo con quien lo compartió.';
+
+  @override
+  String get shareWebMissingTitle => 'Archivo no encontrado';
+
+  @override
+  String get shareWebMissingDetail =>
+      'Puede que se haya movido, renombrado o eliminado.';
+
+  @override
+  String get shareWebBack => 'Volver a lo compartido';
+
+  @override
+  String get shareWebPasswordTitle => 'Se requiere contraseña';
+
+  @override
+  String get shareWebPasswordDetail =>
+      'Este enlace está protegido con contraseña.';
+
+  @override
+  String get shareWebContinue => 'Continuar';
+
+  @override
+  String get shareWebPasswordWrong =>
+      'Contraseña incorrecta. Inténtalo de nuevo.';
+
+  @override
+  String get shareWebTooManyTitle => 'Demasiados intentos';
+
+  @override
+  String get shareWebTooManyDetail => 'Espera un minuto y vuelve a intentarlo.';
+
+  @override
+  String get shareWebErrorTitle => 'Algo salió mal';
+
+  @override
+  String get shareWebErrorDetail => 'Inténtalo de nuevo en un momento.';
+
+  @override
   String get windowStreamDecoderMissing =>
       'No se puede mostrar la ventana: falta el decodificador de vídeo de FFmpeg en este equipo';
 
@@ -2856,6 +3147,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String flowTaskOpenOn(String device) {
     return 'Se muestra en $device';
   }
+
+  @override
+  String get shareLinkBarAction => 'Compartir enlace';
 
   @override
   String get windowStreamSourceErrorDesktopUnsupported =>
@@ -2968,6 +3262,51 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get windowStreamClosing => 'Cerrando';
+
+  @override
+  String shareWebFrom(String device) {
+    return 'Desde $device';
+  }
+
+  @override
+  String get shareWebFooterLan =>
+      'Los archivos llegan directamente desde este dispositivo por tu red local, sin pasar por la nube.';
+
+  @override
+  String shareWebPreviewTruncated(String size) {
+    return 'Se muestran los primeros $size. Descarga el archivo para verlo completo.';
+  }
+
+  @override
+  String get shareWebPrevious => 'Anterior';
+
+  @override
+  String get shareWebNext => 'Siguiente';
+
+  @override
+  String get shareLinkAllowAccess => 'Permitir acceso';
+
+  @override
+  String get shareLinkAddress => 'Dirección';
+
+  @override
+  String get shareLinksServiceFooter =>
+      'Los dispositivos de la misma red pueden abrir un enlace en cualquier navegador. El servidor solo funciona mientras haya un enlace activo.';
+
+  @override
+  String get shareLinkVisitsLabel => 'Visitas';
+
+  @override
+  String get shareLinkDownloadsLabel => 'Descargas';
+
+  @override
+  String get shareLinkLastVisitLabel => 'Última visita';
+
+  @override
+  String get shareLinkSentLabel => 'Datos enviados';
+
+  @override
+  String get shareLinkNever => 'Nunca';
 
   @override
   String get androidWindowServiceTitle => 'Servicio de flujo de ventanas';
