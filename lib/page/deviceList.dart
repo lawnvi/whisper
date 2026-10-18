@@ -242,6 +242,12 @@ class _DeviceListScreen extends State<DeviceListScreen>
   late final AndroidSystemShareRouter _androidSystemShareRouter;
   late final DesktopQuickSendHotKeyController _desktopQuickSendHotKey;
   DeviceData? device;
+
+  /// Port of the server this screen last started. Set before the start is
+  /// awaited: a start closes every session, each close refreshes the list,
+  /// and refreshes that only looked at [device] (still null until the first
+  /// refresh finishes) restarted the server again, for minutes.
+  int? _serverStartPort;
   List<DeviceData> devices = [];
   BonsoirBroadcast? _broadcast;
   BonsoirDiscovery? _discovery;
@@ -1693,7 +1699,8 @@ class _DeviceListScreen extends State<DeviceListScreen>
     var serverPortUpdate = device != null && device!.port != temp.port;
     var localProfileUpdate = device != null && device!.name != temp.name;
 
-    if (isFirst || device?.port != temp.port) {
+    if (isFirst || _serverStartPort != temp.port) {
+      _serverStartPort = temp.port;
       await _startServer(port: temp.port);
     }
 
