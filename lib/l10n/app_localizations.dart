@@ -4738,6 +4738,120 @@ abstract class AppLocalizations {
   /// **'Whisper 文件夹'**
   String get remoteFilesPlaceAppFolder;
 
+  /// Island: files being sent from a conversation, under the file name
+  ///
+  /// In zh, this message translates to:
+  /// **'发送给 {device}'**
+  String islandTransferTo(String device);
+
+  /// Island: files being received in a conversation, under the file name
+  ///
+  /// In zh, this message translates to:
+  /// **'来自 {device}'**
+  String islandTransferFrom(String device);
+
+  /// Island: files going both ways at once
+  ///
+  /// In zh, this message translates to:
+  /// **'正在收发'**
+  String get islandTransferMixed;
+
+  /// Island: title when several files are under way
+  ///
+  /// In zh, this message translates to:
+  /// **'{count} 个文件'**
+  String islandTransferFiles(int count);
+
+  /// Island: conversation files all sent
+  ///
+  /// In zh, this message translates to:
+  /// **'已发送'**
+  String get islandTransferSent;
+
+  /// Island: conversation files all received
+  ///
+  /// In zh, this message translates to:
+  /// **'已收到'**
+  String get islandTransferReceived;
+
+  /// Island: some conversation files failed
+  ///
+  /// In zh, this message translates to:
+  /// **'没有传完'**
+  String get islandTransferFailed;
+
+  /// Island button (screen-reader label): cancel the conversation transfers under way
+  ///
+  /// In zh, this message translates to:
+  /// **'停止传输'**
+  String get islandTransferStop;
+
+  /// Island: this phone, acting as a speaker for another device, is paused
+  ///
+  /// In zh, this message translates to:
+  /// **'已暂停播放'**
+  String get islandAudioPaused;
+
+  /// Island: speaker playback is starting or resuming
+  ///
+  /// In zh, this message translates to:
+  /// **'正在连接…'**
+  String get islandAudioStarting;
+
+  /// Island: speaker playback ended (shown for a moment)
+  ///
+  /// In zh, this message translates to:
+  /// **'已断开'**
+  String get islandAudioEnded;
+
+  /// Island: this phone's apps are shown on another device
+  ///
+  /// In zh, this message translates to:
+  /// **'正在流转到 {device}'**
+  String islandStreamedTitle(String device);
+
+  /// Island: under 'Streaming to {device}'
+  ///
+  /// In zh, this message translates to:
+  /// **'{count} 个窗口正在那台设备上显示，可以被操作'**
+  String islandStreamedWindows(int count);
+
+  /// Island button: stop streaming this phone's apps (same as the notification's button)
+  ///
+  /// In zh, this message translates to:
+  /// **'停止流转'**
+  String get islandStreamedStop;
+
+  /// Island: waiting for the streamed windows to go back
+  ///
+  /// In zh, this message translates to:
+  /// **'正在停止…'**
+  String get islandStreamedStopping;
+
+  /// Island: streaming of this phone stopped (shown for a moment)
+  ///
+  /// In zh, this message translates to:
+  /// **'流转已结束'**
+  String get islandStreamedEnded;
+
+  /// Island: stands in for the viewer's name when it is not known
+  ///
+  /// In zh, this message translates to:
+  /// **'另一台设备'**
+  String get islandStreamedOtherDevice;
+
+  /// Island card: more activities than are listed
+  ///
+  /// In zh, this message translates to:
+  /// **'还有 {count} 项'**
+  String islandMore(int count);
+
+  /// Screen-reader hint on the small island
+  ///
+  /// In zh, this message translates to:
+  /// **'轻点展开，向上轻扫收起'**
+  String get islandHint;
+
   /// File manager menu item / toolbar tooltip that opens the share-link sheet for the selected local items
   ///
   /// In zh, this message translates to:

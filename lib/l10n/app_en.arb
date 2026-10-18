@@ -1536,6 +1536,112 @@
   "@remoteFilesPlaceAppFolder": {
     "description": "File browser: an iPhone's or iPad's root, the app's own Documents folder (Files › On My iPhone › Whisper)."
   },
+  "islandTransferTo": "To {device}",
+  "@islandTransferTo": {
+    "description": "Island: files being sent from a conversation, under the file name",
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "islandTransferFrom": "From {device}",
+  "@islandTransferFrom": {
+    "description": "Island: files being received in a conversation, under the file name",
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "islandTransferMixed": "Sending and receiving",
+  "@islandTransferMixed": {
+    "description": "Island: files going both ways at once"
+  },
+  "islandTransferFiles": "{count, plural, =1{1 file} other{{count} files}}",
+  "@islandTransferFiles": {
+    "description": "Island: title when several files are under way",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "islandTransferSent": "Sent",
+  "@islandTransferSent": {
+    "description": "Island: conversation files all sent"
+  },
+  "islandTransferReceived": "Received",
+  "@islandTransferReceived": {
+    "description": "Island: conversation files all received"
+  },
+  "islandTransferFailed": "Didn't finish",
+  "@islandTransferFailed": {
+    "description": "Island: some conversation files failed"
+  },
+  "islandTransferStop": "Stop transfer",
+  "@islandTransferStop": {
+    "description": "Island button (screen-reader label): cancel the conversation transfers under way"
+  },
+  "islandAudioPaused": "Playback paused",
+  "@islandAudioPaused": {
+    "description": "Island: this phone, acting as a speaker for another device, is paused"
+  },
+  "islandAudioStarting": "Connecting…",
+  "@islandAudioStarting": {
+    "description": "Island: speaker playback is starting or resuming"
+  },
+  "islandAudioEnded": "Disconnected",
+  "@islandAudioEnded": {
+    "description": "Island: speaker playback ended (shown for a moment)"
+  },
+  "islandStreamedTitle": "Streaming to {device}",
+  "@islandStreamedTitle": {
+    "description": "Island: this phone's apps are shown on another device",
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "islandStreamedWindows": "{count, plural, =1{1 window is showing on that device and can be used there} other{{count} windows are showing on that device and can be used there}}",
+  "@islandStreamedWindows": {
+    "description": "Island: under 'Streaming to {device}'",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "islandStreamedStop": "Stop streaming",
+  "@islandStreamedStop": {
+    "description": "Island button: stop streaming this phone's apps (same as the notification's button)"
+  },
+  "islandStreamedStopping": "Stopping…",
+  "@islandStreamedStopping": {
+    "description": "Island: waiting for the streamed windows to go back"
+  },
+  "islandStreamedEnded": "Streaming ended",
+  "@islandStreamedEnded": {
+    "description": "Island: streaming of this phone stopped (shown for a moment)"
+  },
+  "islandStreamedOtherDevice": "another device",
+  "@islandStreamedOtherDevice": {
+    "description": "Island: stands in for the viewer's name when it is not known"
+  },
+  "islandMore": "{count, plural, =1{1 more} other{{count} more}}",
+  "@islandMore": {
+    "description": "Island card: more activities than are listed",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "islandHint": "Tap to expand, swipe up to put away",
+  "@islandHint": {
+    "description": "Screen-reader hint on the small island"
+  },
   "shareLinkMenuCreate": "Create Share Link…",
   "@shareLinkMenuCreate": {
     "description": "File manager menu item / toolbar tooltip that opens the share-link sheet for the selected local items"

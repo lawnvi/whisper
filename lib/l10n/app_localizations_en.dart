@@ -2806,6 +2806,93 @@ class AppLocalizationsEn extends AppLocalizations {
   String get remoteFilesPlaceAppFolder => 'Whisper Folder';
 
   @override
+  String islandTransferTo(String device) {
+    return 'To $device';
+  }
+
+  @override
+  String islandTransferFrom(String device) {
+    return 'From $device';
+  }
+
+  @override
+  String get islandTransferMixed => 'Sending and receiving';
+
+  @override
+  String islandTransferFiles(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count files',
+      one: '1 file',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get islandTransferSent => 'Sent';
+
+  @override
+  String get islandTransferReceived => 'Received';
+
+  @override
+  String get islandTransferFailed => 'Didn\'t finish';
+
+  @override
+  String get islandTransferStop => 'Stop transfer';
+
+  @override
+  String get islandAudioPaused => 'Playback paused';
+
+  @override
+  String get islandAudioStarting => 'Connecting…';
+
+  @override
+  String get islandAudioEnded => 'Disconnected';
+
+  @override
+  String islandStreamedTitle(String device) {
+    return 'Streaming to $device';
+  }
+
+  @override
+  String islandStreamedWindows(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count windows are showing on that device and can be used there',
+      one: '1 window is showing on that device and can be used there',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get islandStreamedStop => 'Stop streaming';
+
+  @override
+  String get islandStreamedStopping => 'Stopping…';
+
+  @override
+  String get islandStreamedEnded => 'Streaming ended';
+
+  @override
+  String get islandStreamedOtherDevice => 'another device';
+
+  @override
+  String islandMore(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count more',
+      one: '1 more',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get islandHint => 'Tap to expand, swipe up to put away';
+
+  @override
   String get shareLinkMenuCreate => 'Create Share Link…';
 
   @override

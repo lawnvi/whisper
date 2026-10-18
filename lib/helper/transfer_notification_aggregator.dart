@@ -86,6 +86,9 @@ class TransferNotificationAggregator {
   int _lastBytesMillis = 0;
   bool _stalledNotified = false;
 
+  /// The transfers this generation follows (for naming the notification).
+  Set<String> get trackedIds => {..._active.keys, ..._terminal.keys};
+
   TransferNotificationCommand? onSnapshot(TransferSnapshot snapshot) {
     if (isTerminalFileTransferState(snapshot.state)) {
       if (!_active.containsKey(snapshot.transferId) &&

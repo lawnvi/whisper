@@ -2649,6 +2649,75 @@ class AppLocalizationsZh extends AppLocalizations {
   String get remoteFilesPlaceAppFolder => 'Whisper 文件夹';
 
   @override
+  String islandTransferTo(String device) {
+    return '发送给 $device';
+  }
+
+  @override
+  String islandTransferFrom(String device) {
+    return '来自 $device';
+  }
+
+  @override
+  String get islandTransferMixed => '正在收发';
+
+  @override
+  String islandTransferFiles(int count) {
+    return '$count 个文件';
+  }
+
+  @override
+  String get islandTransferSent => '已发送';
+
+  @override
+  String get islandTransferReceived => '已收到';
+
+  @override
+  String get islandTransferFailed => '没有传完';
+
+  @override
+  String get islandTransferStop => '停止传输';
+
+  @override
+  String get islandAudioPaused => '已暂停播放';
+
+  @override
+  String get islandAudioStarting => '正在连接…';
+
+  @override
+  String get islandAudioEnded => '已断开';
+
+  @override
+  String islandStreamedTitle(String device) {
+    return '正在流转到 $device';
+  }
+
+  @override
+  String islandStreamedWindows(int count) {
+    return '$count 个窗口正在那台设备上显示，可以被操作';
+  }
+
+  @override
+  String get islandStreamedStop => '停止流转';
+
+  @override
+  String get islandStreamedStopping => '正在停止…';
+
+  @override
+  String get islandStreamedEnded => '流转已结束';
+
+  @override
+  String get islandStreamedOtherDevice => '另一台设备';
+
+  @override
+  String islandMore(int count) {
+    return '还有 $count 项';
+  }
+
+  @override
+  String get islandHint => '轻点展开，向上轻扫收起';
+
+  @override
   String get shareLinkMenuCreate => '创建共享链接…';
 
   @override

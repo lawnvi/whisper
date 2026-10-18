@@ -2836,6 +2836,95 @@ class AppLocalizationsEs extends AppLocalizations {
   String get remoteFilesPlaceAppFolder => 'Carpeta de Whisper';
 
   @override
+  String islandTransferTo(String device) {
+    return 'Para $device';
+  }
+
+  @override
+  String islandTransferFrom(String device) {
+    return 'De $device';
+  }
+
+  @override
+  String get islandTransferMixed => 'Enviando y recibiendo';
+
+  @override
+  String islandTransferFiles(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count archivos',
+      one: '1 archivo',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get islandTransferSent => 'Enviado';
+
+  @override
+  String get islandTransferReceived => 'Recibido';
+
+  @override
+  String get islandTransferFailed => 'No se completó';
+
+  @override
+  String get islandTransferStop => 'Detener transferencia';
+
+  @override
+  String get islandAudioPaused => 'Reproducción en pausa';
+
+  @override
+  String get islandAudioStarting => 'Conectando…';
+
+  @override
+  String get islandAudioEnded => 'Desconectado';
+
+  @override
+  String islandStreamedTitle(String device) {
+    return 'Transmitiendo a $device';
+  }
+
+  @override
+  String islandStreamedWindows(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          '$count ventanas se muestran en ese dispositivo y se pueden usar allí',
+      one: '1 ventana se muestra en ese dispositivo y se puede usar allí',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get islandStreamedStop => 'Detener transmisión';
+
+  @override
+  String get islandStreamedStopping => 'Deteniendo…';
+
+  @override
+  String get islandStreamedEnded => 'Transmisión finalizada';
+
+  @override
+  String get islandStreamedOtherDevice => 'otro dispositivo';
+
+  @override
+  String islandMore(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count más',
+      one: '1 más',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get islandHint =>
+      'Toca para ampliar, desliza hacia arriba para ocultar';
+
+  @override
   String get shareLinkMenuCreate => 'Crear enlace para compartir…';
 
   @override

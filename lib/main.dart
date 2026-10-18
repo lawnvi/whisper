@@ -30,6 +30,7 @@ import 'package:whisper/state/desktop_quick_send_inbox.dart';
 import 'package:whisper/cast_receiver/cast_receiver_manager.dart';
 import 'package:whisper/cast_receiver/cast_playback_window.dart';
 import 'package:whisper/widget/cast_playback_host.dart';
+import 'package:whisper/widget/island/island_host.dart';
 import 'package:whisper/socket/aead_engine.dart';
 import 'package:whisper/socket/auth_session_keys.dart';
 import 'package:whisper/socket/device_identity.dart';
@@ -399,7 +400,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           final shell = FileBrowsePromptHost(child: content);
           return isDesktop()
               ? CastPlaybackHost(child: PhoneTouchAlertHost(child: shell))
-              : shell;
+              : IslandHost(navigatorKey: appNavigatorKey, child: shell);
         },
         home: const DeviceListScreen(),
       ),
