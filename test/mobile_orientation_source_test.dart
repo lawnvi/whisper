@@ -25,6 +25,16 @@ void main() {
     );
   });
 
+  test('an iPhone stays upright except in a streamed window', () {
+    final mainSource = File('lib/main.dart').readAsStringSync();
+    // The plist lets an iPhone turn (a window being viewed may), and the
+    // app keeps itself upright everywhere else.
+    final iosBlock = RegExp(
+      r'if\s*\(\s*Platform\.isIOS\s*\)\s*\{[\s\S]*?shortestSide < 600[\s\S]*?SystemChrome\.setPreferredOrientations\(\[DeviceOrientation\.portraitUp\]\)',
+    ).firstMatch(mainSource);
+    expect(iosBlock, isNotNull);
+  });
+
   test(
     'phones keep portrait while iPad supports rotation and multitasking',
     () {
@@ -52,9 +62,11 @@ void main() {
         phoneOrientations,
         isNot(contains('UIInterfaceOrientationPortraitUpsideDown')),
       );
+      // Landscape is allowed so a streamed window can turn; the app itself
+      // locks an iPhone upright from Dart (test above).
       expect(
         phoneOrientations,
-        isNot(contains('UIInterfaceOrientationLandscape')),
+        contains('UIInterfaceOrientationLandscapeLeft'),
       );
       expect(
         ipadOrientations,

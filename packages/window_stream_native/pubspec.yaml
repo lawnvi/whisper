@@ -1,0 +1,25 @@
+name: window_stream_native
+description: Native windows, decoders and capture for Whisper window streaming, reached through dart:ffi.
+version: 0.1.0
+publish_to: 'none'
+
+environment:
+  sdk: '>=3.5.0 <4.0.0'
+  flutter: '>=3.24.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  ffi: ^2.1.4
+
+flutter:
+  plugin:
+    platforms:
+      macos:
+        ffiPlugin: true
+      ios:
+        pluginClass: WindowStreamNativePlugin
+      windows:
+        ffiPlugin: true
+      linux:
+        ffiPlugin: true

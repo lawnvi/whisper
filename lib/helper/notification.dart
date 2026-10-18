@@ -70,9 +70,12 @@ class NotificationHelper {
   }
 
   //  显示通知
+  // [id] 相同的通知会互相覆盖：默认 1 给文件浏览提示和转发的手机通知，
+  // 其他提示（比如送来的窗口）用自己的 id。
   Future<void> showNotification({
     required String title,
     required String body,
+    int id = 1,
   }) async {
     // 安卓的通知
     // 'your channel id'：用于指定通知通道的ID。
@@ -108,11 +111,19 @@ class NotificationHelper {
 
     // 发起一个通知
     await _notificationsPlugin.show(
-      id: 1,
+      id: id,
       title: title,
       body: body,
       notificationDetails: platformChannelSpecifics,
     );
+  }
+
+  /// 收回 [showNotification] 发出的那条 [id] 通知。
+  Future<void> cancelNotification(int id) async {
+    if (!supportNotification()) {
+      return;
+    }
+    await _notificationsPlugin.cancel(id: id);
   }
 }
 

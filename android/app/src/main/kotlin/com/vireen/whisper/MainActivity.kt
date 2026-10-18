@@ -27,5 +27,8 @@ class MainActivity : FlutterActivity() {
         flutterEngine.plugins.add(ConnectionRequestNotificationPlugin())
         flutterEngine.plugins.add(LocalNetworkPermissionPlugin())
         flutterEngine.plugins.add(AndroidPrivacyPermissionPlugin())
+        flutterEngine.plugins.add(WindowStreamReceiverPlugin())
+        flutterEngine.plugins.add(WindowStreamPhonePlugin())
+        flutterEngine.plugins.add(WindowStreamSelfStartPlugin())
     }
 }

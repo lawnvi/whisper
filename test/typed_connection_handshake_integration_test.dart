@@ -20,14 +20,14 @@ import 'package:whisper/state/peer_profile.dart';
 import 'package:whisper/state/peer_reconnect_controller.dart';
 
 void main() {
-  for (final supportedVersion in [10, 9]) {
+  for (final supportedVersion in [11, 10, 9]) {
     test(
-      'client retries from 11 to $supportedVersion when a legacy server closes newer versions',
+      'client retries from 12 to $supportedVersion when a legacy server closes newer versions',
       () async {
         final harness = await _HandshakeHarness.start();
         final proxy = await _LegacyCloseThenProxy.start(
           harness.port,
-          closeCount: 11 - supportedVersion,
+          closeCount: 12 - supportedVersion,
         );
         addTearDown(proxy.close);
 
@@ -43,7 +43,7 @@ void main() {
             .timeout(const Duration(seconds: 5));
 
         expect(result.status, ConnectionAttemptStatus.authenticated);
-        expect(proxy.acceptedConnections, 12 - supportedVersion);
+        expect(proxy.acceptedConnections, 13 - supportedVersion);
         expect(
           harness.client.remoteProfileFor('server-peer')?.protocolVersion,
           supportedVersion,

@@ -47,6 +47,17 @@
         android:requestRawExternalStorageAccess="true"
         tools:targetApi="s"
         android:icon="@mipmap/ic_launcher">
+        <!-- A window streamed from another device, one task each so it sits
+             in recents beside other apps. -->
+        <activity
+            android:name=".WindowStreamActivity"
+            android:exported="false"
+            android:documentLaunchMode="intoExisting"
+            android:autoRemoveFromRecents="true"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|screenLayout|density|uiMode|navigation"
+            android:windowSoftInputMode="adjustResize|stateHidden"
+            android:resizeableActivity="true"
+            android:theme="@style/WindowStreamTheme" />
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -109,6 +120,14 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/android_local_file_paths" />
         </provider>
+
+        <!-- Window streaming: answers only adb (shell) and root, checked in
+             the provider; the agent reports there and polls for "stop". -->
+        <provider
+            android:name=".WindowStreamProvider"
+            android:authorities="com.vireen.whisper.window_stream"
+            android:exported="true" />
+        <receiver android:name=".WindowStreamStopReceiver" android:exported="false" />
 
         <service android:name="im.zoe.labs.flutter_notification_listener.NotificationsHandlerService"
             android:exported="false"

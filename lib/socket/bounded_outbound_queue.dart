@@ -11,11 +11,16 @@ enum OutboundPacketKind {
   key,
   button,
   release,
+
+  /// Window-stream video: codec parameter sets, keyframes, other frames.
+  videoConfig,
+  videoKey,
+  videoDelta,
 }
 
 enum OutboundQueueResult { sent, dropped, closed, writerFailure }
 
-enum _OutboundPolicy { failClosed, dropOldest, remoteInput }
+enum _OutboundPolicy { failClosed, dropOldest, remoteInput, video }
 
 final class BoundedOutboundQueue {
   BoundedOutboundQueue._({
@@ -81,8 +86,35 @@ final class BoundedOutboundQueue {
     onOverflow: onOverflow,
   );
 
+  /// Live video: only the freshest frames matter. Frames are dropped before
+  /// they are produced (and therefore before they are encrypted), so the
+  /// packet sequence stays contiguous. Once any non-keyframe is dropped, the
+  /// following ones are dropped too until a keyframe arrives, and
+  /// [onKeyframeNeeded] asks the encoder for one. Everything else (codec
+  /// config, keyframes, small control packets) is never dropped silently.
+  factory BoundedOutboundQueue.video({
+    required Future<void> Function(Stream<Object>) addStream,
+    int maxItems = 48,
+    int maxBytes = 24 * 1024 * 1024,
+    Duration writerTimeout = const Duration(seconds: 5),
+    void Function()? onOverflow,
+    void Function()? onKeyframeNeeded,
+  }) => BoundedOutboundQueue._(
+    addStream: addStream,
+    policy: _OutboundPolicy.video,
+    maxItems: maxItems,
+    maxBytes: maxBytes,
+    writerTimeout: writerTimeout,
+    onOverflow: onOverflow,
+  ).._onKeyframeNeeded = onKeyframeNeeded;
+
   final Future<void> Function(Stream<Object>) _addStream;
   final void Function(Object)? _add;
+  void Function()? _onKeyframeNeeded;
+  bool _videoNeedsKeyframe = false;
+
+  /// Video only: deltas are being dropped until the next keyframe.
+  bool get videoNeedsKeyframe => _videoNeedsKeyframe;
   final _OutboundPolicy _policy;
   final int maxItems;
   final int maxBytes;
@@ -164,7 +196,12 @@ final class BoundedOutboundQueue {
       }
     }
 
-    if (_policy == _OutboundPolicy.dropOldest) {
+    if (_policy == _OutboundPolicy.video) {
+      final early = _admitVideo(kind, byteLength);
+      if (early != null) {
+        return Future<OutboundQueueResult>.value(early);
+      }
+    } else if (_policy == _OutboundPolicy.dropOldest) {
       while (_wouldOverflow(byteLength) && _waiting.isNotEmpty) {
         _drop(_waiting.removeFirst());
       }
@@ -188,6 +225,63 @@ final class BoundedOutboundQueue {
     _pendingBytes += byteLength;
     _ensurePump();
     return item.completion.future;
+  }
+
+  /// Returns a result when the packet must not be queued.
+  OutboundQueueResult? _admitVideo(OutboundPacketKind kind, int byteLength) {
+    switch (kind) {
+      case OutboundPacketKind.videoDelta:
+        if (_videoNeedsKeyframe || _wouldOverflow(byteLength)) {
+          _dropWaitingDeltas();
+          _droppedItems += 1;
+          return OutboundQueueResult.dropped;
+        }
+        return null;
+      case OutboundPacketKind.videoKey:
+        // A keyframe makes every queued frame obsolete.
+        _dropWaiting(
+          (item) =>
+              item == OutboundPacketKind.videoDelta ||
+              item == OutboundPacketKind.videoKey,
+        );
+        _videoNeedsKeyframe = false;
+      case OutboundPacketKind.videoConfig:
+        _dropWaiting((item) => item == OutboundPacketKind.videoConfig);
+      default:
+        break;
+    }
+    if (_wouldOverflow(byteLength)) {
+      _dropWaitingDeltas();
+    }
+    if (_wouldOverflow(byteLength)) {
+      _accepting = false;
+      _signalOverflow();
+      return OutboundQueueResult.dropped;
+    }
+    return null;
+  }
+
+  void _dropWaitingDeltas() {
+    final dropped = _dropWaiting(
+      (item) => item == OutboundPacketKind.videoDelta,
+    );
+    if (!_videoNeedsKeyframe) {
+      _videoNeedsKeyframe = true;
+      _onKeyframeNeeded?.call();
+    } else if (dropped > 0) {
+      _onKeyframeNeeded?.call();
+    }
+  }
+
+  int _dropWaiting(bool Function(OutboundPacketKind kind) matches) {
+    final stale = _waiting
+        .where((item) => matches(item.kind))
+        .toList(growable: false);
+    for (final item in stale) {
+      _waiting.remove(item);
+      _drop(item);
+    }
+    return stale.length;
   }
 
   bool _wouldOverflow(int byteLength) {

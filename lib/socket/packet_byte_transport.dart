@@ -103,6 +103,35 @@ class PacketByteTransport {
          onOverflow: onOverflow,
        );
 
+  /// Window-stream video from the source to the viewer. See
+  /// [BoundedOutboundQueue.video] for which frames may be dropped; dropping
+  /// happens before encoding, so the encrypted sequence never has gaps.
+  PacketByteTransport.video({
+    required Future<void> Function(Stream<Object>) addStream,
+    required Future<void> Function() closeSink,
+    this.onPacketSent,
+    this.onPacketDropped,
+    void Function()? onOverflow,
+    void Function()? onKeyframeNeeded,
+    int maxItems = 48,
+    int maxBytes = 24 * 1024 * 1024,
+    Duration writerTimeout = const Duration(seconds: 5),
+    Duration closeTimeout = const Duration(seconds: 2),
+    this.packetEncoder,
+  }) : _sendBytes = null,
+       _closeGuard = TransportCloseGuard(
+         close: closeSink,
+         timeout: closeTimeout,
+       ),
+       _queue = BoundedOutboundQueue.video(
+         addStream: addStream,
+         maxItems: maxItems,
+         maxBytes: maxBytes,
+         writerTimeout: writerTimeout,
+         onOverflow: onOverflow,
+         onKeyframeNeeded: onKeyframeNeeded,
+       );
+
   final void Function(Object bytes)? _sendBytes;
   final TransportCloseGuard _closeGuard;
   final BoundedOutboundQueue? _queue;

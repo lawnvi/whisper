@@ -101,6 +101,8 @@ PODS:
     - Flutter
   - wakelock_plus (0.0.1):
     - Flutter
+  - window_stream_native (0.1.0):
+    - Flutter
 
 DEPENDENCIES:
   - audioplayers_darwin (from `.symlinks/plugins/audioplayers_darwin/darwin`)
@@ -123,6 +125,7 @@ DEPENDENCIES:
   - super_native_extensions (from `.symlinks/plugins/super_native_extensions/ios`)
   - url_launcher_ios (from `.symlinks/plugins/url_launcher_ios/ios`)
   - wakelock_plus (from `.symlinks/plugins/wakelock_plus/ios`)
+  - window_stream_native (from `.symlinks/plugins/window_stream_native/ios`)
 
 SPEC REPOS:
   trunk:
@@ -173,6 +176,8 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/url_launcher_ios/ios"
   wakelock_plus:
     :path: ".symlinks/plugins/wakelock_plus/ios"
+  window_stream_native:
+    :path: ".symlinks/plugins/window_stream_native/ios"
 
 SPEC CHECKSUMS:
   audioplayers_darwin: 835ced6edd4c9fc8ebb0a7cc9e294a91d99917d5
@@ -200,6 +205,7 @@ SPEC CHECKSUMS:
   SwiftyGif: 93a1cc87bf3a51916001cf8f3d63835fb64c819f
   url_launcher_ios: 7a95fa5b60cc718a708b8f2966718e93db0cef1b
   wakelock_plus: e29112ab3ef0b318e58cfa5c32326458be66b556
+  window_stream_native: 8195a7faf1a7ec91770122efe1c98da441047f8c
 
 PODFILE CHECKSUM: 22e5a815f524d8d239c26b3ea1ddce04f62ed8b5
 

@@ -24,6 +24,7 @@ import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/main.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/page/appList.dart';
+import 'package:whisper/page/window_stream/android_service/android_service_page.dart';
 import 'package:whisper/remote_input/remote_input_coordinator.dart';
 import 'package:whisper/socket/svrmanager.dart';
 import 'package:whisper/state/connection_coordinator.dart';
@@ -36,6 +37,8 @@ import 'package:whisper/widget/glass_dialog.dart';
 import 'package:whisper/widget/glass_settings_slider.dart';
 import 'package:whisper/widget/screenshot_controls.dart';
 import 'package:whisper/widget/windows_input_service_setting.dart';
+import 'package:whisper/window_stream/linux/gnome_helper_tile.dart';
+import 'package:whisper/window_stream/remote/window_stream_host.dart';
 
 typedef SettingsPresentationLoader = Future<SettingsPresentation> Function();
 
@@ -641,6 +644,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               );
                             },
                           ),
+                        if (Platform.isLinux) const GnomeHelperTile(),
                         if (!_isMobilePlatform)
                           _buildSettingItem(
                             l10n.close2tray,
@@ -666,6 +670,48 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     l10n.settingsSectionPermissionsSharing,
                     l10n.settingsSectionPermissionsSharingDesc,
                     [
+                      if (!_isMobilePlatform)
+                        _buildSettingItem(
+                          l10n.windowStreamShareSetting,
+                          Icon(
+                            CupertinoIcons.rectangle_stack,
+                            color: isDark
+                                ? Colors.grey[400]
+                                : CupertinoColors.systemGrey,
+                          ),
+                          desc: l10n.windowStreamShareSettingDesc,
+                          trailing: CupertinoSwitch(
+                            value: WindowStreamHost.shared.sharingAllowed,
+                            onChanged: (bool value) async {
+                              await WindowStreamHost.shared.setSharingAllowed(
+                                value,
+                              );
+                              if (mounted) {
+                                setState(() {});
+                              }
+                            },
+                          ),
+                        ),
+                      if (_isMobilePlatform && _isAndroidPlatform)
+                        _buildSettingItem(
+                          l10n.androidWindowServiceEntryTitle,
+                          Icon(
+                            CupertinoIcons.rectangle_on_rectangle_angled,
+                            color: isDark
+                                ? Colors.grey[400]
+                                : CupertinoColors.systemGrey,
+                          ),
+                          desc: l10n.androidWindowServiceEntryHint,
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => const AndroidWindowServicePage(),
+                            ),
+                          ),
+                          trailing: Icon(
+                            Icons.chevron_right_rounded,
+                            color: palette.textMuted,
+                          ),
+                        ),
                       _buildSettingItem(
                         l10n.accessClipboard,
                         Icon(

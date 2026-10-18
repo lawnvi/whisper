@@ -147,6 +147,10 @@ final class WireControlSessionRegistry {
 
   int get length => _bindings.length;
 
+  /// Whether [sessionId] is a session this registry still knows.
+  bool knows({required String namespace, required String sessionId}) =>
+      _bindings.containsKey('$namespace\u0000$sessionId');
+
   bool forget({required String namespace, required String sessionId}) {
     if (namespace.isEmpty || sessionId.isEmpty) {
       return false;
@@ -362,7 +366,8 @@ abstract final class WireInputPolicy {
       MessageEnum.Notification ||
       MessageEnum.AudioControl ||
       MessageEnum.RemoteInputControl ||
-      MessageEnum.AudioGroupControl => true,
+      MessageEnum.AudioGroupControl ||
+      MessageEnum.WindowStreamControl => true,
       MessageEnum.File => allowFileOffer,
       _ => false,
     };

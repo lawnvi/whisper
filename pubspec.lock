@@ -1729,6 +1729,13 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.5.2"
+  window_stream_native:
+    dependency: "direct main"
+    description:
+      path: "packages/window_stream_native"
+      relative: true
+    source: path
+    version: "0.1.0"
   xdg_directories:
     dependency: transitive
     description:

@@ -1,4 +1,20 @@
 <resources>
     <string name="connection_alert_accept_action">数字一致</string>
     <string name="connection_alert_reject_action">拒绝</string>
+    <string name="window_stream_channel">窗口流转</string>
+    <string name="window_stream_active_title">正在流转到 %1$s</string>
+    <string name="window_stream_other_device">另一台设备</string>
+    <plurals name="window_stream_window_count">
+        <item quantity="other">%d 个窗口正在那台设备上显示，可被操作</item>
+    </plurals>
+    <string name="window_stream_stop_action">停止流转</string>
+    <string name="window_stream_stopping">正在停止…</string>
+    <string name="window_stream_chip">流转中</string>
+    <string name="window_stream_back_to_whisper">回到 Whisper</string>
+    <string name="window_stream_text_size">文字大小</string>
+    <string name="window_stream_keyboard">键盘</string>
+    <string name="window_stream_rotate">旋转</string>
+    <string name="window_stream_mute">静音</string>
+    <string name="window_stream_unmute">取消静音</string>
+    <string name="window_stream_close">结束流转，窗口回到原设备</string>
 </resources>

@@ -3435,6 +3435,966 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'{done}/{total} 个文件'**
   String folderFileProgress(int done, int total);
+
+  /// No description provided for @windowStreamTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'手机应用'**
+  String get windowStreamTitle;
+
+  /// No description provided for @windowStreamConnecting.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在连接…'**
+  String get windowStreamConnecting;
+
+  /// No description provided for @windowStreamPaused.
+  ///
+  /// In zh, this message translates to:
+  /// **'已暂停，点按继续'**
+  String get windowStreamPaused;
+
+  /// No description provided for @windowStreamReconnecting.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在重新连接…'**
+  String get windowStreamReconnecting;
+
+  /// No description provided for @windowStreamDisplaced.
+  ///
+  /// In zh, this message translates to:
+  /// **'已回到手机上，点按拿回来'**
+  String get windowStreamDisplaced;
+
+  /// No description provided for @windowStreamSecureBlocked.
+  ///
+  /// In zh, this message translates to:
+  /// **'此应用不允许投屏'**
+  String get windowStreamSecureBlocked;
+
+  /// No description provided for @windowStreamAppExited.
+  ///
+  /// In zh, this message translates to:
+  /// **'应用已退出'**
+  String get windowStreamAppExited;
+
+  /// No description provided for @windowStreamDisconnected.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接已断开，可以关闭这个窗口'**
+  String get windowStreamDisconnected;
+
+  /// No description provided for @windowStreamNoDevice.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有发现手机'**
+  String get windowStreamNoDevice;
+
+  /// No description provided for @windowStreamNoDeviceHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'用数据线连接手机，或在手机的开发者选项里打开“无线调试”。'**
+  String get windowStreamNoDeviceHint;
+
+  /// No description provided for @windowStreamUnauthorized.
+  ///
+  /// In zh, this message translates to:
+  /// **'请在手机上允许这台电脑调试'**
+  String get windowStreamUnauthorized;
+
+  /// No description provided for @windowStreamDeviceOffline.
+  ///
+  /// In zh, this message translates to:
+  /// **'手机暂时连不上，请重新插拔数据线或重新打开无线调试'**
+  String get windowStreamDeviceOffline;
+
+  /// No description provided for @windowStreamAdbMissing.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有找到 adb，请先安装 Android 平台工具'**
+  String get windowStreamAdbMissing;
+
+  /// No description provided for @windowStreamAdbFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'adb 服务没能启动'**
+  String get windowStreamAdbFailed;
+
+  /// No description provided for @windowStreamUnsupported.
+  ///
+  /// In zh, this message translates to:
+  /// **'这台电脑暂时还不能打开手机应用窗口'**
+  String get windowStreamUnsupported;
+
+  /// No description provided for @windowStreamRunningApps.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在运行'**
+  String get windowStreamRunningApps;
+
+  /// No description provided for @windowStreamAllApps.
+  ///
+  /// In zh, this message translates to:
+  /// **'所有应用'**
+  String get windowStreamAllApps;
+
+  /// No description provided for @windowStreamSearchApps.
+  ///
+  /// In zh, this message translates to:
+  /// **'搜索应用'**
+  String get windowStreamSearchApps;
+
+  /// No description provided for @windowStreamLoadingApps.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在读取应用…'**
+  String get windowStreamLoadingApps;
+
+  /// No description provided for @windowStreamOnDesktop.
+  ///
+  /// In zh, this message translates to:
+  /// **'在桌面上'**
+  String get windowStreamOnDesktop;
+
+  /// No description provided for @windowStreamShowSystemApps.
+  ///
+  /// In zh, this message translates to:
+  /// **'显示系统应用'**
+  String get windowStreamShowSystemApps;
+
+  /// No description provided for @windowStreamRetry.
+  ///
+  /// In zh, this message translates to:
+  /// **'重试'**
+  String get windowStreamRetry;
+
+  /// No description provided for @windowStreamInjectDenied.
+  ///
+  /// In zh, this message translates to:
+  /// **'小米手机还要在开发者选项里打开“USB 调试（安全设置）”，然后重启手机'**
+  String get windowStreamInjectDenied;
+
+  /// No description provided for @windowStreamAndroidTooOld.
+  ///
+  /// In zh, this message translates to:
+  /// **'需要 Android 10 或更新的系统'**
+  String get windowStreamAndroidTooOld;
+
+  /// No description provided for @windowStreamOpenFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'没能打开这个应用'**
+  String get windowStreamOpenFailed;
+
+  /// No description provided for @windowStreamNoApps.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有读到应用'**
+  String get windowStreamNoApps;
+
+  /// No description provided for @windowStreamSpaceTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'流转'**
+  String get windowStreamSpaceTitle;
+
+  /// No description provided for @windowStreamRecents.
+  ///
+  /// In zh, this message translates to:
+  /// **'最近'**
+  String get windowStreamRecents;
+
+  /// No description provided for @windowStreamWindows.
+  ///
+  /// In zh, this message translates to:
+  /// **'窗口'**
+  String get windowStreamWindows;
+
+  /// No description provided for @windowStreamApps.
+  ///
+  /// In zh, this message translates to:
+  /// **'应用'**
+  String get windowStreamApps;
+
+  /// No description provided for @windowStreamViaUsb.
+  ///
+  /// In zh, this message translates to:
+  /// **'USB 连接'**
+  String get windowStreamViaUsb;
+
+  /// No description provided for @windowStreamViaWifi.
+  ///
+  /// In zh, this message translates to:
+  /// **'无线调试'**
+  String get windowStreamViaWifi;
+
+  /// No description provided for @windowStreamViaWhisper.
+  ///
+  /// In zh, this message translates to:
+  /// **'已连接'**
+  String get windowStreamViaWhisper;
+
+  /// No description provided for @windowStreamStatusLive.
+  ///
+  /// In zh, this message translates to:
+  /// **'直播'**
+  String get windowStreamStatusLive;
+
+  /// No description provided for @windowStreamStatusPaused.
+  ///
+  /// In zh, this message translates to:
+  /// **'已暂停'**
+  String get windowStreamStatusPaused;
+
+  /// No description provided for @windowStreamStatusConnecting.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接中'**
+  String get windowStreamStatusConnecting;
+
+  /// No description provided for @windowStreamStatusEnded.
+  ///
+  /// In zh, this message translates to:
+  /// **'已断开'**
+  String get windowStreamStatusEnded;
+
+  /// No description provided for @windowStreamPause.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂停'**
+  String get windowStreamPause;
+
+  /// No description provided for @windowStreamResume.
+  ///
+  /// In zh, this message translates to:
+  /// **'继续'**
+  String get windowStreamResume;
+
+  /// No description provided for @windowStreamClose.
+  ///
+  /// In zh, this message translates to:
+  /// **'关闭'**
+  String get windowStreamClose;
+
+  /// No description provided for @windowStreamNoWindows.
+  ///
+  /// In zh, this message translates to:
+  /// **'还没有打开的窗口'**
+  String get windowStreamNoWindows;
+
+  /// No description provided for @windowStreamNoWindowsHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'点开一个应用或最近任务，它会出现在这里'**
+  String get windowStreamNoWindowsHint;
+
+  /// No description provided for @windowStreamNoDevices.
+  ///
+  /// In zh, this message translates to:
+  /// **'还没有可用的设备'**
+  String get windowStreamNoDevices;
+
+  /// No description provided for @windowStreamNoDevicesHintDesktop.
+  ///
+  /// In zh, this message translates to:
+  /// **'用数据线连接安卓手机，或在手机的开发者选项里打开“无线调试”。'**
+  String get windowStreamNoDevicesHintDesktop;
+
+  /// No description provided for @windowStreamNoDevicesHintMobile.
+  ///
+  /// In zh, this message translates to:
+  /// **'在 Mac 上打开 Whisper，并和这台设备互相信任后，Mac 的窗口会出现在这里。'**
+  String get windowStreamNoDevicesHintMobile;
+
+  /// No description provided for @windowStreamLoadFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'没能读取这台设备的应用'**
+  String get windowStreamLoadFailed;
+
+  /// No description provided for @windowStreamBackToSpace.
+  ///
+  /// In zh, this message translates to:
+  /// **'返回流转'**
+  String get windowStreamBackToSpace;
+
+  /// No description provided for @windowStreamKeyboard.
+  ///
+  /// In zh, this message translates to:
+  /// **'键盘'**
+  String get windowStreamKeyboard;
+
+  /// No description provided for @windowStreamNoRecents.
+  ///
+  /// In zh, this message translates to:
+  /// **'这台设备上没有正在运行的应用'**
+  String get windowStreamNoRecents;
+
+  /// No description provided for @windowStreamSourceLocked.
+  ///
+  /// In zh, this message translates to:
+  /// **'这台电脑已锁屏，解锁后才能流转它的窗口'**
+  String get windowStreamSourceLocked;
+
+  /// No description provided for @windowStreamCapturePermission.
+  ///
+  /// In zh, this message translates to:
+  /// **'这台电脑还没允许 Whisper 录屏，请在它的“系统设置 › 隐私与安全性 › 录屏”里打开'**
+  String get windowStreamCapturePermission;
+
+  /// No description provided for @windowStreamUntrusted.
+  ///
+  /// In zh, this message translates to:
+  /// **'这台手机的 Whisper 还没和本机配对。在手机上打开 Whisper，连接本机并确认配对后才能流转'**
+  String get windowStreamUntrusted;
+
+  /// No description provided for @windowStreamWhisperMissing.
+  ///
+  /// In zh, this message translates to:
+  /// **'这台手机上没有可用的 Whisper。装上最新版 Whisper 并和本机配对后才能流转'**
+  String get windowStreamWhisperMissing;
+
+  /// No description provided for @windowStreamNotPaired.
+  ///
+  /// In zh, this message translates to:
+  /// **'未配对'**
+  String get windowStreamNotPaired;
+
+  /// No description provided for @windowStreamOpenHere.
+  ///
+  /// In zh, this message translates to:
+  /// **'在本机打开'**
+  String get windowStreamOpenHere;
+
+  /// No description provided for @windowStreamSendTo.
+  ///
+  /// In zh, this message translates to:
+  /// **'送到 {device}'**
+  String windowStreamSendTo(String device);
+
+  /// No description provided for @windowStreamSendHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'选一个本机窗口送到 {device}。点开后窗口会挪到那台设备上，不再占这台电脑的屏幕；那边关掉后自动回到原处。'**
+  String windowStreamSendHint(String device);
+
+  /// No description provided for @windowStreamSent.
+  ///
+  /// In zh, this message translates to:
+  /// **'已送到 {device}，在那台设备上点开即可查看'**
+  String windowStreamSent(String device);
+
+  /// No description provided for @windowStreamSendFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'没能送过去，请确认那台设备连着本机'**
+  String get windowStreamSendFailed;
+
+  /// No description provided for @windowStreamSendUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'{device} 上的 Whisper 需要连接本机并更新到最新版，才能接收窗口'**
+  String windowStreamSendUnavailable(String device);
+
+  /// No description provided for @windowStreamNoLocalWindows.
+  ///
+  /// In zh, this message translates to:
+  /// **'本机没有可以送出去的窗口'**
+  String get windowStreamNoLocalWindows;
+
+  /// No description provided for @windowStreamOfferTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'{device} 送来了一个窗口'**
+  String windowStreamOfferTitle(String device);
+
+  /// No description provided for @windowStreamOfferView.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看'**
+  String get windowStreamOfferView;
+
+  /// No description provided for @windowStreamOfferFrom.
+  ///
+  /// In zh, this message translates to:
+  /// **'来自 {device}'**
+  String windowStreamOfferFrom(String device);
+
+  /// No description provided for @windowStreamTouchBlockedTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'{device} 现在点不动了'**
+  String windowStreamTouchBlockedTitle(String device);
+
+  /// No description provided for @windowStreamTouchBlockedBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'{app} 留在后台的一个页面挡住了手机屏幕，手机收不到触摸。关掉这个页面就能恢复，{app} 不会被卸载，账号和记录都还在。'**
+  String windowStreamTouchBlockedBody(String app);
+
+  /// No description provided for @windowStreamTouchBlockedFix.
+  ///
+  /// In zh, this message translates to:
+  /// **'关掉这个页面'**
+  String get windowStreamTouchBlockedFix;
+
+  /// No description provided for @windowStreamTouchBlockedLater.
+  ///
+  /// In zh, this message translates to:
+  /// **'以后再说'**
+  String get windowStreamTouchBlockedLater;
+
+  /// No description provided for @windowStreamTouchBlockedFixed.
+  ///
+  /// In zh, this message translates to:
+  /// **'好了，手机可以操作了'**
+  String get windowStreamTouchBlockedFixed;
+
+  /// No description provided for @windowStreamTextSize.
+  ///
+  /// In zh, this message translates to:
+  /// **'文字大小'**
+  String get windowStreamTextSize;
+
+  /// No description provided for @windowStreamOpenHereDetail.
+  ///
+  /// In zh, this message translates to:
+  /// **'用 {device} 上的应用'**
+  String windowStreamOpenHereDetail(String device);
+
+  /// No description provided for @windowStreamSendToDetail.
+  ///
+  /// In zh, this message translates to:
+  /// **'把窗口挪到 {device} 上'**
+  String windowStreamSendToDetail(String device);
+
+  /// No description provided for @windowStreamStreaming.
+  ///
+  /// In zh, this message translates to:
+  /// **'流转中'**
+  String get windowStreamStreaming;
+
+  /// No description provided for @windowStreamCloseWindow.
+  ///
+  /// In zh, this message translates to:
+  /// **'关闭窗口'**
+  String get windowStreamCloseWindow;
+
+  /// No description provided for @windowStreamCloseFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'没能关闭这个窗口'**
+  String get windowStreamCloseFailed;
+
+  /// No description provided for @windowStreamOfferIgnore.
+  ///
+  /// In zh, this message translates to:
+  /// **'忽略'**
+  String get windowStreamOfferIgnore;
+
+  /// No description provided for @windowStreamSwitcherRotate.
+  ///
+  /// In zh, this message translates to:
+  /// **'旋转'**
+  String get windowStreamSwitcherRotate;
+
+  /// Window stream: the source desktop is locked; shown on the viewing device.
+  ///
+  /// In zh, this message translates to:
+  /// **'{device} 已锁屏，解锁后才能流转它的窗口'**
+  String windowStreamHostLocked(String device);
+
+  /// Window stream: a Mac source lacks the Screen Recording permission; tells the viewer what to do on the Mac.
+  ///
+  /// In zh, this message translates to:
+  /// **'{device} 还没允许 Whisper 录屏。请在那台 Mac 的“系统设置 › 隐私与安全性 › 录屏与系统录音”里打开 Whisper'**
+  String windowStreamHostPermissionMac(String device);
+
+  /// Window stream: a Windows or Linux source refused screen capture (privacy setting).
+  ///
+  /// In zh, this message translates to:
+  /// **'{device} 的系统不允许 Whisper 录制窗口。请在那台电脑的隐私设置里允许 Whisper 录屏，然后再试一次'**
+  String windowStreamHostPermission(String device);
+
+  /// Window stream: a Linux (GNOME) source's Whisper Shell helper is not active yet; it becomes active after logging out and in once.
+  ///
+  /// In zh, this message translates to:
+  /// **'{device} 还差一步：请在那台电脑上注销并重新登录一次，之后就能流转它的窗口'**
+  String windowStreamHostHelper(String device);
+
+  /// Window stream: a Linux source runs a desktop other than GNOME on Wayland (KDE, X11).
+  ///
+  /// In zh, this message translates to:
+  /// **'{device} 的桌面暂不支持流转窗口，需要 GNOME（Wayland）'**
+  String windowStreamHostDesktopUnsupported(String device);
+
+  /// Window stream: a Windows source's window belongs to an elevated (administrator) process.
+  ///
+  /// In zh, this message translates to:
+  /// **'这个窗口以管理员身份运行，Whisper 无法流转它。请在 {device} 上以普通身份重新打开这个应用'**
+  String windowStreamHostElevated(String device);
+
+  /// Window stream: the window excludes itself from screen capture (DRM, password managers).
+  ///
+  /// In zh, this message translates to:
+  /// **'这个窗口不允许录屏，无法在这里显示'**
+  String get windowStreamHostProtected;
+
+  /// Window stream: the source could not open a video encoder.
+  ///
+  /// In zh, this message translates to:
+  /// **'{device} 没能开始编码画面，请稍后再试'**
+  String windowStreamHostEncoder(String device);
+
+  /// Window stream: the source has no usable capture backend (generic).
+  ///
+  /// In zh, this message translates to:
+  /// **'{device} 暂时还不能流转窗口。请把那台设备上的 Whisper 更新到最新版'**
+  String windowStreamHostUnsupported(String device);
+
+  /// Window stream: a Windows source lacks Windows Graphics Capture.
+  ///
+  /// In zh, this message translates to:
+  /// **'{device} 需要 Windows 10（1903）或更新的系统才能流转窗口'**
+  String windowStreamHostUnsupportedWindows(String device);
+
+  /// Window stream: a Mac source is older than macOS 12.3 (no ScreenCaptureKit).
+  ///
+  /// In zh, this message translates to:
+  /// **'{device} 需要 macOS 12.3 或更新的系统才能流转窗口'**
+  String windowStreamHostUnsupportedMac(String device);
+
+  /// Window stream: stands in for {device} when the source's name is unknown (lower case; the sentence start is capitalised in code).
+  ///
+  /// In zh, this message translates to:
+  /// **'那台设备'**
+  String get windowStreamThatDevice;
+
+  /// Overlay message for a streamed window on Linux when no H.264 decoder can be loaded (native WSN_WINDOW_DECODE_ERROR with a = 1). Dart should set it with wsn_surface_set_visual(WSN_VISUAL_ERROR, message).
+  ///
+  /// In zh, this message translates to:
+  /// **'无法显示画面：这台电脑缺少 FFmpeg 视频解码库'**
+  String get windowStreamDecoderMissing;
+
+  /// Tooltip and accessibility label of the volume button in a streamed window (desktop).
+  ///
+  /// In zh, this message translates to:
+  /// **'音量'**
+  String get windowStreamVolume;
+
+  /// Mute toggle in a streamed window's volume control.
+  ///
+  /// In zh, this message translates to:
+  /// **'静音'**
+  String get windowStreamMute;
+
+  /// Unmute toggle in a streamed window's volume control.
+  ///
+  /// In zh, this message translates to:
+  /// **'取消静音'**
+  String get windowStreamUnmute;
+
+  /// Overlay in a streamed window when the same window was opened on another device (a window is shown in one place at a time); the window then closes.
+  ///
+  /// In zh, this message translates to:
+  /// **'这个窗口已在另一台设备上打开'**
+  String get windowStreamMovedAway;
+
+  /// Under a window card in Flow: the window is shown on another device right now; opening it here moves it here.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在 {device} 上显示'**
+  String flowTaskOpenOn(String device);
+
+  /// Window-stream source failure shown to the viewer: the host desktop cannot capture windows at all (reason code = WSN_CAPTURE_ERROR_UNSUPPORTED from the Windows source; Windows is supported, so this is only for very old builds or missing Graphics.Capture).
+  ///
+  /// In zh, this message translates to:
+  /// **'这台电脑不支持窗口流转'**
+  String get windowStreamSourceErrorDesktopUnsupported;
+
+  /// Window-stream source: the chosen window belongs to a higher-integrity (administrator) process on Windows, so input can't be injected and it is excluded. Maps from a notFound/permission reason when the target was filtered out as elevated.
+  ///
+  /// In zh, this message translates to:
+  /// **'这个窗口以管理员身份运行，无法流转'**
+  String get windowStreamSourceErrorElevated;
+
+  /// Window-stream source status note (not an error): the app refused to stage off-screen or produced no frames after moving, so it is mirrored in its real on-screen position instead of the background. Shown on the host, or logged. {app} is the application name.
+  ///
+  /// In zh, this message translates to:
+  /// **'{app} 不支持在后台运行，正在原位置流转'**
+  String windowStreamSourceNoteStagedInPlace(String app);
+
+  /// Linux (GNOME) settings row title: the GNOME Shell extension that lets other devices show this computer's windows.
+  ///
+  /// In zh, this message translates to:
+  /// **'窗口流转组件'**
+  String get gnomeHelperTitle;
+
+  /// Linux settings row subtitle: why the helper exists and that the first install needs one logout/login.
+  ///
+  /// In zh, this message translates to:
+  /// **'其他设备流转本机窗口需要一个 GNOME 小组件，首次安装后要注销并重新登录一次'**
+  String get gnomeHelperHint;
+
+  /// Linux settings row subtitle while the helper is being installed.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在安装…'**
+  String get gnomeHelperWorking;
+
+  /// Status label (with a green dot): the helper is running.
+  ///
+  /// In zh, this message translates to:
+  /// **'已就绪'**
+  String get gnomeHelperReady;
+
+  /// Status label: the helper has never been installed.
+  ///
+  /// In zh, this message translates to:
+  /// **'未安装'**
+  String get gnomeHelperNotInstalled;
+
+  /// Status label: installed, takes effect after logging out and back in.
+  ///
+  /// In zh, this message translates to:
+  /// **'需重新登录'**
+  String get gnomeHelperNeedsRelogin;
+
+  /// Status label: an older helper is installed; this Whisper brings a newer one.
+  ///
+  /// In zh, this message translates to:
+  /// **'需要更新'**
+  String get gnomeHelperOutdated;
+
+  /// Status label: the helper was switched off in GNOME's Extensions app.
+  ///
+  /// In zh, this message translates to:
+  /// **'已停用'**
+  String get gnomeHelperDisabled;
+
+  /// Status label: all GNOME user extensions are switched off.
+  ///
+  /// In zh, this message translates to:
+  /// **'扩展已关闭'**
+  String get gnomeHelperExtensionsOff;
+
+  /// Confirmation dialog before installing the helper.
+  ///
+  /// In zh, this message translates to:
+  /// **'Whisper 会给 GNOME 装一个小扩展：被流转的窗口在后台运行，键盘和鼠标由它转交。只有 Whisper 能使用它。装好后需要注销并重新登录一次。'**
+  String get gnomeHelperInstallDesc;
+
+  /// Confirmation dialog before updating the helper.
+  ///
+  /// In zh, this message translates to:
+  /// **'这个版本的 Whisper 带来了新的窗口流转组件。更新后需要注销并重新登录一次。'**
+  String get gnomeHelperUpdateDesc;
+
+  /// Dialog when the helper waits for a new login; the confirm button logs out (GNOME asks again).
+  ///
+  /// In zh, this message translates to:
+  /// **'组件已经装好，GNOME 要在重新登录后才会加载它。注销前请先保存好其他应用里的内容。'**
+  String get gnomeHelperReloginDesc;
+
+  /// Dialog when the helper was switched off in GNOME Extensions.
+  ///
+  /// In zh, this message translates to:
+  /// **'窗口流转组件在 GNOME 的“扩展”里被关掉了。重新打开后，其他设备才能流转本机窗口。'**
+  String get gnomeHelperDisabledDesc;
+
+  /// Dialog when all GNOME extensions are off; confirming turns user extensions back on.
+  ///
+  /// In zh, this message translates to:
+  /// **'GNOME 扩展目前全部关闭。打开扩展后，窗口流转组件才能运行（其他已装的扩展也会一起打开）。'**
+  String get gnomeHelperExtensionsOffDesc;
+
+  /// Dialog when the helper is running (information only).
+  ///
+  /// In zh, this message translates to:
+  /// **'窗口流转组件正在运行。其他设备可以把本机窗口流转过去，窗口会在本机后台继续运行。'**
+  String get gnomeHelperReadyDesc;
+
+  /// Button: install the helper.
+  ///
+  /// In zh, this message translates to:
+  /// **'安装'**
+  String get gnomeHelperInstall;
+
+  /// Button: update the helper.
+  ///
+  /// In zh, this message translates to:
+  /// **'更新'**
+  String get gnomeHelperUpdate;
+
+  /// Button: log out of the desktop session now (GNOME shows its own confirmation).
+  ///
+  /// In zh, this message translates to:
+  /// **'注销…'**
+  String get gnomeHelperLogOut;
+
+  /// Button: dismiss the dialog without doing anything.
+  ///
+  /// In zh, this message translates to:
+  /// **'稍后'**
+  String get gnomeHelperLater;
+
+  /// Button: turn the helper back on.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开'**
+  String get gnomeHelperTurnOn;
+
+  /// Button: turn GNOME user extensions back on.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开扩展'**
+  String get gnomeHelperTurnOnExtensions;
+
+  /// Button: close an information dialog.
+  ///
+  /// In zh, this message translates to:
+  /// **'好'**
+  String get gnomeHelperDone;
+
+  /// Toast after installing: log out and back in to finish.
+  ///
+  /// In zh, this message translates to:
+  /// **'已安装。注销并重新登录后即可使用'**
+  String get gnomeHelperInstalled;
+
+  /// Toast when installing or enabling the helper failed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法安装窗口流转组件'**
+  String get gnomeHelperFailed;
+
+  /// Settings switch: whether trusted devices may open and control this computer's windows (window flow source)
+  ///
+  /// In zh, this message translates to:
+  /// **'允许查看和操作本机窗口'**
+  String get windowStreamShareSetting;
+
+  /// Detail under the window sharing settings switch
+  ///
+  /// In zh, this message translates to:
+  /// **'已信任的设备可以在它们那边打开并操作这台电脑上的窗口'**
+  String get windowStreamShareSettingDesc;
+
+  /// Toast after closing a window from the recents: the window stayed open on its device (for example a save prompt).
+  ///
+  /// In zh, this message translates to:
+  /// **'“{app}”还没有关闭，可能在问你是否保存'**
+  String windowStreamCloseStillOpen(String app);
+
+  /// Toast action: open the window that did not close, to answer its prompt.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开窗口'**
+  String get windowStreamCloseShow;
+
+  /// Accessibility label of a recents card whose window is being closed.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在关闭'**
+  String get windowStreamClosing;
+
+  /// Android page title: the on-phone service that lets other devices view and control this phone's apps.
+  ///
+  /// In zh, this message translates to:
+  /// **'窗口流转服务'**
+  String get androidWindowServiceTitle;
+
+  /// Android window flow service status: the agent is running and reachable.
+  ///
+  /// In zh, this message translates to:
+  /// **'已开启'**
+  String get androidWindowServiceRunning;
+
+  /// Android window flow service subtitle when running: what it enables.
+  ///
+  /// In zh, this message translates to:
+  /// **'你信任的电脑现在可以在它们的流转里看到这台手机，打开手机上的应用来操作'**
+  String get androidWindowServiceRunningHint;
+
+  /// Android window flow service status: set up before, but the agent is not running now (e.g. after a reboot).
+  ///
+  /// In zh, this message translates to:
+  /// **'未运行'**
+  String get androidWindowServiceStopped;
+
+  /// Android window flow service subtitle when stopped but already set up once.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开无线调试后，这里可以重新开启，无需再插电脑'**
+  String get androidWindowServiceStoppedHint;
+
+  /// Android window flow service status: never set up on this phone.
+  ///
+  /// In zh, this message translates to:
+  /// **'未设置'**
+  String get androidWindowServiceNeedsSetup;
+
+  /// Android window flow service subtitle when not set up: what the feature does.
+  ///
+  /// In zh, this message translates to:
+  /// **'开启后，这台手机的应用可以流转到你信任的电脑上查看和操作，手机留在后台'**
+  String get androidWindowServiceNeedsSetupHint;
+
+  /// Android window flow service primary button: start the service.
+  ///
+  /// In zh, this message translates to:
+  /// **'开启服务'**
+  String get androidWindowServiceStart;
+
+  /// Android window flow service button: stop the running service.
+  ///
+  /// In zh, this message translates to:
+  /// **'停止服务'**
+  String get androidWindowServiceStop;
+
+  /// Android window flow service primary button: begin first-time setup.
+  ///
+  /// In zh, this message translates to:
+  /// **'开始设置'**
+  String get androidWindowServiceSetup;
+
+  /// Android window flow setup section header: the steps only needed once.
+  ///
+  /// In zh, this message translates to:
+  /// **'一次性设置'**
+  String get androidWindowServiceHowTitle;
+
+  /// Android setup step 1 title.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开开发者选项'**
+  String get androidWindowServiceStep1;
+
+  /// Android setup step 1 subtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'在“关于手机”里连续点击“版本号”7 次'**
+  String get androidWindowServiceStep1Hint;
+
+  /// Android setup step 1 button: deep link to device info settings.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开“关于手机”'**
+  String get androidWindowServiceStep1Action;
+
+  /// Android setup step 2 title.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开无线调试'**
+  String get androidWindowServiceStep2;
+
+  /// Android setup step 2 subtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'在“开发者选项”里打开“无线调试”，并保持本页在同一屏打开“使用配对码配对设备”'**
+  String get androidWindowServiceStep2Hint;
+
+  /// Android setup step 2 button: deep link to development settings.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开“开发者选项”'**
+  String get androidWindowServiceStep2Action;
+
+  /// Android setup step 3 title: the 6-digit Wireless debugging pairing code.
+  ///
+  /// In zh, this message translates to:
+  /// **'输入配对码'**
+  String get androidWindowServiceStep3;
+
+  /// Android setup step 3 subtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'把系统显示的 6 位配对码填到这里，Whisper 会和这台手机自己配对并开启服务'**
+  String get androidWindowServiceStep3Hint;
+
+  /// Android setup pairing-code text field label.
+  ///
+  /// In zh, this message translates to:
+  /// **'配对码'**
+  String get androidWindowServicePairingCode;
+
+  /// Android setup button: submit the pairing code, pair, and start the service.
+  ///
+  /// In zh, this message translates to:
+  /// **'配对并开启'**
+  String get androidWindowServicePair;
+
+  /// Android setup status while pairing with the phone's own adb.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在配对…'**
+  String get androidWindowServicePairing;
+
+  /// Android window flow service status while the agent starts.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在开启…'**
+  String get androidWindowServiceStarting;
+
+  /// Android window flow service toggle: let Whisper restart the service by itself after the phone reboots.
+  ///
+  /// In zh, this message translates to:
+  /// **'重启后自动开启'**
+  String get androidWindowServiceAutoStart;
+
+  /// Android window flow service auto-start toggle subtitle, stating the security trade-off.
+  ///
+  /// In zh, this message translates to:
+  /// **'需要授予 Whisper 一项系统权限来开启无线调试；只有你信任的电脑才能连上，随时可在这里关闭'**
+  String get androidWindowServiceAutoStartHint;
+
+  /// Toast after the service starts.
+  ///
+  /// In zh, this message translates to:
+  /// **'窗口流转服务已开启'**
+  String get androidWindowServiceStarted;
+
+  /// Toast after the service stops.
+  ///
+  /// In zh, this message translates to:
+  /// **'窗口流转服务已停止'**
+  String get androidWindowServiceStopped2;
+
+  /// Toast when the self-start fails.
+  ///
+  /// In zh, this message translates to:
+  /// **'开启失败，请确认无线调试已打开并重试'**
+  String get androidWindowServiceStartFailed;
+
+  /// Toast when pairing with the pairing code fails.
+  ///
+  /// In zh, this message translates to:
+  /// **'配对失败，请核对配对码后重试'**
+  String get androidWindowServicePairFailed;
+
+  /// Settings row title linking to the Android window flow service page.
+  ///
+  /// In zh, this message translates to:
+  /// **'窗口流转服务'**
+  String get androidWindowServiceEntryTitle;
+
+  /// Settings row subtitle for the Android window flow service page.
+  ///
+  /// In zh, this message translates to:
+  /// **'让其他设备流转这台手机的应用'**
+  String get androidWindowServiceEntryHint;
+
+  /// Android window flow service hint shown when the phone cannot start the agent by itself (no bundled pairing): use a computer once.
+  ///
+  /// In zh, this message translates to:
+  /// **'把这台手机连到一台装了 Whisper、开着窗口流转的电脑一次，就能开启；之后其他电脑都能用'**
+  String get androidWindowServiceComputerHint;
+
+  /// Shown above an Android phone's (empty) window list on another device when the phone's window-flow service is not running.
+  ///
+  /// In zh, this message translates to:
+  /// **'在 {device} 上打开 Whisper，到“设置 → 窗口流转服务”里开启服务'**
+  String windowStreamPhoneServiceOff(String device);
 }
 
 class _AppLocalizationsDelegate

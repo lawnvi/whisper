@@ -958,5 +958,554 @@
         "format": "decimalPattern"
       }
     }
+  },
+  "windowStreamTitle": "手机应用",
+  "windowStreamConnecting": "正在连接…",
+  "windowStreamPaused": "已暂停，点按继续",
+  "windowStreamReconnecting": "正在重新连接…",
+  "windowStreamDisplaced": "已回到手机上，点按拿回来",
+  "windowStreamSecureBlocked": "此应用不允许投屏",
+  "windowStreamAppExited": "应用已退出",
+  "windowStreamDisconnected": "连接已断开，可以关闭这个窗口",
+  "windowStreamNoDevice": "没有发现手机",
+  "windowStreamNoDeviceHint": "用数据线连接手机，或在手机的开发者选项里打开“无线调试”。",
+  "windowStreamUnauthorized": "请在手机上允许这台电脑调试",
+  "windowStreamDeviceOffline": "手机暂时连不上，请重新插拔数据线或重新打开无线调试",
+  "windowStreamAdbMissing": "没有找到 adb，请先安装 Android 平台工具",
+  "windowStreamAdbFailed": "adb 服务没能启动",
+  "windowStreamUnsupported": "这台电脑暂时还不能打开手机应用窗口",
+  "windowStreamRunningApps": "正在运行",
+  "windowStreamAllApps": "所有应用",
+  "windowStreamSearchApps": "搜索应用",
+  "windowStreamLoadingApps": "正在读取应用…",
+  "windowStreamOnDesktop": "在桌面上",
+  "windowStreamShowSystemApps": "显示系统应用",
+  "windowStreamRetry": "重试",
+  "windowStreamInjectDenied": "小米手机还要在开发者选项里打开“USB 调试（安全设置）”，然后重启手机",
+  "windowStreamAndroidTooOld": "需要 Android 10 或更新的系统",
+  "windowStreamOpenFailed": "没能打开这个应用",
+  "windowStreamNoApps": "没有读到应用",
+  "windowStreamSpaceTitle": "流转",
+  "windowStreamRecents": "最近",
+  "windowStreamWindows": "窗口",
+  "windowStreamApps": "应用",
+  "windowStreamViaUsb": "USB 连接",
+  "windowStreamViaWifi": "无线调试",
+  "windowStreamViaWhisper": "已连接",
+  "windowStreamStatusLive": "直播",
+  "windowStreamStatusPaused": "已暂停",
+  "windowStreamStatusConnecting": "连接中",
+  "windowStreamStatusEnded": "已断开",
+  "windowStreamPause": "暂停",
+  "windowStreamResume": "继续",
+  "windowStreamClose": "关闭",
+  "windowStreamNoWindows": "还没有打开的窗口",
+  "windowStreamNoWindowsHint": "点开一个应用或最近任务，它会出现在这里",
+  "windowStreamNoDevices": "还没有可用的设备",
+  "windowStreamNoDevicesHintDesktop": "用数据线连接安卓手机，或在手机的开发者选项里打开“无线调试”。",
+  "windowStreamNoDevicesHintMobile": "在 Mac 上打开 Whisper，并和这台设备互相信任后，Mac 的窗口会出现在这里。",
+  "windowStreamLoadFailed": "没能读取这台设备的应用",
+  "windowStreamBackToSpace": "返回流转",
+  "windowStreamKeyboard": "键盘",
+  "windowStreamNoRecents": "这台设备上没有正在运行的应用",
+  "windowStreamSourceLocked": "这台电脑已锁屏，解锁后才能流转它的窗口",
+  "windowStreamCapturePermission": "这台电脑还没允许 Whisper 录屏，请在它的“系统设置 › 隐私与安全性 › 录屏”里打开",
+  "windowStreamUntrusted": "这台手机的 Whisper 还没和本机配对。在手机上打开 Whisper，连接本机并确认配对后才能流转",
+  "windowStreamWhisperMissing": "这台手机上没有可用的 Whisper。装上最新版 Whisper 并和本机配对后才能流转",
+  "windowStreamNotPaired": "未配对",
+  "windowStreamOpenHere": "在本机打开",
+  "windowStreamSendTo": "送到 {device}",
+  "@windowStreamSendTo": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "windowStreamSendHint": "选一个本机窗口送到 {device}。点开后窗口会挪到那台设备上，不再占这台电脑的屏幕；那边关掉后自动回到原处。",
+  "@windowStreamSendHint": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "windowStreamSent": "已送到 {device}，在那台设备上点开即可查看",
+  "@windowStreamSent": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "windowStreamSendFailed": "没能送过去，请确认那台设备连着本机",
+  "windowStreamSendUnavailable": "{device} 上的 Whisper 需要连接本机并更新到最新版，才能接收窗口",
+  "@windowStreamSendUnavailable": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "windowStreamNoLocalWindows": "本机没有可以送出去的窗口",
+  "windowStreamOfferTitle": "{device} 送来了一个窗口",
+  "@windowStreamOfferTitle": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "windowStreamOfferView": "查看",
+  "windowStreamOfferFrom": "来自 {device}",
+  "@windowStreamOfferFrom": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "windowStreamTouchBlockedTitle": "{device} 现在点不动了",
+  "@windowStreamTouchBlockedTitle": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "windowStreamTouchBlockedBody": "{app} 留在后台的一个页面挡住了手机屏幕，手机收不到触摸。关掉这个页面就能恢复，{app} 不会被卸载，账号和记录都还在。",
+  "@windowStreamTouchBlockedBody": {
+    "placeholders": {
+      "app": {
+        "type": "String"
+      }
+    }
+  },
+  "windowStreamTouchBlockedFix": "关掉这个页面",
+  "windowStreamTouchBlockedLater": "以后再说",
+  "windowStreamTouchBlockedFixed": "好了，手机可以操作了",
+  "windowStreamTextSize": "文字大小",
+  "windowStreamOpenHereDetail": "用 {device} 上的应用",
+  "@windowStreamOpenHereDetail": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "windowStreamSendToDetail": "把窗口挪到 {device} 上",
+  "@windowStreamSendToDetail": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "windowStreamStreaming": "流转中",
+  "windowStreamCloseWindow": "关闭窗口",
+  "windowStreamCloseFailed": "没能关闭这个窗口",
+  "windowStreamOfferIgnore": "忽略",
+  "windowStreamSwitcherRotate": "旋转",
+  "windowStreamHostLocked": "{device} 已锁屏，解锁后才能流转它的窗口",
+  "@windowStreamHostLocked": {
+    "description": "Window stream: the source desktop is locked; shown on the viewing device.",
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "windowStreamHostPermissionMac": "{device} 还没允许 Whisper 录屏。请在那台 Mac 的“系统设置 › 隐私与安全性 › 录屏与系统录音”里打开 Whisper",
+  "@windowStreamHostPermissionMac": {
+    "description": "Window stream: a Mac source lacks the Screen Recording permission; tells the viewer what to do on the Mac.",
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "windowStreamHostPermission": "{device} 的系统不允许 Whisper 录制窗口。请在那台电脑的隐私设置里允许 Whisper 录屏，然后再试一次",
+  "@windowStreamHostPermission": {
+    "description": "Window stream: a Windows or Linux source refused screen capture (privacy setting).",
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "windowStreamHostHelper": "{device} 还差一步：请在那台电脑上注销并重新登录一次，之后就能流转它的窗口",
+  "@windowStreamHostHelper": {
+    "description": "Window stream: a Linux (GNOME) source's Whisper Shell helper is not active yet; it becomes active after logging out and in once.",
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "windowStreamHostDesktopUnsupported": "{device} 的桌面暂不支持流转窗口，需要 GNOME（Wayland）",
+  "@windowStreamHostDesktopUnsupported": {
+    "description": "Window stream: a Linux source runs a desktop other than GNOME on Wayland (KDE, X11).",
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "windowStreamHostElevated": "这个窗口以管理员身份运行，Whisper 无法流转它。请在 {device} 上以普通身份重新打开这个应用",
+  "@windowStreamHostElevated": {
+    "description": "Window stream: a Windows source's window belongs to an elevated (administrator) process.",
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "windowStreamHostProtected": "这个窗口不允许录屏，无法在这里显示",
+  "@windowStreamHostProtected": {
+    "description": "Window stream: the window excludes itself from screen capture (DRM, password managers)."
+  },
+  "windowStreamHostEncoder": "{device} 没能开始编码画面，请稍后再试",
+  "@windowStreamHostEncoder": {
+    "description": "Window stream: the source could not open a video encoder.",
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "windowStreamHostUnsupported": "{device} 暂时还不能流转窗口。请把那台设备上的 Whisper 更新到最新版",
+  "@windowStreamHostUnsupported": {
+    "description": "Window stream: the source has no usable capture backend (generic).",
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "windowStreamHostUnsupportedWindows": "{device} 需要 Windows 10（1903）或更新的系统才能流转窗口",
+  "@windowStreamHostUnsupportedWindows": {
+    "description": "Window stream: a Windows source lacks Windows Graphics Capture.",
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "windowStreamHostUnsupportedMac": "{device} 需要 macOS 12.3 或更新的系统才能流转窗口",
+  "@windowStreamHostUnsupportedMac": {
+    "description": "Window stream: a Mac source is older than macOS 12.3 (no ScreenCaptureKit).",
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "windowStreamThatDevice": "那台设备",
+  "@windowStreamThatDevice": {
+    "description": "Window stream: stands in for {device} when the source's name is unknown (lower case; the sentence start is capitalised in code)."
+  },
+  "windowStreamDecoderMissing": "无法显示画面：这台电脑缺少 FFmpeg 视频解码库",
+  "@windowStreamDecoderMissing": {
+    "description": "Overlay message for a streamed window on Linux when no H.264 decoder can be loaded (native WSN_WINDOW_DECODE_ERROR with a = 1). Dart should set it with wsn_surface_set_visual(WSN_VISUAL_ERROR, message)."
+  },
+  "windowStreamVolume": "音量",
+  "@windowStreamVolume": {
+    "description": "Tooltip and accessibility label of the volume button in a streamed window (desktop)."
+  },
+  "windowStreamMute": "静音",
+  "@windowStreamMute": {
+    "description": "Mute toggle in a streamed window's volume control."
+  },
+  "windowStreamUnmute": "取消静音",
+  "@windowStreamUnmute": {
+    "description": "Unmute toggle in a streamed window's volume control."
+  },
+  "windowStreamMovedAway": "这个窗口已在另一台设备上打开",
+  "@windowStreamMovedAway": {
+    "description": "Overlay in a streamed window when the same window was opened on another device (a window is shown in one place at a time); the window then closes."
+  },
+  "flowTaskOpenOn": "正在 {device} 上显示",
+  "@flowTaskOpenOn": {
+    "description": "Under a window card in Flow: the window is shown on another device right now; opening it here moves it here.",
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "windowStreamSourceErrorDesktopUnsupported": "这台电脑不支持窗口流转",
+  "@windowStreamSourceErrorDesktopUnsupported": {
+    "description": "Window-stream source failure shown to the viewer: the host desktop cannot capture windows at all (reason code = WSN_CAPTURE_ERROR_UNSUPPORTED from the Windows source; Windows is supported, so this is only for very old builds or missing Graphics.Capture)."
+  },
+  "windowStreamSourceErrorElevated": "这个窗口以管理员身份运行，无法流转",
+  "@windowStreamSourceErrorElevated": {
+    "description": "Window-stream source: the chosen window belongs to a higher-integrity (administrator) process on Windows, so input can't be injected and it is excluded. Maps from a notFound/permission reason when the target was filtered out as elevated."
+  },
+  "windowStreamSourceNoteStagedInPlace": "{app} 不支持在后台运行，正在原位置流转",
+  "@windowStreamSourceNoteStagedInPlace": {
+    "description": "Window-stream source status note (not an error): the app refused to stage off-screen or produced no frames after moving, so it is mirrored in its real on-screen position instead of the background. Shown on the host, or logged. {app} is the application name.",
+    "placeholders": {
+      "app": {
+        "type": "String"
+      }
+    }
+  },
+  "gnomeHelperTitle": "窗口流转组件",
+  "@gnomeHelperTitle": {
+    "description": "Linux (GNOME) settings row title: the GNOME Shell extension that lets other devices show this computer's windows."
+  },
+  "gnomeHelperHint": "其他设备流转本机窗口需要一个 GNOME 小组件，首次安装后要注销并重新登录一次",
+  "@gnomeHelperHint": {
+    "description": "Linux settings row subtitle: why the helper exists and that the first install needs one logout/login."
+  },
+  "gnomeHelperWorking": "正在安装…",
+  "@gnomeHelperWorking": {
+    "description": "Linux settings row subtitle while the helper is being installed."
+  },
+  "gnomeHelperReady": "已就绪",
+  "@gnomeHelperReady": {
+    "description": "Status label (with a green dot): the helper is running."
+  },
+  "gnomeHelperNotInstalled": "未安装",
+  "@gnomeHelperNotInstalled": {
+    "description": "Status label: the helper has never been installed."
+  },
+  "gnomeHelperNeedsRelogin": "需重新登录",
+  "@gnomeHelperNeedsRelogin": {
+    "description": "Status label: installed, takes effect after logging out and back in."
+  },
+  "gnomeHelperOutdated": "需要更新",
+  "@gnomeHelperOutdated": {
+    "description": "Status label: an older helper is installed; this Whisper brings a newer one."
+  },
+  "gnomeHelperDisabled": "已停用",
+  "@gnomeHelperDisabled": {
+    "description": "Status label: the helper was switched off in GNOME's Extensions app."
+  },
+  "gnomeHelperExtensionsOff": "扩展已关闭",
+  "@gnomeHelperExtensionsOff": {
+    "description": "Status label: all GNOME user extensions are switched off."
+  },
+  "gnomeHelperInstallDesc": "Whisper 会给 GNOME 装一个小扩展：被流转的窗口在后台运行，键盘和鼠标由它转交。只有 Whisper 能使用它。装好后需要注销并重新登录一次。",
+  "@gnomeHelperInstallDesc": {
+    "description": "Confirmation dialog before installing the helper."
+  },
+  "gnomeHelperUpdateDesc": "这个版本的 Whisper 带来了新的窗口流转组件。更新后需要注销并重新登录一次。",
+  "@gnomeHelperUpdateDesc": {
+    "description": "Confirmation dialog before updating the helper."
+  },
+  "gnomeHelperReloginDesc": "组件已经装好，GNOME 要在重新登录后才会加载它。注销前请先保存好其他应用里的内容。",
+  "@gnomeHelperReloginDesc": {
+    "description": "Dialog when the helper waits for a new login; the confirm button logs out (GNOME asks again)."
+  },
+  "gnomeHelperDisabledDesc": "窗口流转组件在 GNOME 的“扩展”里被关掉了。重新打开后，其他设备才能流转本机窗口。",
+  "@gnomeHelperDisabledDesc": {
+    "description": "Dialog when the helper was switched off in GNOME Extensions."
+  },
+  "gnomeHelperExtensionsOffDesc": "GNOME 扩展目前全部关闭。打开扩展后，窗口流转组件才能运行（其他已装的扩展也会一起打开）。",
+  "@gnomeHelperExtensionsOffDesc": {
+    "description": "Dialog when all GNOME extensions are off; confirming turns user extensions back on."
+  },
+  "gnomeHelperReadyDesc": "窗口流转组件正在运行。其他设备可以把本机窗口流转过去，窗口会在本机后台继续运行。",
+  "@gnomeHelperReadyDesc": {
+    "description": "Dialog when the helper is running (information only)."
+  },
+  "gnomeHelperInstall": "安装",
+  "@gnomeHelperInstall": {
+    "description": "Button: install the helper."
+  },
+  "gnomeHelperUpdate": "更新",
+  "@gnomeHelperUpdate": {
+    "description": "Button: update the helper."
+  },
+  "gnomeHelperLogOut": "注销…",
+  "@gnomeHelperLogOut": {
+    "description": "Button: log out of the desktop session now (GNOME shows its own confirmation)."
+  },
+  "gnomeHelperLater": "稍后",
+  "@gnomeHelperLater": {
+    "description": "Button: dismiss the dialog without doing anything."
+  },
+  "gnomeHelperTurnOn": "打开",
+  "@gnomeHelperTurnOn": {
+    "description": "Button: turn the helper back on."
+  },
+  "gnomeHelperTurnOnExtensions": "打开扩展",
+  "@gnomeHelperTurnOnExtensions": {
+    "description": "Button: turn GNOME user extensions back on."
+  },
+  "gnomeHelperDone": "好",
+  "@gnomeHelperDone": {
+    "description": "Button: close an information dialog."
+  },
+  "gnomeHelperInstalled": "已安装。注销并重新登录后即可使用",
+  "@gnomeHelperInstalled": {
+    "description": "Toast after installing: log out and back in to finish."
+  },
+  "gnomeHelperFailed": "无法安装窗口流转组件",
+  "@gnomeHelperFailed": {
+    "description": "Toast when installing or enabling the helper failed."
+  },
+  "windowStreamShareSetting": "允许查看和操作本机窗口",
+  "@windowStreamShareSetting": {
+    "description": "Settings switch: whether trusted devices may open and control this computer's windows (window flow source)"
+  },
+  "windowStreamShareSettingDesc": "已信任的设备可以在它们那边打开并操作这台电脑上的窗口",
+  "@windowStreamShareSettingDesc": {
+    "description": "Detail under the window sharing settings switch"
+  },
+  "windowStreamCloseStillOpen": "“{app}”还没有关闭，可能在问你是否保存",
+  "@windowStreamCloseStillOpen": {
+    "description": "Toast after closing a window from the recents: the window stayed open on its device (for example a save prompt).",
+    "placeholders": {
+      "app": {
+        "type": "String"
+      }
+    }
+  },
+  "windowStreamCloseShow": "打开窗口",
+  "@windowStreamCloseShow": {
+    "description": "Toast action: open the window that did not close, to answer its prompt."
+  },
+  "windowStreamClosing": "正在关闭",
+  "@windowStreamClosing": {
+    "description": "Accessibility label of a recents card whose window is being closed."
+  },
+  "androidWindowServiceTitle": "窗口流转服务",
+  "@androidWindowServiceTitle": {
+    "description": "Android page title: the on-phone service that lets other devices view and control this phone's apps."
+  },
+  "androidWindowServiceRunning": "已开启",
+  "@androidWindowServiceRunning": {
+    "description": "Android window flow service status: the agent is running and reachable."
+  },
+  "androidWindowServiceRunningHint": "你信任的电脑现在可以在它们的流转里看到这台手机，打开手机上的应用来操作",
+  "@androidWindowServiceRunningHint": {
+    "description": "Android window flow service subtitle when running: what it enables."
+  },
+  "androidWindowServiceStopped": "未运行",
+  "@androidWindowServiceStopped": {
+    "description": "Android window flow service status: set up before, but the agent is not running now (e.g. after a reboot)."
+  },
+  "androidWindowServiceStoppedHint": "打开无线调试后，这里可以重新开启，无需再插电脑",
+  "@androidWindowServiceStoppedHint": {
+    "description": "Android window flow service subtitle when stopped but already set up once."
+  },
+  "androidWindowServiceNeedsSetup": "未设置",
+  "@androidWindowServiceNeedsSetup": {
+    "description": "Android window flow service status: never set up on this phone."
+  },
+  "androidWindowServiceNeedsSetupHint": "开启后，这台手机的应用可以流转到你信任的电脑上查看和操作，手机留在后台",
+  "@androidWindowServiceNeedsSetupHint": {
+    "description": "Android window flow service subtitle when not set up: what the feature does."
+  },
+  "androidWindowServiceStart": "开启服务",
+  "@androidWindowServiceStart": {
+    "description": "Android window flow service primary button: start the service."
+  },
+  "androidWindowServiceStop": "停止服务",
+  "@androidWindowServiceStop": {
+    "description": "Android window flow service button: stop the running service."
+  },
+  "androidWindowServiceSetup": "开始设置",
+  "@androidWindowServiceSetup": {
+    "description": "Android window flow service primary button: begin first-time setup."
+  },
+  "androidWindowServiceHowTitle": "一次性设置",
+  "@androidWindowServiceHowTitle": {
+    "description": "Android window flow setup section header: the steps only needed once."
+  },
+  "androidWindowServiceStep1": "打开开发者选项",
+  "@androidWindowServiceStep1": {
+    "description": "Android setup step 1 title."
+  },
+  "androidWindowServiceStep1Hint": "在“关于手机”里连续点击“版本号”7 次",
+  "@androidWindowServiceStep1Hint": {
+    "description": "Android setup step 1 subtitle."
+  },
+  "androidWindowServiceStep1Action": "打开“关于手机”",
+  "@androidWindowServiceStep1Action": {
+    "description": "Android setup step 1 button: deep link to device info settings."
+  },
+  "androidWindowServiceStep2": "打开无线调试",
+  "@androidWindowServiceStep2": {
+    "description": "Android setup step 2 title."
+  },
+  "androidWindowServiceStep2Hint": "在“开发者选项”里打开“无线调试”，并保持本页在同一屏打开“使用配对码配对设备”",
+  "@androidWindowServiceStep2Hint": {
+    "description": "Android setup step 2 subtitle."
+  },
+  "androidWindowServiceStep2Action": "打开“开发者选项”",
+  "@androidWindowServiceStep2Action": {
+    "description": "Android setup step 2 button: deep link to development settings."
+  },
+  "androidWindowServiceStep3": "输入配对码",
+  "@androidWindowServiceStep3": {
+    "description": "Android setup step 3 title: the 6-digit Wireless debugging pairing code."
+  },
+  "androidWindowServiceStep3Hint": "把系统显示的 6 位配对码填到这里，Whisper 会和这台手机自己配对并开启服务",
+  "@androidWindowServiceStep3Hint": {
+    "description": "Android setup step 3 subtitle."
+  },
+  "androidWindowServicePairingCode": "配对码",
+  "@androidWindowServicePairingCode": {
+    "description": "Android setup pairing-code text field label."
+  },
+  "androidWindowServicePair": "配对并开启",
+  "@androidWindowServicePair": {
+    "description": "Android setup button: submit the pairing code, pair, and start the service."
+  },
+  "androidWindowServicePairing": "正在配对…",
+  "@androidWindowServicePairing": {
+    "description": "Android setup status while pairing with the phone's own adb."
+  },
+  "androidWindowServiceStarting": "正在开启…",
+  "@androidWindowServiceStarting": {
+    "description": "Android window flow service status while the agent starts."
+  },
+  "androidWindowServiceAutoStart": "重启后自动开启",
+  "@androidWindowServiceAutoStart": {
+    "description": "Android window flow service toggle: let Whisper restart the service by itself after the phone reboots."
+  },
+  "androidWindowServiceAutoStartHint": "需要授予 Whisper 一项系统权限来开启无线调试；只有你信任的电脑才能连上，随时可在这里关闭",
+  "@androidWindowServiceAutoStartHint": {
+    "description": "Android window flow service auto-start toggle subtitle, stating the security trade-off."
+  },
+  "androidWindowServiceStarted": "窗口流转服务已开启",
+  "@androidWindowServiceStarted": {
+    "description": "Toast after the service starts."
+  },
+  "androidWindowServiceStopped2": "窗口流转服务已停止",
+  "@androidWindowServiceStopped2": {
+    "description": "Toast after the service stops."
+  },
+  "androidWindowServiceStartFailed": "开启失败，请确认无线调试已打开并重试",
+  "@androidWindowServiceStartFailed": {
+    "description": "Toast when the self-start fails."
+  },
+  "androidWindowServicePairFailed": "配对失败，请核对配对码后重试",
+  "@androidWindowServicePairFailed": {
+    "description": "Toast when pairing with the pairing code fails."
+  },
+  "androidWindowServiceEntryTitle": "窗口流转服务",
+  "@androidWindowServiceEntryTitle": {
+    "description": "Settings row title linking to the Android window flow service page."
+  },
+  "androidWindowServiceEntryHint": "让其他设备流转这台手机的应用",
+  "@androidWindowServiceEntryHint": {
+    "description": "Settings row subtitle for the Android window flow service page."
+  },
+  "androidWindowServiceComputerHint": "把这台手机连到一台装了 Whisper、开着窗口流转的电脑一次，就能开启；之后其他电脑都能用",
+  "@androidWindowServiceComputerHint": {
+    "description": "Android window flow service hint shown when the phone cannot start the agent by itself (no bundled pairing): use a computer once."
+  },
+  "windowStreamPhoneServiceOff": "在 {device} 上打开 Whisper，到“设置 → 窗口流转服务”里开启服务",
+  "@windowStreamPhoneServiceOff": {
+    "description": "Shown above an Android phone's (empty) window list on another device when the phone's window-flow service is not running.",
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
   }
 }

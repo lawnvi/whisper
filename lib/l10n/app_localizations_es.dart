@@ -2031,4 +2031,584 @@ class AppLocalizationsEs extends AppLocalizations {
 
     return '$doneString de $totalString archivos';
   }
+
+  @override
+  String get windowStreamTitle => 'Apps del teléfono';
+
+  @override
+  String get windowStreamConnecting => 'Conectando…';
+
+  @override
+  String get windowStreamPaused => 'En pausa. Haz clic para reanudar';
+
+  @override
+  String get windowStreamReconnecting => 'Reconectando…';
+
+  @override
+  String get windowStreamDisplaced =>
+      'Ha vuelto al teléfono. Haz clic para traerla aquí';
+
+  @override
+  String get windowStreamSecureBlocked =>
+      'Esta app no permite compartir pantalla';
+
+  @override
+  String get windowStreamAppExited => 'La app se ha cerrado';
+
+  @override
+  String get windowStreamDisconnected =>
+      'Desconectado. Puedes cerrar esta ventana';
+
+  @override
+  String get windowStreamNoDevice => 'No se encontró ningún teléfono';
+
+  @override
+  String get windowStreamNoDeviceHint =>
+      'Conecta el teléfono con un cable o activa la depuración inalámbrica en las opciones de desarrollador.';
+
+  @override
+  String get windowStreamUnauthorized =>
+      'Permite la depuración desde este ordenador en tu teléfono';
+
+  @override
+  String get windowStreamDeviceOffline =>
+      'El teléfono no responde. Vuelve a conectar el cable o reinicia la depuración inalámbrica';
+
+  @override
+  String get windowStreamAdbMissing =>
+      'No se encontró adb. Instala primero Android Platform Tools';
+
+  @override
+  String get windowStreamAdbFailed => 'No se pudo iniciar el servidor adb';
+
+  @override
+  String get windowStreamUnsupported =>
+      'Las ventanas de apps del teléfono aún no están disponibles en este ordenador';
+
+  @override
+  String get windowStreamRunningApps => 'En ejecución';
+
+  @override
+  String get windowStreamAllApps => 'Todas las apps';
+
+  @override
+  String get windowStreamSearchApps => 'Buscar apps';
+
+  @override
+  String get windowStreamLoadingApps => 'Cargando apps…';
+
+  @override
+  String get windowStreamOnDesktop => 'En el escritorio';
+
+  @override
+  String get windowStreamShowSystemApps => 'Mostrar apps del sistema';
+
+  @override
+  String get windowStreamRetry => 'Reintentar';
+
+  @override
+  String get windowStreamInjectDenied =>
+      'En los teléfonos Xiaomi, activa también “Depuración USB (ajustes de seguridad)” en las opciones de desarrollador y reinicia el teléfono';
+
+  @override
+  String get windowStreamAndroidTooOld => 'Requiere Android 10 o posterior';
+
+  @override
+  String get windowStreamOpenFailed => 'No se pudo abrir esta app';
+
+  @override
+  String get windowStreamNoApps => 'No se encontraron apps';
+
+  @override
+  String get windowStreamSpaceTitle => 'Flujo';
+
+  @override
+  String get windowStreamRecents => 'Recientes';
+
+  @override
+  String get windowStreamWindows => 'Ventanas';
+
+  @override
+  String get windowStreamApps => 'Apps';
+
+  @override
+  String get windowStreamViaUsb => 'Conectado por USB';
+
+  @override
+  String get windowStreamViaWifi => 'Depuración inalámbrica';
+
+  @override
+  String get windowStreamViaWhisper => 'Conectado';
+
+  @override
+  String get windowStreamStatusLive => 'En vivo';
+
+  @override
+  String get windowStreamStatusPaused => 'En pausa';
+
+  @override
+  String get windowStreamStatusConnecting => 'Conectando';
+
+  @override
+  String get windowStreamStatusEnded => 'Desconectado';
+
+  @override
+  String get windowStreamPause => 'Pausar';
+
+  @override
+  String get windowStreamResume => 'Reanudar';
+
+  @override
+  String get windowStreamClose => 'Cerrar';
+
+  @override
+  String get windowStreamNoWindows => 'No hay ventanas abiertas';
+
+  @override
+  String get windowStreamNoWindowsHint =>
+      'Abre una app o una tarea reciente y aparecerá aquí';
+
+  @override
+  String get windowStreamNoDevices => 'Aún no hay dispositivos';
+
+  @override
+  String get windowStreamNoDevicesHintDesktop =>
+      'Conecta un teléfono Android con un cable o activa la depuración inalámbrica en sus opciones de desarrollador.';
+
+  @override
+  String get windowStreamNoDevicesHintMobile =>
+      'Abre Whisper en tu Mac y confiad el uno en el otro; sus ventanas aparecerán aquí.';
+
+  @override
+  String get windowStreamLoadFailed =>
+      'No se pudieron cargar las apps de este dispositivo';
+
+  @override
+  String get windowStreamBackToSpace => 'Volver a Flujo';
+
+  @override
+  String get windowStreamKeyboard => 'Teclado';
+
+  @override
+  String get windowStreamNoRecents =>
+      'No hay nada en ejecución en este dispositivo';
+
+  @override
+  String get windowStreamSourceLocked =>
+      'Este ordenador está bloqueado. Desbloquéalo para transmitir sus ventanas.';
+
+  @override
+  String get windowStreamCapturePermission =>
+      'Este ordenador aún no permite que Whisper grabe su pantalla. Actívalo en Ajustes del Sistema › Privacidad y seguridad › Grabación de pantalla.';
+
+  @override
+  String get windowStreamUntrusted =>
+      'Whisper en este teléfono aún no está vinculado con este dispositivo. Abre Whisper en el teléfono, conéctate a este dispositivo y confirma la vinculación para transmitir.';
+
+  @override
+  String get windowStreamWhisperMissing =>
+      'Este teléfono no tiene un Whisper utilizable. Instala la última versión de Whisper y vincúlala con este dispositivo para transmitir.';
+
+  @override
+  String get windowStreamNotPaired => 'Sin vincular';
+
+  @override
+  String get windowStreamOpenHere => 'Abrir aquí';
+
+  @override
+  String windowStreamSendTo(String device) {
+    return 'Enviar a $device';
+  }
+
+  @override
+  String windowStreamSendHint(String device) {
+    return 'Elige una ventana de este ordenador para enviarla a $device. Al abrirla allí sale de esta pantalla y vuelve cuando se cierra en $device.';
+  }
+
+  @override
+  String windowStreamSent(String device) {
+    return 'Enviada a $device. Toca el aviso allí para verla.';
+  }
+
+  @override
+  String get windowStreamSendFailed =>
+      'No se pudo enviar. Comprueba que ese dispositivo esté conectado a este.';
+
+  @override
+  String windowStreamSendUnavailable(String device) {
+    return 'Whisper en $device debe estar conectado a este ordenador y actualizado para recibir ventanas.';
+  }
+
+  @override
+  String get windowStreamNoLocalWindows =>
+      'No hay ventanas en este ordenador para enviar';
+
+  @override
+  String windowStreamOfferTitle(String device) {
+    return '$device te envió una ventana';
+  }
+
+  @override
+  String get windowStreamOfferView => 'Ver';
+
+  @override
+  String windowStreamOfferFrom(String device) {
+    return 'De $device';
+  }
+
+  @override
+  String windowStreamTouchBlockedTitle(String device) {
+    return '$device no responde al tacto';
+  }
+
+  @override
+  String windowStreamTouchBlockedBody(String app) {
+    return 'Una página que $app dejó en segundo plano cubre la pantalla del teléfono y los toques no llegan. Cerrar esa página lo arregla; $app sigue instalada con su cuenta e historial.';
+  }
+
+  @override
+  String get windowStreamTouchBlockedFix => 'Cerrar esa página';
+
+  @override
+  String get windowStreamTouchBlockedLater => 'Ahora no';
+
+  @override
+  String get windowStreamTouchBlockedFixed =>
+      'Listo. El teléfono vuelve a responder.';
+
+  @override
+  String get windowStreamTextSize => 'Tamaño del texto';
+
+  @override
+  String windowStreamOpenHereDetail(String device) {
+    return 'Usa las apps de $device';
+  }
+
+  @override
+  String windowStreamSendToDetail(String device) {
+    return 'Mueve una ventana a $device';
+  }
+
+  @override
+  String get windowStreamStreaming => 'Abierta aquí';
+
+  @override
+  String get windowStreamCloseWindow => 'Cerrar ventana';
+
+  @override
+  String get windowStreamCloseFailed => 'No se pudo cerrar la ventana';
+
+  @override
+  String get windowStreamOfferIgnore => 'Descartar';
+
+  @override
+  String get windowStreamSwitcherRotate => 'Girar';
+
+  @override
+  String windowStreamHostLocked(String device) {
+    return '$device está bloqueado. Desbloquéalo para mostrar aquí sus ventanas.';
+  }
+
+  @override
+  String windowStreamHostPermissionMac(String device) {
+    return '$device aún no permite que Whisper grabe la pantalla. En ese Mac, activa Whisper en Ajustes del Sistema › Privacidad y seguridad › Grabación de pantalla y audio del sistema.';
+  }
+
+  @override
+  String windowStreamHostPermission(String device) {
+    return '$device no permite que Whisper grabe sus ventanas. Permite la grabación de pantalla para Whisper en los ajustes de privacidad de ese ordenador y vuelve a intentarlo.';
+  }
+
+  @override
+  String windowStreamHostHelper(String device) {
+    return 'Falta un paso en $device: cierra la sesión en ese ordenador y vuelve a iniciarla para poder mostrar aquí sus ventanas.';
+  }
+
+  @override
+  String windowStreamHostDesktopUnsupported(String device) {
+    return 'El escritorio de $device aún no puede compartir ventanas. Necesita GNOME con Wayland.';
+  }
+
+  @override
+  String windowStreamHostElevated(String device) {
+    return 'Esta ventana se ejecuta como administrador y Whisper no puede mostrarla. En $device, vuelve a abrir la app sin permisos de administrador.';
+  }
+
+  @override
+  String get windowStreamHostProtected =>
+      'Esta ventana bloquea la grabación de pantalla, así que no se puede mostrar aquí.';
+
+  @override
+  String windowStreamHostEncoder(String device) {
+    return '$device no pudo empezar a codificar el vídeo. Vuelve a intentarlo en un momento.';
+  }
+
+  @override
+  String windowStreamHostUnsupported(String device) {
+    return '$device aún no puede compartir sus ventanas. Actualiza Whisper a la última versión en ese dispositivo.';
+  }
+
+  @override
+  String windowStreamHostUnsupportedWindows(String device) {
+    return '$device necesita Windows 10 versión 1903 o posterior para compartir sus ventanas.';
+  }
+
+  @override
+  String windowStreamHostUnsupportedMac(String device) {
+    return '$device necesita macOS 12.3 o posterior para compartir sus ventanas.';
+  }
+
+  @override
+  String get windowStreamThatDevice => 'ese dispositivo';
+
+  @override
+  String get windowStreamDecoderMissing =>
+      'No se puede mostrar la ventana: falta el decodificador de vídeo de FFmpeg en este equipo';
+
+  @override
+  String get windowStreamVolume => 'Volumen';
+
+  @override
+  String get windowStreamMute => 'Silenciar';
+
+  @override
+  String get windowStreamUnmute => 'Activar sonido';
+
+  @override
+  String get windowStreamMovedAway =>
+      'Esta ventana se abrió en otro dispositivo';
+
+  @override
+  String flowTaskOpenOn(String device) {
+    return 'Se muestra en $device';
+  }
+
+  @override
+  String get windowStreamSourceErrorDesktopUnsupported =>
+      'Este PC no puede compartir ventanas';
+
+  @override
+  String get windowStreamSourceErrorElevated =>
+      'Esta ventana se ejecuta como administrador y no se puede compartir';
+
+  @override
+  String windowStreamSourceNoteStagedInPlace(String app) {
+    return '$app no puede ejecutarse en segundo plano, compartiéndola donde está';
+  }
+
+  @override
+  String get gnomeHelperTitle => 'Complemento para compartir ventanas';
+
+  @override
+  String get gnomeHelperHint =>
+      'Para mostrar las ventanas de este ordenador en tus otros dispositivos hace falta un pequeño componente de GNOME y cerrar sesión una vez';
+
+  @override
+  String get gnomeHelperWorking => 'Instalando…';
+
+  @override
+  String get gnomeHelperReady => 'Listo';
+
+  @override
+  String get gnomeHelperNotInstalled => 'No instalado';
+
+  @override
+  String get gnomeHelperNeedsRelogin => 'Cierra sesión para terminar';
+
+  @override
+  String get gnomeHelperOutdated => 'Necesita actualizarse';
+
+  @override
+  String get gnomeHelperDisabled => 'Desactivado';
+
+  @override
+  String get gnomeHelperExtensionsOff => 'Extensiones desactivadas';
+
+  @override
+  String get gnomeHelperInstallDesc =>
+      'Whisper añade una pequeña extensión de GNOME Shell que mantiene las ventanas compartidas en segundo plano y les pasa el teclado y el ratón. Solo Whisper puede usarla. Después de instalarla, cierra sesión y vuelve a entrar una vez.';
+
+  @override
+  String get gnomeHelperUpdateDesc =>
+      'Esta versión de Whisper trae un complemento más reciente. Después de actualizarlo, cierra sesión y vuelve a entrar una vez.';
+
+  @override
+  String get gnomeHelperReloginDesc =>
+      'El complemento ya está instalado. GNOME lo carga cuando vuelves a iniciar sesión. Guarda tu trabajo en otras apps antes de cerrar sesión.';
+
+  @override
+  String get gnomeHelperDisabledDesc =>
+      'El complemento se desactivó en Extensiones de GNOME. Vuelve a activarlo para que tus otros dispositivos puedan mostrar las ventanas de este ordenador.';
+
+  @override
+  String get gnomeHelperExtensionsOffDesc =>
+      'Las extensiones de GNOME están desactivadas. El complemento solo funciona con ellas activadas (también se activarán las demás extensiones instaladas).';
+
+  @override
+  String get gnomeHelperReadyDesc =>
+      'El complemento está funcionando. Tus otros dispositivos pueden mostrar las ventanas de este ordenador mientras siguen abiertas aquí en segundo plano.';
+
+  @override
+  String get gnomeHelperInstall => 'Instalar';
+
+  @override
+  String get gnomeHelperUpdate => 'Actualizar';
+
+  @override
+  String get gnomeHelperLogOut => 'Cerrar sesión…';
+
+  @override
+  String get gnomeHelperLater => 'Más tarde';
+
+  @override
+  String get gnomeHelperTurnOn => 'Activar';
+
+  @override
+  String get gnomeHelperTurnOnExtensions => 'Activar extensiones';
+
+  @override
+  String get gnomeHelperDone => 'Aceptar';
+
+  @override
+  String get gnomeHelperInstalled =>
+      'Instalado. Cierra sesión y vuelve a entrar para terminar.';
+
+  @override
+  String get gnomeHelperFailed => 'No se pudo instalar el complemento';
+
+  @override
+  String get windowStreamShareSetting =>
+      'Compartir las ventanas de este ordenador';
+
+  @override
+  String get windowStreamShareSettingDesc =>
+      'Los dispositivos de confianza pueden abrir y usar las ventanas de este ordenador en sus pantallas';
+
+  @override
+  String windowStreamCloseStillOpen(String app) {
+    return '“$app” sigue abierta; puede que esté preguntando si quieres guardar.';
+  }
+
+  @override
+  String get windowStreamCloseShow => 'Mostrar ventana';
+
+  @override
+  String get windowStreamClosing => 'Cerrando';
+
+  @override
+  String get androidWindowServiceTitle => 'Servicio de flujo de ventanas';
+
+  @override
+  String get androidWindowServiceRunning => 'Activado';
+
+  @override
+  String get androidWindowServiceRunningHint =>
+      'Tus ordenadores de confianza ya pueden ver este teléfono en su flujo de ventanas y abrir sus apps';
+
+  @override
+  String get androidWindowServiceStopped => 'No está en marcha';
+
+  @override
+  String get androidWindowServiceStoppedHint =>
+      'Activa la depuración inalámbrica y vuelve a iniciarlo aquí sin ordenador';
+
+  @override
+  String get androidWindowServiceNeedsSetup => 'Sin configurar';
+
+  @override
+  String get androidWindowServiceNeedsSetupHint =>
+      'Una vez activado, las apps de este teléfono pueden fluir a tus ordenadores de confianza para verlas y controlarlas, mientras el teléfono permanece en segundo plano';
+
+  @override
+  String get androidWindowServiceStart => 'Activar';
+
+  @override
+  String get androidWindowServiceStop => 'Desactivar';
+
+  @override
+  String get androidWindowServiceSetup => 'Configurar';
+
+  @override
+  String get androidWindowServiceHowTitle => 'Configuración única';
+
+  @override
+  String get androidWindowServiceStep1 =>
+      'Activa las opciones de desarrollador';
+
+  @override
+  String get androidWindowServiceStep1Hint =>
+      'Toca Número de compilación 7 veces en Acerca del teléfono';
+
+  @override
+  String get androidWindowServiceStep1Action => 'Abrir Acerca del teléfono';
+
+  @override
+  String get androidWindowServiceStep2 => 'Activa la depuración inalámbrica';
+
+  @override
+  String get androidWindowServiceStep2Hint =>
+      'En Opciones de desarrollador, activa la depuración inalámbrica y abre ‘Vincular dispositivo con código’';
+
+  @override
+  String get androidWindowServiceStep2Action =>
+      'Abrir Opciones de desarrollador';
+
+  @override
+  String get androidWindowServiceStep3 => 'Introduce el código de vinculación';
+
+  @override
+  String get androidWindowServiceStep3Hint =>
+      'Escribe el código de 6 dígitos que muestra el sistema; Whisper se vincula con este teléfono e inicia el servicio';
+
+  @override
+  String get androidWindowServicePairingCode => 'Código de vinculación';
+
+  @override
+  String get androidWindowServicePair => 'Vincular y activar';
+
+  @override
+  String get androidWindowServicePairing => 'Vinculando…';
+
+  @override
+  String get androidWindowServiceStarting => 'Iniciando…';
+
+  @override
+  String get androidWindowServiceAutoStart =>
+      'Iniciar automáticamente tras reiniciar';
+
+  @override
+  String get androidWindowServiceAutoStartHint =>
+      'Necesita un permiso del sistema para que Whisper reactive la depuración inalámbrica; solo tus ordenadores de confianza pueden conectarse y puedes desactivarlo aquí cuando quieras';
+
+  @override
+  String get androidWindowServiceStarted =>
+      'El servicio de flujo de ventanas está activado';
+
+  @override
+  String get androidWindowServiceStopped2 =>
+      'El servicio de flujo de ventanas se detuvo';
+
+  @override
+  String get androidWindowServiceStartFailed =>
+      'No se pudo iniciar. Comprueba que la depuración inalámbrica esté activada e inténtalo de nuevo';
+
+  @override
+  String get androidWindowServicePairFailed =>
+      'La vinculación falló. Comprueba el código e inténtalo de nuevo';
+
+  @override
+  String get androidWindowServiceEntryTitle => 'Servicio de flujo de ventanas';
+
+  @override
+  String get androidWindowServiceEntryHint =>
+      'Permite que otros dispositivos abran las apps de este teléfono';
+
+  @override
+  String get androidWindowServiceComputerHint =>
+      'Conecta este teléfono una vez a un ordenador con Whisper y el flujo de ventanas activado; después todos los ordenadores podrán usarlo';
+
+  @override
+  String windowStreamPhoneServiceOff(String device) {
+    return 'Abre Whisper en $device y activa Ajustes → Servicio de flujo de ventanas.';
+  }
 }

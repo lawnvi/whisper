@@ -10,7 +10,7 @@ class WirePeerProfile {
     required this.uid,
     required this.name,
     required this.platform,
-    this.protocolVersion = 11,
+    this.protocolVersion = 12,
     this.capabilities = const PeerCapabilities(),
     this.displayTopology,
   });
@@ -138,7 +138,7 @@ class PeerProfile {
     required this.trustedPeerIds,
     required this.autoApproveNewDevices,
     required this.autoConnectEnabled,
-    this.protocolVersion = 11,
+    this.protocolVersion = 12,
     this.capabilities = const PeerCapabilities(),
     this.displayTopology,
   });
@@ -366,6 +366,9 @@ class PeerCapabilities {
     this.audioGroupRejoinV1 = false,
     this.audioSyncClockV1 = false,
     this.audioChannelRoleV1 = false,
+    this.windowStreamSourceV1 = false,
+    this.windowStreamSinkV1 = false,
+    this.windowStreamOfferV1 = false,
   });
 
   final bool fileTransferV3;
@@ -383,6 +386,15 @@ class PeerCapabilities {
   final bool audioSyncClockV1;
   final bool audioChannelRoleV1;
 
+  /// Offers its windows to other peers over `/window` (protocol 12).
+  final bool windowStreamSourceV1;
+
+  /// Can show another peer's windows (protocol 12).
+  final bool windowStreamSinkV1;
+
+  /// Accepts windows a host sends over ("送出去", protocol 12).
+  final bool windowStreamOfferV1;
+
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
       'fileTransferV3': fileTransferV3,
@@ -399,11 +411,19 @@ class PeerCapabilities {
       'audioGroupRejoinV1': audioGroupRejoinV1,
       'audioSyncClockV1': audioSyncClockV1,
       'audioChannelRoleV1': audioChannelRoleV1,
+      'windowStreamSourceV1': windowStreamSourceV1,
+      'windowStreamSinkV1': windowStreamSinkV1,
+      'windowStreamOfferV1': windowStreamOfferV1,
     };
   }
 
   Map<String, dynamic> toWireJson(int protocolVersion) {
     final json = toJson();
+    if (protocolVersion < 12) {
+      json.remove('windowStreamSourceV1');
+      json.remove('windowStreamSinkV1');
+      json.remove('windowStreamOfferV1');
+    }
     if (protocolVersion < 11) {
       json.remove('remoteInputManualSourceV1');
       json.remove('remoteInputManualSinkV1');
@@ -433,12 +453,15 @@ class PeerCapabilities {
       audioGroupRejoinV1: json['audioGroupRejoinV1'] as bool? ?? false,
       audioSyncClockV1: json['audioSyncClockV1'] as bool? ?? false,
       audioChannelRoleV1: json['audioChannelRoleV1'] as bool? ?? false,
+      windowStreamSourceV1: json['windowStreamSourceV1'] as bool? ?? false,
+      windowStreamSinkV1: json['windowStreamSinkV1'] as bool? ?? false,
+      windowStreamOfferV1: json['windowStreamOfferV1'] as bool? ?? false,
     );
   }
 
   factory PeerCapabilities.fromWireJson(
     Map<String, dynamic> json, {
-    int protocolVersion = 11,
+    int protocolVersion = 12,
   }) {
     const legacyAllowed = <String>{
       'fileTransferV3',
@@ -459,6 +482,13 @@ class PeerCapabilities {
         : legacyAllowed;
     if (protocolVersion >= 11) {
       allowed.addAll({'remoteInputManualSourceV1', 'remoteInputManualSinkV1'});
+    }
+    if (protocolVersion >= 12) {
+      allowed.addAll({
+        'windowStreamSourceV1',
+        'windowStreamSinkV1',
+        'windowStreamOfferV1',
+      });
     }
     if (json.keys.any((key) => !allowed.contains(key)) ||
         json.values.any((value) => value is! bool)) {

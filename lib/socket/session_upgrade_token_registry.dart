@@ -291,7 +291,11 @@ final class SessionUpgradeTokenRegistry {
 String normalizeMediaRoute(String route) {
   final normalized = _tryNormalizeMediaRoute(route);
   if (normalized == null) {
-    throw ArgumentError.value(route, 'route', 'must be /audio or /input');
+    throw ArgumentError.value(
+      route,
+      'route',
+      'must be /audio, /input or /window',
+    );
   }
   return normalized;
 }
@@ -318,12 +322,17 @@ String? _tryNormalizeMediaNamespace(
   }
   final trimmed = namespace.trim();
   if (trimmed.isEmpty) {
-    return normalizedRoute == '/audio' ? 'audio' : 'remote-input';
+    return switch (normalizedRoute) {
+      '/audio' => 'audio',
+      '/window' => 'window-stream',
+      _ => 'remote-input',
+    };
   }
   return switch ((normalizedRoute, trimmed)) {
     ('/audio', 'audio') => 'audio',
     ('/audio', 'audio-group') => 'audio-group',
     ('/input', 'remote-input') => 'remote-input',
+    ('/window', 'window-stream') => 'window-stream',
     _ => null,
   };
 }
@@ -332,7 +341,7 @@ String? _tryNormalizeMediaRoute(String route) {
   final trimmed = route.trim();
   final normalized = trimmed.startsWith('/') ? trimmed : '/$trimmed';
   return switch (normalized) {
-    '/audio' || '/input' => normalized,
+    '/audio' || '/input' || '/window' => normalized,
     _ => null,
   };
 }

@@ -1865,4 +1865,548 @@ class AppLocalizationsZh extends AppLocalizations {
 
     return '$doneString/$totalString 个文件';
   }
+
+  @override
+  String get windowStreamTitle => '手机应用';
+
+  @override
+  String get windowStreamConnecting => '正在连接…';
+
+  @override
+  String get windowStreamPaused => '已暂停，点按继续';
+
+  @override
+  String get windowStreamReconnecting => '正在重新连接…';
+
+  @override
+  String get windowStreamDisplaced => '已回到手机上，点按拿回来';
+
+  @override
+  String get windowStreamSecureBlocked => '此应用不允许投屏';
+
+  @override
+  String get windowStreamAppExited => '应用已退出';
+
+  @override
+  String get windowStreamDisconnected => '连接已断开，可以关闭这个窗口';
+
+  @override
+  String get windowStreamNoDevice => '没有发现手机';
+
+  @override
+  String get windowStreamNoDeviceHint => '用数据线连接手机，或在手机的开发者选项里打开“无线调试”。';
+
+  @override
+  String get windowStreamUnauthorized => '请在手机上允许这台电脑调试';
+
+  @override
+  String get windowStreamDeviceOffline => '手机暂时连不上，请重新插拔数据线或重新打开无线调试';
+
+  @override
+  String get windowStreamAdbMissing => '没有找到 adb，请先安装 Android 平台工具';
+
+  @override
+  String get windowStreamAdbFailed => 'adb 服务没能启动';
+
+  @override
+  String get windowStreamUnsupported => '这台电脑暂时还不能打开手机应用窗口';
+
+  @override
+  String get windowStreamRunningApps => '正在运行';
+
+  @override
+  String get windowStreamAllApps => '所有应用';
+
+  @override
+  String get windowStreamSearchApps => '搜索应用';
+
+  @override
+  String get windowStreamLoadingApps => '正在读取应用…';
+
+  @override
+  String get windowStreamOnDesktop => '在桌面上';
+
+  @override
+  String get windowStreamShowSystemApps => '显示系统应用';
+
+  @override
+  String get windowStreamRetry => '重试';
+
+  @override
+  String get windowStreamInjectDenied => '小米手机还要在开发者选项里打开“USB 调试（安全设置）”，然后重启手机';
+
+  @override
+  String get windowStreamAndroidTooOld => '需要 Android 10 或更新的系统';
+
+  @override
+  String get windowStreamOpenFailed => '没能打开这个应用';
+
+  @override
+  String get windowStreamNoApps => '没有读到应用';
+
+  @override
+  String get windowStreamSpaceTitle => '流转';
+
+  @override
+  String get windowStreamRecents => '最近';
+
+  @override
+  String get windowStreamWindows => '窗口';
+
+  @override
+  String get windowStreamApps => '应用';
+
+  @override
+  String get windowStreamViaUsb => 'USB 连接';
+
+  @override
+  String get windowStreamViaWifi => '无线调试';
+
+  @override
+  String get windowStreamViaWhisper => '已连接';
+
+  @override
+  String get windowStreamStatusLive => '直播';
+
+  @override
+  String get windowStreamStatusPaused => '已暂停';
+
+  @override
+  String get windowStreamStatusConnecting => '连接中';
+
+  @override
+  String get windowStreamStatusEnded => '已断开';
+
+  @override
+  String get windowStreamPause => '暂停';
+
+  @override
+  String get windowStreamResume => '继续';
+
+  @override
+  String get windowStreamClose => '关闭';
+
+  @override
+  String get windowStreamNoWindows => '还没有打开的窗口';
+
+  @override
+  String get windowStreamNoWindowsHint => '点开一个应用或最近任务，它会出现在这里';
+
+  @override
+  String get windowStreamNoDevices => '还没有可用的设备';
+
+  @override
+  String get windowStreamNoDevicesHintDesktop =>
+      '用数据线连接安卓手机，或在手机的开发者选项里打开“无线调试”。';
+
+  @override
+  String get windowStreamNoDevicesHintMobile =>
+      '在 Mac 上打开 Whisper，并和这台设备互相信任后，Mac 的窗口会出现在这里。';
+
+  @override
+  String get windowStreamLoadFailed => '没能读取这台设备的应用';
+
+  @override
+  String get windowStreamBackToSpace => '返回流转';
+
+  @override
+  String get windowStreamKeyboard => '键盘';
+
+  @override
+  String get windowStreamNoRecents => '这台设备上没有正在运行的应用';
+
+  @override
+  String get windowStreamSourceLocked => '这台电脑已锁屏，解锁后才能流转它的窗口';
+
+  @override
+  String get windowStreamCapturePermission =>
+      '这台电脑还没允许 Whisper 录屏，请在它的“系统设置 › 隐私与安全性 › 录屏”里打开';
+
+  @override
+  String get windowStreamUntrusted =>
+      '这台手机的 Whisper 还没和本机配对。在手机上打开 Whisper，连接本机并确认配对后才能流转';
+
+  @override
+  String get windowStreamWhisperMissing =>
+      '这台手机上没有可用的 Whisper。装上最新版 Whisper 并和本机配对后才能流转';
+
+  @override
+  String get windowStreamNotPaired => '未配对';
+
+  @override
+  String get windowStreamOpenHere => '在本机打开';
+
+  @override
+  String windowStreamSendTo(String device) {
+    return '送到 $device';
+  }
+
+  @override
+  String windowStreamSendHint(String device) {
+    return '选一个本机窗口送到 $device。点开后窗口会挪到那台设备上，不再占这台电脑的屏幕；那边关掉后自动回到原处。';
+  }
+
+  @override
+  String windowStreamSent(String device) {
+    return '已送到 $device，在那台设备上点开即可查看';
+  }
+
+  @override
+  String get windowStreamSendFailed => '没能送过去，请确认那台设备连着本机';
+
+  @override
+  String windowStreamSendUnavailable(String device) {
+    return '$device 上的 Whisper 需要连接本机并更新到最新版，才能接收窗口';
+  }
+
+  @override
+  String get windowStreamNoLocalWindows => '本机没有可以送出去的窗口';
+
+  @override
+  String windowStreamOfferTitle(String device) {
+    return '$device 送来了一个窗口';
+  }
+
+  @override
+  String get windowStreamOfferView => '查看';
+
+  @override
+  String windowStreamOfferFrom(String device) {
+    return '来自 $device';
+  }
+
+  @override
+  String windowStreamTouchBlockedTitle(String device) {
+    return '$device 现在点不动了';
+  }
+
+  @override
+  String windowStreamTouchBlockedBody(String app) {
+    return '$app 留在后台的一个页面挡住了手机屏幕，手机收不到触摸。关掉这个页面就能恢复，$app 不会被卸载，账号和记录都还在。';
+  }
+
+  @override
+  String get windowStreamTouchBlockedFix => '关掉这个页面';
+
+  @override
+  String get windowStreamTouchBlockedLater => '以后再说';
+
+  @override
+  String get windowStreamTouchBlockedFixed => '好了，手机可以操作了';
+
+  @override
+  String get windowStreamTextSize => '文字大小';
+
+  @override
+  String windowStreamOpenHereDetail(String device) {
+    return '用 $device 上的应用';
+  }
+
+  @override
+  String windowStreamSendToDetail(String device) {
+    return '把窗口挪到 $device 上';
+  }
+
+  @override
+  String get windowStreamStreaming => '流转中';
+
+  @override
+  String get windowStreamCloseWindow => '关闭窗口';
+
+  @override
+  String get windowStreamCloseFailed => '没能关闭这个窗口';
+
+  @override
+  String get windowStreamOfferIgnore => '忽略';
+
+  @override
+  String get windowStreamSwitcherRotate => '旋转';
+
+  @override
+  String windowStreamHostLocked(String device) {
+    return '$device 已锁屏，解锁后才能流转它的窗口';
+  }
+
+  @override
+  String windowStreamHostPermissionMac(String device) {
+    return '$device 还没允许 Whisper 录屏。请在那台 Mac 的“系统设置 › 隐私与安全性 › 录屏与系统录音”里打开 Whisper';
+  }
+
+  @override
+  String windowStreamHostPermission(String device) {
+    return '$device 的系统不允许 Whisper 录制窗口。请在那台电脑的隐私设置里允许 Whisper 录屏，然后再试一次';
+  }
+
+  @override
+  String windowStreamHostHelper(String device) {
+    return '$device 还差一步：请在那台电脑上注销并重新登录一次，之后就能流转它的窗口';
+  }
+
+  @override
+  String windowStreamHostDesktopUnsupported(String device) {
+    return '$device 的桌面暂不支持流转窗口，需要 GNOME（Wayland）';
+  }
+
+  @override
+  String windowStreamHostElevated(String device) {
+    return '这个窗口以管理员身份运行，Whisper 无法流转它。请在 $device 上以普通身份重新打开这个应用';
+  }
+
+  @override
+  String get windowStreamHostProtected => '这个窗口不允许录屏，无法在这里显示';
+
+  @override
+  String windowStreamHostEncoder(String device) {
+    return '$device 没能开始编码画面，请稍后再试';
+  }
+
+  @override
+  String windowStreamHostUnsupported(String device) {
+    return '$device 暂时还不能流转窗口。请把那台设备上的 Whisper 更新到最新版';
+  }
+
+  @override
+  String windowStreamHostUnsupportedWindows(String device) {
+    return '$device 需要 Windows 10（1903）或更新的系统才能流转窗口';
+  }
+
+  @override
+  String windowStreamHostUnsupportedMac(String device) {
+    return '$device 需要 macOS 12.3 或更新的系统才能流转窗口';
+  }
+
+  @override
+  String get windowStreamThatDevice => '那台设备';
+
+  @override
+  String get windowStreamDecoderMissing => '无法显示画面：这台电脑缺少 FFmpeg 视频解码库';
+
+  @override
+  String get windowStreamVolume => '音量';
+
+  @override
+  String get windowStreamMute => '静音';
+
+  @override
+  String get windowStreamUnmute => '取消静音';
+
+  @override
+  String get windowStreamMovedAway => '这个窗口已在另一台设备上打开';
+
+  @override
+  String flowTaskOpenOn(String device) {
+    return '正在 $device 上显示';
+  }
+
+  @override
+  String get windowStreamSourceErrorDesktopUnsupported => '这台电脑不支持窗口流转';
+
+  @override
+  String get windowStreamSourceErrorElevated => '这个窗口以管理员身份运行，无法流转';
+
+  @override
+  String windowStreamSourceNoteStagedInPlace(String app) {
+    return '$app 不支持在后台运行，正在原位置流转';
+  }
+
+  @override
+  String get gnomeHelperTitle => '窗口流转组件';
+
+  @override
+  String get gnomeHelperHint => '其他设备流转本机窗口需要一个 GNOME 小组件，首次安装后要注销并重新登录一次';
+
+  @override
+  String get gnomeHelperWorking => '正在安装…';
+
+  @override
+  String get gnomeHelperReady => '已就绪';
+
+  @override
+  String get gnomeHelperNotInstalled => '未安装';
+
+  @override
+  String get gnomeHelperNeedsRelogin => '需重新登录';
+
+  @override
+  String get gnomeHelperOutdated => '需要更新';
+
+  @override
+  String get gnomeHelperDisabled => '已停用';
+
+  @override
+  String get gnomeHelperExtensionsOff => '扩展已关闭';
+
+  @override
+  String get gnomeHelperInstallDesc =>
+      'Whisper 会给 GNOME 装一个小扩展：被流转的窗口在后台运行，键盘和鼠标由它转交。只有 Whisper 能使用它。装好后需要注销并重新登录一次。';
+
+  @override
+  String get gnomeHelperUpdateDesc =>
+      '这个版本的 Whisper 带来了新的窗口流转组件。更新后需要注销并重新登录一次。';
+
+  @override
+  String get gnomeHelperReloginDesc =>
+      '组件已经装好，GNOME 要在重新登录后才会加载它。注销前请先保存好其他应用里的内容。';
+
+  @override
+  String get gnomeHelperDisabledDesc =>
+      '窗口流转组件在 GNOME 的“扩展”里被关掉了。重新打开后，其他设备才能流转本机窗口。';
+
+  @override
+  String get gnomeHelperExtensionsOffDesc =>
+      'GNOME 扩展目前全部关闭。打开扩展后，窗口流转组件才能运行（其他已装的扩展也会一起打开）。';
+
+  @override
+  String get gnomeHelperReadyDesc => '窗口流转组件正在运行。其他设备可以把本机窗口流转过去，窗口会在本机后台继续运行。';
+
+  @override
+  String get gnomeHelperInstall => '安装';
+
+  @override
+  String get gnomeHelperUpdate => '更新';
+
+  @override
+  String get gnomeHelperLogOut => '注销…';
+
+  @override
+  String get gnomeHelperLater => '稍后';
+
+  @override
+  String get gnomeHelperTurnOn => '打开';
+
+  @override
+  String get gnomeHelperTurnOnExtensions => '打开扩展';
+
+  @override
+  String get gnomeHelperDone => '好';
+
+  @override
+  String get gnomeHelperInstalled => '已安装。注销并重新登录后即可使用';
+
+  @override
+  String get gnomeHelperFailed => '无法安装窗口流转组件';
+
+  @override
+  String get windowStreamShareSetting => '允许查看和操作本机窗口';
+
+  @override
+  String get windowStreamShareSettingDesc => '已信任的设备可以在它们那边打开并操作这台电脑上的窗口';
+
+  @override
+  String windowStreamCloseStillOpen(String app) {
+    return '“$app”还没有关闭，可能在问你是否保存';
+  }
+
+  @override
+  String get windowStreamCloseShow => '打开窗口';
+
+  @override
+  String get windowStreamClosing => '正在关闭';
+
+  @override
+  String get androidWindowServiceTitle => '窗口流转服务';
+
+  @override
+  String get androidWindowServiceRunning => '已开启';
+
+  @override
+  String get androidWindowServiceRunningHint =>
+      '你信任的电脑现在可以在它们的流转里看到这台手机，打开手机上的应用来操作';
+
+  @override
+  String get androidWindowServiceStopped => '未运行';
+
+  @override
+  String get androidWindowServiceStoppedHint => '打开无线调试后，这里可以重新开启，无需再插电脑';
+
+  @override
+  String get androidWindowServiceNeedsSetup => '未设置';
+
+  @override
+  String get androidWindowServiceNeedsSetupHint =>
+      '开启后，这台手机的应用可以流转到你信任的电脑上查看和操作，手机留在后台';
+
+  @override
+  String get androidWindowServiceStart => '开启服务';
+
+  @override
+  String get androidWindowServiceStop => '停止服务';
+
+  @override
+  String get androidWindowServiceSetup => '开始设置';
+
+  @override
+  String get androidWindowServiceHowTitle => '一次性设置';
+
+  @override
+  String get androidWindowServiceStep1 => '打开开发者选项';
+
+  @override
+  String get androidWindowServiceStep1Hint => '在“关于手机”里连续点击“版本号”7 次';
+
+  @override
+  String get androidWindowServiceStep1Action => '打开“关于手机”';
+
+  @override
+  String get androidWindowServiceStep2 => '打开无线调试';
+
+  @override
+  String get androidWindowServiceStep2Hint =>
+      '在“开发者选项”里打开“无线调试”，并保持本页在同一屏打开“使用配对码配对设备”';
+
+  @override
+  String get androidWindowServiceStep2Action => '打开“开发者选项”';
+
+  @override
+  String get androidWindowServiceStep3 => '输入配对码';
+
+  @override
+  String get androidWindowServiceStep3Hint =>
+      '把系统显示的 6 位配对码填到这里，Whisper 会和这台手机自己配对并开启服务';
+
+  @override
+  String get androidWindowServicePairingCode => '配对码';
+
+  @override
+  String get androidWindowServicePair => '配对并开启';
+
+  @override
+  String get androidWindowServicePairing => '正在配对…';
+
+  @override
+  String get androidWindowServiceStarting => '正在开启…';
+
+  @override
+  String get androidWindowServiceAutoStart => '重启后自动开启';
+
+  @override
+  String get androidWindowServiceAutoStartHint =>
+      '需要授予 Whisper 一项系统权限来开启无线调试；只有你信任的电脑才能连上，随时可在这里关闭';
+
+  @override
+  String get androidWindowServiceStarted => '窗口流转服务已开启';
+
+  @override
+  String get androidWindowServiceStopped2 => '窗口流转服务已停止';
+
+  @override
+  String get androidWindowServiceStartFailed => '开启失败，请确认无线调试已打开并重试';
+
+  @override
+  String get androidWindowServicePairFailed => '配对失败，请核对配对码后重试';
+
+  @override
+  String get androidWindowServiceEntryTitle => '窗口流转服务';
+
+  @override
+  String get androidWindowServiceEntryHint => '让其他设备流转这台手机的应用';
+
+  @override
+  String get androidWindowServiceComputerHint =>
+      '把这台手机连到一台装了 Whisper、开着窗口流转的电脑一次，就能开启；之后其他电脑都能用';
+
+  @override
+  String windowStreamPhoneServiceOff(String device) {
+    return '在 $device 上打开 Whisper，到“设置 → 窗口流转服务”里开启服务';
+  }
 }

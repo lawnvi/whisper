@@ -65,7 +65,7 @@ final class PeerSocketSession {
     });
   }
 
-  static const int protocolVersion = 11;
+  static const int protocolVersion = 12;
   static const int minimumProtocolVersion = 9;
 
   static bool _supportsProtocolVersion(int version) =>

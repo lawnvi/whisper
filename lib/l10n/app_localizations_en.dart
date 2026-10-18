@@ -2003,4 +2003,576 @@ class AppLocalizationsEn extends AppLocalizations {
 
     return '$doneString of $totalString files';
   }
+
+  @override
+  String get windowStreamTitle => 'Phone apps';
+
+  @override
+  String get windowStreamConnecting => 'Connecting…';
+
+  @override
+  String get windowStreamPaused => 'Paused. Click to resume';
+
+  @override
+  String get windowStreamReconnecting => 'Reconnecting…';
+
+  @override
+  String get windowStreamDisplaced =>
+      'Back on the phone. Click to bring it here';
+
+  @override
+  String get windowStreamSecureBlocked =>
+      'This app doesn\'t allow screen sharing';
+
+  @override
+  String get windowStreamAppExited => 'The app has closed';
+
+  @override
+  String get windowStreamDisconnected =>
+      'Disconnected. You can close this window';
+
+  @override
+  String get windowStreamNoDevice => 'No phone found';
+
+  @override
+  String get windowStreamNoDeviceHint =>
+      'Connect your phone with a cable, or turn on Wireless debugging in the phone\'s Developer options.';
+
+  @override
+  String get windowStreamUnauthorized =>
+      'Allow debugging from this computer on your phone';
+
+  @override
+  String get windowStreamDeviceOffline =>
+      'The phone isn\'t responding. Reconnect the cable or turn Wireless debugging off and on';
+
+  @override
+  String get windowStreamAdbMissing =>
+      'adb wasn\'t found. Install Android Platform Tools first';
+
+  @override
+  String get windowStreamAdbFailed => 'The adb server couldn\'t start';
+
+  @override
+  String get windowStreamUnsupported =>
+      'Phone app windows aren\'t available on this computer yet';
+
+  @override
+  String get windowStreamRunningApps => 'Running';
+
+  @override
+  String get windowStreamAllApps => 'All apps';
+
+  @override
+  String get windowStreamSearchApps => 'Search apps';
+
+  @override
+  String get windowStreamLoadingApps => 'Loading apps…';
+
+  @override
+  String get windowStreamOnDesktop => 'On desktop';
+
+  @override
+  String get windowStreamShowSystemApps => 'Show system apps';
+
+  @override
+  String get windowStreamRetry => 'Retry';
+
+  @override
+  String get windowStreamInjectDenied =>
+      'On Xiaomi phones, also turn on “USB debugging (Security settings)” in Developer options, then restart the phone';
+
+  @override
+  String get windowStreamAndroidTooOld => 'Requires Android 10 or later';
+
+  @override
+  String get windowStreamOpenFailed => 'Couldn\'t open this app';
+
+  @override
+  String get windowStreamNoApps => 'No apps found';
+
+  @override
+  String get windowStreamSpaceTitle => 'Flow';
+
+  @override
+  String get windowStreamRecents => 'Recents';
+
+  @override
+  String get windowStreamWindows => 'Windows';
+
+  @override
+  String get windowStreamApps => 'Apps';
+
+  @override
+  String get windowStreamViaUsb => 'Connected by USB';
+
+  @override
+  String get windowStreamViaWifi => 'Wireless debugging';
+
+  @override
+  String get windowStreamViaWhisper => 'Connected';
+
+  @override
+  String get windowStreamStatusLive => 'Live';
+
+  @override
+  String get windowStreamStatusPaused => 'Paused';
+
+  @override
+  String get windowStreamStatusConnecting => 'Connecting';
+
+  @override
+  String get windowStreamStatusEnded => 'Disconnected';
+
+  @override
+  String get windowStreamPause => 'Pause';
+
+  @override
+  String get windowStreamResume => 'Resume';
+
+  @override
+  String get windowStreamClose => 'Close';
+
+  @override
+  String get windowStreamNoWindows => 'No open windows';
+
+  @override
+  String get windowStreamNoWindowsHint =>
+      'Open an app or a recent task and it shows up here';
+
+  @override
+  String get windowStreamNoDevices => 'No devices yet';
+
+  @override
+  String get windowStreamNoDevicesHintDesktop =>
+      'Connect an Android phone with a cable, or turn on Wireless debugging in its Developer options.';
+
+  @override
+  String get windowStreamNoDevicesHintMobile =>
+      'Open Whisper on your Mac and trust each other; its windows will show up here.';
+
+  @override
+  String get windowStreamLoadFailed => 'Couldn\'t load this device\'s apps';
+
+  @override
+  String get windowStreamBackToSpace => 'Back to Flow';
+
+  @override
+  String get windowStreamKeyboard => 'Keyboard';
+
+  @override
+  String get windowStreamNoRecents => 'Nothing is running on this device';
+
+  @override
+  String get windowStreamSourceLocked =>
+      'This computer is locked. Unlock it to stream its windows.';
+
+  @override
+  String get windowStreamCapturePermission =>
+      'This computer hasn\'t allowed Whisper to record its screen yet. Turn it on in its System Settings › Privacy & Security › Screen Recording.';
+
+  @override
+  String get windowStreamUntrusted =>
+      'Whisper on this phone isn\'t paired with this device yet. Open Whisper on the phone, connect to this device and confirm the pairing to stream.';
+
+  @override
+  String get windowStreamWhisperMissing =>
+      'This phone has no usable Whisper. Install the latest Whisper and pair it with this device to stream.';
+
+  @override
+  String get windowStreamNotPaired => 'Not paired';
+
+  @override
+  String get windowStreamOpenHere => 'Open here';
+
+  @override
+  String windowStreamSendTo(String device) {
+    return 'Send to $device';
+  }
+
+  @override
+  String windowStreamSendHint(String device) {
+    return 'Pick a window on this computer to send to $device. Once opened there it moves off this screen, and comes back when it is closed on $device.';
+  }
+
+  @override
+  String windowStreamSent(String device) {
+    return 'Sent to $device. Tap the prompt there to view it.';
+  }
+
+  @override
+  String get windowStreamSendFailed =>
+      'Couldn\'t send it. Make sure that device is connected to this one.';
+
+  @override
+  String windowStreamSendUnavailable(String device) {
+    return 'Whisper on $device needs to be connected to this computer and up to date to receive windows.';
+  }
+
+  @override
+  String get windowStreamNoLocalWindows =>
+      'No windows on this computer to send';
+
+  @override
+  String windowStreamOfferTitle(String device) {
+    return '$device sent you a window';
+  }
+
+  @override
+  String get windowStreamOfferView => 'View';
+
+  @override
+  String windowStreamOfferFrom(String device) {
+    return 'From $device';
+  }
+
+  @override
+  String windowStreamTouchBlockedTitle(String device) {
+    return '$device isn\'t responding to touch';
+  }
+
+  @override
+  String windowStreamTouchBlockedBody(String app) {
+    return 'A page $app left in the background is covering the phone\'s screen, so touches don\'t get through. Closing that page fixes it; $app stays installed with its account and history.';
+  }
+
+  @override
+  String get windowStreamTouchBlockedFix => 'Close that page';
+
+  @override
+  String get windowStreamTouchBlockedLater => 'Not now';
+
+  @override
+  String get windowStreamTouchBlockedFixed => 'Done. The phone responds again.';
+
+  @override
+  String get windowStreamTextSize => 'Text Size';
+
+  @override
+  String windowStreamOpenHereDetail(String device) {
+    return 'Use apps from $device';
+  }
+
+  @override
+  String windowStreamSendToDetail(String device) {
+    return 'Move a window to $device';
+  }
+
+  @override
+  String get windowStreamStreaming => 'Open here';
+
+  @override
+  String get windowStreamCloseWindow => 'Close Window';
+
+  @override
+  String get windowStreamCloseFailed => 'Couldn’t close this window';
+
+  @override
+  String get windowStreamOfferIgnore => 'Dismiss';
+
+  @override
+  String get windowStreamSwitcherRotate => 'Rotate';
+
+  @override
+  String windowStreamHostLocked(String device) {
+    return '$device is locked. Unlock it to show its windows here.';
+  }
+
+  @override
+  String windowStreamHostPermissionMac(String device) {
+    return '$device hasn\'t allowed Whisper to record its screen. On that Mac, turn on Whisper in System Settings › Privacy & Security › Screen & System Audio Recording.';
+  }
+
+  @override
+  String windowStreamHostPermission(String device) {
+    return '$device doesn\'t let Whisper record its windows. Allow screen recording for Whisper in that computer\'s privacy settings, then try again.';
+  }
+
+  @override
+  String windowStreamHostHelper(String device) {
+    return '$device needs one more step: log out of that computer and back in, then its windows can be shown here.';
+  }
+
+  @override
+  String windowStreamHostDesktopUnsupported(String device) {
+    return '$device\'s desktop can\'t share windows yet. It needs GNOME on Wayland.';
+  }
+
+  @override
+  String windowStreamHostElevated(String device) {
+    return 'This window runs as administrator, so Whisper can\'t show it. On $device, open the app again without administrator rights.';
+  }
+
+  @override
+  String get windowStreamHostProtected =>
+      'This window blocks screen recording, so it can\'t be shown here.';
+
+  @override
+  String windowStreamHostEncoder(String device) {
+    return '$device couldn\'t start encoding video. Try again in a moment.';
+  }
+
+  @override
+  String windowStreamHostUnsupported(String device) {
+    return '$device can\'t share its windows yet. Update Whisper on that device to the latest version.';
+  }
+
+  @override
+  String windowStreamHostUnsupportedWindows(String device) {
+    return '$device needs Windows 10 version 1903 or later to share its windows.';
+  }
+
+  @override
+  String windowStreamHostUnsupportedMac(String device) {
+    return '$device needs macOS 12.3 or later to share its windows.';
+  }
+
+  @override
+  String get windowStreamThatDevice => 'that device';
+
+  @override
+  String get windowStreamDecoderMissing =>
+      'Can\'t show this window: FFmpeg\'s video decoder isn\'t installed on this computer';
+
+  @override
+  String get windowStreamVolume => 'Volume';
+
+  @override
+  String get windowStreamMute => 'Mute';
+
+  @override
+  String get windowStreamUnmute => 'Unmute';
+
+  @override
+  String get windowStreamMovedAway =>
+      'This window was opened on another device';
+
+  @override
+  String flowTaskOpenOn(String device) {
+    return 'Showing on $device';
+  }
+
+  @override
+  String get windowStreamSourceErrorDesktopUnsupported =>
+      'This PC can\'t share windows';
+
+  @override
+  String get windowStreamSourceErrorElevated =>
+      'This window runs as administrator and can\'t be shared';
+
+  @override
+  String windowStreamSourceNoteStagedInPlace(String app) {
+    return '$app can\'t run in the background, sharing it in place';
+  }
+
+  @override
+  String get gnomeHelperTitle => 'Window sharing helper';
+
+  @override
+  String get gnomeHelperHint =>
+      'Showing this computer’s windows on your other devices needs a small GNOME component and one logout';
+
+  @override
+  String get gnomeHelperWorking => 'Installing…';
+
+  @override
+  String get gnomeHelperReady => 'Ready';
+
+  @override
+  String get gnomeHelperNotInstalled => 'Not installed';
+
+  @override
+  String get gnomeHelperNeedsRelogin => 'Log out to finish';
+
+  @override
+  String get gnomeHelperOutdated => 'Needs update';
+
+  @override
+  String get gnomeHelperDisabled => 'Turned off';
+
+  @override
+  String get gnomeHelperExtensionsOff => 'Extensions off';
+
+  @override
+  String get gnomeHelperInstallDesc =>
+      'Whisper adds a small GNOME Shell extension that keeps shared windows running in the background and passes on keyboard and mouse input. Only Whisper can use it. Log out and back in once after installing.';
+
+  @override
+  String get gnomeHelperUpdateDesc =>
+      'This version of Whisper brings a newer window sharing helper. Log out and back in once after updating.';
+
+  @override
+  String get gnomeHelperReloginDesc =>
+      'The helper is installed. GNOME loads it after you log back in. Save your work in other apps before logging out.';
+
+  @override
+  String get gnomeHelperDisabledDesc =>
+      'The window sharing helper was turned off in GNOME Extensions. Turn it back on so your other devices can show this computer’s windows.';
+
+  @override
+  String get gnomeHelperExtensionsOffDesc =>
+      'GNOME extensions are turned off. The helper runs only with extensions on (other installed extensions turn on too).';
+
+  @override
+  String get gnomeHelperReadyDesc =>
+      'The window sharing helper is running. Your other devices can show this computer’s windows while they keep running here in the background.';
+
+  @override
+  String get gnomeHelperInstall => 'Install';
+
+  @override
+  String get gnomeHelperUpdate => 'Update';
+
+  @override
+  String get gnomeHelperLogOut => 'Log Out…';
+
+  @override
+  String get gnomeHelperLater => 'Later';
+
+  @override
+  String get gnomeHelperTurnOn => 'Turn On';
+
+  @override
+  String get gnomeHelperTurnOnExtensions => 'Turn On Extensions';
+
+  @override
+  String get gnomeHelperDone => 'OK';
+
+  @override
+  String get gnomeHelperInstalled =>
+      'Installed. Log out and back in to finish.';
+
+  @override
+  String get gnomeHelperFailed => 'Couldn’t install the window sharing helper';
+
+  @override
+  String get windowStreamShareSetting => 'Share This Computer\'s Windows';
+
+  @override
+  String get windowStreamShareSettingDesc =>
+      'Trusted devices can open and use this computer\'s windows on their screens';
+
+  @override
+  String windowStreamCloseStillOpen(String app) {
+    return '“$app” is still open — it may be asking whether to save.';
+  }
+
+  @override
+  String get windowStreamCloseShow => 'Show Window';
+
+  @override
+  String get windowStreamClosing => 'Closing';
+
+  @override
+  String get androidWindowServiceTitle => 'Window flow service';
+
+  @override
+  String get androidWindowServiceRunning => 'On';
+
+  @override
+  String get androidWindowServiceRunningHint =>
+      'Your trusted computers can now see this phone in their window flow and open its apps';
+
+  @override
+  String get androidWindowServiceStopped => 'Not running';
+
+  @override
+  String get androidWindowServiceStoppedHint =>
+      'Turn on Wireless debugging, then start it again here without a computer';
+
+  @override
+  String get androidWindowServiceNeedsSetup => 'Not set up';
+
+  @override
+  String get androidWindowServiceNeedsSetupHint =>
+      'Once on, this phone\'s apps can flow to your trusted computers to view and control, while the phone stays in the background';
+
+  @override
+  String get androidWindowServiceStart => 'Turn on';
+
+  @override
+  String get androidWindowServiceStop => 'Turn off';
+
+  @override
+  String get androidWindowServiceSetup => 'Set up';
+
+  @override
+  String get androidWindowServiceHowTitle => 'One-time setup';
+
+  @override
+  String get androidWindowServiceStep1 => 'Turn on Developer options';
+
+  @override
+  String get androidWindowServiceStep1Hint =>
+      'Tap Build number 7 times under About phone';
+
+  @override
+  String get androidWindowServiceStep1Action => 'Open About phone';
+
+  @override
+  String get androidWindowServiceStep2 => 'Turn on Wireless debugging';
+
+  @override
+  String get androidWindowServiceStep2Hint =>
+      'In Developer options, turn on Wireless debugging and open ‘Pair device with pairing code’';
+
+  @override
+  String get androidWindowServiceStep2Action => 'Open Developer options';
+
+  @override
+  String get androidWindowServiceStep3 => 'Enter the pairing code';
+
+  @override
+  String get androidWindowServiceStep3Hint =>
+      'Type the 6-digit code the system shows; Whisper pairs with this phone and starts the service';
+
+  @override
+  String get androidWindowServicePairingCode => 'Pairing code';
+
+  @override
+  String get androidWindowServicePair => 'Pair and turn on';
+
+  @override
+  String get androidWindowServicePairing => 'Pairing…';
+
+  @override
+  String get androidWindowServiceStarting => 'Starting…';
+
+  @override
+  String get androidWindowServiceAutoStart =>
+      'Start automatically after a reboot';
+
+  @override
+  String get androidWindowServiceAutoStartHint =>
+      'Needs a system permission so Whisper can turn Wireless debugging back on; only your trusted computers can connect, and you can turn this off here anytime';
+
+  @override
+  String get androidWindowServiceStarted => 'Window flow service is on';
+
+  @override
+  String get androidWindowServiceStopped2 => 'Window flow service stopped';
+
+  @override
+  String get androidWindowServiceStartFailed =>
+      'Couldn’t start. Check that Wireless debugging is on and try again';
+
+  @override
+  String get androidWindowServicePairFailed =>
+      'Pairing failed. Check the code and try again';
+
+  @override
+  String get androidWindowServiceEntryTitle => 'Window flow service';
+
+  @override
+  String get androidWindowServiceEntryHint =>
+      'Let other devices open this phone\'s apps';
+
+  @override
+  String get androidWindowServiceComputerHint =>
+      'Connect this phone once to a computer running Whisper with window flow on; then every computer can use it';
+
+  @override
+  String windowStreamPhoneServiceOff(String device) {
+    return 'Open Whisper on $device and turn on Settings → Window Flow Service.';
+  }
 }

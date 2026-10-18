@@ -1,0 +1,11 @@
+scrcpy-server-v5.0.1
+  Unmodified server component of scrcpy 5.0.1 (https://github.com/Genymobile/scrcpy),
+  Copyright (C) 2018 Genymobile, Copyright (C) 2018-2026 Romain Vimont.
+  Licensed under the Apache License, Version 2.0 (see scrcpy-LICENSE.txt).
+  SHA-256: 764eb6f79811d5211fe9df341120882ba9994c7a61b897d7bf3fb662e53bc536
+
+whisper-agent.jar
+  Whisper's helper for the phone side of window streaming, built from
+  android_agent/ by script/build_window_agent.sh. It contains the server
+  sources of scrcpy 5.0.1 unmodified (Apache License 2.0, see
+  scrcpy-LICENSE.txt) together with Whisper's own code.

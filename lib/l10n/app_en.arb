@@ -838,5 +838,534 @@
   "folderSendUnreadable": "This folder could not be read",
   "folderSendTooManyEntries": "This folder has more than {limit} items. Send it in parts",
   "folderSendTooLarge": "This folder is larger than 1 TB and cannot be sent",
-  "folderFileProgress": "{done} of {total} files"
+  "folderFileProgress": "{done} of {total} files",
+  "windowStreamTitle": "Phone apps",
+  "windowStreamConnecting": "Connecting…",
+  "windowStreamPaused": "Paused. Click to resume",
+  "windowStreamReconnecting": "Reconnecting…",
+  "windowStreamDisplaced": "Back on the phone. Click to bring it here",
+  "windowStreamSecureBlocked": "This app doesn't allow screen sharing",
+  "windowStreamAppExited": "The app has closed",
+  "windowStreamDisconnected": "Disconnected. You can close this window",
+  "windowStreamNoDevice": "No phone found",
+  "windowStreamNoDeviceHint": "Connect your phone with a cable, or turn on Wireless debugging in the phone's Developer options.",
+  "windowStreamUnauthorized": "Allow debugging from this computer on your phone",
+  "windowStreamDeviceOffline": "The phone isn't responding. Reconnect the cable or turn Wireless debugging off and on",
+  "windowStreamAdbMissing": "adb wasn't found. Install Android Platform Tools first",
+  "windowStreamAdbFailed": "The adb server couldn't start",
+  "windowStreamUnsupported": "Phone app windows aren't available on this computer yet",
+  "windowStreamRunningApps": "Running",
+  "windowStreamAllApps": "All apps",
+  "windowStreamSearchApps": "Search apps",
+  "windowStreamLoadingApps": "Loading apps…",
+  "windowStreamOnDesktop": "On desktop",
+  "windowStreamShowSystemApps": "Show system apps",
+  "windowStreamRetry": "Retry",
+  "windowStreamInjectDenied": "On Xiaomi phones, also turn on “USB debugging (Security settings)” in Developer options, then restart the phone",
+  "windowStreamAndroidTooOld": "Requires Android 10 or later",
+  "windowStreamOpenFailed": "Couldn't open this app",
+  "windowStreamNoApps": "No apps found",
+  "windowStreamSpaceTitle": "Flow",
+  "windowStreamRecents": "Recents",
+  "windowStreamWindows": "Windows",
+  "windowStreamApps": "Apps",
+  "windowStreamViaUsb": "Connected by USB",
+  "windowStreamViaWifi": "Wireless debugging",
+  "windowStreamViaWhisper": "Connected",
+  "windowStreamStatusLive": "Live",
+  "windowStreamStatusPaused": "Paused",
+  "windowStreamStatusConnecting": "Connecting",
+  "windowStreamStatusEnded": "Disconnected",
+  "windowStreamPause": "Pause",
+  "windowStreamResume": "Resume",
+  "windowStreamClose": "Close",
+  "windowStreamNoWindows": "No open windows",
+  "windowStreamNoWindowsHint": "Open an app or a recent task and it shows up here",
+  "windowStreamNoDevices": "No devices yet",
+  "windowStreamNoDevicesHintDesktop": "Connect an Android phone with a cable, or turn on Wireless debugging in its Developer options.",
+  "windowStreamNoDevicesHintMobile": "Open Whisper on your Mac and trust each other; its windows will show up here.",
+  "windowStreamLoadFailed": "Couldn't load this device's apps",
+  "windowStreamBackToSpace": "Back to Flow",
+  "windowStreamKeyboard": "Keyboard",
+  "windowStreamNoRecents": "Nothing is running on this device",
+  "windowStreamSourceLocked": "This computer is locked. Unlock it to stream its windows.",
+  "windowStreamCapturePermission": "This computer hasn't allowed Whisper to record its screen yet. Turn it on in its System Settings › Privacy & Security › Screen Recording.",
+  "windowStreamUntrusted": "Whisper on this phone isn't paired with this device yet. Open Whisper on the phone, connect to this device and confirm the pairing to stream.",
+  "windowStreamWhisperMissing": "This phone has no usable Whisper. Install the latest Whisper and pair it with this device to stream.",
+  "windowStreamNotPaired": "Not paired",
+  "windowStreamOpenHere": "Open here",
+  "windowStreamSendTo": "Send to {device}",
+  "@windowStreamSendTo": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "windowStreamSendHint": "Pick a window on this computer to send to {device}. Once opened there it moves off this screen, and comes back when it is closed on {device}.",
+  "@windowStreamSendHint": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "windowStreamSent": "Sent to {device}. Tap the prompt there to view it.",
+  "@windowStreamSent": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "windowStreamSendFailed": "Couldn't send it. Make sure that device is connected to this one.",
+  "windowStreamSendUnavailable": "Whisper on {device} needs to be connected to this computer and up to date to receive windows.",
+  "@windowStreamSendUnavailable": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "windowStreamNoLocalWindows": "No windows on this computer to send",
+  "windowStreamOfferTitle": "{device} sent you a window",
+  "@windowStreamOfferTitle": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "windowStreamOfferView": "View",
+  "windowStreamOfferFrom": "From {device}",
+  "@windowStreamOfferFrom": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "windowStreamTouchBlockedTitle": "{device} isn't responding to touch",
+  "@windowStreamTouchBlockedTitle": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "windowStreamTouchBlockedBody": "A page {app} left in the background is covering the phone's screen, so touches don't get through. Closing that page fixes it; {app} stays installed with its account and history.",
+  "@windowStreamTouchBlockedBody": {
+    "placeholders": {
+      "app": {
+        "type": "String"
+      }
+    }
+  },
+  "windowStreamTouchBlockedFix": "Close that page",
+  "windowStreamTouchBlockedLater": "Not now",
+  "windowStreamTouchBlockedFixed": "Done. The phone responds again.",
+  "windowStreamTextSize": "Text Size",
+  "windowStreamOpenHereDetail": "Use apps from {device}",
+  "@windowStreamOpenHereDetail": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "windowStreamSendToDetail": "Move a window to {device}",
+  "@windowStreamSendToDetail": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "windowStreamStreaming": "Open here",
+  "windowStreamCloseWindow": "Close Window",
+  "windowStreamCloseFailed": "Couldn’t close this window",
+  "windowStreamOfferIgnore": "Dismiss",
+  "windowStreamSwitcherRotate": "Rotate",
+  "windowStreamHostLocked": "{device} is locked. Unlock it to show its windows here.",
+  "@windowStreamHostLocked": {
+    "description": "Window stream: the source desktop is locked; shown on the viewing device.",
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "windowStreamHostPermissionMac": "{device} hasn't allowed Whisper to record its screen. On that Mac, turn on Whisper in System Settings › Privacy & Security › Screen & System Audio Recording.",
+  "@windowStreamHostPermissionMac": {
+    "description": "Window stream: a Mac source lacks the Screen Recording permission; tells the viewer what to do on the Mac.",
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "windowStreamHostPermission": "{device} doesn't let Whisper record its windows. Allow screen recording for Whisper in that computer's privacy settings, then try again.",
+  "@windowStreamHostPermission": {
+    "description": "Window stream: a Windows or Linux source refused screen capture (privacy setting).",
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "windowStreamHostHelper": "{device} needs one more step: log out of that computer and back in, then its windows can be shown here.",
+  "@windowStreamHostHelper": {
+    "description": "Window stream: a Linux (GNOME) source's Whisper Shell helper is not active yet; it becomes active after logging out and in once.",
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "windowStreamHostDesktopUnsupported": "{device}'s desktop can't share windows yet. It needs GNOME on Wayland.",
+  "@windowStreamHostDesktopUnsupported": {
+    "description": "Window stream: a Linux source runs a desktop other than GNOME on Wayland (KDE, X11).",
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "windowStreamHostElevated": "This window runs as administrator, so Whisper can't show it. On {device}, open the app again without administrator rights.",
+  "@windowStreamHostElevated": {
+    "description": "Window stream: a Windows source's window belongs to an elevated (administrator) process.",
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "windowStreamHostProtected": "This window blocks screen recording, so it can't be shown here.",
+  "@windowStreamHostProtected": {
+    "description": "Window stream: the window excludes itself from screen capture (DRM, password managers)."
+  },
+  "windowStreamHostEncoder": "{device} couldn't start encoding video. Try again in a moment.",
+  "@windowStreamHostEncoder": {
+    "description": "Window stream: the source could not open a video encoder.",
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "windowStreamHostUnsupported": "{device} can't share its windows yet. Update Whisper on that device to the latest version.",
+  "@windowStreamHostUnsupported": {
+    "description": "Window stream: the source has no usable capture backend (generic).",
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "windowStreamHostUnsupportedWindows": "{device} needs Windows 10 version 1903 or later to share its windows.",
+  "@windowStreamHostUnsupportedWindows": {
+    "description": "Window stream: a Windows source lacks Windows Graphics Capture.",
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "windowStreamHostUnsupportedMac": "{device} needs macOS 12.3 or later to share its windows.",
+  "@windowStreamHostUnsupportedMac": {
+    "description": "Window stream: a Mac source is older than macOS 12.3 (no ScreenCaptureKit).",
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "windowStreamThatDevice": "that device",
+  "@windowStreamThatDevice": {
+    "description": "Window stream: stands in for {device} when the source's name is unknown (lower case; the sentence start is capitalised in code)."
+  },
+  "windowStreamDecoderMissing": "Can't show this window: FFmpeg's video decoder isn't installed on this computer",
+  "@windowStreamDecoderMissing": {
+    "description": "Overlay message for a streamed window on Linux when no H.264 decoder can be loaded (native WSN_WINDOW_DECODE_ERROR with a = 1). Dart should set it with wsn_surface_set_visual(WSN_VISUAL_ERROR, message)."
+  },
+  "windowStreamVolume": "Volume",
+  "windowStreamMute": "Mute",
+  "windowStreamUnmute": "Unmute",
+  "windowStreamMovedAway": "This window was opened on another device",
+  "flowTaskOpenOn": "Showing on {device}",
+  "windowStreamSourceErrorDesktopUnsupported": "This PC can't share windows",
+  "@windowStreamSourceErrorDesktopUnsupported": {
+    "description": "Window-stream source failure shown to the viewer: the host desktop cannot capture windows at all (reason code = WSN_CAPTURE_ERROR_UNSUPPORTED from the Windows source; Windows is supported, so this is only for very old builds or missing Graphics.Capture)."
+  },
+  "windowStreamSourceErrorElevated": "This window runs as administrator and can't be shared",
+  "@windowStreamSourceErrorElevated": {
+    "description": "Window-stream source: the chosen window belongs to a higher-integrity (administrator) process on Windows, so input can't be injected and it is excluded. Maps from a notFound/permission reason when the target was filtered out as elevated."
+  },
+  "windowStreamSourceNoteStagedInPlace": "{app} can't run in the background, sharing it in place",
+  "@windowStreamSourceNoteStagedInPlace": {
+    "description": "Window-stream source status note (not an error): the app refused to stage off-screen or produced no frames after moving, so it is mirrored in its real on-screen position instead of the background. Shown on the host, or logged. {app} is the application name.",
+    "placeholders": {
+      "app": {
+        "type": "String"
+      }
+    }
+  },
+  "gnomeHelperTitle": "Window sharing helper",
+  "@gnomeHelperTitle": {
+    "description": "Linux (GNOME) settings row title: the GNOME Shell extension that lets other devices show this computer's windows."
+  },
+  "gnomeHelperHint": "Showing this computer’s windows on your other devices needs a small GNOME component and one logout",
+  "@gnomeHelperHint": {
+    "description": "Linux settings row subtitle: why the helper exists and that the first install needs one logout/login."
+  },
+  "gnomeHelperWorking": "Installing…",
+  "@gnomeHelperWorking": {
+    "description": "Linux settings row subtitle while the helper is being installed."
+  },
+  "gnomeHelperReady": "Ready",
+  "@gnomeHelperReady": {
+    "description": "Status label (with a green dot): the helper is running."
+  },
+  "gnomeHelperNotInstalled": "Not installed",
+  "@gnomeHelperNotInstalled": {
+    "description": "Status label: the helper has never been installed."
+  },
+  "gnomeHelperNeedsRelogin": "Log out to finish",
+  "@gnomeHelperNeedsRelogin": {
+    "description": "Status label: installed, takes effect after logging out and back in."
+  },
+  "gnomeHelperOutdated": "Needs update",
+  "@gnomeHelperOutdated": {
+    "description": "Status label: an older helper is installed; this Whisper brings a newer one."
+  },
+  "gnomeHelperDisabled": "Turned off",
+  "@gnomeHelperDisabled": {
+    "description": "Status label: the helper was switched off in GNOME's Extensions app."
+  },
+  "gnomeHelperExtensionsOff": "Extensions off",
+  "@gnomeHelperExtensionsOff": {
+    "description": "Status label: all GNOME user extensions are switched off."
+  },
+  "gnomeHelperInstallDesc": "Whisper adds a small GNOME Shell extension that keeps shared windows running in the background and passes on keyboard and mouse input. Only Whisper can use it. Log out and back in once after installing.",
+  "@gnomeHelperInstallDesc": {
+    "description": "Confirmation dialog before installing the helper."
+  },
+  "gnomeHelperUpdateDesc": "This version of Whisper brings a newer window sharing helper. Log out and back in once after updating.",
+  "@gnomeHelperUpdateDesc": {
+    "description": "Confirmation dialog before updating the helper."
+  },
+  "gnomeHelperReloginDesc": "The helper is installed. GNOME loads it after you log back in. Save your work in other apps before logging out.",
+  "@gnomeHelperReloginDesc": {
+    "description": "Dialog when the helper waits for a new login; the confirm button logs out (GNOME asks again)."
+  },
+  "gnomeHelperDisabledDesc": "The window sharing helper was turned off in GNOME Extensions. Turn it back on so your other devices can show this computer’s windows.",
+  "@gnomeHelperDisabledDesc": {
+    "description": "Dialog when the helper was switched off in GNOME Extensions."
+  },
+  "gnomeHelperExtensionsOffDesc": "GNOME extensions are turned off. The helper runs only with extensions on (other installed extensions turn on too).",
+  "@gnomeHelperExtensionsOffDesc": {
+    "description": "Dialog when all GNOME extensions are off; confirming turns user extensions back on."
+  },
+  "gnomeHelperReadyDesc": "The window sharing helper is running. Your other devices can show this computer’s windows while they keep running here in the background.",
+  "@gnomeHelperReadyDesc": {
+    "description": "Dialog when the helper is running (information only)."
+  },
+  "gnomeHelperInstall": "Install",
+  "@gnomeHelperInstall": {
+    "description": "Button: install the helper."
+  },
+  "gnomeHelperUpdate": "Update",
+  "@gnomeHelperUpdate": {
+    "description": "Button: update the helper."
+  },
+  "gnomeHelperLogOut": "Log Out…",
+  "@gnomeHelperLogOut": {
+    "description": "Button: log out of the desktop session now (GNOME shows its own confirmation)."
+  },
+  "gnomeHelperLater": "Later",
+  "@gnomeHelperLater": {
+    "description": "Button: dismiss the dialog without doing anything."
+  },
+  "gnomeHelperTurnOn": "Turn On",
+  "@gnomeHelperTurnOn": {
+    "description": "Button: turn the helper back on."
+  },
+  "gnomeHelperTurnOnExtensions": "Turn On Extensions",
+  "@gnomeHelperTurnOnExtensions": {
+    "description": "Button: turn GNOME user extensions back on."
+  },
+  "gnomeHelperDone": "OK",
+  "@gnomeHelperDone": {
+    "description": "Button: close an information dialog."
+  },
+  "gnomeHelperInstalled": "Installed. Log out and back in to finish.",
+  "@gnomeHelperInstalled": {
+    "description": "Toast after installing: log out and back in to finish."
+  },
+  "gnomeHelperFailed": "Couldn’t install the window sharing helper",
+  "@gnomeHelperFailed": {
+    "description": "Toast when installing or enabling the helper failed."
+  },
+  "windowStreamShareSetting": "Share This Computer's Windows",
+  "@windowStreamShareSetting": {
+    "description": "Settings switch: whether trusted devices may open and control this computer's windows (window flow source)"
+  },
+  "windowStreamShareSettingDesc": "Trusted devices can open and use this computer's windows on their screens",
+  "@windowStreamShareSettingDesc": {
+    "description": "Detail under the window sharing settings switch"
+  },
+  "windowStreamCloseStillOpen": "“{app}” is still open — it may be asking whether to save.",
+  "@windowStreamCloseStillOpen": {
+    "description": "Toast after closing a window from the recents: the window stayed open on its device (for example a save prompt).",
+    "placeholders": {
+      "app": {
+        "type": "String"
+      }
+    }
+  },
+  "windowStreamCloseShow": "Show Window",
+  "@windowStreamCloseShow": {
+    "description": "Toast action: open the window that did not close, to answer its prompt."
+  },
+  "windowStreamClosing": "Closing",
+  "@windowStreamClosing": {
+    "description": "Accessibility label of a recents card whose window is being closed."
+  },
+  "androidWindowServiceTitle": "Window flow service",
+  "@androidWindowServiceTitle": {
+    "description": "Android page title: the on-phone service that lets other devices view and control this phone's apps."
+  },
+  "androidWindowServiceRunning": "On",
+  "@androidWindowServiceRunning": {
+    "description": "Android window flow service status: the agent is running and reachable."
+  },
+  "androidWindowServiceRunningHint": "Your trusted computers can now see this phone in their window flow and open its apps",
+  "@androidWindowServiceRunningHint": {
+    "description": "Android window flow service subtitle when running: what it enables."
+  },
+  "androidWindowServiceStopped": "Not running",
+  "@androidWindowServiceStopped": {
+    "description": "Android window flow service status: set up before, but the agent is not running now (e.g. after a reboot)."
+  },
+  "androidWindowServiceStoppedHint": "Turn on Wireless debugging, then start it again here without a computer",
+  "@androidWindowServiceStoppedHint": {
+    "description": "Android window flow service subtitle when stopped but already set up once."
+  },
+  "androidWindowServiceNeedsSetup": "Not set up",
+  "@androidWindowServiceNeedsSetup": {
+    "description": "Android window flow service status: never set up on this phone."
+  },
+  "androidWindowServiceNeedsSetupHint": "Once on, this phone's apps can flow to your trusted computers to view and control, while the phone stays in the background",
+  "@androidWindowServiceNeedsSetupHint": {
+    "description": "Android window flow service subtitle when not set up: what the feature does."
+  },
+  "androidWindowServiceStart": "Turn on",
+  "@androidWindowServiceStart": {
+    "description": "Android window flow service primary button: start the service."
+  },
+  "androidWindowServiceStop": "Turn off",
+  "@androidWindowServiceStop": {
+    "description": "Android window flow service button: stop the running service."
+  },
+  "androidWindowServiceSetup": "Set up",
+  "@androidWindowServiceSetup": {
+    "description": "Android window flow service primary button: begin first-time setup."
+  },
+  "androidWindowServiceHowTitle": "One-time setup",
+  "@androidWindowServiceHowTitle": {
+    "description": "Android window flow setup section header: the steps only needed once."
+  },
+  "androidWindowServiceStep1": "Turn on Developer options",
+  "@androidWindowServiceStep1": {
+    "description": "Android setup step 1 title."
+  },
+  "androidWindowServiceStep1Hint": "Tap Build number 7 times under About phone",
+  "@androidWindowServiceStep1Hint": {
+    "description": "Android setup step 1 subtitle."
+  },
+  "androidWindowServiceStep1Action": "Open About phone",
+  "@androidWindowServiceStep1Action": {
+    "description": "Android setup step 1 button: deep link to device info settings."
+  },
+  "androidWindowServiceStep2": "Turn on Wireless debugging",
+  "@androidWindowServiceStep2": {
+    "description": "Android setup step 2 title."
+  },
+  "androidWindowServiceStep2Hint": "In Developer options, turn on Wireless debugging and open ‘Pair device with pairing code’",
+  "@androidWindowServiceStep2Hint": {
+    "description": "Android setup step 2 subtitle."
+  },
+  "androidWindowServiceStep2Action": "Open Developer options",
+  "@androidWindowServiceStep2Action": {
+    "description": "Android setup step 2 button: deep link to development settings."
+  },
+  "androidWindowServiceStep3": "Enter the pairing code",
+  "@androidWindowServiceStep3": {
+    "description": "Android setup step 3 title: the 6-digit Wireless debugging pairing code."
+  },
+  "androidWindowServiceStep3Hint": "Type the 6-digit code the system shows; Whisper pairs with this phone and starts the service",
+  "@androidWindowServiceStep3Hint": {
+    "description": "Android setup step 3 subtitle."
+  },
+  "androidWindowServicePairingCode": "Pairing code",
+  "@androidWindowServicePairingCode": {
+    "description": "Android setup pairing-code text field label."
+  },
+  "androidWindowServicePair": "Pair and turn on",
+  "@androidWindowServicePair": {
+    "description": "Android setup button: submit the pairing code, pair, and start the service."
+  },
+  "androidWindowServicePairing": "Pairing…",
+  "@androidWindowServicePairing": {
+    "description": "Android setup status while pairing with the phone's own adb."
+  },
+  "androidWindowServiceStarting": "Starting…",
+  "@androidWindowServiceStarting": {
+    "description": "Android window flow service status while the agent starts."
+  },
+  "androidWindowServiceAutoStart": "Start automatically after a reboot",
+  "@androidWindowServiceAutoStart": {
+    "description": "Android window flow service toggle: let Whisper restart the service by itself after the phone reboots."
+  },
+  "androidWindowServiceAutoStartHint": "Needs a system permission so Whisper can turn Wireless debugging back on; only your trusted computers can connect, and you can turn this off here anytime",
+  "@androidWindowServiceAutoStartHint": {
+    "description": "Android window flow service auto-start toggle subtitle, stating the security trade-off."
+  },
+  "androidWindowServiceStarted": "Window flow service is on",
+  "@androidWindowServiceStarted": {
+    "description": "Toast after the service starts."
+  },
+  "androidWindowServiceStopped2": "Window flow service stopped",
+  "@androidWindowServiceStopped2": {
+    "description": "Toast after the service stops."
+  },
+  "androidWindowServiceStartFailed": "Couldn’t start. Check that Wireless debugging is on and try again",
+  "@androidWindowServiceStartFailed": {
+    "description": "Toast when the self-start fails."
+  },
+  "androidWindowServicePairFailed": "Pairing failed. Check the code and try again",
+  "@androidWindowServicePairFailed": {
+    "description": "Toast when pairing with the pairing code fails."
+  },
+  "androidWindowServiceEntryTitle": "Window flow service",
+  "@androidWindowServiceEntryTitle": {
+    "description": "Settings row title linking to the Android window flow service page."
+  },
+  "androidWindowServiceEntryHint": "Let other devices open this phone's apps",
+  "@androidWindowServiceEntryHint": {
+    "description": "Settings row subtitle for the Android window flow service page."
+  },
+  "androidWindowServiceComputerHint": "Connect this phone once to a computer running Whisper with window flow on; then every computer can use it",
+  "@androidWindowServiceComputerHint": {
+    "description": "Android window flow service hint shown when the phone cannot start the agent by itself (no bundled pairing): use a computer once."
+  },
+  "windowStreamPhoneServiceOff": "Open Whisper on {device} and turn on Settings → Window Flow Service.",
+  "@windowStreamPhoneServiceOff": {
+    "description": "Shown above an Android phone's (empty) window list on another device when the phone's window-flow service is not running.",
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  }
 }

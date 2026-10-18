@@ -41,6 +41,10 @@ import 'package:whisper/socket/quick_send_identity_gate.dart';
 import 'package:whisper/socket/socket_admission.dart';
 import 'package:whisper/socket/session_upgrade_token_registry.dart';
 import 'package:whisper/socket/no_delay_socket.dart';
+import 'package:whisper/window_stream/remote/remote_peer_source.dart';
+import 'package:whisper/window_stream/remote/window_stream_control.dart';
+import 'package:whisper/window_stream/remote/window_stream_host.dart';
+import 'package:whisper/window_stream/window_stream_support.dart';
 import 'package:whisper/socket/transport_close_guard.dart';
 import 'package:whisper/socket/whisper_frame_v3.dart';
 import 'package:whisper/socket/wire_message_codec.dart';
@@ -262,6 +266,8 @@ class WsSvrManager {
       .values
       .map((action) => action.name)
       .toSet();
+  static final Set<String> _windowStreamControlActions =
+      WindowStreamControlAction.values.map((action) => action.name).toSet();
 
   static const String _profileRefreshRequestMessage = 'profile-refresh-request';
 
@@ -578,6 +584,16 @@ class WsSvrManager {
       _remoteProfilesByPeerId[receiver] ?? _remoteProfile;
 
   Set<String> get connectedPeerIds => _peerConnections.connectedPeerIds;
+
+  /// [peerId] is connected and accepts windows sent to it ("送出去").
+  bool canOfferWindowsTo(String peerId) =>
+      supportsWindowStreamSource() &&
+      _sessionsByPeerId[peerId]?.isAuthenticated == true &&
+      remoteProfileFor(peerId)?.capabilities.windowStreamOfferV1 == true;
+
+  /// This device's peer id on [peerId]'s authenticated session.
+  String localPeerIdFor(String peerId) =>
+      _sessionsByPeerId[peerId]?.localProfile.uid ?? '';
   bool get isConnected =>
       _sink != null || _peerConnections.connectedPeerIds.isNotEmpty;
   bool get supportsFileTransferV3 =>
@@ -602,7 +618,7 @@ class WsSvrManager {
 
   bool supportsManualInputFor(String peerId) {
     final profile = remoteProfileFor(peerId);
-    return profile?.protocolVersion == 11 &&
+    return (profile?.protocolVersion ?? 0) >= 11 &&
         profile?.capabilities.remoteInputManualSinkV1 == true;
   }
 
@@ -1290,6 +1306,17 @@ class WsSvrManager {
     _audioManager.onGroupPacket = (packet) {
       unawaited(AudioGroupCoordinator.shared.handlePacket(packet));
     };
+    if (_manageSharedCoordinators) {
+      WindowStreamViewer.shared
+        ..sender = sendWindowStreamControlTo
+        ..localPeerId = localPeerIdFor
+        ..issueInboundToken = _issueInboundWindowToken;
+      WindowStreamHost.shared
+        ..sender = sendWindowStreamControlTo
+        ..dialScope = _windowDialScope
+        ..localPeerId = localPeerIdFor
+        ..start();
+    }
 
     Future<shelf.Response> handleMediaUpgrade({
       required shelf.Request request,
@@ -1401,7 +1428,10 @@ class WsSvrManager {
 
     FutureOr<shelf.Response> handler(shelf.Request request) async {
       final path = request.url.path;
-      if (path != 'chat' && path != 'audio' && path != 'input') {
+      if (path != 'chat' &&
+          path != 'audio' &&
+          path != 'input' &&
+          path != 'window') {
         return shelf.Response.notFound('Not Found');
       }
       if (request.method != 'GET' || !_isValidWebSocketUpgrade(request)) {
@@ -1491,6 +1521,57 @@ class WsSvrManager {
             channel,
             claim: consumed,
             claimValidator: _isExpectedMediaPeerClaim,
+          ),
+        );
+      }
+
+      if (path == 'window') {
+        final credentials = _mediaUpgradeCredentials(request);
+        final claim = credentials == null
+            ? null
+            : _sessionUpgradeTokens.lookup(
+                route: WindowStreamHost.route,
+                sessionId: credentials.sessionId,
+                token: credentials.token,
+                now: DateTime.now(),
+              );
+        // A host dialling this viewer back carries the token this viewer
+        // gave it (WindowStreamMediaDial); it never matches a host stream.
+        final inbound =
+            claim != null &&
+            _isExpectedMediaPeerClaim(claim) &&
+            WindowStreamViewer.shared.canAttachInbound(claim);
+        if (claim == null ||
+            !_isExpectedMediaPeerClaim(claim) ||
+            (!inbound && !WindowStreamHost.shared.canAttachClaim(claim))) {
+          return shelf.Response.unauthorized('Unauthorized');
+        }
+        if (inbound) {
+          return handleMediaUpgrade(
+            request: request,
+            route: WindowStreamHost.route,
+            sessionId: credentials!.sessionId,
+            token: credentials.token,
+            provisionalClaim: claim,
+            canAttach: (candidate) =>
+                _isExpectedMediaPeerClaim(candidate) &&
+                WindowStreamViewer.shared.canAttachInbound(candidate),
+            attach: WindowStreamViewer.shared.attachInbound,
+          );
+        }
+        return handleMediaUpgrade(
+          request: request,
+          route: WindowStreamHost.route,
+          sessionId: credentials!.sessionId,
+          token: credentials.token,
+          provisionalClaim: claim,
+          canAttach: (candidate) =>
+              _isExpectedMediaPeerClaim(candidate) &&
+              WindowStreamHost.shared.canAttachClaim(candidate),
+          attach: (channel, consumed) => WindowStreamHost.shared.attachChannel(
+            channel,
+            claim: consumed,
+            sendKeyScope: _withMediaSendKeyFor,
           ),
         );
       }
@@ -2960,6 +3041,7 @@ class WsSvrManager {
     }
     await _audioManager.closeChannels();
     await _remoteInputManager.closeChannels();
+    await WindowStreamHost.shared.closeAll();
     for (final session in authenticatedSessions) {
       await session.drainOutbound();
     }
@@ -3232,7 +3314,9 @@ class WsSvrManager {
       _audioManager.closePeerChannels(peerId),
       _remoteInputManager.closePeerChannels(peerId),
       _remoteClipboardTransfer.clearPeer(peerId),
+      WindowStreamHost.shared.closePeer(peerId),
     ]);
+    WindowStreamViewer.shared.peerGone(peerId);
     if (!ownsCleanup()) {
       return;
     }
@@ -3410,7 +3494,10 @@ class WsSvrManager {
         }
         await _listen(bytes, sink: sink, asServer: asServer, session: session);
       } catch (error) {
-        logger.i('处理 websocket 消息失败: ${error.runtimeType}');
+        logger.i(
+          '处理 websocket 消息失败: ${error.runtimeType}'
+          '${error is WireInputRejected ? ' ${error.reason}' : ''}',
+        );
         final failedSession = _sessionsBySink[sink];
         if (failedSession != null) {
           final message = switch (error) {
@@ -4668,6 +4755,140 @@ class WsSvrManager {
           await _ackMessage(message);
           break;
         }
+      case MessageEnum.WindowStreamControl:
+        {
+          final json =
+              jsonDecode(message.content ?? "{}") as Map<String, dynamic>;
+          WireInputPolicy.validateControlEnvelope(
+            json,
+            allowedActions: _windowStreamControlActions,
+          ).requireAccepted();
+          final control = WindowStreamControlMessage.fromJson(json);
+          WireInputPolicy.validateControlSessionId(
+            messageId: message.uuid,
+            sessionId: control.sessionId,
+          ).requireAccepted();
+          WireInputPolicy.validatePeerPair(
+            sourcePeerId: control.viewerPeerId,
+            sinkPeerId: control.hostPeerId,
+            authenticatedPeerId: session.remotePeerId,
+            localPeerId: session.localProfile.uid,
+          ).requireAccepted();
+          final weAreHost = control.hostPeerId == session.localProfile.uid;
+          // Both ends may end a stream at once (the host's window went away
+          // while the viewer saw its picture stop): a stop or error for a
+          // session this side already ended is expected, not a protocol
+          // violation that drops the whole connection.
+          if (control.isTerminal &&
+              !control.isInitial &&
+              !_wireControlSessions.knows(
+                namespace: WindowStreamHost.namespace,
+                sessionId: control.sessionId,
+              )) {
+            await _ackMessage(message);
+            break;
+          }
+          _wireControlSessions
+              .validateAndRemember(
+                namespace: WindowStreamHost.namespace,
+                sessionId: control.sessionId,
+                sourcePeerId: control.viewerPeerId,
+                sinkPeerId: control.hostPeerId,
+                authenticatedPeerId: session.remotePeerId,
+                localPeerId: session.localProfile.uid,
+                isInitialOffer: control.isInitial,
+                isIncoming: weAreHost,
+                // Viewer-first sessions arrive at a viewer reversed; a host's
+                // offer arrives there in its natural direction.
+                reverseInitialDirection: !weAreHost && !control.isHostInitiated,
+              )
+              .requireAccepted();
+          requireCurrentBusiness();
+          final remoteDevice = _requireRemoteProfileForSession(session).device;
+          var releaseLater = false;
+          try {
+            if (weAreHost) {
+              // Only mutually trusted peers may see or drive this desktop.
+              final storedRemote = await _database.fetchDevice(
+                remoteDevice.uid,
+              );
+              requireCurrentBusiness();
+              final trusted =
+                  storedRemote?.auth == true &&
+                  storedRemote?.identityPublicKey.isNotEmpty == true &&
+                  storedRemote?.identityPublicKey ==
+                      session.remoteIdentityPublicKey &&
+                  session.isAuthenticated;
+              final remotePeerId = session.remotePeerId;
+              Future<bool> reply(WindowStreamControlMessage outgoing) =>
+                  sendWindowStreamControlTo(remotePeerId, outgoing);
+              if (!trusted || !supportsWindowStreamSource()) {
+                if (control.isInitial) {
+                  await reply(
+                    control.reply(
+                      WindowStreamControlAction.reject,
+                      payload: {
+                        'reason': trusted ? 'unsupported' : 'untrusted',
+                      },
+                    ),
+                  );
+                }
+              } else {
+                // Catalogs, icons and thumbnails take the capture framework
+                // seconds. Answering them here would hold every later
+                // message of this peer (heartbeats included) until the
+                // phone gave up and reconnected; replies go to whichever
+                // session is current when they are ready.
+                releaseLater = control.isTerminal;
+                unawaited(
+                  WindowStreamHost.shared
+                      .handleControl(
+                        control,
+                        remotePeerId: remotePeerId,
+                        send: reply,
+                      )
+                      .catchError((Object error) {
+                        logger.i('窗口流转请求失败: ${error.runtimeType}');
+                      })
+                      .whenComplete(() async {
+                        if (releaseLater) {
+                          await _releaseTerminalControl(
+                            namespace: WindowStreamHost.namespace,
+                            route: WindowStreamHost.route,
+                            peerId: remotePeerId,
+                            sessionId: control.sessionId,
+                          );
+                        }
+                      }),
+                );
+              }
+            } else {
+              session.withMediaSendKey(
+                (sendKey) => session.withMediaReceiveKey(
+                  (receiveKey) => WindowStreamViewer.shared.handleControl(
+                    control,
+                    remotePeerId: session.remotePeerId,
+                    remoteHost: remoteDevice.host,
+                    sendKey: sendKey,
+                    receiveKey: receiveKey,
+                  ),
+                ),
+              );
+            }
+          } finally {
+            if (control.isTerminal && !releaseLater) {
+              await _releaseTerminalControl(
+                namespace: WindowStreamHost.namespace,
+                route: WindowStreamHost.route,
+                peerId: session.remotePeerId,
+                sessionId: control.sessionId,
+              );
+            }
+          }
+          requireCurrentBusiness();
+          await _ackMessage(message);
+          break;
+        }
       case MessageEnum.AudioGroupControl:
         {
           final json =
@@ -4959,6 +5180,9 @@ class WsSvrManager {
         audioGroupRejoinV1: true,
         audioSyncClockV1: true,
         audioChannelRoleV1: true,
+        windowStreamSourceV1: supportsWindowStreamSource(),
+        windowStreamSinkV1: supportsWindowStreamSink(),
+        windowStreamOfferV1: supportsWindowStreamSink(),
       ),
       displayTopology: topology,
     );
@@ -5007,8 +5231,22 @@ class WsSvrManager {
     if (hasPeerId) {
       if (profile == null) {
         _remoteProfilesByPeerId.remove(peerId);
+        WindowStreamViewer.shared.peerGone(peerId);
       } else {
         _remoteProfilesByPeerId[peerId] = profile;
+        if (profile.protocolVersion >= 12 &&
+            profile.capabilities.windowStreamSourceV1 &&
+            supportsWindowStreamSink()) {
+          WindowStreamViewer.shared.peerAvailable(
+            peerId: peerId,
+            name: profile.device.name,
+            platform: windowStreamPlatformOf(profile.device.platform),
+            host: profile.device.host,
+            port: profile.device.port,
+          );
+        } else {
+          WindowStreamViewer.shared.peerGone(peerId);
+        }
       }
     } else if (profile == null) {
       _remoteProfilesByPeerId.clear();
@@ -5257,6 +5495,17 @@ class WsSvrManager {
         peerId: peerId,
         namespace: namespace,
       );
+    } else if (route == WindowStreamHost.route) {
+      await WindowStreamHost.shared.handleControl(
+        WindowStreamControlMessage(
+          action: WindowStreamControlAction.stop,
+          sessionId: sessionId,
+          viewerPeerId: peerId,
+          hostPeerId: '',
+        ),
+        remotePeerId: peerId,
+        send: (_) async => false,
+      );
     } else if (route == '/input') {
       await _remoteClipboardTransfer.clearSession(sessionId);
       await _remoteInputManager.closeSessionChannels(
@@ -5291,6 +5540,124 @@ class WsSvrManager {
 
   Future<bool> sendAudioControl(AudioControlMessage control) {
     return sendAudioControlTo(receiver, control);
+  }
+
+  /// Runs [action] with this device's media send key for [peerId], or
+  /// returns null when that peer has no authenticated session.
+  T? _withMediaSendKeyFor<T>(String peerId, T Function(Uint8List key) action) {
+    final session = _sessionsByPeerId[peerId];
+    if (session == null || !session.isAuthenticated) {
+      return null;
+    }
+    return session.withMediaSendKey(action);
+  }
+
+  /// Sends a window-stream control message. The viewer starts every session
+  /// (wire "source"); an `accept` from this host carries a one-time token
+  /// for `/window`, issued like the audio and input routes.
+  Future<bool> sendWindowStreamControlTo(
+    String peerId,
+    WindowStreamControlMessage control,
+  ) {
+    if (!_validateOutgoingControlSession(
+      namespace: WindowStreamHost.namespace,
+      peerId: peerId,
+      sessionId: control.sessionId,
+      sourcePeerId: control.viewerPeerId,
+      sinkPeerId: control.hostPeerId,
+      isInitialOffer: control.isInitial,
+      reverseInitialDirection: control.isHostInitiated,
+    )) {
+      return Future<bool>.value(false);
+    }
+    var outgoing = control;
+    if (control.action == WindowStreamControlAction.accept) {
+      final token = _issueSessionUpgradeToken(
+        route: WindowStreamHost.route,
+        namespace: WindowStreamHost.namespace,
+        peerId: peerId,
+        sessionId: control.sessionId,
+        sourcePeerId: control.viewerPeerId,
+        sinkPeerId: control.hostPeerId,
+      );
+      if (token == null) {
+        return Future<bool>.value(false);
+      }
+      outgoing = control.withTransport(token, port: _server?.port);
+    }
+    final message = _buildMessage(
+      MessageEnum.WindowStreamControl,
+      jsonEncode(outgoing.toJson()),
+      "",
+      "",
+      0,
+      false,
+      uid: control.sessionId,
+      receiverOverride: peerId,
+    );
+    return _sendControlWithLifecycle(
+      send: _sendMessageData(message, peerId: peerId),
+      isTerminal: control.isTerminal,
+      namespace: WindowStreamHost.namespace,
+      route: WindowStreamHost.route,
+      peerId: peerId,
+      sessionId: control.sessionId,
+    );
+  }
+
+  /// A one-time `/window` token for [hostPeerId] to dial this viewer back,
+  /// proved with that host's media send key (this device's receive key).
+  String? _issueInboundWindowToken(String hostPeerId, String sessionId) {
+    final session = _sessionsByPeerId[hostPeerId];
+    if (_server == null || session == null || !session.isAuthenticated) {
+      return null;
+    }
+    try {
+      return session.withMediaReceiveKey(
+        (mediaReceiveKey) => _sessionUpgradeTokens.issue(
+          route: WindowStreamHost.route,
+          namespace: WindowStreamHost.namespace,
+          sessionId: sessionId,
+          peerId: hostPeerId,
+          mediaMacKey: mediaReceiveKey,
+          connectionGeneration: session.connectionGeneration,
+          now: DateTime.now(),
+        ),
+      );
+    } on StateError {
+      return null;
+    }
+  }
+
+  /// For a viewer whose Whisper session this device dialled: the address it
+  /// dialled and this device's media keys, so a phone host can dial that
+  /// viewer's `/window` (WindowStreamMediaDial). Null otherwise.
+  T? _windowDialScope<T>(
+    String peerId,
+    T Function(Uri base, Uint8List sendKey, Uint8List receiveKey) action,
+  ) {
+    final session = _sessionsByPeerId[peerId];
+    if (session == null ||
+        !session.isAuthenticated ||
+        session.role != PeerSocketRole.client) {
+      return null;
+    }
+    ({String host, int port})? endpoint;
+    for (final entry in _sessionsBySink.entries) {
+      if (identical(entry.value, session)) {
+        endpoint = _endpointsBySink[entry.key];
+        break;
+      }
+    }
+    if (endpoint == null || endpoint.host.isEmpty || endpoint.port <= 0) {
+      return null;
+    }
+    final base = Uri(scheme: 'ws', host: endpoint.host, port: endpoint.port);
+    return session.withMediaSendKey(
+      (sendKey) => session.withMediaReceiveKey(
+        (receiveKey) => action(base, sendKey, receiveKey),
+      ),
+    );
   }
 
   Future<bool> sendAudioControlTo(String peerId, AudioControlMessage control) {

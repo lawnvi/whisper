@@ -19,6 +19,11 @@ import 'package:whisper/helper/transfer_notifications.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/page/deviceList.dart';
 import 'package:whisper/helper/desktop_startup.dart';
+import 'package:whisper/audio/audio_codec.dart';
+import 'package:whisper/page/window_stream/flow_desktop_offers.dart';
+import 'package:whisper/page/window_stream/phone_touch_alert.dart';
+import 'package:whisper/window_stream/linux/gnome_shell_helper.dart';
+import 'package:whisper/window_stream/window_stream_coordinator.dart';
 import 'package:whisper/state/desktop_quick_send_inbox.dart';
 import 'package:whisper/cast_receiver/cast_receiver_manager.dart';
 import 'package:whisper/cast_receiver/cast_playback_window.dart';
@@ -148,8 +153,34 @@ Future<void> main(List<String> arguments) async {
   );
   if (isDesktop()) {
     unawaited(CastReceiverManager.shared.initialize());
+    // Windows sent here from another device open in windows of their own.
+    DesktopOfferOpener.shared.start();
+    // Streamed windows' sound is decoded in the stream isolate, which opens
+    // the copy of libopus this unpacks.
+    unawaited(OpusAudioCodec.warmUp().catchError((Object _) {}));
+  }
+  if (Platform.isLinux) {
+    // Keeps the GNOME helper's allowed-exe pointing at this executable (an
+    // AppImage mounts somewhere new each time); nothing if not installed.
+    unawaited(GnomeShellHelperController.shared.refresh());
   }
   runApp(MyApp());
+  if (Platform.isIOS) {
+    // An iPhone stays upright like the Android app; only a window being
+    // viewed turns (its viewer unlocks rotation). An iPad turns freely.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final view = WidgetsBinding.instance.platformDispatcher.implicitView;
+      if (view == null) {
+        return;
+      }
+      final size = view.physicalSize / view.devicePixelRatio;
+      if (size.shortestSide > 0 && size.shortestSide < 600) {
+        unawaited(
+          SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]),
+        );
+      }
+    });
+  }
 }
 
 Brightness _brightnessForThemeMode(ThemeMode mode) {
@@ -352,8 +383,16 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               ),
             );
           }
+          // Windows opened from anywhere (not only the Flow page) carry
+          // their overlay texts in the app's language.
+          final strings = AppLocalizations.of(context);
+          if (strings != null) {
+            WindowStreamCoordinator.shared.updateStrings(strings);
+          }
           final content = child ?? const SizedBox.shrink();
-          return isDesktop() ? CastPlaybackHost(child: content) : content;
+          return isDesktop()
+              ? CastPlaybackHost(child: PhoneTouchAlertHost(child: content))
+              : content;
         },
         home: const DeviceListScreen(),
       ),

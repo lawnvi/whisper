@@ -95,6 +95,8 @@ dependencies:
   media_kit_libs_macos_video: ^1.1.4
   media_kit_libs_windows_video: ^1.0.11
   media_kit_libs_linux: ^1.2.1
+  window_stream_native:
+    path: packages/window_stream_native
 
 
 dev_dependencies:
@@ -138,6 +140,20 @@ flutter:
       platforms: [windows]
     - path: assets/fonts/OFL.txt
       platforms: [windows]
+    - path: assets/window_stream/scrcpy-server-v5.0.1
+      platforms: [macos, windows, linux]
+    - path: assets/window_stream/whisper-agent.jar
+      platforms: [macos, windows, linux]
+    - path: assets/window_stream/whisper-agent.json
+      platforms: [macos, windows, linux]
+    - path: assets/window_stream/scrcpy-LICENSE.txt
+      platforms: [macos, windows, linux]
+    - path: assets/window_stream/NOTICE.txt
+      platforms: [macos, windows, linux]
+    - path: assets/window_stream/gnome-shell/whisper-window-stream@vireen.com/metadata.json
+      platforms: [linux]
+    - path: assets/window_stream/gnome-shell/whisper-window-stream@vireen.com/extension.js
+      platforms: [linux]
   # - images/a_dot_ham.jpeg
 
   # An image asset can refer to one or more resolution-specific "variants", see

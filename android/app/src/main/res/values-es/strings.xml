@@ -1,4 +1,21 @@
 <resources>
     <string name="connection_alert_accept_action">Coinciden</string>
     <string name="connection_alert_reject_action">Rechazar</string>
+    <string name="window_stream_channel">Transmisión de ventanas</string>
+    <string name="window_stream_active_title">Transmitiendo a %1$s</string>
+    <string name="window_stream_other_device">otro dispositivo</string>
+    <plurals name="window_stream_window_count">
+        <item quantity="one">%d ventana se muestra allí y se puede controlar</item>
+        <item quantity="other">%d ventanas se muestran allí y se pueden controlar</item>
+    </plurals>
+    <string name="window_stream_stop_action">Detener</string>
+    <string name="window_stream_stopping">Deteniendo…</string>
+    <string name="window_stream_chip">Transmitiendo</string>
+    <string name="window_stream_back_to_whisper">Volver a Whisper</string>
+    <string name="window_stream_text_size">Tamaño del texto</string>
+    <string name="window_stream_keyboard">Teclado</string>
+    <string name="window_stream_rotate">Girar</string>
+    <string name="window_stream_mute">Silenciar</string>
+    <string name="window_stream_unmute">Activar sonido</string>
+    <string name="window_stream_close">Dejar de mostrar aquí; la ventana vuelve</string>
 </resources>

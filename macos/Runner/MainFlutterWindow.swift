@@ -1621,9 +1621,21 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     injectionSegmentEnd = doubleValue(data["sinkSegmentEnd"])
   }
 
+  /// The screens keyboard and mouse sharing works with: Whisper's own
+  /// virtual displays (a window shown on a phone) are not part of the desk.
+  private var deskScreens: [NSScreen] {
+    NSScreen.screens.filter { screen in
+      guard
+        let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")]
+          as? CGDirectDisplayID
+      else { return true }
+      return CGDisplayVendorNumber(number) != 0x5748
+    }
+  }
+
   private func virtualDisplayBounds() -> CGRect {
     var bounds = CGRect.null
-    for screen in NSScreen.screens {
+    for screen in deskScreens {
       let frame = cgDisplayBounds(displayId: screenDisplayId(screen)) ?? screen.frame
       bounds = bounds.union(frame)
     }
@@ -1634,7 +1646,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
   }
 
   private func displayTopology() -> [String: Any] {
-    let displays = NSScreen.screens.map { screen -> [String: Any] in
+    let displays = deskScreens.map { screen -> [String: Any] in
       let displayId = screenDisplayId(screen)
       let frame = cgDisplayBounds(displayId: displayId) ?? screen.frame
       return [
@@ -1740,7 +1752,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     let bounds = virtualDisplayBounds()
     let inset: CGFloat = 2
     if manualInjection {
-      let displays = NSScreen.screens.compactMap { cgDisplayBounds(displayId: screenDisplayId($0)) }
+      let displays = deskScreens.compactMap { cgDisplayBounds(displayId: screenDisplayId($0)) }
       if displays.contains(where: { $0.contains(point) }) { return point }
       let candidates = displays.map { rect in
         CGPoint(x: min(rect.maxX - inset, max(rect.minX + inset, point.x)),

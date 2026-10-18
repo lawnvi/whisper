@@ -32,6 +32,8 @@
 	<string>NSApplication</string>
 	<key>NSDownloadsFolderUsageDescription</key>
     <string>Save Files</string>
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>Whisper plays the sound of a window you stream on the device that shows it, instead of on this Mac.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Whisper uses the local network only to discover and connect to nearby devices. Connections are not routed through a public relay.</string>
 	<key>NSBonjourServices</key>

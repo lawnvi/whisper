@@ -640,6 +640,10 @@ void main() {
       500,
       scrollable: find.byType(Scrollable).first,
     );
+    // The list grew (window sharing row): bring the row fully on screen
+    // before tapping it.
+    await tester.ensureVisible(find.text('Select Language'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Select Language'));
     await tester.pumpAndSettle();
     expect(find.byType(WhisperGlassActionSheet), findsOneWidget);
@@ -708,6 +712,34 @@ void main() {
     expect(find.byType(WhisperSettingsSlider), findsOneWidget);
     expect(find.text('0.5×'), findsOneWidget);
     expect(find.text('3.0×'), findsOneWidget);
+  });
+
+  testWidgets('only an Android phone offers the window flow service', (
+    tester,
+  ) async {
+    await _pumpAt(tester, width: 760, presentation: _androidPresentation);
+    await tester.scrollUntilVisible(
+      find.text('Access Clipboard'),
+      400,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pump();
+    expect(find.text('Window flow service'), findsOneWidget);
+    expect(
+      find.text('Let other devices open this phone\'s apps'),
+      findsOneWidget,
+    );
+
+    // A new settings screen, as on a desktop.
+    await tester.pumpWidget(const SizedBox());
+    await _pumpAt(tester, width: 760);
+    await tester.scrollUntilVisible(
+      find.text('Access Clipboard'),
+      400,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pump();
+    expect(find.text('Window flow service'), findsNothing);
   });
 
   testWidgets('Android forwarding and app navigation are separate actions', (
@@ -1294,5 +1326,58 @@ void main() {
     expect(find.text('Delete Device'), findsNothing);
     await tester.tap(find.text('Search chat history'));
     expect(searched, isTrue);
+  });
+
+  testWidgets('device page takes back always allowing file browsing', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      'remote_files.always_allowed': <String>['android-peer', 'other-peer'],
+    });
+    const peer = DeviceData(
+      id: 9,
+      uid: 'android-peer',
+      name: 'Pixel',
+      host: '192.168.1.9',
+      port: 10002,
+      platform: 'android',
+      isServer: false,
+      online: true,
+      clipboard: false,
+      auth: true,
+      lastTime: 0,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.lightTheme,
+        locale: const Locale('en'),
+        localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: ClientSettingsScreen(
+          device: peer,
+          deviceLoader: (_) async => peer,
+          isConnected: true,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Always Allow Browsing My Files'), findsOneWidget);
+    final filesSwitch = find.byType(CupertinoSwitch).last;
+    expect(tester.widget<CupertinoSwitch>(filesSwitch).value, isTrue);
+
+    await tester.tap(filesSwitch);
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<CupertinoSwitch>(filesSwitch).value, isFalse);
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getStringList('remote_files.always_allowed'), <String>[
+      'other-peer',
+    ]);
   });
 }

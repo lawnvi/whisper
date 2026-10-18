@@ -112,6 +112,10 @@ class OpusAudioCodec implements AudioCodec {
     );
   }
 
+  /// Loads libopus here, which on Windows and Linux also unpacks it where
+  /// stream isolates open it (`WorkerOpus`).
+  static Future<void> warmUp() => _ensureInitialized();
+
   static Future<void> _ensureInitialized() {
     return _initialization ??= opus_loader.load().then(opus.initOpus);
   }

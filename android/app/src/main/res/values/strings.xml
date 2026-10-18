@@ -2,4 +2,21 @@
     <string name="connection_alert_accept_action">Numbers match</string>
     <string name="connection_alert_reject_action">Decline</string>
     <string name="notification_listener_label">Whisper Notification Forwarding</string>
+    <string name="window_stream_channel">Window streaming</string>
+    <string name="window_stream_active_title">Streaming to %1$s</string>
+    <string name="window_stream_other_device">another device</string>
+    <plurals name="window_stream_window_count">
+        <item quantity="one">%d window is shown there and can be controlled</item>
+        <item quantity="other">%d windows are shown there and can be controlled</item>
+    </plurals>
+    <string name="window_stream_stop_action">Stop streaming</string>
+    <string name="window_stream_stopping">Stopping…</string>
+    <string name="window_stream_chip">Streaming</string>
+    <string name="window_stream_back_to_whisper">Back to Whisper</string>
+    <string name="window_stream_text_size">Text size</string>
+    <string name="window_stream_keyboard">Keyboard</string>
+    <string name="window_stream_rotate">Rotate</string>
+    <string name="window_stream_mute">Mute</string>
+    <string name="window_stream_unmute">Unmute</string>
+    <string name="window_stream_close">Stop showing here; the window goes back</string>
 </resources>

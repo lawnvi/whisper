@@ -36,5 +36,6 @@ enum MessageEnum {
   AudioControl,
   RemoteInputControl,
   AudioGroupControl,
+  WindowStreamControl,
 }
 

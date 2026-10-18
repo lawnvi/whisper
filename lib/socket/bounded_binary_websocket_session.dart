@@ -15,6 +15,8 @@ final class BoundedBinaryWebSocketSession {
     void Function(Object error)? onError,
     void Function()? onClosing,
     void Function()? onClosed,
+    int? maxQueuedItems,
+    int? maxQueuedBytes,
   }) : _channel = channel,
        _onMessage = onMessage,
        _onError = onError,
@@ -24,6 +26,8 @@ final class BoundedBinaryWebSocketSession {
       throw ArgumentError.value(maxMessageBytes, 'maxMessageBytes');
     }
     _queue = BoundedReceiveQueue(
+      maxItems: maxQueuedItems ?? 64,
+      maxBytes: maxQueuedBytes ?? 8 * 1024 * 1024,
       onPause: () => _subscription?.pause(),
       onResume: () => _subscription?.resume(),
       onOverflow: () =>

@@ -86,6 +86,9 @@ import 'appList.dart';
 import 'conversation.dart';
 import 'pairing_qr.dart';
 import 'settings.dart' as app_settings;
+import '../window_stream/android/phone_identity.dart';
+import '../window_stream/window_stream_coordinator.dart';
+import 'window_stream/flow_space_page.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:io' show Platform;
 import 'package:whisper/widget/subtle_motion.dart';
@@ -315,6 +318,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     WidgetsBinding.instance.addObserver(this);
     _setDesktopWindow();
     _localNetworkPermissionBootstrap = _requestLocalNetworkPermission();
+    unawaited(PhoneStreamIdentity.publish());
     unawaited(_requestPermission());
     _desktopSearchFocusNode.addListener(_handleDesktopSearchFocusChanged);
     _audioCoordinator.addListener(_handleDesktopAudioChanged);
@@ -1325,6 +1329,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     return _desktopShutdownFuture ??= _shutdownCoordinator.run([
       CastReceiverManager.shared.stop,
       PlaybackWindowBridge.videos.close,
+      WindowStreamCoordinator.shared.shutdown,
       // Left running on Windows: the process ends right after the rest,
       // and with older versions of the plugin the stop itself crashed. See
       // [_endWindowsProcess].

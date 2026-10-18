@@ -31,6 +31,7 @@ import 'package:whisper/model/file_transfer.dart';
 import 'package:whisper/model/message.dart';
 import 'package:whisper/page/deviceList.dart';
 import 'package:whisper/page/settings.dart' as app_settings;
+import 'package:whisper/page/window_stream/flow_space_page.dart';
 import 'package:whisper/page/transfer_assistant.dart';
 import 'package:whisper/remote_input/remote_input_coordinator.dart';
 import 'package:whisper/remote_input/mobile_control_screen.dart';
