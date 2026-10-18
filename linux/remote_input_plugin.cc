@@ -493,6 +493,28 @@ constexpr char kPortalInputCaptureInterface[] =
     "org.freedesktop.portal.InputCapture";
 constexpr uint32_t kPortalKeyboardDevice = 1;
 constexpr uint32_t kPortalPointerDevice = 2;
+// GNOME: Mutter's own remote desktop and input capture services. They need
+// no portal and so never ask the user: whether a peer may control this
+// desktop is decided by Whisper's trust and settings, and GNOME shows its
+// remote-control indicator while a session runs.
+constexpr char kMutterRemoteDesktopBusName[] = "org.gnome.Mutter.RemoteDesktop";
+constexpr char kMutterRemoteDesktopObjectPath[] = "/org/gnome/Mutter/RemoteDesktop";
+constexpr char kMutterRemoteDesktopInterface[] = "org.gnome.Mutter.RemoteDesktop";
+constexpr char kMutterRemoteDesktopSessionInterface[] =
+    "org.gnome.Mutter.RemoteDesktop.Session";
+constexpr char kMutterInputCaptureBusName[] = "org.gnome.Mutter.InputCapture";
+constexpr char kMutterInputCaptureObjectPath[] = "/org/gnome/Mutter/InputCapture";
+constexpr char kMutterInputCaptureInterface[] = "org.gnome.Mutter.InputCapture";
+constexpr char kMutterInputCaptureSessionInterface[] =
+    "org.gnome.Mutter.InputCapture.Session";
+constexpr uint32_t kMutterAxisFinish = 1;
+// Other desktops: the portal, on a connection that first tells it who we
+// are. The app id is the installed desktop file's name (whisper.desktop), so
+// a remembered permission matches however Whisper was started (menu,
+// terminal, autostart). Without it the portal guesses from the process's
+// systemd scope, which differs between launchers.
+constexpr char kPortalRegistryInterface[] = "org.freedesktop.host.portal.Registry";
+constexpr char kPortalAppId[] = "whisper";
 
 struct PortalResponse {
   uint32_t response = 2;
@@ -562,6 +584,8 @@ bool WaitPortalResponse(GDBusConnection* connection,
     if (waiter.response.results != nullptr) {
       g_variant_unref(waiter.response.results);
     }
+    response->response = waiter.response.response;
+    response->results = nullptr;
     *error = waiter.response.response == 1
                  ? "Linux remote desktop permission was cancelled"
                  : "Linux remote desktop permission was denied";
@@ -569,6 +593,130 @@ bool WaitPortalResponse(GDBusConnection* connection,
   }
   *response = waiter.response;
   return true;
+}
+
+bool BusNameHasOwner(GDBusConnection* connection, const char* name) {
+  GVariant* result = g_dbus_connection_call_sync(
+      connection, "org.freedesktop.DBus", "/org/freedesktop/DBus",
+      "org.freedesktop.DBus", "NameHasOwner", g_variant_new("(s)", name),
+      G_VARIANT_TYPE("(b)"), G_DBUS_CALL_FLAGS_NONE, 500, nullptr, nullptr);
+  if (result == nullptr) {
+    return false;
+  }
+  gboolean has_owner = FALSE;
+  g_variant_get(result, "(b)", &has_owner);
+  g_variant_unref(result);
+  return has_owner == TRUE;
+}
+
+bool PropertyUint32(GDBusConnection* connection,
+                    const char* bus_name,
+                    const char* object_path,
+                    const char* interface,
+                    const char* property,
+                    uint32_t* value) {
+  GVariant* result = g_dbus_connection_call_sync(
+      connection, bus_name, object_path, "org.freedesktop.DBus.Properties",
+      "Get", g_variant_new("(ss)", interface, property), G_VARIANT_TYPE("(v)"),
+      G_DBUS_CALL_FLAGS_NONE, 500, nullptr, nullptr);
+  if (result == nullptr) {
+    return false;
+  }
+  GVariant* variant = nullptr;
+  g_variant_get(result, "(v)", &variant);
+  g_variant_unref(result);
+  const bool ok =
+      variant != nullptr && g_variant_is_of_type(variant, G_VARIANT_TYPE_UINT32);
+  if (ok) {
+    *value = g_variant_get_uint32(variant);
+  }
+  if (variant != nullptr) {
+    g_variant_unref(variant);
+  }
+  return ok;
+}
+
+// Whether Mutter's service `bus_name` runs here and offers keyboard and
+// pointer (`property` is its capability mask: keyboard 1, pointer 2).
+bool MutterServiceAvailable(const char* bus_name,
+                            const char* object_path,
+                            const char* interface,
+                            const char* property) {
+  GDBusConnection* connection =
+      g_bus_get_sync(G_BUS_TYPE_SESSION, nullptr, nullptr);
+  if (connection == nullptr) {
+    return false;
+  }
+  uint32_t capabilities = 0;
+  const bool available =
+      BusNameHasOwner(connection, bus_name) &&
+      PropertyUint32(connection, bus_name, object_path, interface, property,
+                     &capabilities) &&
+      (capabilities & (kPortalKeyboardDevice | kPortalPointerDevice)) ==
+          (kPortalKeyboardDevice | kPortalPointerDevice);
+  g_object_unref(connection);
+  return available;
+}
+
+// Mutter's services are used on Wayland only; GNOME on Xorg keeps the
+// portal or XTest paths it always had.
+bool WaylandSession() {
+  return g_getenv("WAYLAND_DISPLAY") != nullptr ||
+         g_strcmp0(g_getenv("XDG_SESSION_TYPE"), "wayland") == 0;
+}
+
+bool MutterRemoteDesktopAvailable() {
+  return WaylandSession() && MutterServiceAvailable(kMutterRemoteDesktopBusName,
+                                kMutterRemoteDesktopObjectPath,
+                                kMutterRemoteDesktopInterface,
+                                "SupportedDeviceTypes");
+}
+
+bool MutterInputCaptureAvailable() {
+  return WaylandSession() && MutterServiceAvailable(kMutterInputCaptureBusName,
+                                kMutterInputCaptureObjectPath,
+                                kMutterInputCaptureInterface,
+                                "SupportedCapabilities");
+}
+
+// A connection of its own for one portal session, registered as Whisper
+// before anything else is said on it (the portal only accepts that as the
+// first call of a connection). If the desktop's portal is too old to know
+// the registry, or whisper.desktop is not installed, the session still
+// works; the permission just is not remembered across launchers.
+GDBusConnection* OpenPortalConnection(std::string* error) {
+  GError* bus_error = nullptr;
+  gchar* address =
+      g_dbus_address_get_for_bus_sync(G_BUS_TYPE_SESSION, nullptr, &bus_error);
+  GDBusConnection* connection = nullptr;
+  if (address != nullptr) {
+    connection = g_dbus_connection_new_for_address_sync(
+        address,
+        static_cast<GDBusConnectionFlags>(
+            G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_CLIENT |
+            G_DBUS_CONNECTION_FLAGS_MESSAGE_BUS_CONNECTION),
+        nullptr, nullptr, &bus_error);
+    g_free(address);
+  }
+  if (connection == nullptr) {
+    if (bus_error != nullptr) {
+      *error = bus_error->message == nullptr ? "" : bus_error->message;
+      g_error_free(bus_error);
+    } else {
+      *error = "Unable to connect to Linux session bus";
+    }
+    return nullptr;
+  }
+  GVariantBuilder options;
+  g_variant_builder_init(&options, G_VARIANT_TYPE_VARDICT);
+  GVariant* registered = g_dbus_connection_call_sync(
+      connection, kPortalBusName, kPortalObjectPath, kPortalRegistryInterface,
+      "Register", g_variant_new("(sa{sv})", kPortalAppId, &options), nullptr,
+      G_DBUS_CALL_FLAGS_NONE, 3000, nullptr, nullptr);
+  if (registered != nullptr) {
+    g_variant_unref(registered);
+  }
+  return connection;
 }
 
 std::string PortalHandleToken(const char* prefix) {
@@ -753,6 +901,12 @@ void SavePortalRestoreTokenToPath(const std::string& path,
   g_free(directory);
 }
 
+void ForgetPortalRestoreTokenAtPath(const std::string& path) {
+  if (!path.empty()) {
+    g_unlink(path.c_str());
+  }
+}
+
 void SavePortalRestoreToken(const std::string& token) {
   SavePortalRestoreTokenToPath(PortalRestoreTokenPath(), token);
 }
@@ -768,6 +922,9 @@ bool PortalRequestForInterface(GDBusConnection* connection,
                                int timeout_ms,
                                PortalResponse* response,
                                std::string* error) {
+  // Non-zero only once the portal itself answered with a refusal.
+  response->response = 0;
+  response->results = nullptr;
   GError* call_error = nullptr;
   GVariant* result = g_dbus_connection_call_sync(
       connection, kPortalBusName, kPortalObjectPath, interface, method,
@@ -802,8 +959,10 @@ bool PortalRequest(GDBusConnection* connection,
 
 struct PortalSession {
   GDBusConnection* connection = nullptr;
+  // The portal's session handle, or Mutter's session object path.
   std::string session_handle;
   int eis_fd = -1;
+  bool mutter = false;
 };
 
 struct PortalZone {
@@ -812,6 +971,93 @@ struct PortalZone {
   int32_t x = 0;
   int32_t y = 0;
 };
+
+// Logical rects of Mutter's virtual monitors ("Meta-<n>"): the ones the
+// window stream adds below the real screens to run streamed windows on. They
+// are not part of this desk, so no edge barrier for keyboard-and-mouse sharing
+// belongs on them (and a real screen's edge next to one is still an outer
+// edge).
+std::vector<PortalZone> VirtualMonitorRects() {
+  std::vector<PortalZone> rects;
+  GDBusConnection* bus = g_bus_get_sync(G_BUS_TYPE_SESSION, nullptr, nullptr);
+  if (bus == nullptr) return rects;
+  GVariant* reply = g_dbus_connection_call_sync(
+      bus, "org.gnome.Mutter.DisplayConfig", "/org/gnome/Mutter/DisplayConfig", "org.gnome.Mutter.DisplayConfig",
+      "GetCurrentState", nullptr, G_VARIANT_TYPE("(ua((ssss)a(siiddada{sv})a{sv})a(iiduba(ssss)a{sv})a{sv})"),
+      G_DBUS_CALL_FLAGS_NONE, 1000, nullptr, nullptr);
+  g_object_unref(bus);
+  if (reply == nullptr) return rects;
+  GVariant* monitors = g_variant_get_child_value(reply, 1);
+  GVariant* logical = g_variant_get_child_value(reply, 2);
+  GVariant* properties = g_variant_get_child_value(reply, 3);
+  guint32 layout_mode = 1;
+  g_variant_lookup(properties, "layout-mode", "u", &layout_mode);
+  for (gsize l = 0; l < g_variant_n_children(logical); l++) {
+    GVariant* entry = g_variant_get_child_value(logical, l);
+    gint32 x = 0, y = 0;
+    gdouble scale = 1;
+    guint32 transform = 0;
+    gboolean primary = FALSE;
+    GVariant* specs = nullptr;
+    g_variant_get(entry, "(iidub@a(ssss)@a{sv})", &x, &y, &scale, &transform, &primary, &specs, nullptr);
+    const gchar* connector = nullptr;
+    if (g_variant_n_children(specs) > 0) {
+      g_variant_get_child(specs, 0, "(&sss&s)", &connector, nullptr, nullptr, nullptr);
+    }
+    if (connector != nullptr && g_str_has_prefix(connector, "Meta-")) {
+      for (gsize m = 0; m < g_variant_n_children(monitors); m++) {
+        GVariant* monitor = g_variant_get_child_value(monitors, m);
+        const gchar* name = nullptr;
+        GVariant* modes = nullptr;
+        g_variant_get(monitor, "((&sss&s)@a(siiddada{sv})@a{sv})", &name, nullptr, nullptr, nullptr, &modes,
+                      nullptr);
+        if (g_strcmp0(name, connector) == 0) {
+          for (gsize k = 0; k < g_variant_n_children(modes); k++) {
+            GVariant* mode = g_variant_get_child_value(modes, k);
+            gint32 width = 0, height = 0;
+            GVariant* mode_props = nullptr;
+            g_variant_get(mode, "(&siidd@ad@a{sv})", nullptr, &width, &height, nullptr, nullptr, nullptr,
+                          &mode_props);
+            gboolean current = FALSE;
+            g_variant_lookup(mode_props, "is-current", "b", &current);
+            if (current) {
+              if (transform % 2 == 1) std::swap(width, height);
+              double divisor = layout_mode != 2 && scale > 0 ? scale : 1;
+              rects.push_back(PortalZone{static_cast<uint32_t>(std::lround(width / divisor)),
+                                         static_cast<uint32_t>(std::lround(height / divisor)), x, y});
+            }
+            g_variant_unref(mode_props);
+            g_variant_unref(mode);
+          }
+        }
+        g_variant_unref(modes);
+        g_variant_unref(monitor);
+      }
+    }
+    g_variant_unref(specs);
+    g_variant_unref(entry);
+  }
+  g_variant_unref(properties);
+  g_variant_unref(logical);
+  g_variant_unref(monitors);
+  g_variant_unref(reply);
+  return rects;
+}
+
+// [zones] without the window stream's virtual monitors, unless nothing would
+// be left (a desk that only has virtual monitors).
+std::vector<PortalZone> WithoutVirtualMonitors(const std::vector<PortalZone>& zones) {
+  std::vector<PortalZone> virtual_rects = VirtualMonitorRects();
+  if (virtual_rects.empty()) return zones;
+  std::vector<PortalZone> kept;
+  for (const auto& zone : zones) {
+    bool is_virtual = std::any_of(virtual_rects.begin(), virtual_rects.end(), [&](const PortalZone& v) {
+      return v.x == zone.x && v.y == zone.y && v.width == zone.width && v.height == zone.height;
+    });
+    if (!is_virtual) kept.push_back(zone);
+  }
+  return kept.empty() ? zones : kept;
+}
 
 bool Uint32FromVariantDict(GVariant* dict, const char* key, uint32_t* value) {
   if (dict == nullptr) {
@@ -910,18 +1156,14 @@ void ClosePortalSession(GDBusConnection* connection,
       G_DBUS_CALL_FLAGS_NONE, 500, nullptr, nullptr);
 }
 
-bool StartRemoteDesktopPortalSession(PortalSession* session,
-                                     std::string* error, bool connect_eis = true) {
-  GError* bus_error = nullptr;
-  GDBusConnection* connection =
-      g_bus_get_sync(G_BUS_TYPE_SESSION, nullptr, &bus_error);
+bool StartRemoteDesktopPortalSessionOnce(PortalSession* session,
+                                         std::string* error,
+                                         bool connect_eis,
+                                         bool use_restore_token,
+                                         bool* restore_rejected) {
+  *restore_rejected = false;
+  GDBusConnection* connection = OpenPortalConnection(error);
   if (connection == nullptr) {
-    if (bus_error != nullptr) {
-      *error = bus_error->message == nullptr ? "" : bus_error->message;
-      g_error_free(bus_error);
-    } else {
-      *error = "Unable to connect to Linux session bus";
-    }
     return false;
   }
 
@@ -960,7 +1202,8 @@ bool StartRemoteDesktopPortalSession(PortalSession* session,
       g_variant_new_uint32(kPortalKeyboardDevice | kPortalPointerDevice));
   g_variant_builder_add(&select_options, "{sv}", "persist_mode",
                         g_variant_new_uint32(2));
-  const std::string restore_token = LoadPortalRestoreToken();
+  const std::string restore_token =
+      use_restore_token ? LoadPortalRestoreToken() : "";
   if (!restore_token.empty()) {
     g_variant_builder_add(&select_options, "{sv}", "restore_token",
                           g_variant_new_string(restore_token.c_str()));
@@ -969,6 +1212,7 @@ bool StartRemoteDesktopPortalSession(PortalSession* session,
                      g_variant_new("(oa{sv})", session_handle.c_str(),
                                    &select_options),
                      30000, &select_response, error)) {
+    *restore_rejected = !restore_token.empty() && select_response.response == 2;
     ClosePortalSession(connection, session_handle);
     g_object_unref(connection);
     return false;
@@ -985,6 +1229,7 @@ bool StartRemoteDesktopPortalSession(PortalSession* session,
                      g_variant_new("(osa{sv})", session_handle.c_str(), "",
                                    &start_options),
                      30000, &start_response, error)) {
+    *restore_rejected = !restore_token.empty() && start_response.response == 2;
     ClosePortalSession(connection, session_handle);
     g_object_unref(connection);
     return false;
@@ -1006,23 +1251,196 @@ bool StartRemoteDesktopPortalSession(PortalSession* session,
   session->connection = connection;
   session->session_handle = session_handle;
   session->eis_fd = eis_fd;
+  session->mutter = false;
   return true;
+}
+
+bool StartRemoteDesktopPortalSession(PortalSession* session,
+                                     std::string* error, bool connect_eis = true) {
+  bool restore_rejected = false;
+  if (StartRemoteDesktopPortalSessionOnce(session, error, connect_eis, true,
+                                          &restore_rejected)) {
+    return true;
+  }
+  if (!restore_rejected) {
+    return false;
+  }
+  // The remembered permission no longer applies: forget it and ask once.
+  ForgetPortalRestoreTokenAtPath(PortalRestoreTokenPath());
+  error->clear();
+  return StartRemoteDesktopPortalSessionOnce(session, error, connect_eis, false,
+                                             &restore_rejected);
+}
+
+bool MutterSessionCall(GDBusConnection* connection,
+                       const char* bus_name,
+                       const std::string& session_path,
+                       const char* interface,
+                       const char* method,
+                       GVariant* parameters,
+                       std::string* error) {
+  GError* call_error = nullptr;
+  GVariant* result = g_dbus_connection_call_sync(
+      connection, bus_name, session_path.c_str(), interface, method, parameters,
+      nullptr, G_DBUS_CALL_FLAGS_NONE, 3000, nullptr, &call_error);
+  if (result == nullptr) {
+    if (error != nullptr) {
+      *error = call_error != nullptr && call_error->message != nullptr
+                   ? call_error->message
+                   : "Mutter did not answer";
+    }
+    if (call_error != nullptr) {
+      g_error_free(call_error);
+    }
+    return false;
+  }
+  g_variant_unref(result);
+  return true;
+}
+
+// Mutter hands out the EIS socket of a remote desktop or input capture
+// session the same way the portal does.
+bool MutterConnectToEis(GDBusConnection* connection,
+                        const char* bus_name,
+                        const std::string& session_path,
+                        const char* interface,
+                        GVariant* parameters,
+                        int* eis_fd,
+                        std::string* error) {
+  GError* call_error = nullptr;
+  GUnixFDList* fd_list = nullptr;
+  GVariant* result = g_dbus_connection_call_with_unix_fd_list_sync(
+      connection, bus_name, session_path.c_str(), interface, "ConnectToEIS",
+      parameters, G_VARIANT_TYPE("(h)"), G_DBUS_CALL_FLAGS_NONE, 3000, nullptr,
+      &fd_list, nullptr, &call_error);
+  if (result == nullptr) {
+    *error = call_error != nullptr && call_error->message != nullptr
+                 ? call_error->message
+                 : "Mutter did not return an EIS socket";
+    if (call_error != nullptr) {
+      g_error_free(call_error);
+    }
+    return false;
+  }
+  gint32 fd_index = -1;
+  g_variant_get(result, "(h)", &fd_index);
+  g_variant_unref(result);
+  const int fd = fd_list != nullptr && fd_index >= 0
+                     ? g_unix_fd_list_get(fd_list, fd_index, nullptr)
+                     : -1;
+  if (fd_list != nullptr) {
+    g_object_unref(fd_list);
+  }
+  if (fd < 0) {
+    *error = "Mutter did not return an EIS socket";
+    return false;
+  }
+  *eis_fd = fd;
+  return true;
+}
+
+void CloseMutterRemoteDesktopSession(GDBusConnection* connection,
+                                     const std::string& session_path) {
+  if (connection == nullptr || session_path.empty()) {
+    return;
+  }
+  MutterSessionCall(connection, kMutterRemoteDesktopBusName, session_path,
+                    kMutterRemoteDesktopSessionInterface, "Stop", nullptr,
+                    nullptr);
+}
+
+// GNOME: a remote desktop session straight from Mutter (no portal, no
+// dialog). Mutter ends it when Whisper stops it or leaves the bus.
+bool StartMutterRemoteDesktopSession(PortalSession* session,
+                                     std::string* error,
+                                     bool connect_eis) {
+  GDBusConnection* connection =
+      g_bus_get_sync(G_BUS_TYPE_SESSION, nullptr, nullptr);
+  if (connection == nullptr) {
+    *error = "Unable to connect to Linux session bus";
+    return false;
+  }
+  GError* create_error = nullptr;
+  GVariant* created = g_dbus_connection_call_sync(
+      connection, kMutterRemoteDesktopBusName, kMutterRemoteDesktopObjectPath,
+      kMutterRemoteDesktopInterface, "CreateSession", nullptr,
+      G_VARIANT_TYPE("(o)"), G_DBUS_CALL_FLAGS_NONE, 3000, nullptr,
+      &create_error);
+  if (created == nullptr) {
+    *error = create_error != nullptr && create_error->message != nullptr
+                 ? create_error->message
+                 : "Mutter did not create a remote desktop session";
+    if (create_error != nullptr) {
+      g_error_free(create_error);
+    }
+    g_object_unref(connection);
+    return false;
+  }
+  const gchar* path = nullptr;
+  g_variant_get(created, "(&o)", &path);
+  const std::string session_path = path == nullptr ? "" : path;
+  g_variant_unref(created);
+  if (!MutterSessionCall(connection, kMutterRemoteDesktopBusName, session_path,
+                         kMutterRemoteDesktopSessionInterface, "Start", nullptr,
+                         error)) {
+    CloseMutterRemoteDesktopSession(connection, session_path);
+    g_object_unref(connection);
+    return false;
+  }
+  int eis_fd = -1;
+  if (connect_eis) {
+    GVariantBuilder options;
+    g_variant_builder_init(&options, G_VARIANT_TYPE_VARDICT);
+    if (!MutterConnectToEis(connection, kMutterRemoteDesktopBusName,
+                            session_path, kMutterRemoteDesktopSessionInterface,
+                            g_variant_new("(a{sv})", &options), &eis_fd,
+                            error)) {
+      CloseMutterRemoteDesktopSession(connection, session_path);
+      g_object_unref(connection);
+      return false;
+    }
+  }
+  session->connection = connection;
+  session->session_handle = session_path;
+  session->eis_fd = eis_fd;
+  session->mutter = true;
+  return true;
+}
+
+// Mutter where it runs (GNOME), the portal elsewhere or if Mutter refuses.
+bool StartRemoteDesktopSession(PortalSession* session,
+                               std::string* error,
+                               bool connect_eis) {
+  if (MutterRemoteDesktopAvailable() &&
+      StartMutterRemoteDesktopSession(session, error, connect_eis)) {
+    return true;
+  }
+  if (!RemoteDesktopPortalAvailable()) {
+    if (error->empty()) {
+      *error = "Wayland remote input requires libei and desktop portal support";
+    }
+    return false;
+  }
+  error->clear();
+  return StartRemoteDesktopPortalSession(session, error, connect_eis);
+}
+
+void CloseRemoteDesktopSession(GDBusConnection* connection,
+                               const std::string& session_handle,
+                               bool mutter) {
+  if (mutter) {
+    CloseMutterRemoteDesktopSession(connection, session_handle);
+  } else {
+    ClosePortalSession(connection, session_handle);
+  }
 }
 
 bool StartInputCapturePortalSessionV2(PortalSession* session,
                                       std::vector<PortalZone>* zones,
                                       uint32_t* zone_set,
                                       std::string* error) {
-  GError* bus_error = nullptr;
-  GDBusConnection* connection =
-      g_bus_get_sync(G_BUS_TYPE_SESSION, nullptr, &bus_error);
+  GDBusConnection* connection = OpenPortalConnection(error);
   if (connection == nullptr) {
-    if (bus_error != nullptr) {
-      *error = bus_error->message == nullptr ? "" : bus_error->message;
-      g_error_free(bus_error);
-    } else {
-      *error = "Unable to connect to Linux session bus";
-    }
     return false;
   }
 
@@ -1165,16 +1583,8 @@ bool StartInputCapturePortalSessionV1(PortalSession* session,
                                       std::vector<PortalZone>* zones,
                                       uint32_t* zone_set,
                                       std::string* error) {
-  GError* bus_error = nullptr;
-  GDBusConnection* connection =
-      g_bus_get_sync(G_BUS_TYPE_SESSION, nullptr, &bus_error);
+  GDBusConnection* connection = OpenPortalConnection(error);
   if (connection == nullptr) {
-    if (bus_error != nullptr) {
-      *error = bus_error->message == nullptr ? "" : bus_error->message;
-      g_error_free(bus_error);
-    } else {
-      *error = "Unable to connect to Linux session bus";
-    }
     return false;
   }
 
@@ -1282,6 +1692,149 @@ bool StartInputCapturePortalSession(PortalSession* session,
     return StartInputCapturePortalSessionV2(session, zones, zone_set, error);
   }
   return StartInputCapturePortalSessionV1(session, zones, zone_set, error);
+}
+
+void CloseMutterInputCaptureSession(GDBusConnection* connection,
+                                    const std::string& session_path) {
+  if (connection == nullptr || session_path.empty()) {
+    return;
+  }
+  MutterSessionCall(connection, kMutterInputCaptureBusName, session_path,
+                    kMutterInputCaptureSessionInterface, "Close", nullptr,
+                    nullptr);
+}
+
+void CloseInputCaptureSession(GDBusConnection* connection,
+                              const std::string& session_handle,
+                              bool mutter) {
+  if (mutter) {
+    CloseMutterInputCaptureSession(connection, session_handle);
+  } else {
+    ClosePortalSession(connection, session_handle);
+  }
+}
+
+bool MutterInputCaptureZones(GDBusConnection* connection,
+                             const std::string& session_path,
+                             std::vector<PortalZone>* zones,
+                             uint32_t* zone_set) {
+  GVariant* reply = g_dbus_connection_call_sync(
+      connection, kMutterInputCaptureBusName, session_path.c_str(),
+      kMutterInputCaptureSessionInterface, "GetZones", nullptr,
+      G_VARIANT_TYPE("(ua(uuii))"), G_DBUS_CALL_FLAGS_NONE, 3000, nullptr,
+      nullptr);
+  zones->clear();
+  if (reply == nullptr) {
+    return false;
+  }
+  GVariantIter* iter = nullptr;
+  g_variant_get(reply, "(ua(uuii))", zone_set, &iter);
+  uint32_t width = 0;
+  uint32_t height = 0;
+  int32_t x = 0;
+  int32_t y = 0;
+  while (g_variant_iter_next(iter, "(uuii)", &width, &height, &x, &y)) {
+    if (width > 0 && height > 0) {
+      zones->push_back(PortalZone{width, height, x, y});
+    }
+  }
+  g_variant_iter_free(iter);
+  g_variant_unref(reply);
+  return !zones->empty();
+}
+
+bool PortalInputCaptureZones(GDBusConnection* connection,
+                             const std::string& session_handle,
+                             std::vector<PortalZone>* zones,
+                             uint32_t* zone_set) {
+  zones->clear();
+  PortalResponse response;
+  GVariantBuilder options;
+  g_variant_builder_init(&options, G_VARIANT_TYPE_VARDICT);
+  g_variant_builder_add(
+      &options, "{sv}", "handle_token",
+      g_variant_new_string(PortalHandleToken("whisper_capture_zones").c_str()));
+  std::string error;
+  if (!PortalRequestForInterface(
+          connection, kPortalInputCaptureInterface, "GetZones",
+          g_variant_new("(oa{sv})", session_handle.c_str(), &options), 3000,
+          &response, &error)) {
+    return false;
+  }
+  GVariant* value = g_variant_lookup_value(response.results, "zones",
+                                           G_VARIANT_TYPE("a(uuii)"));
+  if (value != nullptr) {
+    GVariantIter iter;
+    g_variant_iter_init(&iter, value);
+    guint32 width = 0;
+    guint32 height = 0;
+    gint32 x = 0;
+    gint32 y = 0;
+    while (g_variant_iter_loop(&iter, "(uuii)", &width, &height, &x, &y)) {
+      if (width > 0 && height > 0) {
+        zones->push_back(PortalZone{width, height, x, y});
+      }
+    }
+    g_variant_unref(value);
+  }
+  Uint32FromVariantDict(response.results, "zone_set", zone_set);
+  g_variant_unref(response.results);
+  return !zones->empty();
+}
+
+// GNOME: an input capture session straight from Mutter (no portal, no
+// dialog): its zones and its EIS socket. Barriers come next.
+bool StartMutterInputCaptureSession(PortalSession* session,
+                                    std::vector<PortalZone>* zones,
+                                    uint32_t* zone_set,
+                                    std::string* error) {
+  GDBusConnection* connection =
+      g_bus_get_sync(G_BUS_TYPE_SESSION, nullptr, nullptr);
+  if (connection == nullptr) {
+    *error = "Unable to connect to Linux session bus";
+    return false;
+  }
+  GError* call_error = nullptr;
+  GVariant* created = g_dbus_connection_call_sync(
+      connection, kMutterInputCaptureBusName, kMutterInputCaptureObjectPath,
+      kMutterInputCaptureInterface, "CreateSession",
+      g_variant_new("(u)", kPortalKeyboardDevice | kPortalPointerDevice),
+      G_VARIANT_TYPE("(o)"), G_DBUS_CALL_FLAGS_NONE, 3000, nullptr,
+      &call_error);
+  if (created == nullptr) {
+    *error = call_error != nullptr && call_error->message != nullptr
+                 ? call_error->message
+                 : "Mutter did not create an input capture session";
+    if (call_error != nullptr) {
+      g_error_free(call_error);
+    }
+    g_object_unref(connection);
+    return false;
+  }
+  const gchar* path = nullptr;
+  g_variant_get(created, "(&o)", &path);
+  const std::string session_path = path == nullptr ? "" : path;
+  g_variant_unref(created);
+
+  if (!MutterInputCaptureZones(connection, session_path, zones, zone_set)) {
+    *error = "Mutter did not return input zones";
+    CloseMutterInputCaptureSession(connection, session_path);
+    g_object_unref(connection);
+    return false;
+  }
+  int eis_fd = -1;
+  if (!MutterConnectToEis(connection, kMutterInputCaptureBusName, session_path,
+                          kMutterInputCaptureSessionInterface, nullptr, &eis_fd,
+                          error)) {
+    CloseMutterInputCaptureSession(connection, session_path);
+    g_object_unref(connection);
+    return false;
+  }
+  session->connection = connection;
+  session->session_handle = session_path;
+  session->eis_fd = eis_fd;
+  session->mutter = true;
+  return true;
 }
 #endif
 
@@ -2088,7 +2641,7 @@ class RemoteInputPlugin {
 #if HAVE_LIBEI_REMOTE_INPUT
     (void)release_hotkey;
     *attempted = false;
-    if (!InputCapturePortalAvailable()) {
+    if (!MutterInputCaptureAvailable() && !InputCapturePortalAvailable()) {
       return false;
     }
     *attempted = true;
@@ -2117,8 +2670,18 @@ class RemoteInputPlugin {
     PortalSession session;
     std::vector<PortalZone> zones;
     uint32_t zone_set = 0;
-    if (!StartInputCapturePortalSession(&session, &zones, &zone_set, error)) {
-      return false;
+    // GNOME: Mutter directly, so it never asks for permission.
+    const bool mutter =
+        MutterInputCaptureAvailable() &&
+        StartMutterInputCaptureSession(&session, &zones, &zone_set, error);
+    if (!mutter) {
+      if (!InputCapturePortalAvailable()) {
+        return false;
+      }
+      error->clear();
+      if (!StartInputCapturePortalSession(&session, &zones, &zone_set, error)) {
+        return false;
+      }
     }
     Display* x_display = XOpenDisplay(nullptr);
     std::vector<InputCaptureBarrier> barriers =
@@ -2132,20 +2695,28 @@ class RemoteInputPlugin {
       if (x_display != nullptr) {
         XCloseDisplay(x_display);
       }
-      ClosePortalSession(session.connection, session.session_handle);
+      CloseInputCaptureSession(session.connection, session.session_handle,
+                               session.mutter);
       g_object_unref(session.connection);
       return false;
     }
-    if (!SetInputCapturePointerBarriers(session.connection,
-                                        session.session_handle, barriers,
-                                        zone_set, error)) {
+    const bool barriers_set =
+        session.mutter
+            ? SetMutterInputCaptureBarriers(session.connection,
+                                            session.session_handle, &barriers,
+                                            zone_set, error)
+            : SetInputCapturePointerBarriers(session.connection,
+                                             session.session_handle, barriers,
+                                             zone_set, error);
+    if (!barriers_set) {
       if (session.eis_fd >= 0) {
         close(session.eis_fd);
       }
       if (x_display != nullptr) {
         XCloseDisplay(x_display);
       }
-      ClosePortalSession(session.connection, session.session_handle);
+      CloseInputCaptureSession(session.connection, session.session_handle,
+                               session.mutter);
       g_object_unref(session.connection);
       return false;
     }
@@ -2159,7 +2730,8 @@ class RemoteInputPlugin {
       if (x_display != nullptr) {
         XCloseDisplay(x_display);
       }
-      ClosePortalSession(session.connection, session.session_handle);
+      CloseInputCaptureSession(session.connection, session.session_handle,
+                               session.mutter);
       g_object_unref(session.connection);
       return false;
     }
@@ -2172,27 +2744,45 @@ class RemoteInputPlugin {
       if (x_display != nullptr) {
         XCloseDisplay(x_display);
       }
-      ClosePortalSession(session.connection, session.session_handle);
+      CloseInputCaptureSession(session.connection, session.session_handle,
+                               session.mutter);
       g_object_unref(session.connection);
       return false;
     }
 
+    // Mutter signals on the session object; the portal on its own object
+    // with the session handle as the first argument.
+    const char* signal_sender =
+        session.mutter ? kMutterInputCaptureBusName : kPortalBusName;
+    const char* signal_interface = session.mutter
+                                       ? kMutterInputCaptureSessionInterface
+                                       : kPortalInputCaptureInterface;
+    const char* signal_path = session.mutter ? session.session_handle.c_str()
+                                             : kPortalObjectPath;
     const guint activated_signal_id = g_dbus_connection_signal_subscribe(
-        session.connection, kPortalBusName, kPortalInputCaptureInterface,
-        "Activated", kPortalObjectPath, nullptr, G_DBUS_SIGNAL_FLAGS_NONE,
-        InputCaptureActivatedCallback, this, nullptr);
+        session.connection, signal_sender, signal_interface, "Activated",
+        signal_path, nullptr, G_DBUS_SIGNAL_FLAGS_NONE,
+        session.mutter ? MutterInputCaptureActivatedCallback
+                       : InputCaptureActivatedCallback,
+        this, nullptr);
     const guint deactivated_signal_id = g_dbus_connection_signal_subscribe(
-        session.connection, kPortalBusName, kPortalInputCaptureInterface,
-        "Deactivated", kPortalObjectPath, nullptr, G_DBUS_SIGNAL_FLAGS_NONE,
-        InputCaptureDeactivatedCallback, this, nullptr);
+        session.connection, signal_sender, signal_interface, "Deactivated",
+        signal_path, nullptr, G_DBUS_SIGNAL_FLAGS_NONE,
+        session.mutter ? MutterInputCaptureDeactivatedCallback
+                       : InputCaptureDeactivatedCallback,
+        this, nullptr);
     const guint disabled_signal_id = g_dbus_connection_signal_subscribe(
-        session.connection, kPortalBusName, kPortalInputCaptureInterface,
-        "Disabled", kPortalObjectPath, nullptr, G_DBUS_SIGNAL_FLAGS_NONE,
-        InputCaptureDisabledCallback, this, nullptr);
+        session.connection, signal_sender, signal_interface, "Disabled",
+        signal_path, nullptr, G_DBUS_SIGNAL_FLAGS_NONE,
+        session.mutter ? MutterInputCaptureDisabledCallback
+                       : InputCaptureDisabledCallback,
+        this, nullptr);
     const guint zones_changed_signal_id = g_dbus_connection_signal_subscribe(
-        session.connection, kPortalBusName, kPortalInputCaptureInterface,
-        "ZonesChanged", kPortalObjectPath, nullptr, G_DBUS_SIGNAL_FLAGS_NONE,
-        InputCaptureZonesChangedCallback, this, nullptr);
+        session.connection, signal_sender, signal_interface, "ZonesChanged",
+        signal_path, nullptr, G_DBUS_SIGNAL_FLAGS_NONE,
+        session.mutter ? MutterInputCaptureZonesChangedCallback
+                       : InputCaptureZonesChangedCallback,
+        this, nullptr);
 
     {
       std::lock_guard<std::mutex> lock(capture_mutex_);
@@ -2209,6 +2799,7 @@ class RemoteInputPlugin {
       capture_pause_release_segment_ = EdgeSegment{};
       input_capture_connection_ = session.connection;
       input_capture_session_handle_ = session.session_handle;
+      input_capture_mutter_ = session.mutter;
       input_capture_ei_ = portal_ei;
       input_capture_x_display_ = x_display;
       input_capture_barriers_ = barriers;
@@ -2238,6 +2829,20 @@ class RemoteInputPlugin {
   bool EnableInputCapturePortal(GDBusConnection* connection,
                                 const std::string& session_handle,
                                 std::string* error) {
+    return EnableInputCaptureSession(connection, session_handle,
+                                     input_capture_mutter_, error);
+  }
+
+  bool EnableInputCaptureSession(GDBusConnection* connection,
+                                 const std::string& session_handle,
+                                 bool mutter,
+                                 std::string* error) {
+    if (mutter) {
+      return MutterSessionCall(connection, kMutterInputCaptureBusName,
+                               session_handle,
+                               kMutterInputCaptureSessionInterface, "Enable",
+                               nullptr, error);
+    }
     GVariantBuilder options;
     g_variant_builder_init(&options, G_VARIANT_TYPE_VARDICT);
     GError* call_error = nullptr;
@@ -2260,6 +2865,7 @@ class RemoteInputPlugin {
   }
 
   void ResetInputCaptureStateLocked() {
+    ForgetInputCapturePositionLocked();
     input_capture_active_ = false;
     input_capture_pending_active_start_ = false;
     input_capture_activation_id_ = 0;
@@ -2326,13 +2932,17 @@ class RemoteInputPlugin {
 
   std::vector<InputCaptureBarrier> BuildInputCaptureBarriers(
       Display* display,
-      const std::vector<PortalZone>& zones,
+      const std::vector<PortalZone>& all_zones,
       const std::string& display_id,
       const std::string& edge,
       const EdgeSegment& segment,
       const std::vector<CaptureRoute>& configured_routes) const {
     std::vector<InputCaptureBarrier> barriers;
     uint32_t next_id = 1;
+    // Windows streamed to other devices run on virtual monitors of their
+    // own; those are not screens of this desk.
+    const std::vector<PortalZone> desk = WithoutVirtualMonitors(all_zones);
+    const std::vector<PortalZone>& zones = desk;
     const std::vector<CaptureRoute> routes =
         CaptureRoutesForMatching(configured_routes, display_id, edge, segment);
     for (const auto& route : routes) {
@@ -2441,6 +3051,41 @@ class RemoteInputPlugin {
     return true;
   }
 
+  // Mutter adds barriers one by one and numbers them itself; the barriers
+  // it accepted come back with its ids (what Activated reports).
+  bool SetMutterInputCaptureBarriers(GDBusConnection* connection,
+                                     const std::string& session_path,
+                                     std::vector<InputCaptureBarrier>* barriers,
+                                     uint32_t zone_set,
+                                     std::string* error) {
+    MutterSessionCall(connection, kMutterInputCaptureBusName, session_path,
+                      kMutterInputCaptureSessionInterface, "ClearBarriers",
+                      nullptr, nullptr);
+    std::vector<InputCaptureBarrier> accepted;
+    for (const auto& barrier : *barriers) {
+      GVariant* reply = g_dbus_connection_call_sync(
+          connection, kMutterInputCaptureBusName, session_path.c_str(),
+          kMutterInputCaptureSessionInterface, "AddBarrier",
+          g_variant_new("(u(iiii))", zone_set, barrier.x1, barrier.y1,
+                        barrier.x2, barrier.y2),
+          G_VARIANT_TYPE("(u)"), G_DBUS_CALL_FLAGS_NONE, 3000, nullptr,
+          nullptr);
+      if (reply == nullptr) {
+        continue;
+      }
+      InputCaptureBarrier added = barrier;
+      g_variant_get(reply, "(u)", &added.id);
+      g_variant_unref(reply);
+      accepted.push_back(added);
+    }
+    if (accepted.empty()) {
+      *error = "Linux input capture portal rejected pointer barriers";
+      return false;
+    }
+    *barriers = std::move(accepted);
+    return true;
+  }
+
   const InputCaptureBarrier* InputCaptureBarrierByIdLocked(
       uint32_t barrier_id) const {
     for (const auto& barrier : input_capture_barriers_) {
@@ -2467,6 +3112,46 @@ class RemoteInputPlugin {
     Uint32FromVariantDict(options, "barrier_id", &barrier_id);
     uint32_t activation_id = 0;
     Uint32FromVariantDict(options, "activation_id", &activation_id);
+    double cursor_x = 0;
+    double cursor_y = 0;
+    const bool has_cursor =
+        DoublePairFromVariantDict(options, "cursor_position", &cursor_x,
+                                  &cursor_y);
+    if (options != nullptr) {
+      g_variant_unref(options);
+    }
+    ActivateInputCaptureLocked(barrier_id, activation_id, has_cursor, cursor_x,
+                               cursor_y);
+  }
+
+  // Mutter: Activated(u barrier_id, u activation_id, (dd) cursor_position)
+  // on the session object.
+  void HandleMutterInputCaptureActivated(const gchar* object_path,
+                                         GVariant* parameters) {
+    if (!g_variant_is_of_type(parameters, G_VARIANT_TYPE("(uu(dd))"))) {
+      return;
+    }
+    uint32_t barrier_id = 0;
+    uint32_t activation_id = 0;
+    double cursor_x = 0;
+    double cursor_y = 0;
+    g_variant_get(parameters, "(uu(dd))", &barrier_id, &activation_id,
+                  &cursor_x, &cursor_y);
+    std::lock_guard<std::mutex> lock(capture_mutex_);
+    if (!input_capture_mutter_ ||
+        input_capture_session_handle_ !=
+            (object_path == nullptr ? "" : object_path)) {
+      return;
+    }
+    ActivateInputCaptureLocked(barrier_id, activation_id, true, cursor_x,
+                               cursor_y);
+  }
+
+  void ActivateInputCaptureLocked(uint32_t barrier_id,
+                                  uint32_t activation_id,
+                                  bool has_cursor,
+                                  double cursor_x,
+                                  double cursor_y) {
     const InputCaptureBarrier* barrier =
         InputCaptureBarrierByIdLocked(barrier_id);
     if (barrier != nullptr) {
@@ -2486,11 +3171,7 @@ class RemoteInputPlugin {
           BoundsForDisplay(input_capture_x_display_,
                            input_capture_active_display_id_);
     }
-    double cursor_x = 0;
-    double cursor_y = 0;
-    if (!DoublePairFromVariantDict(options, "cursor_position", &cursor_x,
-                                   &cursor_y) &&
-        barrier != nullptr) {
+    if (!has_cursor && barrier != nullptr) {
       cursor_x = (barrier->x1 + barrier->x2) / 2.0;
       cursor_y = (barrier->y1 + barrier->y2) / 2.0;
     }
@@ -2505,11 +3186,130 @@ class RemoteInputPlugin {
                          input_capture_active_edge_,
                          input_capture_active_segment_);
     capture_route_id_ = input_capture_active_route_id_;
+    input_capture_position_known_ = true;
     TraceRemoteInput(RemoteInputTraceEvent::kPortalCaptureActive);
     EmitDiagnostic(RemoteInputTraceEvent::kPortalCaptureActive);
-    if (options != nullptr) {
-      g_variant_unref(options);
+    if (input_capture_held_events_ > 0) {
+      const int held_x = input_capture_held_dx_;
+      const int held_y = input_capture_held_dy_;
+      ClearHeldInputCaptureMotionLocked();
+      EmitInputCaptureMouseMoveLocked(held_x, held_y);
     }
+  }
+
+  void ClearHeldInputCaptureMotionLocked() {
+    input_capture_held_dx_ = 0;
+    input_capture_held_dy_ = 0;
+    input_capture_held_events_ = 0;
+  }
+
+  void ForgetInputCapturePositionLocked() {
+    input_capture_position_known_ = false;
+    ClearHeldInputCaptureMotionLocked();
+  }
+
+  // The compositor's zones changed (a monitor came or went, or a screen
+  // cast added one): barriers made for the old zone set no longer apply, so
+  // they are made again for the new set. Bursts of signals are coalesced;
+  // the D-Bus work runs without the lock (the portal answers through a
+  // nested main loop).
+  void ScheduleInputCaptureZoneRefreshLocked() {
+    if (input_capture_zone_refresh_source_ != 0) {
+      return;
+    }
+    input_capture_zone_refresh_source_ = g_timeout_add(
+        150,
+        [](gpointer data) -> gboolean {
+          static_cast<RemoteInputPlugin*>(data)->RefreshInputCaptureZones();
+          return G_SOURCE_REMOVE;
+        },
+        this);
+  }
+
+  void CancelInputCaptureZoneRefreshLocked() {
+    if (input_capture_zone_refresh_source_ != 0) {
+      g_source_remove(input_capture_zone_refresh_source_);
+      input_capture_zone_refresh_source_ = 0;
+    }
+  }
+
+  void RefreshInputCaptureZones() {
+    GDBusConnection* connection = nullptr;
+    std::string handle;
+    bool mutter = false;
+    std::string display_id;
+    std::string edge;
+    EdgeSegment segment;
+    std::vector<CaptureRoute> routes;
+    {
+      std::lock_guard<std::mutex> lock(capture_mutex_);
+      input_capture_zone_refresh_source_ = 0;
+      if (input_capture_connection_ == nullptr ||
+          input_capture_session_handle_.empty()) {
+        return;
+      }
+      connection = G_DBUS_CONNECTION(g_object_ref(input_capture_connection_));
+      handle = input_capture_session_handle_;
+      mutter = input_capture_mutter_;
+      display_id = capture_display_id_;
+      edge = capture_edge_;
+      segment = capture_segment_;
+      routes = capture_routes_;
+    }
+    std::vector<PortalZone> zones;
+    uint32_t zone_set = 0;
+    std::vector<InputCaptureBarrier> barriers;
+    std::string error;
+    bool ok = mutter ? MutterInputCaptureZones(connection, handle, &zones,
+                                               &zone_set)
+                     : PortalInputCaptureZones(connection, handle, &zones,
+                                               &zone_set);
+    if (ok) {
+      barriers = BuildInputCaptureBarriers(nullptr, zones, display_id, edge,
+                                           segment, routes);
+      ok = !barriers.empty() &&
+           (mutter ? SetMutterInputCaptureBarriers(connection, handle,
+                                                   &barriers, zone_set, &error)
+                   : SetInputCapturePointerBarriers(connection, handle,
+                                                    barriers, zone_set,
+                                                    &error));
+    }
+    if (ok) {
+      // Re-arm; a session that stayed enabled just says so.
+      EnableInputCaptureSession(connection, handle, mutter, &error);
+    }
+    {
+      std::lock_guard<std::mutex> lock(capture_mutex_);
+      if (ok && input_capture_session_handle_ == handle) {
+        input_capture_barriers_ = barriers;
+        input_capture_zone_set_ = zone_set;
+      }
+    }
+    g_object_unref(connection);
+  }
+
+  // Mutter's Deactivated(u), Disabled() and ZonesChanged() on the session
+  // object.
+  void HandleMutterInputCaptureEvent(const gchar* object_path,
+                                     const gchar* signal_name) {
+    std::lock_guard<std::mutex> lock(capture_mutex_);
+    if (!input_capture_mutter_ ||
+        input_capture_session_handle_ !=
+            (object_path == nullptr ? "" : object_path)) {
+      return;
+    }
+    if (std::strcmp(signal_name, "ZonesChanged") == 0) {
+      EmitDiagnostic(RemoteInputTraceEvent::kPortalZonesChanged);
+      ScheduleInputCaptureZoneRefreshLocked();
+      return;
+    }
+    input_capture_active_ = false;
+    input_capture_pending_active_start_ = false;
+    input_capture_buttons_ = 0;
+    ForgetInputCapturePositionLocked();
+    TraceRemoteInput(std::strcmp(signal_name, "Disabled") == 0
+                         ? RemoteInputTraceEvent::kPortalCaptureDisabled
+                         : RemoteInputTraceEvent::kPortalCaptureDeactivated);
   }
 
   void HandleInputCaptureDeactivated(GVariant* parameters) {
@@ -2522,6 +3322,7 @@ class RemoteInputPlugin {
       input_capture_active_ = false;
       input_capture_pending_active_start_ = false;
       input_capture_buttons_ = 0;
+      ForgetInputCapturePositionLocked();
       TraceRemoteInput(RemoteInputTraceEvent::kPortalCaptureDeactivated);
     }
     if (options != nullptr) {
@@ -2539,6 +3340,7 @@ class RemoteInputPlugin {
       input_capture_active_ = false;
       input_capture_pending_active_start_ = false;
       input_capture_buttons_ = 0;
+      ForgetInputCapturePositionLocked();
       TraceRemoteInput(RemoteInputTraceEvent::kPortalCaptureDisabled);
     }
     if (options != nullptr) {
@@ -2554,10 +3356,55 @@ class RemoteInputPlugin {
     if (input_capture_session_handle_ ==
         (session_handle == nullptr ? "" : session_handle)) {
       EmitDiagnostic(RemoteInputTraceEvent::kPortalZonesChanged);
+      ScheduleInputCaptureZoneRefreshLocked();
     }
     if (options != nullptr) {
       g_variant_unref(options);
     }
+  }
+
+  static void MutterInputCaptureActivatedCallback(GDBusConnection*,
+                                                  const gchar*,
+                                                  const gchar* object_path,
+                                                  const gchar*,
+                                                  const gchar*,
+                                                  GVariant* parameters,
+                                                  gpointer user_data) {
+    static_cast<RemoteInputPlugin*>(user_data)
+        ->HandleMutterInputCaptureActivated(object_path, parameters);
+  }
+
+  static void MutterInputCaptureDeactivatedCallback(GDBusConnection*,
+                                                    const gchar*,
+                                                    const gchar* object_path,
+                                                    const gchar*,
+                                                    const gchar*,
+                                                    GVariant*,
+                                                    gpointer user_data) {
+    static_cast<RemoteInputPlugin*>(user_data)->HandleMutterInputCaptureEvent(
+        object_path, "Deactivated");
+  }
+
+  static void MutterInputCaptureDisabledCallback(GDBusConnection*,
+                                                 const gchar*,
+                                                 const gchar* object_path,
+                                                 const gchar*,
+                                                 const gchar*,
+                                                 GVariant*,
+                                                 gpointer user_data) {
+    static_cast<RemoteInputPlugin*>(user_data)->HandleMutterInputCaptureEvent(
+        object_path, "Disabled");
+  }
+
+  static void MutterInputCaptureZonesChangedCallback(GDBusConnection*,
+                                                     const gchar*,
+                                                     const gchar* object_path,
+                                                     const gchar*,
+                                                     const gchar*,
+                                                     GVariant*,
+                                                     gpointer user_data) {
+    static_cast<RemoteInputPlugin*>(user_data)->HandleMutterInputCaptureEvent(
+        object_path, "ZonesChanged");
   }
 
   static void InputCaptureActivatedCallback(GDBusConnection*,
@@ -2684,6 +3531,7 @@ class RemoteInputPlugin {
         input_capture_active_ = false;
         input_capture_pending_active_start_ = false;
         input_capture_buttons_ = 0;
+        ClearHeldInputCaptureMotionLocked();
         return;
       case EI_EVENT_POINTER_MOTION:
         EmitInputCaptureMouseMoveLocked(
@@ -2731,6 +3579,15 @@ class RemoteInputPlugin {
 
   void EmitInputCaptureMouseMoveLocked(int delta_x, int delta_y) {
     if (!input_capture_active_ && !input_capture_pending_active_start_) {
+      return;
+    }
+    // The EIS stream can start before the Activated signal says where the
+    // pointer crossed: hold the motion until it does, so the first event
+    // starts at the crossing point rather than at a stale position.
+    if (!input_capture_position_known_ && input_capture_held_events_ < 20) {
+      input_capture_held_dx_ += delta_x;
+      input_capture_held_dy_ += delta_y;
+      input_capture_held_events_++;
       return;
     }
     const bool active_start = input_capture_pending_active_start_;
@@ -2854,12 +3711,20 @@ class RemoteInputPlugin {
     g_variant_builder_add(&options, "{sv}", "cursor_position",
                           g_variant_new("(dd)", cursor.x, cursor.y));
     GError* call_error = nullptr;
-    GVariant* result = g_dbus_connection_call_sync(
-        input_capture_connection_, kPortalBusName, kPortalObjectPath,
-        kPortalInputCaptureInterface, "Release",
-        g_variant_new("(oa{sv})", input_capture_session_handle_.c_str(),
-                      &options),
-        nullptr, G_DBUS_CALL_FLAGS_NONE, 1000, nullptr, &call_error);
+    GVariant* result =
+        input_capture_mutter_
+            ? g_dbus_connection_call_sync(
+                  input_capture_connection_, kMutterInputCaptureBusName,
+                  input_capture_session_handle_.c_str(),
+                  kMutterInputCaptureSessionInterface, "Release",
+                  g_variant_new("(a{sv})", &options), nullptr,
+                  G_DBUS_CALL_FLAGS_NONE, 1000, nullptr, &call_error)
+            : g_dbus_connection_call_sync(
+                  input_capture_connection_, kPortalBusName, kPortalObjectPath,
+                  kPortalInputCaptureInterface, "Release",
+                  g_variant_new("(oa{sv})",
+                                input_capture_session_handle_.c_str(), &options),
+                  nullptr, G_DBUS_CALL_FLAGS_NONE, 1000, nullptr, &call_error);
     if (result != nullptr) {
       g_variant_unref(result);
     } else if (call_error != nullptr) {
@@ -2870,6 +3735,7 @@ class RemoteInputPlugin {
     input_capture_pending_active_start_ = false;
     input_capture_activation_id_ = 0;
     input_capture_buttons_ = 0;
+    ForgetInputCapturePositionLocked();
     input_capture_x_ = static_cast<int>(std::lround(cursor.x));
     input_capture_y_ = static_cast<int>(std::lround(cursor.y));
     input_capture_active_route_id_ = release_route_id;
@@ -2902,11 +3768,15 @@ class RemoteInputPlugin {
       input_capture_ei_ = ei_unref(input_capture_ei_);
     }
     if (input_capture_connection_ != nullptr) {
-      ClosePortalSession(input_capture_connection_, input_capture_session_handle_);
+      CloseInputCaptureSession(input_capture_connection_,
+                               input_capture_session_handle_,
+                               input_capture_mutter_);
       g_object_unref(input_capture_connection_);
       input_capture_connection_ = nullptr;
     }
     input_capture_session_handle_.clear();
+    input_capture_mutter_ = false;
+    CancelInputCaptureZoneRefreshLocked();
     if (input_capture_x_display_ != nullptr) {
       XCloseDisplay(input_capture_x_display_);
       input_capture_x_display_ = nullptr;
@@ -2934,18 +3804,21 @@ class RemoteInputPlugin {
       return false;
     }
 #if HAVE_LIBEI_REMOTE_INPUT
+    // Manual control needs keysyms for Unicode text, which ConnectToEIS
+    // disables. Keep the existing EIS path for desktop edge traversal.
+    if (manual && MutterRemoteDesktopAvailable()) {
+      // GNOME: Mutter directly, so it never asks for permission.
+      PortalSession session;
+      if (StartMutterRemoteDesktopSession(&session, error, false)) {
+        UseManualRemoteDesktopSession(session_id, session);
+        return true;
+      }
+      error->clear();
+    }
     if (manual && RemoteDesktopPortalAvailable()) {
-      // Manual control needs keysyms for Unicode text, which ConnectToEIS
-      // disables. Keep the existing EIS path for desktop edge traversal.
       PortalSession session;
       if (!StartRemoteDesktopPortalSession(&session, error, false)) return false;
-      std::lock_guard<std::mutex> lock(injection_mutex_);
-      injection_backend_ = InjectionBackend::kPortal;
-      injection_session_id_ = session_id;
-      portal_connection_ = session.connection;
-      portal_session_handle_ = session.session_handle;
-      portal_x_display_ = XOpenDisplay(nullptr);
-      manual_portal_ = true;
+      UseManualRemoteDesktopSession(session_id, session);
       return true;
     }
 #endif
@@ -3029,7 +3902,7 @@ class RemoteInputPlugin {
                                std::string* error) {
 #if HAVE_LIBEI_REMOTE_INPUT
     *attempted = false;
-    if (!RemoteDesktopPortalAvailable()) {
+    if (!MutterRemoteDesktopAvailable() && !RemoteDesktopPortalAvailable()) {
       return false;
     }
     *attempted = true;
@@ -3048,6 +3921,18 @@ class RemoteInputPlugin {
   }
 
 #if HAVE_LIBEI_REMOTE_INPUT
+  void UseManualRemoteDesktopSession(const std::string& session_id,
+                                     const PortalSession& session) {
+    std::lock_guard<std::mutex> lock(injection_mutex_);
+    injection_backend_ = InjectionBackend::kPortal;
+    injection_session_id_ = session_id;
+    portal_connection_ = session.connection;
+    portal_session_handle_ = session.session_handle;
+    portal_mutter_ = session.mutter;
+    portal_x_display_ = XOpenDisplay(nullptr);
+    manual_portal_ = true;
+  }
+
   bool StartPortalInjection(const std::string& session_id,
                             const std::string& display_id,
                             const std::string& edge,
@@ -3055,7 +3940,7 @@ class RemoteInputPlugin {
                             std::vector<InjectionRoute> routes,
                             std::string* error) {
     PortalSession session;
-    if (!StartRemoteDesktopPortalSession(&session, error)) {
+    if (!StartRemoteDesktopSession(&session, error, true)) {
       return false;
     }
     struct ei* portal_ei = ei_new_sender(nullptr);
@@ -3064,7 +3949,8 @@ class RemoteInputPlugin {
       if (session.eis_fd >= 0) {
         close(session.eis_fd);
       }
-      ClosePortalSession(session.connection, session.session_handle);
+      CloseRemoteDesktopSession(session.connection, session.session_handle,
+                                session.mutter);
       g_object_unref(session.connection);
       return false;
     }
@@ -3074,7 +3960,8 @@ class RemoteInputPlugin {
     if (setup_result < 0) {
       *error = "Unable to connect Linux remote desktop input client";
       ei_unref(portal_ei);
-      ClosePortalSession(session.connection, session.session_handle);
+      CloseRemoteDesktopSession(session.connection, session.session_handle,
+                                session.mutter);
       g_object_unref(session.connection);
       return false;
     }
@@ -3097,6 +3984,7 @@ class RemoteInputPlugin {
     injected_keys_.clear();
     portal_connection_ = session.connection;
     portal_session_handle_ = session.session_handle;
+    portal_mutter_ = session.mutter;
     portal_ei_ = portal_ei;
     portal_x_display_ = x_display;
     RefreshInjectionDisplaysLocked();
@@ -3409,11 +4297,13 @@ class RemoteInputPlugin {
       portal_ei_ = ei_unref(portal_ei_);
     }
     if (portal_connection_ != nullptr) {
-      ClosePortalSession(portal_connection_, portal_session_handle_);
+      CloseRemoteDesktopSession(portal_connection_, portal_session_handle_,
+                                portal_mutter_);
       g_object_unref(portal_connection_);
       portal_connection_ = nullptr;
     }
     portal_session_handle_.clear();
+    portal_mutter_ = false;
     if (portal_x_display_ != nullptr) {
       XCloseDisplay(portal_x_display_);
       portal_x_display_ = nullptr;
@@ -3598,10 +4488,16 @@ class RemoteInputPlugin {
 #if HAVE_X11_REMOTE_INPUT && HAVE_LIBEI_REMOTE_INPUT
   bool ManualPortalCallLocked(const char* method, GVariant* parameters) {
     GError* error = nullptr;
-    GVariant* reply = g_dbus_connection_call_sync(
-        portal_connection_, kPortalBusName, kPortalObjectPath,
-        kPortalRemoteDesktopInterface, method, parameters, nullptr,
-        G_DBUS_CALL_FLAGS_NONE, 1000, nullptr, &error);
+    GVariant* reply = portal_mutter_
+        ? g_dbus_connection_call_sync(
+              portal_connection_, kMutterRemoteDesktopBusName,
+              portal_session_handle_.c_str(),
+              kMutterRemoteDesktopSessionInterface, method, parameters, nullptr,
+              G_DBUS_CALL_FLAGS_NONE, 1000, nullptr, &error)
+        : g_dbus_connection_call_sync(
+              portal_connection_, kPortalBusName, kPortalObjectPath,
+              kPortalRemoteDesktopInterface, method, parameters, nullptr,
+              G_DBUS_CALL_FLAGS_NONE, 1000, nullptr, &error);
     if (error != nullptr) g_error_free(error);
     if (reply == nullptr) { manual_event_failed_ = true; return false; }
     g_variant_unref(reply);
@@ -3609,6 +4505,14 @@ class RemoteInputPlugin {
   }
 
   bool ManualPortalKeyLocked(const char* method, int key, bool down) {
+    if (portal_mutter_) {
+      // Mutter: NotifyPointerButton(ib), NotifyKeyboardKeycode(ub),
+      // NotifyKeyboardKeysym(ub).
+      const bool button = std::strcmp(method, "NotifyPointerButton") == 0;
+      return ManualPortalCallLocked(method, button
+          ? g_variant_new("(ib)", key, down ? TRUE : FALSE)
+          : g_variant_new("(ub)", static_cast<uint32_t>(key), down ? TRUE : FALSE));
+    }
     GVariantBuilder options;
     g_variant_builder_init(&options, G_VARIANT_TYPE_VARDICT);
     return ManualPortalCallLocked(method, g_variant_new("(oa{sv}iu)",
@@ -3623,9 +4527,22 @@ class RemoteInputPlugin {
       // pixels; vertical portal scrolling has the opposite wheel direction.
       const bool wheel = type == "mouseWheel";
       const double gain = wheel && JsonString(json, "scrollUnit") != "pixel" ? 15.0 / 120.0 : 1.0;
+      const double dx = JsonNumber(json, "deltaX") * gain;
+      const double dy = JsonNumber(json, "deltaY") * (wheel ? -gain : gain);
+      if (portal_mutter_) {
+        // Mutter: the same events without handle and options; an axis step
+        // ends with a finish flag, as the portal's "finish" does.
+        const bool moved = wheel
+            ? ManualPortalCallLocked("NotifyPointerAxis", g_variant_new("(ddu)", dx, dy, 0u))
+            : ManualPortalCallLocked("NotifyPointerMotionRelative", g_variant_new("(dd)", dx, dy));
+        if (wheel && moved) {
+          ManualPortalCallLocked("NotifyPointerAxis",
+              g_variant_new("(ddu)", 0.0, 0.0, kMutterAxisFinish));
+        }
+        return;
+      }
       const bool delivered = ManualPortalCallLocked(type == "mouseMove" ? "NotifyPointerMotion" : "NotifyPointerAxis",
-          g_variant_new("(oa{sv}dd)", portal_session_handle_.c_str(), &options,
-              JsonNumber(json, "deltaX") * gain, JsonNumber(json, "deltaY") * (wheel ? -gain : gain)));
+          g_variant_new("(oa{sv}dd)", portal_session_handle_.c_str(), &options, dx, dy));
       if (wheel && delivered) {
         // Mutter treats finish as an axis-stop event and ignores its deltas.
         // Commit the movement first, then end this momentum-free scroll step.
@@ -5447,6 +6364,16 @@ class RemoteInputPlugin {
 #if HAVE_LIBEI_REMOTE_INPUT
   GDBusConnection* input_capture_connection_ = nullptr;
   std::string input_capture_session_handle_;
+  // input_capture_connection_ talks to Mutter's input capture session
+  // (GNOME) rather than to the portal.
+  bool input_capture_mutter_ = false;
+  guint input_capture_zone_refresh_source_ = 0;
+  // Whether the Activated signal of the current activation has arrived, and
+  // the motion held back until it does.
+  bool input_capture_position_known_ = false;
+  int input_capture_held_dx_ = 0;
+  int input_capture_held_dy_ = 0;
+  int input_capture_held_events_ = 0;
   struct ei* input_capture_ei_ = nullptr;
   Display* input_capture_x_display_ = nullptr;
   std::thread input_capture_thread_;
@@ -5474,6 +6401,9 @@ class RemoteInputPlugin {
 
   GDBusConnection* portal_connection_ = nullptr;
   std::string portal_session_handle_;
+  // portal_connection_ talks to Mutter's remote desktop session (GNOME)
+  // rather than to the portal.
+  bool portal_mutter_ = false;
   struct ei* portal_ei_ = nullptr;
   Display* portal_x_display_ = nullptr;
   std::thread portal_thread_;
