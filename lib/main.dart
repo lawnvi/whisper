@@ -6,6 +6,8 @@ import 'package:whisper/audio/audio_media_session.dart';
 import 'package:whisper/audio/audio_platform.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:sodium/sodium.dart';
+import 'package:whisper/debug/automation_hooks.dart';
+import 'package:whisper/share_links/share_debug_hooks.dart';
 import 'package:whisper/share_links/share_link_store.dart';
 import 'package:whisper/helper/connection_request_notifications.dart';
 import 'package:whisper/helper/desktop_screenshot.dart';
@@ -34,6 +36,7 @@ import 'package:whisper/widget/island/island_host.dart';
 import 'package:whisper/socket/aead_engine.dart';
 import 'package:whisper/socket/auth_session_keys.dart';
 import 'package:whisper/socket/device_identity.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:toastification/toastification.dart';
@@ -170,6 +173,12 @@ Future<void> main(List<String> arguments) async {
     // Keeps the GNOME helper's allowed-exe pointing at this executable (an
     // AppImage mounts somewhere new each time); nothing if not installed.
     unawaited(GnomeShellHelperController.shared.refresh());
+  }
+  // Debug builds only (not profile or release): they drive the app from a
+  // test machine without the UI.
+  if (kDebugMode) {
+    registerAutomationHooks();
+    registerShareDebugHooks();
   }
   runApp(MyApp());
   if (Platform.isIOS) {

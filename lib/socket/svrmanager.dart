@@ -11,6 +11,7 @@ import 'package:uuid/uuid.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:whisper/debug/automation_hooks.dart' show DebugPairingRequests;
 import 'package:whisper/audio/audio_group_coordinator.dart';
 import 'package:whisper/audio/audio_share_coordinator.dart';
 import 'package:whisper/audio/audio_protocol.dart';
@@ -4015,6 +4016,10 @@ class WsSvrManager {
       cancellation: presentation.cancellation,
       presentation: presentation,
     );
+    if (kDebugMode) {
+      // Test machines are paired by the automation hooks, not by a click.
+      DebugPairingRequests.add(request);
+    }
     _ignoreFuture(
       ConnectionRequestNotifier().maybeShowForPairing(
         request: request,
