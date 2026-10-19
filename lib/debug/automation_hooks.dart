@@ -10,9 +10,13 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../helper/device_form_factor.dart';
 import '../helper/local.dart';
 import '../helper/toast.dart' show appNavigatorKey;
 import '../model/LocalDatabase.dart';
+import '../page/remote_files/files_drag.dart'
+    show FilesFolderPromises, filesVirtualClipboard;
+import '../page/remote_files/files_model.dart';
 import '../page/window_stream/flow_open.dart' show flowWindowRoute;
 import '../remote_files/fs_client.dart';
 import '../remote_files/fs_host.dart';
@@ -101,6 +105,8 @@ final Map<String, AutomationHook> automationHooks = {
   // Window streaming: host side.
   'ws.hostStatus': _wsHostStatus,
   'ws.localWindows': _wsLocalWindows,
+  'ws.quality': _wsQuality,
+  'ws.localThumbnail': _wsLocalThumbnail,
   'ws.offer': _wsOffer,
   'ws.hostStreams': (_) async => {
     'streams': WindowStreamHost.shared.debugStreams(),
@@ -113,10 +119,16 @@ final Map<String, AutomationHook> automationHooks = {
   'files.rename': _filesRename,
   'files.trash': _filesTrash,
   'files.copy': _filesCopy,
+  'files.clipboard': _filesClipboard,
+  'files.folderOut': _filesFolderOut,
   'files.hash': _filesHash,
   'files.pending': _filesPending,
   'files.answer': _filesAnswer,
   'files.close': _filesClose,
+  // Transfers.
+  'transfers.get': _transfersGet,
+  'transfers.cancel': _transfersCancel,
+  'transfers.cancelAt': _transfersCancelAt,
   // Peers and pairing.
   'peers.list': _peersList,
   'peers.connect': _peersConnect,
@@ -714,6 +726,30 @@ Future<Map<String, Object?>> _wsLocalWindows(HookParams params) async => {
   ],
 };
 
+/// Sets how sharp windows come here (`quality`: smooth, standard, high,
+/// best), for every open one at once; without it, says the current one.
+Future<Map<String, Object?>> _wsQuality(HookParams params) async {
+  final coordinator = WindowStreamCoordinator.shared;
+  final name = params.optString('quality');
+  if (name != null) {
+    await coordinator.setQuality(WindowStreamQuality.fromName(name));
+  }
+  return {'quality': coordinator.quality.value.name};
+}
+
+/// A picture of one of this desktop's windows by id, listed or not (to see
+/// what an app's extra windows hold).
+Future<Map<String, Object?>> _wsLocalThumbnail(HookParams params) async {
+  final jpeg = await WindowStreamHost.shared.localThumbnail(
+    params.integer('windowId'),
+    maxEdge: params.optInt('maxEdge') ?? 480,
+  );
+  return {
+    'bytes': jpeg?.length ?? 0,
+    if (jpeg != null) 'jpeg': base64Encode(jpeg),
+  };
+}
+
 Future<Map<String, Object?>> _wsOffer(HookParams params) async {
   final peer = params.string('peer');
   final windowId = params.integer('windowId');
@@ -904,6 +940,75 @@ Future<Map<String, Object?>> _filesCopy(HookParams params) async {
   return {'transfers': await client.fetch(items, folder)};
 }
 
+/// The file browser of the last `files.clipboard`, kept for what pastes
+/// its copy later.
+FilesController? _clipboardBrowser;
+
+/// The file browser's copy (⌘C) of another device's items, without the
+/// window: what the system clipboard then holds is what other apps paste.
+/// Waits while the other device asks whether to allow browsing.
+Future<Map<String, Object?>> _filesClipboard(HookParams params) async {
+  final peer = params.string('peer');
+  final location = FilesLocation(
+    peer,
+    params.string('root'),
+    params.optString('path') ?? '',
+  );
+  _clipboardBrowser?.dispose();
+  // Starts on this device; opening the other one asks it once.
+  final controller = _clipboardBrowser = FilesController();
+  final device = controller.deviceById(peer);
+  if (device == null) {
+    throw HookError('cannot browse $peer');
+  }
+  await controller.open(device);
+  await controller.go(location);
+  for (final name in params.list('names')) {
+    if (name is String) {
+      controller.select(name, toggle: true);
+    }
+  }
+  if (controller.selection.isEmpty) {
+    throw const HookError('nothing selected');
+  }
+  controller.copySelection();
+  return {
+    'selected': controller.selection.toList(),
+    'fetchedOnPaste': filesVirtualClipboard,
+  };
+}
+
+/// Another device's folder `root`/`path` as a drag into Finder has it:
+/// fetched into the empty folder `destination` (made here, as the runner
+/// makes it where Finder asks). Waits for it.
+Future<Map<String, Object?>> _filesFolderOut(HookParams params) async {
+  final peer = params.string('peer');
+  final path = params.string('path');
+  final destination = params.string('destination');
+  final controller = FilesController();
+  try {
+    final device = controller.deviceById(peer);
+    if (device == null) {
+      throw HookError('cannot browse $peer');
+    }
+    await controller.open(device);
+    await Directory(destination).create();
+    final item = FilesItem(
+      FilesLocation(
+        peer,
+        params.string('root'),
+        p.dirname(path) == '.' ? '' : p.dirname(path),
+      ),
+      p.basename(path),
+      isDir: true,
+    );
+    await FilesFolderPromises.fill(controller, item, destination);
+    return {'destination': destination};
+  } finally {
+    controller.dispose();
+  }
+}
+
 /// SHA-256 of a local file (or of every file under a folder, by relative
 /// path), to check copies.
 Future<Map<String, Object?>> _filesHash(HookParams params) async {
@@ -962,6 +1067,51 @@ Future<Map<String, Object?>> _filesClose(HookParams params) async {
   return {'closed': client != null};
 }
 
+// ----------------------------------------------------------------- transfers
+
+Future<Map<String, Object?>> _transfersGet(HookParams params) async {
+  final id = params.string('id');
+  final transfer = await LocalDatabase().fetchFileTransfer(id);
+  if (transfer == null) {
+    return {'id': id, 'known': false};
+  }
+  return {
+    'id': id,
+    'known': true,
+    'direction': transfer.direction.name,
+    'state': transfer.state.name,
+    'size': transfer.size,
+    'committed': transfer.committedBytes,
+    'lastError': transfer.lastError,
+  };
+}
+
+/// Stops a transfer as its stop button does.
+Future<Map<String, Object?>> _transfersCancel(HookParams params) async {
+  final id = params.string('id');
+  await WsSvrManager().cancelTransfer(id);
+  return {'id': id};
+}
+
+/// Stops transfer `id` once `bytes` of it are written (waiting up to
+/// `waitMs`), as its stop button does mid-way.
+Future<Map<String, Object?>> _transfersCancelAt(HookParams params) async {
+  final id = params.string('id');
+  final bytes = params.integer('bytes');
+  final deadline = DateTime.now().add(
+    Duration(milliseconds: params.optInt('waitMs') ?? 60000),
+  );
+  while (DateTime.now().isBefore(deadline)) {
+    final transfer = await LocalDatabase().fetchFileTransfer(id);
+    if (transfer != null && transfer.committedBytes >= bytes) {
+      await WsSvrManager().cancelTransfer(id);
+      return {'id': id, 'canceledAt': transfer.committedBytes};
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+  }
+  throw HookError('$id did not reach $bytes bytes');
+}
+
 // --------------------------------------------------------------------- peers
 
 Future<Map<String, Object?>> _peersList(HookParams params) async {
@@ -974,6 +1124,7 @@ Future<Map<String, Object?>> _peersList(HookParams params) async {
       'uid': prefs.get('_uuid'),
       'name': prefs.get('_name'),
       'port': prefs.get('_port') ?? 10002,
+      'formFactor': DeviceFormFactors.shared.local,
     },
     'connected': connected.toList(),
     'devices': [
@@ -987,8 +1138,12 @@ Future<Map<String, Object?>> _peersList(HookParams params) async {
           'trusted': device.auth,
           'online': device.online,
           'connected': connected.contains(device.uid),
+          'connection': manager.connectionIdOf(device.uid),
           'windows': manager.canOfferWindowsTo(device.uid),
           'files': manager.canBrowseFilesOf(device.uid),
+          'protocol': manager.remoteProfileFor(device.uid)?.protocolVersion,
+          'formFactor': manager.remoteProfileFor(device.uid)?.formFactor,
+          'tablet': DeviceFormFactors.shared.isTablet(device.uid),
         },
     ],
   };
