@@ -369,6 +369,30 @@ void main() {
       );
     });
 
+    test('frames still on their way when a transfer was cancelled are '
+        'ignored', () {
+      // The cancel forgot the 4 MiB chunks agreed for it; the bound falls
+      // back to the legacy 512 KiB. Rejecting them dropped the connection.
+      final late = _dataFrame(payloadLength: fileTransferV3FramePayloadSize);
+      FileDataValidationResult validate(FileTransferState state) =>
+          WireInputPolicy.validateFileData(
+            frame: late,
+            transfer: _incomingTransfer(
+              size: fileTransferV3FramePayloadSize * 4,
+            ).copyWith(state: state),
+            authenticatedPeerId: 'peer-a',
+            expectedOffset: 4,
+            expectedSequence: 2,
+            isActive: false,
+            maxPayloadSize: fileTransferV3LegacyFramePayloadSize,
+          );
+      expect(validate(FileTransferState.canceled).isIgnored, isTrue);
+      expect(
+        validate(FileTransferState.transferring).reason,
+        WireInputReason.transferPayloadInvalid,
+      );
+    });
+
     test('rejects negative/non-contiguous offset and invalid sequence/flags',
         () {
       expect(

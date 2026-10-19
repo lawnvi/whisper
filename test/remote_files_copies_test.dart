@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/model/file_transfer.dart';
 import 'package:whisper/remote_files/fs_copies.dart';
 import 'package:whisper/remote_files/fs_placement.dart';
+import 'package:whisper/socket/file_transfer_v3.dart';
 
 TransferSnapshot _snap(
   String id,
@@ -270,6 +271,33 @@ void main() {
       _snap('refused', FileTransferState.paused, error: 'receiver_canceled'),
     );
     expect(resumed, ['copy']);
+  });
+
+  test('a copy the other side stopped is let go, not offered again', () async {
+    // Stopped there, it is paused here; offered again, the other side,
+    // having cancelled it, dropped the connection.
+    final placements = TransferPlacements();
+    final resumed = <String>[];
+    final forgotten = <String>[];
+    placements.resume = (id) async => resumed.add(id);
+    placements.forgetRecord = (id) async => forgotten.add(id);
+    placements.markQuiet('stopped');
+    await placements.onTransferUpdated(
+      _snap(
+        'stopped',
+        FileTransferState.paused,
+        done: 10,
+        error: fileTransferPeerCanceled,
+      ),
+    );
+    expect(resumed, isEmpty);
+    expect(forgotten, ['stopped']);
+    expect(placements.isQuiet('stopped'), isFalse);
+    // The engine says so when the receiver cancels one it was sending.
+    final engine = File(
+      'lib/socket/file_transfer_engine.dart',
+    ).readAsStringSync();
+    expect(engine, contains('? fileTransferPeerCanceled'));
   });
 
   test('a copy here is shown under the name it landed with', () {

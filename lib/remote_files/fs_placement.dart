@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
 import '../model/file_transfer.dart';
+import '../socket/file_transfer_v3.dart' show fileTransferPeerCanceled;
 import 'files_log.dart';
 
 /// One copy that landed where it was asked to go.
@@ -124,6 +125,18 @@ class TransferPlacements extends ChangeNotifier {
     }
     await _place(snapshot);
     if (!quiet) {
+      return;
+    }
+    // Stopped by the device it went to: over, like a cancelled one.
+    final stoppedThere =
+        snapshot.direction == FileTransferDirection.outgoing &&
+        snapshot.state == FileTransferState.paused &&
+        snapshot.lastError == fileTransferPeerCanceled;
+    if (stoppedThere) {
+      await forgetRecord?.call(snapshot.transferId);
+      _quiet.remove(snapshot.transferId);
+      _resumed.remove(snapshot.transferId);
+      notifyListeners();
       return;
     }
     switch (snapshot.state) {

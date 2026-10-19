@@ -596,6 +596,11 @@ class WsSvrManager {
 
   Set<String> get connectedPeerIds => _peerConnections.connectedPeerIds;
 
+  /// Which connection to [peerId] this is (a new one after a reconnect);
+  /// null while not connected.
+  int? connectionIdOf(String peerId) =>
+      _peerConnections.currentBinding(peerId)?.generation;
+
   /// [peerId] is connected and accepts windows sent to it ("送出去").
   bool canOfferWindowsTo(String peerId) =>
       supportsWindowStreamSource() &&

@@ -3673,12 +3673,17 @@ class FileTransferEngine {
     if (existing == null) {
       return;
     }
+    final outgoing = existing.direction == FileTransferDirection.outgoing;
     await _updateTransfer(
       control.transferId,
-      state: existing.direction == FileTransferDirection.outgoing
-          ? FileTransferState.paused
-          : FileTransferState.canceled,
-      lastError: control.failureReason.wireCode,
+      state: outgoing ? FileTransferState.paused : FileTransferState.canceled,
+      // The receiver stopped it: said so, so nothing takes it for a pause
+      // from a dropped connection and offers it again (a file manager copy
+      // did, and the receiver, having cancelled it, dropped the connection).
+      lastError:
+          outgoing && control.failureReason == FileTransferFailureReason.none
+          ? fileTransferPeerCanceled
+          : control.failureReason.wireCode,
       requireCurrent: requireCurrent,
     );
     final transfer = await _database().fetchFileTransfer(control.transferId);

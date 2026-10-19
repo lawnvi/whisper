@@ -13,6 +13,7 @@ import 'package:whisper/model/file_transfer.dart';
 import 'package:whisper/model/message.dart';
 import 'package:whisper/socket/device_identity.dart';
 import 'package:whisper/socket/file_transfer_engine.dart';
+import 'package:whisper/socket/file_transfer_v3.dart';
 import 'package:whisper/socket/peer_socket_session.dart';
 import 'package:whisper/socket/svrmanager.dart';
 import 'package:whisper/state/connection_attempt.dart';
@@ -218,6 +219,83 @@ void main() {
       expect(sender.events.notices, isEmpty);
       expect(receiver.events.notices, isEmpty);
       expect(sender.manager.isConnectedTo('receiver-peer'), isTrue);
+    },
+    timeout: const Timeout(Duration(seconds: 60)),
+  );
+
+  test(
+    'stopped by the receiver midway, a transfer leaves the connection up',
+    () async {
+      // The cancel forgot the 4 MiB chunks agreed for it, and the frames
+      // already on their way were turned down as too big: the whole
+      // connection went with them (file browsing dropped, then came back).
+      final temp = Directory.systemTemp.createTempSync('whisper-stop-link-');
+      addTearDown(() => temp.deleteSync(recursive: true));
+      final random = math.Random(5);
+      final block = Uint8List.fromList(
+        List<int>.generate(1 << 20, (_) => random.nextInt(256)),
+      );
+      final big = File(p.join(temp.path, 'big.bin'));
+      final sink = big.openWrite();
+      for (var index = 0; index < 160; index += 1) {
+        sink.add(block);
+      }
+      await sink.close();
+
+      final receiver = _Peer('receiver-peer', temp, 1);
+      final sender = _Peer('sender-peer', temp, 33);
+      addTearDown(sender.dispose);
+      addTearDown(receiver.dispose);
+      final started = await receiver.manager.startServer(0);
+      expect(started.isSuccess, isTrue);
+      final connected = await sender.manager
+          .connectToServer(
+            ConnectionAttemptRequest(
+              requestId: 'stop-link',
+              endpoint: PeerEndpoint.loopbackForTesting(port: started.port),
+              expectedPeerId: 'receiver-peer',
+              mode: ConnectionAttemptMode.interactive,
+            ),
+          )
+          .timeout(const Duration(seconds: 10));
+      expect(connected.status, ConnectionAttemptStatus.authenticated);
+      final link = sender.manager.connectionIdOf('receiver-peer');
+
+      expect(await sender.manager.sendFileTo('receiver-peer', big.path), true);
+      final transferId = sender.events.messages.single.uuid;
+      final deadline = DateTime.now().add(const Duration(seconds: 25));
+      while (true) {
+        final arriving = await receiver.database.fetchFileTransfer(transferId);
+        if ((arriving?.committedBytes ?? 0) >= 16 << 20) {
+          break;
+        }
+        if (DateTime.now().isAfter(deadline)) {
+          fail('the transfer did not get going');
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+      await receiver.manager.cancelTransfer(transferId);
+
+      final settle = DateTime.now().add(const Duration(seconds: 10));
+      FileTransferData? sent;
+      while (DateTime.now().isBefore(settle)) {
+        sent = await sender.database.fetchFileTransfer(transferId);
+        if (sent?.state == FileTransferState.paused) {
+          break;
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+      // What was still on its way has arrived and been let go by now.
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+      expect(sent?.state, FileTransferState.paused);
+      expect(sent?.lastError, fileTransferPeerCanceled);
+      expect(
+        (await receiver.database.fetchFileTransfer(transferId))?.state,
+        FileTransferState.canceled,
+      );
+      expect(sender.manager.isConnectedTo('receiver-peer'), isTrue);
+      expect(receiver.manager.isConnectedTo('sender-peer'), isTrue);
+      expect(sender.manager.connectionIdOf('receiver-peer'), link);
     },
     timeout: const Timeout(Duration(seconds: 60)),
   );

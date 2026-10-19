@@ -566,7 +566,8 @@ abstract final class WireInputPolicy {
         WireInputReason.transferOffsetInvalid,
       );
     }
-    if (frame.payload.isEmpty || frame.payload.length > maxPayloadSize) {
+    if (frame.payload.isEmpty ||
+        frame.payload.length > fileTransferV3FramePayloadSize) {
       return const FileDataValidationResult.rejected(
         WireInputReason.transferPayloadInvalid,
       );
@@ -578,8 +579,15 @@ abstract final class WireInputPolicy {
         WireInputReason.transferSizeInvalid,
       );
     }
+    // Before the chunk size agreed for it: a cancel forgets that, and the
+    // frames the sender had already sent arrive at it afterwards.
     if (isTerminalFileTransferState(transfer.state)) {
       return const FileDataValidationResult.ignored();
+    }
+    if (frame.payload.length > maxPayloadSize) {
+      return const FileDataValidationResult.rejected(
+        WireInputReason.transferPayloadInvalid,
+      );
     }
     if (!isActive) {
       return const FileDataValidationResult.rejected(

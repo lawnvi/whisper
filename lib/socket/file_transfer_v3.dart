@@ -76,6 +76,10 @@ bool isValidFileTransferV3FlowParameters({
 
 enum FileTransferV3Action { ready, ack, verify, complete, cancel, error }
 
+/// Why an outgoing transfer is paused when its receiver cancelled it (kept
+/// here only, never sent): not a dropped connection to carry on from.
+const fileTransferPeerCanceled = 'peer_canceled';
+
 enum FileTransferFailureReason {
   none,
   invalidSize,
