@@ -12,6 +12,7 @@
 
 #include <gio/gio.h>
 
+#include <cstdint>
 #include <functional>
 #include <string>
 

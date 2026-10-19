@@ -57,4 +57,19 @@ void main() {
       contains('if (!ensureDesktopVideoLibrary()) {\n      throw StateError'),
     );
   });
+
+  test(
+    'a configure that stops early never leaves /usr/local to install to',
+    () {
+      // The mpv headers check can fail on a machine without them; the bundle
+      // must already be the install prefix by then (seen on Arch: the next
+      // build as root installed into /usr/local).
+      final cmake = File('linux/CMakeLists.txt').readAsStringSync();
+      final prefix = cmake.indexOf(
+        'set(CMAKE_INSTALL_PREFIX "\${BUILD_BUNDLE_DIR}" CACHE PATH',
+      );
+      expect(prefix, isNot(-1));
+      expect(prefix, lessThan(cmake.indexOf('REQUIRED')));
+    },
+  );
 }
