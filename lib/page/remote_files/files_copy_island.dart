@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
 import 'package:flutter/services.dart';
@@ -20,10 +21,28 @@ String copyTitle(AppLocalizations l10n, FileCopyBatch batch) =>
     ? batch.names.single
     : l10n.remoteFilesCopyItems(batch.names.length);
 
-/// "拷贝到 一加 的“下载”".
-String copyRoute(AppLocalizations l10n, FileCopyBatch batch) => batch.upload
-    ? l10n.remoteFilesCopyToDevice(batch.deviceName, batch.folder)
-    : l10n.remoteFilesCopyFromDevice(batch.deviceName, batch.folder);
+/// "拷贝到 一加 的“下载”"; "从 一加 拷贝到“访达”" for a copy dragged or
+/// pasted out of the app.
+String copyRoute(AppLocalizations l10n, FileCopyBatch batch) {
+  final outside = switch (batch.target) {
+    FilesOutside.fileManager => systemFileManagerName(l10n),
+    _ => null,
+  };
+  if (outside != null) {
+    return l10n.remoteFilesCopyFromDevice(batch.deviceName, outside);
+  }
+  return batch.upload
+      ? l10n.remoteFilesCopyToDevice(batch.deviceName, batch.folder)
+      : l10n.remoteFilesCopyFromDevice(batch.deviceName, batch.folder);
+}
+
+/// What this system calls its file manager.
+String systemFileManagerName(AppLocalizations l10n) =>
+    switch (defaultTargetPlatform) {
+      TargetPlatform.macOS => l10n.remoteFilesFinder,
+      TargetPlatform.windows => l10n.remoteFilesExplorer,
+      _ => l10n.remoteFilesFileManager,
+    };
 
 String copyDuration(AppLocalizations l10n, Duration left) {
   final seconds = left.inSeconds;
@@ -997,7 +1016,9 @@ class _Open extends StatelessWidget {
         onPressed: () => unawaited(copies.stop(batch)),
       );
     }
-    if (phase == FileCopyPhase.done && onReveal != null) {
+    if (phase == FileCopyPhase.done &&
+        onReveal != null &&
+        batch.target is! FilesOutside) {
       return _RoundButton(
         icon: CupertinoIcons.folder,
         label: l10n.remoteFilesCopyReveal,

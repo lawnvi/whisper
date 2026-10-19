@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -11,6 +12,7 @@ import 'package:super_drag_and_drop/super_drag_and_drop.dart';
 
 import '../../helper/helper.dart' show isDesktop;
 import '../../l10n/app_localizations.dart';
+import '../../widget/device_glyph.dart';
 import '../../model/file_transfer.dart';
 import '../../remote_files/fs_browser.dart';
 import '../../remote_files/fs_host_files.dart';
@@ -110,6 +112,22 @@ class _FinderViewState extends State<FinderView> {
 
   /// Set by an item a moment before the listing sees the same click.
   bool _itemHit = false;
+
+  /// Where a finger went down on the list (see the list's [Listener]).
+  Offset? _backgroundTouch;
+
+  /// The finger went down on an item, not the blank around them.
+  bool _touchOnItem = false;
+  Timer? _backgroundHold;
+
+  /// A touch screen's "选择": taps add and remove items, as a click with
+  /// Command or Ctrl held does.
+  bool _selecting = false;
+
+  /// This layout on a tablet: fingers, no right button, no Command key.
+  static bool get _touchDevice =>
+      defaultTargetPlatform == TargetPlatform.iOS ||
+      defaultTargetPlatform == TargetPlatform.android;
 
   FilesController get controller => widget.controller;
   FilesActions get actions => widget.actions;
@@ -372,7 +390,11 @@ class _FinderViewState extends State<FinderView> {
     return targets;
   }
 
-  Future<void> _entryMenu(FsEntry entry, Offset position) async {
+  Future<void> _entryMenu(
+    FsEntry entry,
+    Offset position, {
+    bool touch = false,
+  }) async {
     if (!controller.selection.contains(entry.name)) {
       controller.select(entry.name);
     }
@@ -386,6 +408,7 @@ class _FinderViewState extends State<FinderView> {
     await showFilesMenu(
       context,
       position: position,
+      touch: touch,
       items: [
         if (count == 1 && entry.isDir) ...[
           FilesMenuItem(
@@ -467,18 +490,32 @@ class _FinderViewState extends State<FinderView> {
 
   bool get _listActive => _listFocus.hasFocus || _menuOpen;
 
-  Future<void> _backgroundMenu(Offset position) async {
+  Future<void> _backgroundMenu(Offset position, {bool touch = false}) async {
     controller.clearSelection();
     _listFocus.requestFocus();
     final l10n = AppLocalizations.of(context)!;
     await showFilesMenu(
       context,
       position: position,
+      touch: touch,
       items: _folderMenuItems(l10n),
     );
   }
 
   List<FilesMenuItem> _folderMenuItems(AppLocalizations l10n) => [
+    // No Command-A on a tablet: picking everything is here, and stays on
+    // to add or take away items.
+    if (_touchDevice) ...[
+      FilesMenuItem(
+        label: l10n.remoteFilesSelectAll,
+        icon: CupertinoIcons.checkmark_circle,
+        onSelected: () {
+          setState(() => _selecting = true);
+          controller.selectAll();
+        },
+      ),
+      const FilesMenuItem.separator(),
+    ],
     FilesMenuItem(
       label: l10n.remoteFilesNewFolder,
       icon: CupertinoIcons.folder_badge_plus,
@@ -632,6 +669,18 @@ class _FinderViewState extends State<FinderView> {
                 ),
               ),
             ),
+            if (_touchDevice) ...[
+              _TextToolButton(
+                label: _selecting
+                    ? l10n.remoteFilesDone
+                    : l10n.remoteFilesSelect,
+                active: _selecting,
+                onPressed: ready
+                    ? () => setState(() => _selecting = !_selecting)
+                    : null,
+              ),
+              const SizedBox(width: 8),
+            ],
             _ViewSwitch(
               view: controller.view,
               onChanged: ready ? _setView : null,
@@ -899,6 +948,23 @@ class _FinderViewState extends State<FinderView> {
     listing = Listener(
       behavior: HitTestBehavior.translucent,
       onPointerDown: (event) {
+        if (filesTouchPointer(event.kind)) {
+          // A finger may be starting a scroll: decided when it lifts.
+          // Held still on the blank, it opens the folder's menu.
+          _backgroundTouch = event.position;
+          final onItem = _touchOnItem;
+          _touchOnItem = false;
+          _backgroundHold?.cancel();
+          _backgroundHold = onItem
+              ? null
+              : Timer(kLongPressTimeout, () {
+                  _backgroundHold = null;
+                  _backgroundTouch = null;
+                  unawaited(HapticFeedback.selectionClick());
+                  unawaited(_backgroundMenu(event.position, touch: true));
+                });
+          return;
+        }
         final onItem = _itemHit;
         _itemHit = false;
         if (onItem) {
@@ -910,6 +976,33 @@ class _FinderViewState extends State<FinderView> {
         } else if (event.buttons == kPrimaryButton) {
           controller.clearSelection();
         }
+      },
+      onPointerMove: (event) {
+        final down = _backgroundTouch;
+        if (down != null && (event.position - down).distance > kTouchSlop) {
+          _backgroundHold?.cancel();
+          _backgroundHold = null;
+        }
+      },
+      onPointerUp: (event) {
+        _backgroundHold?.cancel();
+        _backgroundHold = null;
+        final down = _backgroundTouch;
+        _backgroundTouch = null;
+        final onItem = _itemHit;
+        _itemHit = false;
+        if (down == null ||
+            onItem ||
+            (event.position - down).distance > kTouchSlop) {
+          return;
+        }
+        _listFocus.requestFocus();
+        controller.clearSelection();
+      },
+      onPointerCancel: (_) {
+        _backgroundHold?.cancel();
+        _backgroundHold = null;
+        _backgroundTouch = null;
       },
       child: listing,
     );
@@ -995,10 +1088,11 @@ class _FinderViewState extends State<FinderView> {
       );
     }
     item = _ClickRegion(
+      onTouchStart: () => _touchOnItem = true,
       onDown: () {
         _itemHit = true;
         _listFocus.requestFocus();
-        if (_primaryPressed) {
+        if (_primaryPressed || _selecting) {
           controller.select(entry.name, toggle: true);
         } else if (HardwareKeyboard.instance.isShiftPressed) {
           controller.select(entry.name, extend: true);
@@ -1008,8 +1102,10 @@ class _FinderViewState extends State<FinderView> {
       },
       onUp: () {
         // A plain click on one of several selected items keeps them all
-        // until it is clear that it was not the start of a drag.
-        if (selected &&
+        // until it is clear that it was not the start of a drag. Picking
+        // with taps, the tap has already added or taken it away.
+        if (!_selecting &&
+            selected &&
             !_primaryPressed &&
             !HardwareKeyboard.instance.isShiftPressed &&
             controller.selection.length > 1) {
@@ -1017,13 +1113,17 @@ class _FinderViewState extends State<FinderView> {
         }
       },
       onDoubleClick: () {
-        if (entry.isDir) {
+        if (entry.isDir && !_selecting) {
           unawaited(controller.openEntry(entry));
         }
       },
       onSecondary: (position) {
         _itemHit = true;
         unawaited(_entryMenu(entry, position));
+      },
+      onLongPress: (position) {
+        _itemHit = true;
+        unawaited(_entryMenu(entry, position, touch: true));
       },
       child: item,
     );
@@ -1048,6 +1148,8 @@ class _FinderViewState extends State<FinderView> {
       );
     }
     return _FilesDraggable<FilesDragData>(
+      // A held finger moving on drags; letting go opens the menu.
+      liftOnHold: false,
       data: FilesDragData(
         selected
             ? controller.selectedItems
@@ -1171,7 +1273,7 @@ class _Sidebar extends StatelessWidget {
       add(
         key,
         (selected) => _SidebarItem(
-          icon: fsDeviceIcon(device.platform),
+          icon: filesDeviceIcon(device),
           label: filesDeviceName(l10n, device),
           selected: selected,
           dimmed:
@@ -1460,7 +1562,7 @@ class _SidebarItemState extends State<_SidebarItem> {
                 opacity: widget.dimmed ? 0.5 : 1,
                 child: Row(
                   children: [
-                    Icon(
+                    DeviceGlyph(
                       widget.icon,
                       size: 16,
                       color: dropping ? Colors.white : colors.accent,
@@ -1545,6 +1647,50 @@ class _DeviceBadge extends StatelessWidget {
 }
 
 // ----------------------------------------------------------------- toolbar
+
+/// A worded button in the toolbar's style (a tablet's 选择/完成).
+class _TextToolButton extends StatelessWidget {
+  const _TextToolButton({
+    required this.label,
+    required this.onPressed,
+    this.active = false,
+  });
+
+  final String label;
+  final VoidCallback? onPressed;
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = FinderColors.of(context);
+    final enabled = onPressed != null;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onPressed,
+      child: Container(
+        height: 32,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: active ? colors.accent : colors.capsule,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: active
+                ? Colors.white
+                : enabled
+                ? colors.label
+                : colors.tertiaryLabel,
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 class _ToolButton extends StatefulWidget {
   const _ToolButton({
@@ -2209,8 +2355,15 @@ class _ClickRegion extends StatefulWidget {
     required this.onDoubleClick,
     required this.onSecondary,
     required this.child,
+    this.onTouchStart,
+    this.onLongPress,
   });
 
+  /// A finger went down here (the list tells it from one on its blank).
+  final VoidCallback? onTouchStart;
+
+  /// A finger held still and let go: the menu a right click opens.
+  final ValueChanged<Offset>? onLongPress;
   final VoidCallback onDown;
   final VoidCallback onUp;
   final VoidCallback onDoubleClick;
@@ -2225,6 +2378,21 @@ class _ClickRegionState extends State<_ClickRegion> {
   Duration? _lastDown;
   Offset _downAt = Offset.zero;
   bool _moved = false;
+
+  /// A finger's press waits for its release: it may be the start of a
+  /// scroll, which must not select (or clear) anything.
+  bool _touch = false;
+  bool _touchDouble = false;
+
+  /// The finger has been down a long press (its menu when let go).
+  bool _held = false;
+  Timer? _holdTimer;
+
+  @override
+  void dispose() {
+    _holdTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2246,6 +2414,15 @@ class _ClickRegionState extends State<_ClickRegion> {
             (event.position - _downAt).distance < kDoubleTapSlop;
         _lastDown = isDouble ? null : event.timeStamp;
         _downAt = event.position;
+        _touch = filesTouchPointer(event.kind);
+        if (_touch) {
+          _touchDouble = isDouble;
+          _held = false;
+          _holdTimer?.cancel();
+          _holdTimer = Timer(kLongPressTimeout, () => _held = true);
+          widget.onTouchStart?.call();
+          return;
+        }
         widget.onDown();
         if (isDouble) {
           widget.onDoubleClick();
@@ -2253,17 +2430,31 @@ class _ClickRegionState extends State<_ClickRegion> {
       },
       onPointerMove: (event) {
         // As soon as it is a drag: a system drag takes the pointer and the
-        // window may not see it move any further.
+        // window may not see it move any further. A finger scrolls.
         if ((event.position - _downAt).distance >
-            FilesSlopDragRecognizer.slop) {
+            (_touch ? kTouchSlop : FilesSlopDragRecognizer.slop)) {
           _moved = true;
         }
       },
-      onPointerUp: (_) {
-        if (!_moved) {
-          widget.onUp();
+      onPointerUp: (event) {
+        _holdTimer?.cancel();
+        if (_moved) {
+          return;
         }
+        final longPress = widget.onLongPress;
+        if (_touch && _held && longPress != null) {
+          longPress(event.position);
+          return;
+        }
+        if (_touch) {
+          widget.onDown();
+          if (_touchDouble) {
+            widget.onDoubleClick();
+          }
+        }
+        widget.onUp();
       },
+      onPointerCancel: (_) => _moved = true,
       child: widget.child,
     );
   }
@@ -2278,12 +2469,16 @@ class _FilesDraggable<T extends Object> extends Draggable<T> {
     required super.feedback,
     super.data,
     super.dragAnchorStrategy,
+    this.liftOnHold = true,
   });
+
+  /// See [FilesSlopDragRecognizer.liftOnHold].
+  final bool liftOnHold;
 
   @override
   MultiDragGestureRecognizer createRecognizer(
     GestureMultiDragStartCallback onStart,
-  ) => FilesSlopDragRecognizer()..onStart = onStart;
+  ) => FilesSlopDragRecognizer(liftOnHold: liftOnHold)..onStart = onStart;
 }
 
 class _DragFeedback extends StatelessWidget {
@@ -2374,7 +2569,7 @@ class _BottomBar extends StatelessWidget {
     final crumbs = <(IconData, String, FilesLocation?)>[];
     if (device != null && here != null && !controller.panelOpen) {
       crumbs.add((
-        fsDeviceIcon(device.platform),
+        filesDeviceIcon(device),
         filesDeviceName(l10n, device),
         null,
       ));
@@ -2398,17 +2593,21 @@ class _BottomBar extends StatelessWidget {
         : selected == 0
         ? l10n.remoteFilesItemCount(count)
         : l10n.remoteFilesStatusSelected(selected, count);
-    final Widget? activity = controller.clipboardPreparing
-        ? _Activity(
-            key: const ValueKey('preparing'),
-            busy: true,
-            text: l10n.remoteFilesClipboardPreparing(controller.stagedCount),
-          )
-        : controller.clipboardReady
+    final Widget? activity = controller.clipboardReady
         ? _Activity(
             key: const ValueKey('ready'),
             icon: CupertinoIcons.doc_on_clipboard_fill,
             text: l10n.remoteFilesClipboardReady,
+          )
+        : controller.clipboardOnPaste
+        ? _Activity(
+            key: const ValueKey('on-paste'),
+            icon: CupertinoIcons.doc_on_clipboard,
+            text: controller.clipboardDragsOut
+                ? l10n.remoteFilesClipboardOnPasteDrag(
+                    systemFileManagerName(l10n),
+                  )
+                : l10n.remoteFilesClipboardOnPaste,
           )
         : null;
     return Container(
@@ -2523,7 +2722,7 @@ class _CrumbState extends State<_Crumb> {
           ),
           child: Row(
             children: [
-              Icon(
+              DeviceGlyph(
                 widget.icon,
                 size: 12,
                 color: folder ? const Color(0xFF3A97EA) : colors.secondaryLabel,
@@ -2584,16 +2783,10 @@ class _SlowLoadState extends State<_SlowLoad> {
 }
 
 class _Activity extends StatelessWidget {
-  const _Activity({
-    super.key,
-    required this.text,
-    this.icon,
-    this.busy = false,
-  });
+  const _Activity({super.key, required this.text, required this.icon});
 
   final String text;
-  final IconData? icon;
-  final bool busy;
+  final IconData icon;
 
   @override
   Widget build(BuildContext context) {
@@ -2601,10 +2794,7 @@ class _Activity extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (busy)
-          const CupertinoActivityIndicator(radius: 6)
-        else if (icon != null)
-          Icon(icon, size: 12, color: colors.accent),
+        Icon(icon, size: 12, color: colors.accent),
         const SizedBox(width: 6),
         Text(
           text,

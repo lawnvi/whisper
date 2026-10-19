@@ -2412,12 +2412,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get remoteFilesClose => '关闭文件';
 
   @override
-  String remoteFilesClipboardPreparing(int count) {
-    return '正在取回 $count 项，好了就能在访达等应用里粘贴';
-  }
+  String get remoteFilesClipboardReady => '可以在访达等应用里粘贴了';
 
   @override
-  String get remoteFilesClipboardReady => '可以在访达等应用里粘贴了';
+  String get remoteFilesClipboardOnPaste => '已复制，在 Whisper 里粘贴时开始传输';
+
+  @override
+  String remoteFilesClipboardOnPasteDrag(String app) {
+    return '已复制，在 Whisper 里粘贴时开始传输；放进$app请直接拖过去';
+  }
 
   @override
   String get windowStreamTextSize => '文字大小';
@@ -2539,6 +2542,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String remoteFilesCopyToDevice(String device, String folder) {
     return '拷贝到 $device 的“$folder”';
   }
+
+  @override
+  String get remoteFilesFinder => '访达';
+
+  @override
+  String get remoteFilesExplorer => '文件资源管理器';
+
+  @override
+  String get remoteFilesFileManager => '文件管理器';
 
   @override
   String remoteFilesCopyFromDevice(String device, String folder) {

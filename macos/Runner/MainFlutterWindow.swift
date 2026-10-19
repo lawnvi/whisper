@@ -130,6 +130,8 @@ class MainFlutterWindow: NSWindow {
     self.contentViewController = flutterViewController
     self.setFrame(windowFrame, display: true)
 
+    FilePromiseProgress.install()
+    FolderPromises.install()
     RegisterGeneratedPlugins(registry: flutterViewController)
     FlutterMultiWindowPlugin.setOnWindowCreatedCallback { controller in
       RegisterGeneratedPlugins(registry: controller)
@@ -148,6 +150,10 @@ class MainFlutterWindow: NSWindow {
     registerFileManagerChannel(with: flutterViewController)
     registerDesktopQuickSendChannel(with: flutterViewController)
     registerSystemPowerChannel(with: flutterViewController)
+    FolderPromises.shared.attach(
+      channel: FlutterMethodChannel(
+        name: "com.vireen.whisper/folder_promises",
+        binaryMessenger: flutterViewController.engine.binaryMessenger))
 
     super.awakeFromNib()
   }
@@ -4154,5 +4160,204 @@ private enum AudioCaptureAccess {
     guard let requestFn = requestFn else { return false }
     requestFn(service, nil, done)
     return true
+  }
+}
+
+/// A file dragged out of the file manager into Finder is written as it
+/// arrives, and super_native_extensions publishes its progress for Finder to
+/// draw on the file: the completed count in thousandths, but no total, so
+/// Finder has no fraction to show. Such progress gets its total (and is said
+/// to be received, as from another device) as it is published.
+enum FilePromiseProgress {
+  private static var installed = false
+
+  static func install() {
+    guard !installed,
+      let original = class_getInstanceMethod(Progress.self, #selector(Progress.publish)),
+      let replacement = class_getInstanceMethod(
+        Progress.self, #selector(Progress.whisperPublishWithTotal))
+    else { return }
+    installed = true
+    method_exchangeImplementations(original, replacement)
+  }
+}
+
+extension Progress {
+  @objc fileprivate func whisperPublishWithTotal() {
+    if kind == .file, fileURL != nil, totalUnitCount == 0 {
+      totalUnitCount = 1000
+      fileOperationKind = .receiving
+    }
+    // Swapped: this calls the original publish.
+    whisperPublishWithTotal()
+  }
+}
+
+/// A folder dragged out of the file manager into Finder. super_native_extensions
+/// only fulfils a promise with a plain file (it creates one where Finder
+/// asks), so a provider promising a folder gets its delegate wrapped as it is
+/// set: the folder is made where Finder asked, the file manager fetches the
+/// other device's folder into it (`write`), and Finder draws the progress
+/// the file manager reports on it (`progress`); Finder's stop is `cancel`.
+final class FolderPromises: NSObject {
+  static let shared = FolderPromises()
+  static let folderType = "public.folder"
+  fileprivate static var delegateKey = 0
+  private static var installed = false
+
+  private var channel: FlutterMethodChannel?
+  private var progresses: [String: Progress] = [:]
+
+  static func install() {
+    guard !installed,
+      let original = class_getInstanceMethod(
+        NSFilePromiseProvider.self, #selector(setter: NSFilePromiseProvider.delegate)),
+      let replacement = class_getInstanceMethod(
+        NSFilePromiseProvider.self, #selector(NSFilePromiseProvider.whisperSetDelegate(_:)))
+    else { return }
+    installed = true
+    method_exchangeImplementations(original, replacement)
+  }
+
+  func attach(channel: FlutterMethodChannel) {
+    self.channel = channel
+    channel.setMethodCallHandler { [weak self] call, result in
+      guard call.method == "progress",
+        let arguments = call.arguments as? [String: Any],
+        let id = arguments["id"] as? String,
+        let fraction = arguments["fraction"] as? Double
+      else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      if let progress = self?.progresses[id] {
+        progress.completedUnitCount = Int64((min(max(fraction, 0), 1) * 1000).rounded())
+      }
+      result(nil)
+    }
+  }
+
+  fileprivate func write(
+    name: String, to url: URL, completion: @escaping (Error?) -> Void
+  ) {
+    guard let channel = channel else {
+      completion(Self.error("the file manager is not running"))
+      return
+    }
+    let folder = Self.freeURL(url)
+    do {
+      try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false)
+    } catch {
+      completion(error)
+      return
+    }
+    let id = UUID().uuidString
+    let progress = Progress(parent: nil, userInfo: nil)
+    progress.totalUnitCount = 1000
+    progress.kind = .file
+    progress.fileURL = folder
+    progress.fileOperationKind = .receiving
+    progress.isCancellable = true
+    progress.cancellationHandler = { [weak self] in
+      DispatchQueue.main.async {
+        self?.channel?.invokeMethod("cancel", arguments: ["id": id])
+      }
+    }
+    progress.publish()
+    progresses[id] = progress
+    channel.invokeMethod(
+      "write", arguments: ["id": id, "name": name, "path": folder.path]
+    ) { [weak self] result in
+      self?.progresses.removeValue(forKey: id)?.unpublish()
+      let failure: String?
+      if let error = result as? FlutterError {
+        failure = error.message ?? error.code
+      } else if (result as AnyObject?) === FlutterMethodNotImplemented {
+        failure = "not handled"
+      } else {
+        failure = nil
+      }
+      guard let failure = failure else {
+        completion(nil)
+        return
+      }
+      // Nothing came, or only part of it: the folder goes if it is empty.
+      if (try? FileManager.default.contentsOfDirectory(atPath: folder.path))?.isEmpty == true {
+        try? FileManager.default.removeItem(at: folder)
+      }
+      completion(Self.error(failure))
+    }
+  }
+
+  /// [url], or "name 2", "name 3"… beside it when something has that name.
+  private static func freeURL(_ url: URL) -> URL {
+    let manager = FileManager.default
+    guard manager.fileExists(atPath: url.path) else { return url }
+    let parent = url.deletingLastPathComponent()
+    let name = url.lastPathComponent
+    var number = 2
+    while true {
+      let candidate = parent.appendingPathComponent("\(name) \(number)")
+      if !manager.fileExists(atPath: candidate.path) {
+        return candidate
+      }
+      number += 1
+    }
+  }
+
+  private static func error(_ message: String) -> NSError {
+    NSError(
+      domain: "com.vireen.whisper.files", code: 1,
+      userInfo: [NSLocalizedDescriptionKey: message])
+  }
+}
+
+/// Stands in for the plugin's delegate on a provider promising a folder.
+private final class FolderPromiseDelegate: NSObject, NSFilePromiseProviderDelegate {
+  /// The provider holds its delegate weakly; this one holds the plugin's.
+  private let original: AnyObject
+
+  init(original: AnyObject) {
+    self.original = original
+  }
+
+  func filePromiseProvider(
+    _ filePromiseProvider: NSFilePromiseProvider, fileNameForType fileType: String
+  ) -> String {
+    if let delegate = original as? NSFilePromiseProviderDelegate {
+      return delegate.filePromiseProvider(filePromiseProvider, fileNameForType: fileType)
+    }
+    let selector = #selector(
+      NSFilePromiseProviderDelegate.filePromiseProvider(_:fileNameForType:))
+    return original.perform(selector, with: filePromiseProvider, with: fileType)?
+      .takeUnretainedValue() as? String ?? "Folder"
+  }
+
+  func filePromiseProvider(
+    _ filePromiseProvider: NSFilePromiseProvider, writePromiseTo url: URL,
+    completionHandler: @escaping (Error?) -> Void
+  ) {
+    FolderPromises.shared.write(
+      name: url.lastPathComponent, to: url, completion: completionHandler)
+  }
+
+  func operationQueue(for filePromiseProvider: NSFilePromiseProvider) -> OperationQueue {
+    .main
+  }
+}
+
+extension NSFilePromiseProvider {
+  @objc fileprivate func whisperSetDelegate(_ delegate: AnyObject?) {
+    if let delegate = delegate, !(delegate is FolderPromiseDelegate),
+      fileType == FolderPromises.folderType
+    {
+      let stand = FolderPromiseDelegate(original: delegate)
+      objc_setAssociatedObject(
+        self, &FolderPromises.delegateKey, stand, .OBJC_ASSOCIATION_RETAIN)
+      // Swapped: this calls the original setter.
+      whisperSetDelegate(stand)
+      return
+    }
+    whisperSetDelegate(delegate)
   }
 }

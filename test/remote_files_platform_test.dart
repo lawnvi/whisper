@@ -258,8 +258,8 @@ tmpfs /run/user/1000 tmpfs rw 0 0
   });
 
   test('every desktop can take the file manager\'s copy off the clipboard', () {
-    // Asked for while another device's newer copy is still on its way, so
-    // Finder or Explorer does not paste the earlier one meanwhile.
+    // Another device's items copied for a paste here replace what the
+    // clipboard held, so Finder does not paste an older thing meanwhile.
     for (final plugin in [
       'macos/Runner/MainFlutterWindow.swift',
       'windows/runner/desktop_clipboard_image_plugin.cpp',
@@ -275,12 +275,12 @@ tmpfs /run/user/1000 tmpfs rw 0 0
       'lib/page/remote_files/files_model.dart',
     ).readAsStringSync();
     expect(model, contains("invokeMethod<bool>('clearFilePaths')"));
-    // Only its own files: nothing copied elsewhere since is removed.
     expect(
       model,
       contains(
-        'if (current.isNotEmpty && listEquals(current, _systemPaths)) {\n'
-        '      await system.clear();',
+        '      await system.clear();\n'
+        '      _systemPaths = const [];\n'
+        '      if (generation == _clipboardGeneration) {',
       ),
     );
   });

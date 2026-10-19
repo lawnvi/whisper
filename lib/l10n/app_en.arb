@@ -1230,15 +1230,17 @@
   "remoteFilesSortBy": "Sort By",
   "remoteFilesMore": "More",
   "remoteFilesClose": "Close Files",
-  "remoteFilesClipboardPreparing": "Fetching {count} items so other apps can paste them",
-  "@remoteFilesClipboardPreparing": {
+  "remoteFilesClipboardReady": "Ready to paste in other apps",
+  "remoteFilesClipboardOnPaste": "Copied. It transfers when you paste it in Whisper.",
+  "remoteFilesClipboardOnPasteDrag": "Copied. Sent when you paste it in Whisper; drag it to put it in {app}",
+  "@remoteFilesClipboardOnPasteDrag": {
+    "description": "Status after copying another device's big files on macOS or Linux: the file manager pastes only files already on disk, so dragging is the way there",
     "placeholders": {
-      "count": {
-        "type": "int"
+      "app": {
+        "type": "String"
       }
     }
   },
-  "remoteFilesClipboardReady": "Ready to paste in other apps",
   "windowStreamTextSize": "Text Size",
   "macPermissionAccessibility": "Accessibility",
   "macPermissionAccessibilityDesc": "Needed to share keyboard and mouse and to work in streamed windows",
@@ -1318,6 +1320,18 @@
         "type": "String"
       }
     }
+  },
+  "remoteFilesFinder": "Finder",
+  "@remoteFilesFinder": {
+    "description": "macOS's file manager, where a copy dragged or pasted out of Whisper goes"
+  },
+  "remoteFilesExplorer": "File Explorer",
+  "@remoteFilesExplorer": {
+    "description": "Windows' file manager, where a copy dragged or pasted out of Whisper goes"
+  },
+  "remoteFilesFileManager": "Files",
+  "@remoteFilesFileManager": {
+    "description": "A Linux desktop's file manager, where a copy dragged or pasted out of Whisper goes"
   },
   "remoteFilesCopyFromDevice": "From {device} to “{folder}”",
   "@remoteFilesCopyFromDevice": {

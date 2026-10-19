@@ -7,14 +7,24 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/model/file_transfer.dart';
 import 'package:super_clipboard/super_clipboard.dart' show WriteProgress;
-import 'package:super_drag_and_drop/super_drag_and_drop.dart' show DropRegion;
+import 'package:super_drag_and_drop/super_drag_and_drop.dart'
+    show DropRegion, WidgetSnapshotter, WidgetSnapshotterState;
 import 'package:super_native_extensions/raw_clipboard.dart' as raw;
+// ignore: implementation_imports
+import 'package:super_native_extensions/src/native/context.dart'
+    show superNativeExtensionsContext;
+// The channel context super_native_extensions talks through (a mock in
+// tests).
+// ignore: depend_on_referenced_packages
+import 'package:irondash_message_channel/irondash_message_channel.dart'
+    show MockMessageChannelContext, MockMethodChannel;
 import 'package:whisper/page/remote_files/files_desktop.dart';
 import 'package:whisper/page/remote_files/files_drag.dart';
 import 'package:whisper/page/remote_files/files_icons.dart';
@@ -47,6 +57,19 @@ class _FakeClipboard extends FilesSystemClipboard {
   @override
   Future<bool> clear() async {
     contents = const [];
+    return true;
+  }
+
+  /// Files put there to be fetched when pasted (Explorer).
+  List<FilesItem> fetched = const [];
+
+  @override
+  Future<bool> writeFetched(
+    FilesController controller,
+    List<FilesItem> items,
+  ) async {
+    contents = const [];
+    fetched = items;
     return true;
   }
 }
@@ -344,6 +367,162 @@ void main() {
     controller.dispose();
   });
 
+  testWidgets('on a tablet a finger scrolls the list; holding picks up', (
+    tester,
+  ) async {
+    // An iPad is wide enough for this layout: a swipe used to drag the item
+    // under the finger instead of scrolling.
+    await tester.binding.setSurfaceSize(const Size(1024, 768));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    late FilesController controller;
+    await tester.runAsync(() async {
+      for (var i = 0; i < 60; i++) {
+        await File(
+          p.join(local.path, 'note ${i.toString().padLeft(2, '0')}.txt'),
+        ).writeAsString('$i');
+      }
+      controller = controllerFor();
+      await _until(() => controller.entries.length > 60);
+    });
+    final actions = FilesActions(
+      controller: controller,
+      context: () => tester.element(find.byType(FinderView)),
+    );
+    await tester.pumpWidget(
+      app(
+        FinderView(controller: controller, actions: actions),
+        size: const Size(1024, 768),
+      ),
+    );
+    await tester.pump();
+    final picture = find.byWidgetPredicate(
+      (widget) => widget.runtimeType.toString() == '_DragFeedback',
+    );
+    final item = find.text('note 05.txt');
+    final before = tester.getTopLeft(item).dy;
+
+    final swipe = await tester.startGesture(
+      tester.getCenter(item),
+      kind: PointerDeviceKind.touch,
+    );
+    for (var i = 0; i < 12; i++) {
+      await swipe.moveBy(const Offset(0, -20));
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(picture, findsNothing);
+    await swipe.up();
+    await tester.pumpAndSettle();
+    expect(tester.getTopLeft(item).dy, lessThan(before - 150));
+    // Nothing the finger passed over got selected.
+    expect(controller.selection, isEmpty);
+
+    await tester.tap(item, kind: PointerDeviceKind.touch);
+    await tester.pump();
+    expect(controller.selection, {'note 05.txt'});
+
+    // Held, the item is ready to go: moving on picks it up.
+    final hold = await tester.startGesture(
+      tester.getCenter(item),
+      kind: PointerDeviceKind.touch,
+    );
+    await tester.pump(const Duration(milliseconds: 700));
+    expect(picture, findsNothing);
+    await hold.moveBy(const Offset(40, 0));
+    await tester.pump();
+    expect(find.text('Copy'), findsNothing);
+    expect(picture, findsOneWidget);
+    await hold.up();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(picture, findsNothing);
+
+    // Held and let go: the menu a right click opens (no right button on
+    // a tablet).
+    final menu = await tester.startGesture(
+      tester.getCenter(item),
+      kind: PointerDeviceKind.touch,
+    );
+    await tester.pump(const Duration(milliseconds: 700));
+    await menu.up();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Copy'), findsOneWidget);
+    expect(picture, findsNothing);
+    await tester.tapAt(const Offset(5, 5), kind: PointerDeviceKind.touch);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Copy'), findsNothing);
+    expect(tester.takeException(), isNull);
+    controller.dispose();
+  });
+
+  testWidgets(
+    'a tablet selects several by taps and opens menus by holding',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1024, 768));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      late FilesController controller;
+      await tester.runAsync(() async {
+        controller = controllerFor();
+        await _until(() => controller.entries.isNotEmpty);
+      });
+      final actions = FilesActions(
+        controller: controller,
+        context: () => tester.element(find.byType(FinderView)),
+      );
+      await tester.pumpWidget(
+        app(
+          FinderView(controller: controller, actions: actions),
+          size: const Size(1024, 768),
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('Select'), kind: PointerDeviceKind.touch);
+      await tester.pump();
+      expect(find.text('Done'), findsOneWidget);
+      for (final name in ['b2.txt', 'photo.jpg', 'z folder']) {
+        await tester.tap(find.text(name), kind: PointerDeviceKind.touch);
+        await tester.pump(const Duration(milliseconds: 400));
+      }
+      expect(controller.selection, {'b2.txt', 'photo.jpg', 'z folder'});
+      // A second tap takes one away again (no folder opens meanwhile).
+      await tester.tap(find.text('z folder'), kind: PointerDeviceKind.touch);
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(controller.selection, {'b2.txt', 'photo.jpg'});
+      expect(controller.location!.path, '');
+      // Pressed through its handler: copies left by earlier tests show the
+      // window's island over the middle of the toolbar.
+      tester
+          .widget<GestureDetector>(
+            find
+                .ancestor(
+                  of: find.text('Done'),
+                  matching: find.byType(GestureDetector),
+                )
+                .first,
+          )
+          .onTap!();
+      await tester.pump();
+      expect(find.text('Select'), findsOneWidget);
+
+      // Held on the blank below the items: the folder's menu.
+      final blank = await tester.startGesture(
+        const Offset(700, 700),
+        kind: PointerDeviceKind.touch,
+      );
+      await tester.pump(const Duration(milliseconds: 700));
+      await blank.up();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('New folder'), findsWidgets);
+      expect(find.text('Select All'), findsOneWidget);
+      await tester.tap(find.text('Select All'), kind: PointerDeviceKind.touch);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(controller.selection.length, controller.entries.length);
+      expect(find.text('Done'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      controller.dispose();
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.iOS),
+  );
+
   testWidgets('on macOS and Windows items are dragged by the system', (
     tester,
   ) async {
@@ -510,6 +689,67 @@ void main() {
     await tester.pumpAndSettle();
     expect(controller.location!.path, 'Documents');
     expect(find.text('This folder is empty'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    controller.dispose();
+  });
+
+  testWidgets('an iPhone opens its Whisper folder as "This device"', (
+    tester,
+  ) async {
+    // Its sandbox is the one folder there is: tapped as "This device", it
+    // reads as that, not as a favorite of the same name (seen on an iPad).
+    await tester.binding.setSurfaceSize(const Size(390, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    late FilesController controller;
+    await tester.runAsync(() async {
+      controller = FilesController(
+        local: LocalFsBrowser(
+          files: FsHostFiles(
+            resolver: FsPathResolver([
+              FsRoot(
+                id: 'documents',
+                directory: local.path,
+                kind: FsRootKind.documents,
+              ),
+            ]),
+          ),
+        ),
+        peers: FilesPeers(
+          connected: () => const {},
+          canBrowse: (_) => false,
+          describe: (_) => (name: '', platform: ''),
+        ),
+      );
+      await _until(() => controller.entries.isNotEmpty);
+    });
+    final actions = FilesActions(
+      controller: controller,
+      context: () => tester.element(find.byType(FilesPhoneView)),
+    );
+    await tester.pumpWidget(
+      app(
+        FilesPhoneView(
+          controller: controller,
+          actions: actions,
+          startAtDevice: false,
+        ),
+        size: const Size(390, 800),
+      ),
+    );
+    await tester.pump();
+    expect(find.text('This device'), findsOneWidget);
+    expect(find.text('Favorites'), findsNothing);
+    expect(find.text('Whisper Folder'), findsNothing);
+    await tester.runAsync(() async {
+      await tester.tap(find.text('This device'));
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    });
+    await tester.pumpAndSettle();
+    expect(controller.location!.root, 'documents');
+    expect(controller.location!.path, '');
+    expect(find.text('This device'), findsWidgets);
+    expect(find.text('Whisper Folder'), findsNothing);
+    expect(find.text('b2.txt'), findsOneWidget);
     expect(tester.takeException(), isNull);
     controller.dispose();
   });
@@ -779,43 +1019,76 @@ void main() {
       return (controller, clipboard);
     }
 
-    test('a newer copy takes the older one off the clipboard', () async {
+    test('another device\'s files are fetched only once pasted here', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
       final (controller, clipboard) = await browsePhone();
-      controller.select('b2.txt');
-      controller.copySelection();
-      await _until(() => controller.copies.length == 1);
-      expect(controller.clipboardPreparing, isTrue);
-      final first = controller.copies.keys.single;
-      await arrive(first, 'b2.txt', 'two');
-      await _until(() => clipboard.contents.isNotEmpty);
-      expect(p.basename(clipboard.contents.single), 'b2.txt');
-      expect(controller.clipboardPreparing, isFalse);
-
+      clipboard.contents = ['/elsewhere/older.pdf'];
       controller.select('photo.jpg');
       controller.copySelection();
-      await _until(() => controller.copies.length == 2);
-      // Pasted in Finder now, b2.txt would be the wrong file.
+      await _until(() => controller.clipboardOnPaste);
+      // Finder pastes only files already on disk: nothing is fetched for
+      // it (a drag takes them there). The older thing is gone, or a paste
+      // there brought it out as a file of its own ("已粘贴 …").
+      expect(controller.copies, isEmpty);
       expect(clipboard.contents, isEmpty);
-      expect(controller.clipboardPreparing, isTrue);
-      final second = controller.copies.keys.last;
-      await arrive(second, 'photo.jpg', 'jpg');
-      await _until(() => clipboard.contents.isNotEmpty);
-      expect(p.basename(clipboard.contents.single), 'photo.jpg');
+      expect(controller.clipboardDragsOut, isTrue);
+      // Leaving the app (for Finder, say) fetches nothing either.
+      TestWidgetsFlutterBinding.instance
+        ..handleAppLifecycleStateChanged(AppLifecycleState.resumed)
+        ..handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      TestWidgetsFlutterBinding.instance.handleAppLifecycleStateChanged(
+        AppLifecycleState.resumed,
+      );
+      expect(controller.copies, isEmpty);
+
+      const docs = FilesLocation(FilesDevice.localId, 'home', 'Documents');
+      expect(await controller.externalClipboardPaths(), isNull);
+      expect(await controller.copy(controller.clipboard, docs), 1);
+      await _until(() => controller.copies.length == 1);
+      await arrive(controller.copies.keys.single, 'photo.jpg', 'jpg');
+      final landed = File(p.join(local.path, 'Documents', 'photo.jpg'));
+      await _until(landed.existsSync);
+      expect(await landed.readAsString(), 'jpg');
+    });
+
+    test('what the system file manager takes by a drag', () {
+      const phone = FilesLocation('phone', 'home', '');
+      const file = FilesItem(phone, 'b2.txt', isDir: false);
+      const folder = FilesItem(phone, 'z folder', isDir: true);
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      final takes = <TargetPlatform, (bool, bool)>{};
+      for (final platform in [
+        TargetPlatform.macOS,
+        TargetPlatform.windows,
+        TargetPlatform.linux,
+      ]) {
+        debugDefaultTargetPlatformOverride = platform;
+        takes[platform] = (filesDragsOut(file), filesDragsOut(folder));
+      }
+      // Finder takes files and folders; Explorer files; on Linux a drag
+      // stays in the window.
+      expect(takes, {
+        TargetPlatform.macOS: (true, true),
+        TargetPlatform.windows: (true, false),
+        TargetPlatform.linux: (false, false),
+      });
     });
 
     test('a paste waiting for one copy still lands after the next', () async {
       final (controller, _) = await browsePhone();
       controller.select('b2.txt');
       controller.copySelection();
-      await _until(() => controller.copies.length == 1);
-      final first = controller.copies.keys.single;
       const home = FilesLocation(FilesDevice.localId, 'home', '');
       expect(await controller.copy(controller.clipboard, home), 1);
+      await _until(() => controller.copies.length == 1);
+      final first = controller.copies.keys.single;
 
       // Copied again before the first one arrived.
       controller.select('photo.jpg');
       controller.copySelection();
-      await _until(() => controller.copies.length == 2);
+      await _until(() => controller.clipboardOnPaste);
       await arrive(first, 'b2.txt', 'two');
       final pasted = File(p.join(local.path, 'b2 2.txt'));
       await _until(pasted.existsSync);
@@ -846,16 +1119,24 @@ void main() {
               representation.runtimeType,
         ];
         // This device's file as it is; another device's file once fetched;
-        // another device's folder only inside the window.
+        // another device's folder as a folder Finder fills from here.
         expect(await kinds(const FilesItem(home, 'b2.txt', isDir: false)), [
           raw.DataRepresentationSimple,
         ]);
         expect(await kinds(const FilesItem(phone, 'b2.txt', isDir: false)), [
           raw.DataRepresentationVirtualFile,
         ]);
+        final folder = [
+          for (final data in (await filesDragItem(
+            controller,
+            const FilesItem(phone, 'z folder', isDir: true),
+          )).data)
+            ...(await data).representations,
+        ];
+        expect(folder.single, isA<raw.DataRepresentationVirtualFile>());
         expect(
-          await kinds(const FilesItem(phone, 'z folder', isDir: true)),
-          [],
+          (folder.single as raw.DataRepresentationVirtualFile).format,
+          'public.folder',
         );
         expect(filesItemFromLocalData({'path': '/elsewhere'}), isNull);
       },
@@ -935,37 +1216,152 @@ void main() {
       await out.dispose();
     });
 
-    test('a paste takes over a copy still on its way', () async {
+    test('on Windows Explorer fetches a pasted file itself', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
       final (controller, clipboard) = await browsePhone();
       controller.select('b2.txt');
       controller.copySelection();
-      await _until(() => controller.copies.length == 1);
-      final first = controller.copies.keys.single;
+      await _until(() => clipboard.fetched.isNotEmpty);
+      // On the clipboard at once, nothing fetched ahead.
+      expect(clipboard.fetched.single.path, 'b2.txt');
+      expect(controller.clipboardReady, isTrue);
+      expect(controller.copies, isEmpty);
+
+      // Pasted here, it is fetched straight into the folder.
       const docs = FilesLocation(FilesDevice.localId, 'home', 'Documents');
       expect(await controller.copy(controller.clipboard, docs), 1);
-      await _until(
-        () => controller.copyList.batches.first.transfers.isNotEmpty,
-      );
-      expect(controller.copyList.batches.first.transfers.keys, [first]);
-
-      // It lands in Documents itself: nothing waits for the staging
-      // folder, nothing is copied a second time.
-      await arrive(first, 'b2.txt', 'two');
+      await _until(() => controller.copies.length == 1);
+      await arrive(controller.copies.keys.single, 'b2.txt', 'two');
       final landed = File(p.join(local.path, 'Documents', 'b2.txt'));
       await _until(landed.existsSync);
-      expect(await landed.readAsString(), 'two');
-      expect(File(p.join(downloads.path, 'b2.txt')).existsSync(), isFalse);
-      // Other apps paste the file where it landed.
-      await _until(() => clipboard.contents.isNotEmpty);
-      expect(
-        File(clipboard.contents.single).resolveSymbolicLinksSync(),
-        landed.resolveSymbolicLinksSync(),
-      );
 
-      // Pasted again, it is fetched anew, not taken from Documents.
-      const home = FilesLocation(FilesDevice.localId, 'home', '');
-      expect(await controller.copy(controller.clipboard, home), 1);
-      await _until(() => controller.copies.length == 2);
+      // A folder is not a file Explorer can be handed: it comes over once
+      // pasted here.
+      clipboard.fetched = const [];
+      controller.select('z folder');
+      controller.copySelection();
+      await _until(() => controller.clipboardOnPaste);
+      expect(clipboard.fetched, isEmpty);
+      expect(controller.copies, hasLength(1));
+    });
+
+    testWidgets('the drag picture keeps its own size inside a long row', (
+      tester,
+    ) async {
+      final snapshotter = GlobalKey<WidgetSnapshotterState>();
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: Center(
+            child: SizedBox(
+              width: 900,
+              height: 28,
+              child: WidgetSnapshotter(
+                key: snapshotter,
+                child: const ColoredBox(color: Color(0xFF888888)),
+              ),
+            ),
+          ),
+        ),
+      );
+      // The picture is built into the tree to be laid out and drawn; its
+      // size there is the size of the picture.
+      const face = ValueKey('drag-face');
+      unawaited(
+        snapshotter.currentState!.getSnapshot(
+          const Offset(10, 10),
+          Object(),
+          () => filesDragPicture(
+            const SizedBox(
+              key: face,
+              width: 84,
+              height: 84,
+              child: ColoredBox(color: Color(0xFF0A84FF)),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(tester.getSize(find.byKey(face)), const Size(84, 84));
+    });
+
+    testWidgets('⌘C, a place in the sidebar, ⌘V: the paste starts at once', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(1100, 720));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      // Real time passes here, enough for the system drag and drop to set
+      // itself up: it finds no native side and does nothing.
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('dev.irondash.engine_context'),
+        (call) async => 1,
+      );
+      final native = superNativeExtensionsContext as MockMessageChannelContext;
+      for (final channel in ['DragManager', 'DropManager']) {
+        native.registerMockMethodCallHandler(channel, (call) async => null);
+      }
+      late FilesController controller;
+      await tester.runAsync(() async {
+        (controller, _) = await browsePhone();
+      });
+      final actions = FilesActions(
+        controller: controller,
+        context: () => tester.element(find.byType(FinderView)),
+      );
+      await tester.pumpWidget(
+        app(FinderView(controller: controller, actions: actions)),
+      );
+      await tester.pump();
+      // What the keys start runs in the test's zone: frames and real time
+      // both have to pass.
+      Future<void> until(bool Function() done) async {
+        for (var i = 0; i < 200 && !done(); i++) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 10)),
+          );
+          await tester.pump();
+        }
+        expect(done(), isTrue);
+      }
+
+      final primary = Platform.isMacOS
+          ? LogicalKeyboardKey.metaLeft
+          : LogicalKeyboardKey.controlLeft;
+      Future<void> press(LogicalKeyboardKey key) async {
+        await tester.sendKeyDownEvent(primary);
+        await tester.sendKeyEvent(key);
+        await tester.sendKeyUpEvent(primary);
+        await tester.pump();
+      }
+
+      // A file no other test here copies (the same paste twice within
+      // seconds is one copy).
+      await tester.tap(find.text('b10.txt'));
+      await tester.pump();
+      await press(LogicalKeyboardKey.keyC);
+      await until(() => controller.clipboardOnPaste);
+      expect(controller.copies, isEmpty);
+
+      // This Mac's Documents, picked in the sidebar.
+      await tester.tap(find.text('Documents').first);
+      await until(() => controller.location?.deviceId == FilesDevice.localId);
+      await press(LogicalKeyboardKey.keyV);
+      await until(() => controller.copies.length == 1);
+      final fetching = controller.copies.keys.single;
+      FileCopyBatch? pasted() => controller.copyList.batches
+          .where((batch) => batch.transfers.containsKey(fetching))
+          .firstOrNull;
+      await until(() => pasted() != null);
+      expect(pasted()!.finished, isFalse);
+
+      await tester.runAsync(() => arrive(fetching, 'b10.txt', 'ten'));
+      final landed = File(p.join(local.path, 'Documents', 'b10.txt'));
+      await until(landed.existsSync);
+      await until(() => pasted()!.finished);
+      await tester.pumpWidget(const SizedBox());
+      // The status bar's "copied" note goes after a while.
+      await tester.pump(const Duration(seconds: 9));
     });
   });
 }

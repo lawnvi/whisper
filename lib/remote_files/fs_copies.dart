@@ -27,6 +27,10 @@ enum FileCopyPhase {
 
 /// One copy the user made (a paste, a drop): a file or several, maybe
 /// folders, between this device and another one.
+/// Where a copy that leaves the app goes ([FileCopyBatch.target]): into
+/// the system's file manager (dragged or pasted there).
+enum FilesOutside { fileManager }
+
 class FileCopyBatch {
   FileCopyBatch._({
     required this.id,
@@ -433,18 +437,13 @@ class FileCopies extends ChangeNotifier {
     _changed();
   }
 
-  FileCopyBatch? _batchOf(String transferId) {
-    for (final batch in batches) {
-      if (batch.transfers.containsKey(transferId)) {
-        return batch;
-      }
-    }
-    return null;
-  }
+  /// Every batch [transferId] serves (copies can share a transfer).
+  Iterable<FileCopyBatch> _batchesOf(String transferId) =>
+      batches.where((batch) => batch.transfers.containsKey(transferId));
 
   void _onUpdate(TransferSnapshot snapshot) {
-    final batch = _batchOf(snapshot.transferId);
-    if (batch == null) {
+    final serving = _batchesOf(snapshot.transferId).toList();
+    if (serving.isEmpty) {
       _early
         ..remove(snapshot.transferId)
         ..[snapshot.transferId] = snapshot;
@@ -453,14 +452,16 @@ class FileCopies extends ChangeNotifier {
       }
       return;
     }
-    batch.transfers[snapshot.transferId] = snapshot;
-    batch.noShow.remove(snapshot.transferId);
+    for (final batch in serving) {
+      batch.transfers[snapshot.transferId] = snapshot;
+      batch.noShow.remove(snapshot.transferId);
+    }
     _changed();
   }
 
   void _onPlaced(PlacedTransfer placed) {
-    final batch = _batchOf(placed.transferId);
-    if (batch == null) {
+    final serving = _batchesOf(placed.transferId).toList();
+    if (serving.isEmpty) {
       _earlyLanded
         ..remove(placed.transferId)
         ..[placed.transferId] = placed.path;
@@ -469,7 +470,9 @@ class FileCopies extends ChangeNotifier {
       }
       return;
     }
-    batch.landed[placed.transferId] = placed.path;
+    for (final batch in serving) {
+      batch.landed[placed.transferId] = placed.path;
+    }
   }
 
   /// Transfers announced long ago that never showed up count as failed.

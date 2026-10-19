@@ -20,6 +20,7 @@ import '../../remote_files/fs_paths.dart';
 import '../../remote_files/fs_placement.dart';
 import '../../remote_files/fs_protocol.dart';
 import '../../socket/svrmanager.dart';
+import 'files_drag.dart';
 
 /// A device in the sidebar ("位置"): this one, or a trusted peer.
 enum FilesDeviceState {
@@ -94,12 +95,15 @@ class FilesLocation {
 
 /// Something copied with ⌘C (or picked to copy on a phone).
 class FilesItem {
-  const FilesItem(this.location, this.name, {required this.isDir});
+  const FilesItem(this.location, this.name, {required this.isDir, this.size});
 
   /// The folder it is in.
   final FilesLocation location;
   final String name;
   final bool isDir;
+
+  /// A file's size as listed, when known.
+  final int? size;
 
   String get path => location.child(name);
 }
@@ -153,6 +157,13 @@ class FilesSystemClipboard {
     return const DesktopClipboardFileWriter().writeFilePaths(paths);
   }
 
+  /// Another device's files, each fetched when an app pastes it (see
+  /// [filesVirtualClipboard]).
+  Future<bool> writeFetched(
+    FilesController controller,
+    List<FilesItem> items,
+  ) => writeFetchedToClipboard(controller, items);
+
   Future<List<String>> read() async {
     try {
       return await _channel.invokeListMethod<String>('readFilePaths') ??
@@ -201,20 +212,9 @@ class FilesController extends ChangeNotifier {
     );
     _updates = TransferPlacements.shared.updates.listen(_onTransfer);
     _placed = TransferPlacements.shared.placed.listen((placed) {
-      if (_stagedArrived(placed.transferId, placed.path)) {
-        return;
-      }
-      if (copies.containsKey(placed.transferId)) {
-        if (location?.deviceId == FilesDevice.localId) {
-          unawaited(reload());
-        }
-        return;
-      }
-      _remember(_earlyPlaced, placed.transferId, placed.path);
-    });
-    _unplaced = TransferPlacements.shared.unplaced.listen((transferId) {
-      if (!_stagedGone(transferId)) {
-        _remember(_earlyPlaced, transferId, null);
+      if (copies.containsKey(placed.transferId) &&
+          location?.deviceId == FilesDevice.localId) {
+        unawaited(reload());
       }
     });
     unawaited(_cleanStaging());
@@ -232,7 +232,6 @@ class FilesController extends ChangeNotifier {
   Timer? _devicesTimer;
   StreamSubscription<TransferSnapshot>? _updates;
   StreamSubscription<PlacedTransfer>? _placed;
-  StreamSubscription<String>? _unplaced;
 
   FilesLocation? location;
 
@@ -383,7 +382,12 @@ class FilesController extends ChangeNotifier {
     return [
       for (final entry in _entries)
         if (selection.contains(entry.name))
-          FilesItem(here, entry.name, isDir: entry.isDir),
+          FilesItem(
+            here,
+            entry.name,
+            isDir: entry.isDir,
+            size: entry.isDir ? null : entry.size,
+          ),
     ];
   }
 
@@ -836,43 +840,38 @@ class FilesController extends ChangeNotifier {
     unawaited(_publish(clipboard));
   }
 
-  // The system clipboard gets real files too, so Finder and other apps can
-  // paste what was copied here: this device's files at once, another
-  // device's once they have been fetched into a staging folder.
+  // The system clipboard gets real files too, so other apps can paste what
+  // was copied here: this device's files as they are. Another device's
+  // files only where an app fetches them as it pastes (Explorer); Finder
+  // and Linux file managers paste only files already on disk, and there
+  // they are pasted here or dragged out instead.
   final FilesSystemClipboard? _system;
 
   /// The system clipboard's files as it reads back what was written here
   /// last (a platform may spell a path differently from how it was given).
   List<String> _systemPaths = const [];
 
-  /// What is being staged for the latest copy of another device's items.
-  _Staging? _staging;
-
-  /// Every staging still waited for, by transfer: the latest and earlier
-  /// ones a paste here still takes its files from.
-  final _stagings = <String, _Staging>{};
-
-  /// Where copies landed (null: they could not be moved there) before it
-  /// was known which staging they belong to.
-  final _earlyPlaced = <String, String?>{};
-
   /// Transfer updates from before their copy was being followed here.
   final _earlySnapshots = <String, TransferSnapshot?>{};
 
   int _clipboardGeneration = 0;
 
-  /// Another device's items are on their way to the system clipboard.
-  bool get clipboardPreparing => _staging?.settled == false;
-
   /// Another device's items can now be pasted in other apps.
   bool clipboardReady = false;
 
-  int get stagedCount => _staging?.sources.length ?? 0;
+  /// Another device's items were copied for a paste here: they come over
+  /// once pasted.
+  bool clipboardOnPaste = false;
 
+  /// With [clipboardOnPaste]: the system file manager takes them by a drag
+  /// ([filesDragsOut]).
+  bool clipboardDragsOut = false;
+
+  /// Where another device's files dragged out wait to be handed over.
   static Future<Directory> _stagingRoot() async =>
       Directory(p.join(Directory.systemTemp.path, 'whisper_files_clipboard'));
 
-  /// Staging folders from earlier copies; a day is plenty to paste them.
+  /// Staging folders left behind (an app that quit while taking a file).
   static Future<void> _cleanStaging() async {
     try {
       final root = await _stagingRoot();
@@ -906,9 +905,8 @@ class FilesController extends ChangeNotifier {
       return;
     }
     final generation = ++_clipboardGeneration;
-    // An earlier staging keeps going for a paste that waits on it.
-    _staging = null;
     clipboardReady = false;
+    clipboardOnPaste = false;
     try {
       final local = deviceById(FilesDevice.localId)!.browser! as LocalFsBrowser;
       if (items.first.location.deviceId == FilesDevice.localId) {
@@ -921,208 +919,54 @@ class FilesController extends ChangeNotifier {
         }
         return;
       }
-      final client = deviceById(items.first.location.deviceId)?.client;
-      if (client == null) {
+      // Explorer fetches each file once it is pasted there: nothing is
+      // fetched ahead, and a paste there starts at once. A paste here
+      // fetches into its folder.
+      if (filesVirtualClipboard && items.every((item) => !item.isDir)) {
+        _systemPaths = const [];
+        if (await system.writeFetched(this, items) &&
+            generation == _clipboardGeneration) {
+          FilesLog.write(
+            'clipboard: ${items.length} item(s) to fetch on paste',
+          );
+          _markReady();
+        }
+        _notify();
         return;
       }
-      final staging = _Staging([for (final item in items) _sourceKey(item)]);
-      _staging = staging;
-      _notify();
-      FilesLog.write('clipboard: staging ${items.length} item(s)');
-      // What the system clipboard holds now is an earlier copy: pasted in
-      // Finder meanwhile it would be the wrong files. Whatever stays there
-      // is older than this copy, so a paste here does not take it.
-      await _clearOwnSystemClipboard(system);
-      _systemPaths = await system.read();
-      try {
-        final folder = await Directory(
-          p.join(
-            (await _stagingRoot()).path,
-            '${DateTime.now().millisecondsSinceEpoch}',
-          ),
-        ).create(recursive: true);
-        final ids = await client.fetch([
-          for (final item in items) (root: item.location.root, path: item.path),
-        ], folder.path);
-        FilesLog.write(
-          'clipboard: staging as ${ids.map(FilesLog.id).join(',')}',
-        );
-        _stageArrived(staging, ids);
-      } catch (error) {
-        FilesLog.write('clipboard: staging failed (${error.runtimeType})');
-        staging.start(const []);
-      }
+      // For a paste here. It still replaces what the clipboard held: left
+      // there, a paste in Finder would bring out the older thing (an
+      // image, some text) as a file of its own.
+      await system.clear();
+      _systemPaths = const [];
       if (generation == _clipboardGeneration) {
-        await _publishStaged(staging);
+        FilesLog.write('clipboard: ${items.length} item(s) for a paste');
+        clipboardOnPaste = true;
+        clipboardDragsOut = items.every(filesDragsOut);
+        _markShortly(() => clipboardOnPaste = false);
       }
+      _notify();
     } catch (_) {
       // The copy still works inside the file manager.
     }
   }
 
-  /// [ids] carry [staging]: follow them, with whatever about them came in
-  /// before they were known.
-  void _stageArrived(_Staging staging, List<String> ids) {
-    staging.start(ids);
-    for (final id in ids) {
-      _stagings[id] = staging;
-    }
-    _track(ids, refreshRemote: false);
-    for (final id in ids) {
-      if (_earlyPlaced.containsKey(id)) {
-        final path = _earlyPlaced.remove(id);
-        path == null ? _stagedGone(id) : _stagedArrived(id, path);
-      }
-    }
-    // One the other device announced but never started does not keep the
-    // clipboard "preparing" for good.
-    staging.watch(FileCopies.noShowAfter, () {
-      for (final id in ids) {
-        if (staging.paths.containsKey(id) &&
-            staging.paths[id] == null &&
-            copies[id] == null) {
-          FilesLog.write('clipboard: ${FilesLog.id(id)} never started');
-          _stagedGone(id);
-        }
+  /// Says for a moment that other apps can paste the latest copy.
+  void _markReady() {
+    clipboardReady = true;
+    _markShortly(() => clipboardReady = false);
+  }
+
+  /// Runs [clear] (taking a note off the status bar) after a while unless
+  /// a newer copy was made.
+  void _markShortly(void Function() clear) {
+    final generation = _clipboardGeneration;
+    Timer(const Duration(seconds: 8), () {
+      if (generation == _clipboardGeneration) {
+        clear();
+        _notify();
       }
     });
-  }
-
-  /// A staged transfer landed at [path]; false if it is not one.
-  bool _stagedArrived(String transferId, String path) {
-    final staging = _stagings.remove(transferId);
-    if (staging == null) {
-      return false;
-    }
-    staging.place(transferId, path);
-    unawaited(_publishStaged(staging));
-    return true;
-  }
-
-  /// A staged transfer failed or could not be moved; false if it is not
-  /// one.
-  bool _stagedGone(String transferId) {
-    final staging = _stagings.remove(transferId);
-    if (staging == null) {
-      return false;
-    }
-    staging.drop(transferId);
-    unawaited(_publishStaged(staging));
-    return true;
-  }
-
-  /// The staging of exactly [items], when that is what is being staged.
-  _Staging? _stagingOf(List<FilesItem> items) {
-    final staging = _staging;
-    if (staging == null) {
-      return null;
-    }
-    final keys = [for (final item in items) _sourceKey(item)]..sort();
-    return listEquals(keys, staging.sources) ? staging : null;
-  }
-
-  /// A paste here of what is being staged: the same transfers carry it.
-  /// Those still on their way land here instead, without waiting to reach
-  /// the staging folder first; those already there are copied over.
-  Future<void> _pasteStaged(
-    FileCopyBatch batch,
-    _Staging staging,
-    FilesLocation target,
-  ) async {
-    try {
-      final ids = await staging.ids;
-      for (final id in ids) {
-        copyList.add(batch, id);
-      }
-      copyList.started(batch);
-      final local = deviceById(FilesDevice.localId)!.browser! as LocalFsBrowser;
-      final folder = await local.realPath(target.root, target.path);
-      for (final id in ids) {
-        if (staging.paths.containsKey(id) &&
-            staging.paths[id] == null &&
-            TransferPlacements.shared.retarget(id, folder)) {
-          staging.taken.add(id);
-        }
-      }
-      await staging.settledFuture;
-      // Those taken over landed here already (and are what the system
-      // clipboard gets).
-      final files = [
-        for (final id in ids)
-          if (!staging.taken.contains(id)) ?staging.paths[id],
-      ];
-      FilesLog.write(
-        'paste: ${staging.taken.length} of ${ids.length} staged item(s) '
-        'sent here, ${files.length} copied in',
-      );
-      for (final path in files) {
-        await _copyInto(path, folder);
-      }
-      if (shownLocation == target) {
-        await reload();
-      }
-    } catch (error) {
-      // Shown as failed in the list of copies; pasting again retries.
-      FilesLog.write('paste: staged copy failed (${error.runtimeType})');
-    } finally {
-      copyList.started(batch);
-    }
-  }
-
-  static Future<void> _copyInto(String source, String folder) async {
-    final name = p.basename(source);
-    var dest = p.join(folder, name);
-    final stem = p.basenameWithoutExtension(name);
-    final ext = p.extension(name);
-    for (
-      var n = 2;
-      await FileSystemEntity.type(dest, followLinks: false) !=
-          FileSystemEntityType.notFound;
-      n++
-    ) {
-      dest = p.join(folder, '$stem $n$ext');
-    }
-    if (await FileSystemEntity.isDirectory(source)) {
-      await Directory(dest).create(recursive: true);
-      await for (final entry in Directory(source).list(followLinks: false)) {
-        await _copyInto(entry.path, dest);
-      }
-    } else {
-      await File(source).copy(dest);
-    }
-  }
-
-  /// Puts [staging]'s files on the system clipboard once all are there,
-  /// if it is still the latest copy.
-  Future<void> _publishStaged(_Staging staging) async {
-    final system = _system;
-    if (system == null ||
-        !identical(staging, _staging) ||
-        !staging.settled ||
-        staging.published) {
-      _notify();
-      return;
-    }
-    staging.published = true;
-    final paths = staging.files;
-    // Something copied elsewhere since this copy is newer: left alone.
-    if (!listEquals(await system.read(), _systemPaths)) {
-      FilesLog.write('clipboard: copied elsewhere meanwhile, kept');
-      _notify();
-      return;
-    }
-    if (paths.isNotEmpty && await _writeSystem(system, paths)) {
-      FilesLog.write('clipboard: ${paths.length} staged item(s) ready');
-      clipboardReady = true;
-      final generation = _clipboardGeneration;
-      Timer(const Duration(seconds: 8), () {
-        if (generation == _clipboardGeneration && clipboardReady) {
-          clipboardReady = false;
-          _notify();
-        }
-      });
-    }
-    _notify();
   }
 
   /// Writes [paths] to the system clipboard and remembers how it reads
@@ -1140,18 +984,6 @@ class FilesController extends ChangeNotifier {
     final back = await system.read();
     _systemPaths = back.isEmpty ? paths : back;
     return true;
-  }
-
-  /// Takes this file manager's earlier copy off the system clipboard (and
-  /// nothing someone copied elsewhere since).
-  Future<void> _clearOwnSystemClipboard(FilesSystemClipboard system) async {
-    if (_systemPaths.isEmpty) {
-      return;
-    }
-    final current = await system.read();
-    if (current.isNotEmpty && listEquals(current, _systemPaths)) {
-      await system.clear();
-    }
   }
 
   /// Files someone copied in another app (Finder, Explorer…), when the
@@ -1247,27 +1079,6 @@ class FilesController extends ChangeNotifier {
       upload ? target.deviceId : items.first.location.deviceId,
     )!;
     final client = remote.client!;
-    // Copied here a moment ago, another device's files are already on
-    // their way to the staging folder (for other apps to paste): this
-    // paste takes them from there instead of fetching them a second time.
-    // Once a paste took them over, another one fetches its own.
-    final staging = !upload && target.deviceId == FilesDevice.localId
-        ? _stagingOf(items)
-        : null;
-    if (staging != null && staging.taken.isEmpty) {
-      final batch = copyList.start(
-        upload: false,
-        peerId: remote.id,
-        deviceName: remote.name,
-        folder: folderLabel ?? _folderName(target),
-        names: [for (final item in items) p.basename(item.path)],
-        signature: copySignature(items, target),
-        target: target,
-      );
-      FilesLog.write('paste: ${items.length} item(s) from the staging');
-      unawaited(_pasteStaged(batch, staging, target));
-      return items.length;
-    }
     // Shown at once, before anything is awaited: a second paste a moment
     // later finds this one under way. The other device answers shortly.
     late final FileCopyBatch batch;
@@ -1388,12 +1199,15 @@ class FilesController extends ChangeNotifier {
   /// Another device's file fetched for an app it was dragged to (Finder,
   /// Explorer), into a folder of its own. [onProgress] hears how far the
   /// fetch is.
+  /// Fetches [item] for a place outside the app. With [shownAs], the copy
+  /// is listed with the others (the island, Transfers) as going there.
   FilesFetchOut fetchOut(
     FilesItem item, {
     void Function(double fraction)? onProgress,
+    FilesOutside? shownAs,
   }) {
     final out = FilesFetchOut._(copyList.cancel);
-    unawaited(_fetchOut(item, out, onProgress));
+    unawaited(_fetchOut(item, out, onProgress, shownAs));
     return out;
   }
 
@@ -1401,6 +1215,7 @@ class FilesController extends ChangeNotifier {
     FilesItem item,
     FilesFetchOut out,
     void Function(double fraction)? onProgress,
+    FilesOutside? shownAs,
   ) async {
     final subscriptions = <StreamSubscription<Object?>>[];
     try {
@@ -1422,6 +1237,19 @@ class FilesController extends ChangeNotifier {
       }
       final id = out._transferId = ids.single;
       FilesLog.write('drag out: as ${FilesLog.id(id)}');
+      if (shownAs != null) {
+        final batch = copyList.start(
+          upload: false,
+          peerId: item.location.deviceId,
+          deviceName: deviceById(item.location.deviceId)?.name ?? '',
+          folder: '',
+          names: [item.name],
+          signature: 'out:$id',
+          target: shownAs,
+        );
+        copyList.add(batch, id);
+        copyList.started(batch);
+      }
       if (out._canceled) {
         out.cancel();
         return;
@@ -1435,6 +1263,11 @@ class FilesController extends ChangeNotifier {
               return;
             }
             onProgress?.call(snapshot.progress);
+            out._arrive(
+              snapshot.tempPath,
+              snapshot.committedBytes,
+              snapshot.size,
+            );
             switch (snapshot.state) {
               case FileTransferState.completed:
                 arrived = snapshot.finalPath;
@@ -1509,10 +1342,6 @@ class FilesController extends ChangeNotifier {
       return;
     }
     copies[snapshot.transferId] = snapshot;
-    if (snapshot.state == FileTransferState.failed ||
-        snapshot.state == FileTransferState.canceled) {
-      _stagedGone(snapshot.transferId);
-    }
     if (snapshot.state == FileTransferState.completed &&
         _refreshAfter.remove(snapshot.transferId) &&
         location?.deviceId != FilesDevice.localId) {
@@ -1555,10 +1384,6 @@ class FilesController extends ChangeNotifier {
     _devicesTimer?.cancel();
     _updates?.cancel();
     _placed?.cancel();
-    _unplaced?.cancel();
-    for (final staging in {..._stagings.values, ?_staging}) {
-      staging.dispose();
-    }
     for (final device in devices) {
       unawaited(device.client?.close());
     }
@@ -1569,11 +1394,28 @@ class FilesController extends ChangeNotifier {
 
 /// Another device's file on its way here for another app
 /// ([FilesController.fetchOut]).
+/// See [FilesFetchOut.arriving].
+typedef FilesArriving = ({String temp, int committed, int size});
+
 class FilesFetchOut {
   FilesFetchOut._(this._cancelTransfer) {
     // Failing before anyone waits on it is not an uncaught error.
     _path.future.ignore();
   }
+
+  /// One driven by hand: [debugArrive], [debugDone], [debugFail].
+  @visibleForTesting
+  FilesFetchOut.debug() : this._(null);
+
+  @visibleForTesting
+  void debugArrive(String temp, int committed, int size) =>
+      _arrive(temp, committed, size);
+
+  @visibleForTesting
+  void debugDone(String path) => _done(path);
+
+  @visibleForTesting
+  void debugFail(Object error) => _fail(error);
 
   final Future<void> Function(String transferId)? _cancelTransfer;
   final _path = Completer<String>();
@@ -1586,6 +1428,21 @@ class FilesFetchOut {
 
   /// The transfer bringing it, once the other device answered.
   String? get transferId => _transferId;
+
+  /// What has come so far: the file it is written to, how much of it is
+  /// there for sure (bytes arrive in order) and how big it is. Null until
+  /// the other device started sending.
+  final arriving = ValueNotifier<FilesArriving?>(null);
+
+  void _arrive(String temp, int committed, int size) {
+    if (size < 0) {
+      return;
+    }
+    arriving.value = (temp: temp, committed: committed, size: size);
+  }
+
+  /// Whether it is all here (or given up).
+  bool get settled => _path.isCompleted;
 
   void _done(String path) {
     if (!_path.isCompleted) {
@@ -1617,79 +1474,4 @@ class FilesFetchOut {
       // Cleared with the other staging folders after a day.
     }
   }
-}
-
-/// Another device's items on their way into a staging folder, for the
-/// system clipboard and for a paste here to take from. Each copy has its
-/// own: a paste waiting on one is not cut off by the next copy.
-class _Staging {
-  _Staging(List<String> sources) : sources = sources..sort();
-
-  /// What is staged ([FilesController._sourceKey]), sorted.
-  final List<String> sources;
-
-  final _ids = Completer<List<String>>();
-
-  /// The transfers carrying it, once the other device answered.
-  Future<List<String>> get ids => _ids.future;
-
-  /// Each transfer's file in the staging folder once there (null while on
-  /// its way); one that failed is no longer listed.
-  final paths = <String, String?>{};
-
-  final _settled = Completer<void>();
-
-  /// Everything has arrived or failed.
-  bool get settled => _settled.isCompleted;
-  Future<void> get settledFuture => _settled.future;
-
-  /// Its files went to the system clipboard, or were not to.
-  bool published = false;
-
-  /// Transfers a paste took over on their way: they land in its folder.
-  final taken = <String>{};
-
-  Timer? _watch;
-
-  List<String> get files => [for (final path in paths.values) ?path];
-
-  void start(List<String> transferIds) {
-    if (_ids.isCompleted) {
-      return;
-    }
-    for (final id in transferIds) {
-      paths[id] = null;
-    }
-    _ids.complete(transferIds);
-    _check();
-  }
-
-  void place(String transferId, String path) {
-    if (paths.containsKey(transferId)) {
-      paths[transferId] = path;
-      _check();
-    }
-  }
-
-  void drop(String transferId) {
-    paths.remove(transferId);
-    _check();
-  }
-
-  /// Runs [check] after [after] unless everything has settled by then.
-  void watch(Duration after, void Function() check) {
-    _watch?.cancel();
-    _watch = settled ? null : Timer(after, check);
-  }
-
-  void _check() {
-    if (!_settled.isCompleted &&
-        _ids.isCompleted &&
-        !paths.values.contains(null)) {
-      _watch?.cancel();
-      _settled.complete();
-    }
-  }
-
-  void dispose() => _watch?.cancel();
 }

@@ -29,6 +29,65 @@ TransferSnapshot _snap(
 );
 
 void main() {
+  test('two copies that share a transfer both follow it', () {
+    // Dragged out to Finder and pasted here meanwhile, the paste takes
+    // the same transfer over. Both rows keep moving.
+    final updates = StreamController<TransferSnapshot>.broadcast(sync: true);
+    final copies = FileCopies(updates: updates.stream, nowMs: () => 0);
+    addTearDown(copies.dispose);
+    final dragged = copies.start(
+      upload: false,
+      peerId: 'phone',
+      deviceName: 'OnePlus',
+      folder: '',
+      names: ['movie.mp4'],
+      signature: 'out:t',
+      target: FilesOutside.fileManager,
+    );
+    copies
+      ..add(dragged, 't')
+      ..started(dragged);
+    updates.add(
+      _snap(
+        't',
+        FileTransferState.transferring,
+        done: 200,
+        direction: FileTransferDirection.incoming,
+      ),
+    );
+    final paste = copies.start(
+      upload: false,
+      peerId: 'phone',
+      deviceName: 'OnePlus',
+      folder: 'Downloads',
+      names: ['movie.mp4'],
+      signature: 'paste',
+    );
+    copies
+      ..add(paste, 't')
+      ..started(paste);
+    updates.add(
+      _snap(
+        't',
+        FileTransferState.transferring,
+        done: 600,
+        direction: FileTransferDirection.incoming,
+      ),
+    );
+    expect(dragged.fraction, closeTo(0.6, 1e-9));
+    expect(paste.fraction, closeTo(0.6, 1e-9));
+    updates.add(
+      _snap(
+        't',
+        FileTransferState.completed,
+        done: 1000,
+        direction: FileTransferDirection.incoming,
+      ),
+    );
+    expect(dragged.phase, FileCopyPhase.done);
+    expect(paste.phase, FileCopyPhase.done);
+  });
+
   test('a paste is one copy, from asking to done', () {
     final updates = StreamController<TransferSnapshot>.broadcast(sync: true);
     final copies = FileCopies(updates: updates.stream, nowMs: () => 0);

@@ -1,14 +1,19 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart'
+    show HapticFeedback, MethodCall, MethodChannel, PlatformException;
 import 'package:flutter/widgets.dart';
 import 'package:super_clipboard/super_clipboard.dart'
     show
+        DataWriterItem,
         SimpleFileFormat,
+        SystemClipboard,
         VirtualFileEventSinkProvider,
         VirtualFileStorage,
         WriteProgress;
@@ -17,6 +22,8 @@ import 'package:super_drag_and_drop/super_drag_and_drop.dart';
 import 'package:super_native_extensions/raw_drag_drop.dart' as raw;
 
 import '../../remote_files/files_log.dart';
+import '../../remote_files/fs_copies.dart' show FilesOutside;
+import '../../remote_files/fs_placement.dart' show TransferPlacements;
 import 'files_model.dart';
 
 /// What is dragged around inside the file manager.
@@ -35,13 +42,69 @@ bool get filesSystemDrag =>
     (defaultTargetPlatform == TargetPlatform.macOS ||
         defaultTargetPlatform == TargetPlatform.windows);
 
+/// Explorer pastes a file that is still to be fetched, asking for it once
+/// pasted as it does for a drop. Finder only pastes files already on disk
+/// (it takes a promised file from a drag, never from the clipboard), and so
+/// do Linux file managers: there another device's copied files are pasted
+/// in the file manager here, or dragged out ([filesDragsOut]).
+bool get filesVirtualClipboard =>
+    !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
+
+/// Whether [item], another device's, goes to the system file manager by a
+/// drag: a file where drags leave the window ([filesSystemDrag]), a folder
+/// to Finder only ([FilesFolderPromises]).
+bool filesDragsOut(FilesItem item) =>
+    filesSystemDrag &&
+    (!item.isDir || defaultTargetPlatform == TargetPlatform.macOS);
+
+/// Puts another device's files on the system clipboard, each fetched when
+/// an app pastes it. False if the clipboard did not take them.
+Future<bool> writeFetchedToClipboard(
+  FilesController controller,
+  List<FilesItem> items,
+) async {
+  final clipboard = SystemClipboard.instance;
+  if (clipboard == null) {
+    return false;
+  }
+  try {
+    await clipboard.write([
+      for (final item in items)
+        DataWriterItem(suggestedName: item.name)..addVirtualFile(
+          format: _anyFile,
+          storageSuggestion: VirtualFileStorage.temporaryFile,
+          provider: (sinkProvider, progress) => unawaited(
+            _handOver(controller, item, sinkProvider, progress, as: 'paste'),
+          ),
+        ),
+    ]);
+    return true;
+  } catch (error) {
+    FilesLog.write('clipboard: not written (${error.runtimeType})');
+    return false;
+  }
+}
+
+/// A finger or a pen, not a mouse: on a tablet showing the desktop layout,
+/// it scrolls the list and taps; holding an item picks it up.
+bool filesTouchPointer(PointerDeviceKind kind) =>
+    kind == PointerDeviceKind.touch ||
+    kind == PointerDeviceKind.stylus ||
+    kind == PointerDeviceKind.invertedStylus;
+
 /// Starts a drag once the pointer has moved a little, however long the
-/// button was held first.
+/// button was held first. A finger has to hold the item first (as in the
+/// Files app): moved at once, it scrolls the list instead. With
+/// [liftOnHold] off, the hold only readies it: moving on drags, letting go
+/// is left to the item (its menu; a menu pushed while the finger is down
+/// would cancel the finger, and with it the drag).
 class FilesSlopDragRecognizer extends MultiDragGestureRecognizer {
-  FilesSlopDragRecognizer() : super(debugOwner: null);
+  FilesSlopDragRecognizer({this.liftOnHold = true}) : super(debugOwner: null);
 
   /// How far the pointer moves before it is a drag.
   static const double slop = 6;
+
+  final bool liftOnHold;
 
   /// The pointer of the latest drag.
   int? pointer;
@@ -54,7 +117,14 @@ class FilesSlopDragRecognizer extends MultiDragGestureRecognizer {
 
   @override
   MultiDragPointerState createNewPointerState(PointerDownEvent event) =>
-      _SlopPointerState(event.position, event.kind, gestureSettings);
+      filesTouchPointer(event.kind)
+      ? _HoldPointerState(
+          event.position,
+          event.kind,
+          gestureSettings,
+          liftOnHold: liftOnHold,
+        )
+      : _SlopPointerState(event.position, event.kind, gestureSettings);
 
   @override
   String get debugDescription => 'files drag';
@@ -100,6 +170,85 @@ class _SlopPointerState extends MultiDragPointerState {
 
   @override
   void dispose() {
+    _starter = null;
+    super.dispose();
+  }
+}
+
+/// A finger: moving at once gives the pointer to the list (it scrolls);
+/// held still for a long press it is picked up, at once or (without
+/// [liftOnHold]) once it moves on.
+class _HoldPointerState extends MultiDragPointerState {
+  _HoldPointerState(
+    super.initialPosition,
+    super.kind,
+    super.deviceGestureSettings, {
+    required this.liftOnHold,
+  }) {
+    _timer = Timer(kLongPressTimeout, _held);
+  }
+
+  final bool liftOnHold;
+
+  Timer? _timer;
+  bool _isHeld = false;
+  bool _lifted = false;
+  GestureMultiDragStartCallback? _starter;
+
+  void _held() {
+    _timer = null;
+    _isHeld = true;
+    unawaited(HapticFeedback.selectionClick());
+    if (liftOnHold) {
+      _lift();
+    }
+  }
+
+  void _lift() {
+    if (_lifted) {
+      return;
+    }
+    _lifted = true;
+    final starter = _starter;
+    if (starter == null) {
+      resolve(GestureDisposition.accepted);
+      return;
+    }
+    _starter = null;
+    starter(initialPosition);
+  }
+
+  @override
+  void accepted(GestureMultiDragStartCallback starter) {
+    if (_lifted) {
+      starter(initialPosition);
+    } else {
+      _starter = starter;
+    }
+  }
+
+  @override
+  void checkForResolutionAfterMove() {
+    final moved =
+        pendingDelta!.distance > computeHitSlop(kind, gestureSettings);
+    if (!_isHeld) {
+      if (moved) {
+        _timer?.cancel();
+        _timer = null;
+        _starter = null;
+        resolve(GestureDisposition.rejected);
+      }
+      return;
+    }
+    if (moved && !_lifted) {
+      _lift();
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _timer = null;
     _starter = null;
     super.dispose();
   }
@@ -154,7 +303,7 @@ class _FilesSystemDragSourceState extends State<FilesSystemDragSource> {
       final picture = await _snapshotter.currentState?.getSnapshot(
         position,
         _feedbackKey,
-        () => widget.feedback,
+        () => filesDragPicture(widget.feedback),
       );
       if (picture == null || drag.ended || !mounted || dragItems.isEmpty) {
         picture?.snapshot.dispose();
@@ -251,6 +400,14 @@ class _FilesSystemDragSourceState extends State<FilesSystemDragSource> {
   }
 }
 
+/// [feedback] as the system drag's picture, at its own size: under the
+/// dragged row's constraints it was stretched into a long strip as wide as
+/// the row.
+Widget filesDragPicture(Widget feedback) => SnapshotSettings(
+  constraintsTransform: (_) => const BoxConstraints(),
+  child: feedback,
+);
+
 class _SystemDrag implements Drag {
   bool ended = false;
 
@@ -272,10 +429,13 @@ const _anyFile = SimpleFileFormat(
 
 const _localDataKey = 'whisperFiles';
 
+/// A folder, promised to Finder: the runner fulfils it ([FilesFolderPromises]).
+const _folder = SimpleFileFormat(uniformTypeIdentifiers: ['public.folder']);
+
 /// [item] for a system drag: what the file manager reads back when it is
 /// dropped in the window, and the file itself for other apps. Another
-/// device's folders stay in the window: other apps only take a file that
-/// is still to be fetched.
+/// device's folders go to Finder only ([FilesFolderPromises]); Explorer
+/// takes a file still to be fetched, not a folder.
 Future<DragItem> filesDragItem(
   FilesController controller,
   FilesItem item,
@@ -301,8 +461,136 @@ Future<DragItem> filesDragItem(
       provider: (sinkProvider, progress) =>
           unawaited(_handOver(controller, item, sinkProvider, progress)),
     );
+  } else if (defaultTargetPlatform == TargetPlatform.macOS) {
+    FilesFolderPromises.offer(controller, item);
+    dragItem.addVirtualFile(
+      format: _folder,
+      storageSuggestion: VirtualFileStorage.temporaryFile,
+      // The runner writes folders itself; here only if it did not.
+      provider: (sinkProvider, progress) {
+        FilesLog.write('drag out: folder promise reached the plugin');
+        sinkProvider(
+          fileSize: 0,
+        ).addError(const FileSystemException('a folder, not a file'));
+      },
+    );
   }
   return dragItem;
+}
+
+/// Another device's folders dragged out to Finder. The runner
+/// (`FolderPromises` in MainFlutterWindow.swift) makes the folder where
+/// Finder asks and has it filled here: the folder comes over as one copy
+/// (listed with the others) and moves in once it is all here, while Finder
+/// shows the progress on it.
+abstract final class FilesFolderPromises {
+  static const _channel = MethodChannel('com.vireen.whisper/folder_promises');
+
+  /// The folders in drags so far, by name (what Finder asks for).
+  static final _offered =
+      <String, ({FilesController controller, FilesItem item})>{};
+
+  /// What is being written, by the runner's id.
+  static final _writing = <String, FilesFetchOut>{};
+
+  static bool _listening = false;
+
+  static void offer(FilesController controller, FilesItem item) {
+    if (!_listening) {
+      _listening = true;
+      _channel.setMethodCallHandler(_handle);
+    }
+    _offered[item.name] = (controller: controller, item: item);
+  }
+
+  static Future<Object?> _handle(MethodCall call) async {
+    final arguments = call.arguments;
+    if (arguments is! Map) {
+      return null;
+    }
+    final id = arguments['id'];
+    switch (call.method) {
+      case 'write':
+        final name = arguments['name'];
+        final path = arguments['path'];
+        final offered = _offered[name];
+        if (id is! String || path is! String || offered == null) {
+          throw PlatformException(code: 'unknown', message: '$name');
+        }
+        await _write(id, offered.controller, offered.item, path);
+      case 'cancel':
+        _writing[id]?.cancel();
+    }
+    return null;
+  }
+
+  static Future<void> _write(
+    String id,
+    FilesController controller,
+    FilesItem item,
+    String destination,
+  ) async {
+    try {
+      await fill(
+        controller,
+        item,
+        destination,
+        started: (fetch) => _writing[id] = fetch,
+        onProgress: (fraction) => unawaited(
+          _channel
+              .invokeMethod<void>('progress', {'id': id, 'fraction': fraction})
+              .catchError((Object _) {}),
+        ),
+      );
+    } catch (error) {
+      throw PlatformException(code: 'failed', message: '$error');
+    } finally {
+      _writing.remove(id);
+    }
+  }
+
+  /// Fetches [item], another device's folder, into [destination] (an
+  /// empty folder): one copy, listed with the others. [started] gets the
+  /// fetch, to cancel it.
+  static Future<void> fill(
+    FilesController controller,
+    FilesItem item,
+    String destination, {
+    void Function(FilesFetchOut fetch)? started,
+    void Function(double fraction)? onProgress,
+  }) async {
+    final fetch = controller.fetchOut(
+      item,
+      shownAs: FilesOutside.fileManager,
+      onProgress: onProgress,
+    );
+    started?.call(fetch);
+    try {
+      await moveFolderInto(await fetch.path, destination);
+      FilesLog.write('drag out: folder handed over');
+    } catch (error) {
+      FilesLog.write('drag out: folder not handed over (${error.runtimeType})');
+      rethrow;
+    } finally {
+      await fetch.dispose();
+    }
+  }
+
+  /// Puts the folder [from] where [to] is, an empty folder Finder shows:
+  /// renamed over it on the same volume, else what is in it moved in.
+  @visibleForTesting
+  static Future<void> moveFolderInto(String from, String to) async {
+    try {
+      await Directory(from).rename(to);
+      return;
+    } on FileSystemException {
+      // Another volume, or something put in it meanwhile.
+    }
+    await for (final entity in Directory(from).list()) {
+      await TransferPlacements.moveInto(entity.path, to);
+    }
+    await Directory(from).delete(recursive: true);
+  }
 }
 
 /// The file manager's own items in a system drag; null for anything else.
@@ -334,67 +622,144 @@ FilesItem? filesItemFromLocalData(Object? data) {
   );
 }
 
-/// The share of the progress the fetch has; handing the file over is the
-/// rest.
-const _fetchShare = 0.9;
-
-/// Another device's file dropped in another app: fetched here, then
-/// written into what the app gave for it.
+/// Another device's file dropped or pasted in another app, written into
+/// what that app gave for it as it arrives (see [filesHandOver]). The copy
+/// is listed with the others (island, Transfers). [as] names how in the log.
 Future<void> _handOver(
   FilesController controller,
   FilesItem item,
   VirtualFileEventSinkProvider sinkProvider,
-  WriteProgress progress,
-) async {
+  WriteProgress progress, {
+  String as = 'drag out',
+}) async {
   var canceled = false;
-  final fetch = controller.fetchOut(
-    item,
-    onProgress: (fraction) {
-      if (!canceled) {
-        progress.updateProgress(fraction * _fetchShare);
-      }
-    },
-  );
+  final fetch = controller.fetchOut(item, shownAs: FilesOutside.fileManager);
   progress.onCancel.addListener(() {
     canceled = true;
     fetch.cancel();
   });
   EventSink<Object?>? sink;
   try {
-    final file = File(await fetch.path);
-    final size = await file.length();
-    final out = sink = sinkProvider(fileSize: size);
-    final reader = await file.open();
-    try {
-      var done = 0;
-      while (!canceled) {
-        // A piece at a time: the writing happens on this isolate.
-        final chunk = await reader.read(1 << 20);
-        if (chunk.isEmpty) {
-          break;
-        }
-        out.add(chunk);
-        done += chunk.length;
-        if (size > 0) {
-          progress.updateProgress(
-            _fetchShare + (1 - _fetchShare) * done / size,
-          );
-        }
-      }
-    } finally {
-      await reader.close();
-    }
+    await filesHandOver(
+      fetch,
+      open: (size) => sink = sinkProvider(fileSize: size),
+      onProgress: progress.updateProgress,
+      canceled: () => canceled,
+    );
     if (!canceled) {
-      out.close();
-      FilesLog.write('drag out: handed over');
+      sink!.close();
+      FilesLog.write('$as: handed over');
     }
   } catch (error) {
     if (!canceled) {
-      FilesLog.write('drag out: not handed over (${error.runtimeType})');
+      FilesLog.write('$as: not handed over (${error.runtimeType})');
       (sink ?? sinkProvider(fileSize: 0)).addError(error);
     }
   } finally {
     await fetch.dispose();
+  }
+}
+
+/// Writes [fetch]'s file into the sink [open] gives, as it arrives: the
+/// sink opens as soon as the size is known (Explorer then shows its own copy
+/// progress; Finder's file grows) and gets each piece once the transfer
+/// committed it, rather than an empty file until the whole of it is here.
+/// Throws when the fetch fails or not all of it came.
+@visibleForTesting
+Future<void> filesHandOver(
+  FilesFetchOut fetch, {
+  required EventSink<Object?> Function(int size) open,
+  void Function(double fraction)? onProgress,
+  bool Function()? canceled,
+}) async {
+  bool stop() => canceled?.call() ?? false;
+  // Woken whenever more has arrived (or the fetch settled).
+  var wake = Completer<void>();
+  void poke() {
+    if (!wake.isCompleted) {
+      wake.complete();
+    }
+  }
+
+  fetch.arriving.addListener(poke);
+  unawaited(fetch.path.then((_) => poke(), onError: (Object _) => poke()));
+  EventSink<Object?>? sink;
+  RandomAccessFile? reader;
+  String? readingFrom;
+  var done = 0;
+  var size = -1;
+
+  /// Hands over what of [path] is here up to [end].
+  Future<void> pump(String path, int end) async {
+    if (readingFrom != path) {
+      await reader?.close();
+      reader = null;
+      reader = await File(path).open();
+      readingFrom = path;
+    }
+    final file = reader!;
+    end = math.min(end, await file.length());
+    while (done < end && !stop()) {
+      await file.setPosition(done);
+      final chunk = await file.read(math.min(1 << 20, end - done));
+      if (chunk.isEmpty) {
+        break;
+      }
+      sink!.add(chunk);
+      done += chunk.length;
+      if (size > 0) {
+        onProgress?.call(done / size);
+      }
+    }
+  }
+
+  try {
+    while (!stop()) {
+      final before = done;
+      final arrived = fetch.arriving.value;
+      if (sink == null && arrived != null) {
+        size = arrived.size;
+        sink = open(size);
+      }
+      if (fetch.settled) {
+        final path = await fetch.path;
+        if (sink == null) {
+          size = await File(path).length();
+          sink = open(size);
+        }
+        await pump(path, size);
+        break;
+      }
+      if (arrived != null &&
+          arrived.temp.isNotEmpty &&
+          arrived.committed > done) {
+        try {
+          await pump(arrived.temp, arrived.committed);
+        } on FileSystemException {
+          // Moved to where it lands as it finished: read from there next.
+          await reader?.close();
+          reader = null;
+          readingFrom = null;
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+          continue;
+        }
+      }
+      // Nothing new handed over (not written yet, or only the finished
+      // file's path to come): wait for more rather than spin.
+      wake = Completer<void>();
+      if (!fetch.settled && done == before) {
+        await Future.any([
+          wake.future,
+          Future<void>.delayed(const Duration(milliseconds: 250)),
+        ]);
+      }
+    }
+    if (!stop() && done != size) {
+      throw FileSystemException('handed over $done of $size bytes');
+    }
+  } finally {
+    fetch.arriving.removeListener(poke);
+    await reader?.close();
   }
 }
 

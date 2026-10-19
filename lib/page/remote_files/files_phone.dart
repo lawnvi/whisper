@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../l10n/app_localizations.dart';
+import '../../widget/device_glyph.dart';
 import '../../remote_files/fs_browser.dart';
 import '../../remote_files/fs_copies.dart';
 import '../../remote_files/fs_host_files.dart';
@@ -242,7 +243,31 @@ class _FilesPhoneViewState extends State<FilesPhoneView> {
     if (here.path.isEmpty || here.root.isEmpty) {
       return l10n.remoteFilesBrowse;
     }
-    return fsFolderLabel(l10n, device, here.root, here.parent.path);
+    return _folderLabel(l10n, device, here.root, here.parent.path);
+  }
+
+  /// A device with one root (an iPhone's Whisper folder, a phone's own
+  /// storage) is that root: its top reads as the device, as it was tapped,
+  /// not as one of its favorites.
+  static String _folderLabel(
+    AppLocalizations l10n,
+    FilesDevice device,
+    String root,
+    String path,
+  ) {
+    final only = _onlyRoot(device);
+    if (path.isEmpty && only != null && only.root == root) {
+      return filesDeviceName(l10n, device);
+    }
+    return fsFolderLabel(l10n, device, root, path);
+  }
+
+  static FsPlace? _onlyRoot(FilesDevice device) {
+    final roots = [
+      for (final place in device.browser?.places ?? const <FsPlace>[])
+        if (place.kind == 'root') place,
+    ];
+    return roots.length == 1 ? roots.single : null;
   }
 
   String _title(AppLocalizations l10n, {bool folder = false}) {
@@ -265,7 +290,7 @@ class _FilesPhoneViewState extends State<FilesPhoneView> {
     if (here.root.isEmpty) {
       return filesDeviceName(l10n, device);
     }
-    return fsFolderLabel(l10n, device, here.root, here.path);
+    return _folderLabel(l10n, device, here.root, here.path);
   }
 
   // ------------------------------------------------------------- actions
@@ -600,8 +625,8 @@ class _FilesPhoneViewState extends State<FilesPhoneView> {
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
             child: Row(
               children: [
-                Icon(
-                  fsDeviceIcon(controller.device!.platform),
+                DeviceGlyph(
+                  filesDeviceIcon(controller.device!),
                   size: 13,
                   color: colors.secondaryLabel,
                 ),
@@ -643,6 +668,11 @@ class _FilesPhoneViewState extends State<FilesPhoneView> {
   ) {
     final local = controller.deviceById(FilesDevice.localId)!;
     final accent = FinderColors.of(context).accent;
+    final only = _onlyRoot(local);
+    final favorites = [
+      for (final place in local.browser!.places)
+        if (only == null || place.kind != 'root') place,
+    ];
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 120),
       children: [
@@ -659,7 +689,7 @@ class _FilesPhoneViewState extends State<FilesPhoneView> {
           children: [
             for (final device in controller.devices)
               _GroupRow(
-                icon: fsDeviceIcon(device.platform),
+                icon: filesDeviceIcon(device),
                 iconColor: accent,
                 title: filesDeviceName(l10n, device),
                 subtitle: _deviceStatus(l10n, device),
@@ -712,23 +742,27 @@ class _FilesPhoneViewState extends State<FilesPhoneView> {
             );
           },
         ),
-        const SizedBox(height: 24),
-        _GroupLabel(l10n.remoteFilesFavorites),
-        _Group(
-          children: [
-            for (final place in local.browser!.places)
-              _GroupRow(
-                icon: fsPlaceGlyph(place),
-                iconColor: accent,
-                title: fsPlaceLabel(l10n, place),
-                onTap: () => _enter(
-                  () => controller.go(
-                    FilesLocation(local.id, place.root, place.path),
+        // "本机" already opens a sole root: favorites list only what lies
+        // under it (an iPhone has none).
+        if (favorites.isNotEmpty) ...[
+          const SizedBox(height: 24),
+          _GroupLabel(l10n.remoteFilesFavorites),
+          _Group(
+            children: [
+              for (final place in favorites)
+                _GroupRow(
+                  icon: fsPlaceGlyph(place),
+                  iconColor: accent,
+                  title: fsPlaceLabel(l10n, place),
+                  onTap: () => _enter(
+                    () => controller.go(
+                      FilesLocation(local.id, place.root, place.path),
+                    ),
                   ),
                 ),
-              ),
-          ],
-        ),
+            ],
+          ),
+        ],
       ],
     );
   }
@@ -1076,7 +1110,7 @@ class _GroupRow extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(16, 11, 12, 11),
           child: Row(
             children: [
-              Icon(icon, color: iconColor, size: 24),
+              DeviceGlyph(icon, color: iconColor, size: 24),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(

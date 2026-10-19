@@ -308,7 +308,9 @@ class _CopyRow extends StatelessWidget {
           color: colors.tertiaryLabel,
           onPressed: () => unawaited(copies.stop(batch)),
         ),
-      if (phase == FileCopyPhase.done && onReveal != null)
+      if (phase == FileCopyPhase.done &&
+          onReveal != null &&
+          batch.target is! FilesOutside)
         _IconAction(
           icon: CupertinoIcons.folder,
           label: l10n.remoteFilesCopyReveal,

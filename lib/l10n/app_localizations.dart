@@ -4384,17 +4384,23 @@ abstract class AppLocalizations {
   /// **'关闭文件'**
   String get remoteFilesClose;
 
-  /// No description provided for @remoteFilesClipboardPreparing.
-  ///
-  /// In zh, this message translates to:
-  /// **'正在取回 {count} 项，好了就能在访达等应用里粘贴'**
-  String remoteFilesClipboardPreparing(int count);
-
   /// No description provided for @remoteFilesClipboardReady.
   ///
   /// In zh, this message translates to:
   /// **'可以在访达等应用里粘贴了'**
   String get remoteFilesClipboardReady;
+
+  /// No description provided for @remoteFilesClipboardOnPaste.
+  ///
+  /// In zh, this message translates to:
+  /// **'已复制，在 Whisper 里粘贴时开始传输'**
+  String get remoteFilesClipboardOnPaste;
+
+  /// Status after copying another device's big files on macOS or Linux: the file manager pastes only files already on disk, so dragging is the way there
+  ///
+  /// In zh, this message translates to:
+  /// **'已复制，在 Whisper 里粘贴时开始传输；放进{app}请直接拖过去'**
+  String remoteFilesClipboardOnPasteDrag(String app);
 
   /// No description provided for @windowStreamTextSize.
   ///
@@ -4617,6 +4623,24 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'拷贝到 {device} 的“{folder}”'**
   String remoteFilesCopyToDevice(String device, String folder);
+
+  /// No description provided for @remoteFilesFinder.
+  ///
+  /// In zh, this message translates to:
+  /// **'访达'**
+  String get remoteFilesFinder;
+
+  /// No description provided for @remoteFilesExplorer.
+  ///
+  /// In zh, this message translates to:
+  /// **'文件资源管理器'**
+  String get remoteFilesExplorer;
+
+  /// No description provided for @remoteFilesFileManager.
+  ///
+  /// In zh, this message translates to:
+  /// **'文件管理器'**
+  String get remoteFilesFileManager;
 
   /// No description provided for @remoteFilesCopyFromDevice.
   ///

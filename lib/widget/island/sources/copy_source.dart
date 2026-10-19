@@ -289,7 +289,9 @@ class CopyPresenter extends IslandPresenter {
       );
     }
     final reveal = IslandCopyHooks.reveal;
-    if (phase == FileCopyPhase.done && reveal != null) {
+    if (phase == FileCopyPhase.done &&
+        reveal != null &&
+        batch.target is! FilesOutside) {
       return IslandRoundButton(
         icon: CupertinoIcons.folder,
         label: l10n.remoteFilesCopyReveal,

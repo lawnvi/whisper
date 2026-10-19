@@ -2567,12 +2567,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get remoteFilesClose => 'Close Files';
 
   @override
-  String remoteFilesClipboardPreparing(int count) {
-    return 'Fetching $count items so other apps can paste them';
-  }
+  String get remoteFilesClipboardReady => 'Ready to paste in other apps';
 
   @override
-  String get remoteFilesClipboardReady => 'Ready to paste in other apps';
+  String get remoteFilesClipboardOnPaste =>
+      'Copied. It transfers when you paste it in Whisper.';
+
+  @override
+  String remoteFilesClipboardOnPasteDrag(String app) {
+    return 'Copied. Sent when you paste it in Whisper; drag it to put it in $app';
+  }
 
   @override
   String get windowStreamTextSize => 'Text Size';
@@ -2698,6 +2702,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String remoteFilesCopyToDevice(String device, String folder) {
     return 'To “$folder” on $device';
   }
+
+  @override
+  String get remoteFilesFinder => 'Finder';
+
+  @override
+  String get remoteFilesExplorer => 'File Explorer';
+
+  @override
+  String get remoteFilesFileManager => 'Files';
 
   @override
   String remoteFilesCopyFromDevice(String device, String folder) {

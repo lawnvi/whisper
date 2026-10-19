@@ -1350,15 +1350,17 @@
   "remoteFilesSortBy": "排序方式",
   "remoteFilesMore": "更多",
   "remoteFilesClose": "关闭文件",
-  "remoteFilesClipboardPreparing": "正在取回 {count} 项，好了就能在访达等应用里粘贴",
-  "@remoteFilesClipboardPreparing": {
+  "remoteFilesClipboardReady": "可以在访达等应用里粘贴了",
+  "remoteFilesClipboardOnPaste": "已复制，在 Whisper 里粘贴时开始传输",
+  "remoteFilesClipboardOnPasteDrag": "已复制，在 Whisper 里粘贴时开始传输；放进{app}请直接拖过去",
+  "@remoteFilesClipboardOnPasteDrag": {
+    "description": "Status after copying another device's big files on macOS or Linux: the file manager pastes only files already on disk, so dragging is the way there",
     "placeholders": {
-      "count": {
-        "type": "int"
+      "app": {
+        "type": "String"
       }
     }
   },
-  "remoteFilesClipboardReady": "可以在访达等应用里粘贴了",
   "windowStreamTextSize": "文字大小",
   "macPermissionAccessibility": "辅助功能",
   "macPermissionAccessibilityDesc": "共享键盘鼠标、在流转来的窗口里操作时需要",
@@ -1427,6 +1429,9 @@
       }
     }
   },
+  "remoteFilesFinder": "访达",
+  "remoteFilesExplorer": "文件资源管理器",
+  "remoteFilesFileManager": "文件管理器",
   "remoteFilesCopyFromDevice": "从 {device} 拷贝到“{folder}”",
   "@remoteFilesCopyFromDevice": {
     "placeholders": {
