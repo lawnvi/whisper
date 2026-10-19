@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 
 import '../../window_stream/core/window_source.dart';
 import '../../window_stream/core/window_stream_models.dart';
+import '../../window_stream/remote/remote_peer_source.dart';
 import '../../window_stream/window_stream_coordinator.dart';
 
 /// Everything the Flow Space shows for one source.
@@ -53,9 +54,30 @@ class FlowSpaceController extends ChangeNotifier {
 
   List<WindowSource> get sources => coordinator.sources;
 
+  /// Connected devices that only take windows from here (an iPad): no
+  /// windows of their own to list, only "送到".
+  List<WindowStreamPeer> get sendOnly => [
+    for (final peer in WindowStreamViewer.shared.targets)
+      if (coordinator.sourceForPeer(peer.peerId) == null) peer,
+  ];
+
+  static String _sendId(String peerId) => 'send:$peerId';
+
+  /// The send-only device chosen, or the first one when nothing else is
+  /// there to choose.
+  WindowStreamPeer? get selectedTarget {
+    final targets = sendOnly;
+    for (final peer in targets) {
+      if (_sendId(peer.peerId) == _selectedId) {
+        return peer;
+      }
+    }
+    return sources.isEmpty ? targets.firstOrNull : null;
+  }
+
   WindowSource? get selected {
     final all = sources;
-    if (all.isEmpty) {
+    if (all.isEmpty || selectedTarget != null) {
       return null;
     }
     return all.firstWhere(
@@ -83,6 +105,15 @@ class FlowSpaceController extends ChangeNotifier {
     unawaited(_load(source));
   }
 
+  void selectTarget(WindowStreamPeer peer) {
+    final id = _sendId(peer.peerId);
+    if (_selectedId == id) {
+      return;
+    }
+    _selectedId = id;
+    notifyListeners();
+  }
+
   FlowSourceView _viewFor(WindowSource source) {
     final existing = _views[source.info.id];
     if (existing != null && identical(existing.source, source)) {
@@ -99,7 +130,11 @@ class FlowSpaceController extends ChangeNotifier {
     }
     final focus = focusPeerId;
     if (_selectedId == null && focus != null) {
-      _selectedId = coordinator.sourceForPeer(focus)?.info.id;
+      _selectedId =
+          coordinator.sourceForPeer(focus)?.info.id ??
+          (sendOnly.any((peer) => peer.peerId == focus)
+              ? _sendId(focus)
+              : null);
     }
     final source = selected;
     if (source != null) {

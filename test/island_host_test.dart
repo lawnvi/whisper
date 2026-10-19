@@ -214,4 +214,46 @@ void main() {
     expect(tester.getTopLeft(row).dy, closeTo(rowTop - 28, 0.5));
     await tester.pump(const Duration(seconds: 10));
   });
+
+  testWidgets('a page may hush the island while it is first built', (
+    tester,
+  ) async {
+    // The window viewer hushes it from initState (seen on a real iPad as
+    // "setState() called during build").
+    source.activities = [islandActivity('copy', arrival: IslandArrival.quiet)];
+    await pumpHost(tester, home: _HushesOnOpen(center));
+    expect(tester.takeException(), isNull);
+    await settle(tester);
+    expect(center.quiet, isTrue);
+    expect(find.text('glyph:copy'), findsNothing);
+    await tester.pump(const Duration(seconds: 10));
+  });
+}
+
+class _HushesOnOpen extends StatefulWidget {
+  const _HushesOnOpen(this.center);
+
+  final IslandCenter center;
+
+  @override
+  State<_HushesOnOpen> createState() => _HushesOnOpenState();
+}
+
+class _HushesOnOpenState extends State<_HushesOnOpen> {
+  late final VoidCallback _unhush;
+
+  @override
+  void initState() {
+    super.initState();
+    _unhush = widget.center.hush();
+  }
+
+  @override
+  void dispose() {
+    _unhush();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => const Scaffold(body: SizedBox.expand());
 }

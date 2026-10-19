@@ -4,10 +4,12 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../helper/device_form_factor.dart';
 import '../../helper/notification.dart';
 import '../../helper/notification_l10n.dart';
 import '../../helper/toast.dart';
 import '../../l10n/app_localizations.dart';
+import '../../widget/device_glyph.dart';
 import '../../widget/island/island_activity.dart';
 import '../../widget/island/island_host.dart';
 import '../../widget/island/island_views.dart';
@@ -232,16 +234,17 @@ class OfferPresenter extends IslandPresenter {
 
   String get _title => OfferIslandSource.titleOf(offer);
 
+  IconData get _glyph => flowDeviceGlyph(
+    offer.source.info.platform,
+    tablet: DeviceFormFactors.shared.isTablet(offer.source.peerId),
+  );
+
   @override
   Widget compact(BuildContext context) {
     return IslandCompactLine(
       leading: OfferAppIcon(offer: offer, size: 22, radius: 6),
       title: _title,
-      trailing: Icon(
-        flowDeviceGlyph(offer.source.info.platform),
-        size: 16,
-        color: FlowSpaceTokens.live,
-      ),
+      trailing: DeviceGlyph(_glyph, size: 16, color: FlowSpaceTokens.live),
     );
   }
 
@@ -278,11 +281,7 @@ class OfferPresenter extends IslandPresenter {
                     children: [
                       Row(
                         children: [
-                          Icon(
-                            flowDeviceGlyph(offer.source.info.platform),
-                            size: 13,
-                            color: dim,
-                          ),
+                          DeviceGlyph(_glyph, size: 13, color: dim),
                           const SizedBox(width: 5),
                           Flexible(
                             child: Text(

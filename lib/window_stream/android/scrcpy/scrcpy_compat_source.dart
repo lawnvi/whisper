@@ -215,7 +215,7 @@ class ScrcpyCompatSource implements WindowSource {
       'log_level=info',
       'tunnel_forward=true',
       'video_codec=h264',
-      'video_bit_rate=${options.videoBitRate}',
+      'video_bit_rate=${options.quality.scale(options.videoBitRate)}',
       'max_fps=${options.maxFps}',
       'audio=$audio',
       if (audio) 'audio_codec=raw',
@@ -500,6 +500,10 @@ class ScrcpyStreamHandle implements StreamHandle {
 
   @override
   void setQuality(QualityTier tier) {}
+
+  /// Stock scrcpy-server takes its bit rate at the start only.
+  @override
+  void setStreamQuality(WindowStreamQuality quality) {}
 
   @override
   Future<void> setViewport({required int width, required int height}) async {

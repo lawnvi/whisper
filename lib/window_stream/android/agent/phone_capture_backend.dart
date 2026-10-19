@@ -571,6 +571,16 @@ class PhoneCaptureBackend implements WindowCaptureBackend {
   }
 
   @override
+  void captureSetBitRate(int capture, int bitRate) {
+    final stream = _streams[capture];
+    if (stream != null && bitRate > 0) {
+      unawaited(
+        _quiet('bitRate', {'stream': stream.agentStream, 'bitRate': bitRate}),
+      );
+    }
+  }
+
+  @override
   void captureSetAudio(int capture, int mode) {
     // Audio is chosen when the stream opens (the agent records per app).
   }

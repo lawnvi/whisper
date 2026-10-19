@@ -70,6 +70,9 @@ abstract interface class StreamHandle {
   void sendInput(WindowInputEvent event);
   void requestKeyframe();
   void setQuality(QualityTier tier);
+
+  /// The viewer's picture quality; the source applies it as it can.
+  void setStreamQuality(WindowStreamQuality quality);
   Future<void> setViewport({required int width, required int height});
   Future<void> suspend();
   Future<void> resume();

@@ -158,7 +158,10 @@ void main() {
     final deck = File(
       'lib/page/window_stream/flow_recents_deck.dart',
     ).readAsStringSync();
-    expect(deck, contains('opacity: card.closing ? 1 : 0'));
+    // The spinner exists only while closing (one hidden at zero opacity
+    // kept turning and redrew the page every frame).
+    expect(deck, contains('child: card.closing'));
+    expect(deck, isNot(contains('opacity: card.closing ? 1 : 0')));
     expect(deck, contains('card.closing ||'));
   });
 }

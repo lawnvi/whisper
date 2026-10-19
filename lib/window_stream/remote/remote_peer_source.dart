@@ -28,6 +28,29 @@ typedef WindowStreamPeerSender =
 typedef StreamInputPort =
     void Function(String streamId, WindowInputEvent event);
 
+/// A Whisper peer connected now, as far as windows go.
+class WindowStreamPeer {
+  const WindowStreamPeer({
+    required this.peerId,
+    required this.name,
+    required this.platform,
+    required this.takesWindows,
+  });
+
+  final String peerId;
+  final String name;
+  final WindowStreamPlatform platform;
+
+  /// It shows windows sent to it ("送到"): an iPad only does that.
+  final bool takesWindows;
+
+  bool sameAs(WindowStreamPeer other) =>
+      peerId == other.peerId &&
+      name == other.name &&
+      platform == other.platform &&
+      takesWindows == other.takesWindows;
+}
+
 /// Viewer-side registry: every connected Whisper peer that offers windows,
 /// plus routing of the host's control replies to the right source.
 class WindowStreamViewer extends ChangeNotifier {
@@ -104,6 +127,36 @@ class WindowStreamViewer extends ChangeNotifier {
   }
 
   RemotePeerSource? sourceFor(String peerId) => _sources[peerId];
+
+  final _peers = <String, WindowStreamPeer>{};
+
+  /// [peerId] is connected through Whisper now (an adb phone is streamed
+  /// only then, like every other device).
+  bool isConnected(String peerId) => _peers.containsKey(peerId);
+
+  /// Connected peers that show windows sent to them.
+  List<WindowStreamPeer> get targets => [
+    for (final peer in _peers.values)
+      if (peer.takesWindows) peer,
+  ];
+
+  /// Set by the socket layer once a peer's profile is known.
+  void peerConnected(WindowStreamPeer peer) {
+    final before = _peers[peer.peerId];
+    _peers[peer.peerId] = peer;
+    if (before == null || !before.sameAs(peer)) {
+      notifyListeners();
+    }
+  }
+
+  /// The peer's connection closed: its source goes too.
+  void peerDisconnected(String peerId) {
+    final had = _peers.remove(peerId) != null;
+    peerGone(peerId);
+    if (had) {
+      notifyListeners();
+    }
+  }
 
   /// A trusted peer that can host windows connected (or its profile changed).
   void peerAvailable({
@@ -620,6 +673,7 @@ class RemotePeerSource implements WindowSource, ClosesTasks, ConfirmsTaskClose {
         : RemoteViewport.screen();
     handle._viewport = screen;
     handle._pixelRatio = RemoteViewport.pixelRatio;
+    handle._quality = options.quality;
     final viewerName = await _localName();
     final sent = await _send(
       _message(WindowStreamControlAction.open, session, {
@@ -628,6 +682,9 @@ class RemotePeerSource implements WindowSource, ClosesTasks, ConfirmsTaskClose {
         'viewportHeight': screen.height.round(),
         'viewportScale': RemoteViewport.scale,
         'pixelRatio': handle._pixelRatio,
+        // How much picture the viewer wants (hosts that don't know it use
+        // their usual bit rate).
+        'quality': handle._quality.name,
         'viewerKind': RemoteViewport.viewerKind,
         // Other viewers' lists say where the window is.
         'viewerName': viewerName,
@@ -966,6 +1023,7 @@ class RemoteStreamHandle implements StreamHandle {
 
   /// This screen's pixels per point, so the host sends no more than that.
   double _pixelRatio = 1;
+  WindowStreamQuality _quality = WindowStreamQuality.fallback;
   final _state = ValueNotifier<StreamState>(
     const StreamState(StreamStatus.opening),
   );
@@ -1041,6 +1099,16 @@ class RemoteStreamHandle implements StreamHandle {
   @override
   void setQuality(QualityTier tier) {}
 
+  /// The host changes its bit rate as the stream goes on.
+  @override
+  void setStreamQuality(WindowStreamQuality quality) {
+    if (_closed || quality == _quality) {
+      return;
+    }
+    _quality = quality;
+    unawaited(_sendViewport());
+  }
+
   /// The viewer's screen turned or resized: the host fits the window again.
   @override
   Future<void> setViewport({required int width, required int height}) async {
@@ -1089,6 +1157,7 @@ class RemoteStreamHandle implements StreamHandle {
       'viewportScale': RemoteViewport.scale,
       'pixelRatio': _pixelRatio,
       'keyboardInset': _keyboardInset,
+      'quality': _quality.name,
     }),
   );
 

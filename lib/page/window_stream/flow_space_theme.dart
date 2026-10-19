@@ -1,3 +1,4 @@
+import 'dart:io' show Platform;
 import 'dart:math' as math;
 import 'dart:ui';
 
@@ -170,6 +171,11 @@ class FlowSpaceColors {
 
 /// Frosted material for floating surfaces (menus, control capsules, paused
 /// overlays). The space's flat surfaces stay opaque.
+///
+/// Blurring what is behind is redone every frame anything under it moves.
+/// Windows and Linux GPUs pay for that in dropped frames (cards animating
+/// with glass on them stuttered), so there the material is a denser tint
+/// without the blur.
 class FlowGlass extends StatelessWidget {
   const FlowGlass({
     super.key,
@@ -190,24 +196,33 @@ class FlowGlass extends StatelessWidget {
     final shape = RoundedSuperellipseBorder(
       borderRadius: BorderRadius.circular(radius),
     );
+    final color = tint ?? colors.glassTint;
+    final surface = DecoratedBox(
+      decoration: ShapeDecoration(
+        shape: RoundedSuperellipseBorder(
+          borderRadius: BorderRadius.circular(radius),
+          side: BorderSide(color: colors.hairline),
+        ),
+        color: flowGlassBlurs
+            ? color
+            : color.withValues(alpha: math.min(1, color.a + 0.25)),
+      ),
+      child: Padding(padding: padding ?? EdgeInsets.zero, child: child),
+    );
     return ClipPath(
       clipper: ShapeBorderClipper(shape: shape),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
-        child: DecoratedBox(
-          decoration: ShapeDecoration(
-            shape: RoundedSuperellipseBorder(
-              borderRadius: BorderRadius.circular(radius),
-              side: BorderSide(color: colors.hairline),
-            ),
-            color: tint ?? colors.glassTint,
-          ),
-          child: Padding(padding: padding ?? EdgeInsets.zero, child: child),
-        ),
-      ),
+      child: flowGlassBlurs
+          ? BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
+              child: surface,
+            )
+          : surface,
     );
   }
 }
+
+/// Whether [FlowGlass] blurs what is behind it (see there).
+bool get flowGlassBlurs => !(Platform.isWindows || Platform.isLinux);
 
 /// Whether motion should collapse to fades.
 bool flowReduceMotion(BuildContext context) =>

@@ -83,8 +83,22 @@ class _SwitcherRoute extends PageRoute<void> {
 
   final Widget Function(Animation<double> animation) builder;
 
+  bool _covered = false;
+
+  /// The page behind is all under the switcher's own picture of it: once
+  /// open, it need not be drawn again every frame.
+  void backdropShown() {
+    if (_covered) {
+      return;
+    }
+    _covered = true;
+    if ((animation?.isCompleted ?? false) && overlayEntries.isNotEmpty) {
+      overlayEntries.first.opaque = true;
+    }
+  }
+
   @override
-  bool get opaque => false;
+  bool get opaque => _covered;
 
   @override
   Color? get barrierColor => null;
@@ -286,6 +300,12 @@ class _FlowSwitcherState extends State<FlowSwitcher>
     widget.backdrop?.then((image) {
       if (mounted) {
         setState(() => _backdrop = image);
+        if (image != null) {
+          final route = ModalRoute.of(context);
+          if (route is _SwitcherRoute) {
+            route.backdropShown();
+          }
+        }
       } else {
         image?.dispose();
       }
@@ -619,8 +639,8 @@ class _FlowSwitcherState extends State<FlowSwitcher>
                       child: Stack(
                         fit: StackFit.expand,
                         children: [
+                          // Dimmed already (see [blurredSnapshot]).
                           RawImage(image: _backdrop, fit: BoxFit.cover),
-                          const ColoredBox(color: Color(0x4D000000)),
                         ],
                       ),
                     )
@@ -883,8 +903,14 @@ class _SwitcherCard extends StatelessWidget {
                             color: Colors.white,
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
+                            // A tight shadow: a wide one is a costly blur
+                            // for every name in every frame.
                             shadows: [
-                              Shadow(color: Color(0x66000000), blurRadius: 8),
+                              Shadow(
+                                color: Color(0x80000000),
+                                offset: Offset(0, 1),
+                                blurRadius: 2,
+                              ),
                             ],
                           ),
                         ),
@@ -895,6 +921,7 @@ class _SwitcherCard extends StatelessWidget {
               ),
             ),
           ),
+          const Positioned.fill(child: CustomPaint(painter: _CardShadow())),
           Positioned.fill(
             child: GestureDetector(
               onTap: onTap,
@@ -902,13 +929,6 @@ class _SwitcherCard extends StatelessWidget {
                 decoration: ShapeDecoration(
                   shape: shape,
                   color: const Color(0xFF1C1C1E),
-                  shadows: const [
-                    BoxShadow(
-                      color: Color(0x33000000),
-                      blurRadius: 18,
-                      offset: Offset(-2, 6),
-                    ),
-                  ],
                 ),
                 child: ClipPath(
                   clipper: ShapeBorderClipper(shape: shape),
@@ -950,25 +970,106 @@ class _SwitcherCard extends StatelessWidget {
 /// background.
 Future<ui.Image?> blurredSnapshot(RenderRepaintBoundary boundary) async {
   try {
-    final image = await boundary.toImage(pixelRatio: 0.3);
+    const scale = 0.3;
+    final page = await boundary.toImage(pixelRatio: scale);
+    // Whole pixels only: a last row or column the page only partly covers
+    // is see-through, and blurred it would leave a dark edge (nothing is
+    // drawn behind the switcher once it is open). Cut first, then blur the
+    // whole picture, which carries its edges on outwards.
+    final width = math.max(1, (boundary.size.width * scale).floor());
+    final height = math.max(1, (boundary.size.height * scale).floor());
+    final whole = Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble());
+    final cut = ui.PictureRecorder();
+    Canvas(cut).drawImageRect(page, whole, whole, Paint());
+    final image = cut.endRecording().toImageSync(width, height);
+    page.dispose();
     final recorder = ui.PictureRecorder();
-    Canvas(recorder).drawImage(
-      image,
-      Offset.zero,
-      Paint()
-        ..imageFilter = ui.ImageFilter.blur(
-          sigmaX: 7,
-          sigmaY: 7,
-          tileMode: TileMode.clamp,
-        ),
-    );
-    final blurred = await recorder.endRecording().toImage(
-      image.width,
-      image.height,
-    );
+    final canvas = Canvas(recorder)
+      ..drawImage(
+        image,
+        Offset.zero,
+        Paint()
+          ..imageFilter = ui.ImageFilter.blur(
+            sigmaX: 7,
+            sigmaY: 7,
+            tileMode: TileMode.clamp,
+          ),
+      );
+    // Dimmed here once rather than by a layer drawn over it every frame.
+    canvas.drawColor(const Color(0x4D000000), BlendMode.srcOver);
+    final blurred = await recorder.endRecording().toImage(width, height);
     image.dispose();
     return blurred;
   } catch (_) {
     return null;
   }
+}
+
+/// A card's soft shadow. Blurred live it cost a slow tablet most of each
+/// frame with several cards on screen; it is blurred once into a small
+/// picture instead, and only its ring around the card (which covers the
+/// middle) is drawn, stretched to the card.
+class _CardShadow extends CustomPainter {
+  const _CardShadow();
+
+  static const _radius = 22.0;
+  static const _sigma = 18 * 0.57735 + 0.5;
+  static const _margin = 34.0;
+  static const _side = (_margin + _radius) * 2 + 2;
+  static ui.Image? _image;
+
+  static ui.Image _picture() {
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        const Rect.fromLTWH(
+          _margin,
+          _margin,
+          _side - 2 * _margin,
+          _side - 2 * _margin,
+        ),
+        const Radius.circular(_radius),
+      ),
+      Paint()
+        ..color = const Color(0x33000000)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, _sigma),
+    );
+    return recorder.endRecording().toImageSync(_side.toInt(), _side.toInt());
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // Still growing out of a point in the stack: too small for corners.
+    if (size.shortestSide < 2 * _radius) {
+      return;
+    }
+    final image = _image ??= _picture();
+    const edge = _margin + _radius;
+    final paint = Paint()..filterQuality = FilterQuality.low;
+    final dst = (Offset.zero & size)
+        .inflate(_margin)
+        .shift(const Offset(-2, 6));
+    const far = _side - edge;
+    final xs = [dst.left, dst.left + edge, dst.right - edge, dst.right];
+    final ys = [dst.top, dst.top + edge, dst.bottom - edge, dst.bottom];
+    const sx = [0.0, edge, far, _side];
+    const sy = [0.0, edge, far, _side];
+    for (var row = 0; row < 3; row++) {
+      for (var col = 0; col < 3; col++) {
+        if (row == 1 && col == 1) {
+          continue;
+        }
+        canvas.drawImageRect(
+          image,
+          Rect.fromLTRB(sx[col], sy[row], sx[col + 1], sy[row + 1]),
+          Rect.fromLTRB(xs[col], ys[row], xs[col + 1], ys[row + 1]),
+          paint,
+        );
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_CardShadow oldDelegate) => false;
 }

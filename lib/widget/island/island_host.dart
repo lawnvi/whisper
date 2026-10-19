@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
 import '../../l10n/app_localizations.dart';
@@ -148,8 +149,23 @@ class _IslandHostState extends State<IslandHost> with TickerProviderStateMixin {
 
   // --------------------------------------------------------------- motion
 
+  bool _centerLater = false;
+
   void _onCenter() {
     if (!mounted) {
+      return;
+    }
+    // A page that hushes the island from initState tells it mid-build:
+    // catch up once the frame is done.
+    if (SchedulerBinding.instance.schedulerPhase ==
+        SchedulerPhase.persistentCallbacks) {
+      if (!_centerLater) {
+        _centerLater = true;
+        SchedulerBinding.instance.addPostFrameCallback((_) {
+          _centerLater = false;
+          _onCenter();
+        });
+      }
       return;
     }
     final featured = _center.featured;

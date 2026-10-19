@@ -729,7 +729,10 @@ class _DirectionOptionState extends State<_DirectionOption> {
   }
 }
 
-/// Three dots travelling left to right while [active].
+/// Three dots and a chevron pointing the way windows go. Chosen
+/// ([active]), a light runs along them once and they stay lit: a light
+/// running for as long as the choice stood redrew the page all the time
+/// and read as a cursor flickering there.
 class _FlowArrow extends StatefulWidget {
   const _FlowArrow({required this.color, required this.active});
 
@@ -744,35 +747,20 @@ class _FlowArrowState extends State<_FlowArrow>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 1200),
+    duration: const Duration(milliseconds: 700),
+    value: 1,
   );
-
-  @override
-  void initState() {
-    super.initState();
-    _sync();
-  }
 
   @override
   void didUpdateWidget(_FlowArrow old) {
     super.didUpdateWidget(old);
-    _sync();
-  }
-
-  void _sync() {
     final still = WidgetsBinding
         .instance
         .platformDispatcher
         .accessibilityFeatures
         .disableAnimations;
-    if (widget.active && !still) {
-      if (!_controller.isAnimating) {
-        _controller.repeat();
-      }
-    } else {
-      _controller
-        ..stop()
-        ..value = 0.5;
+    if (widget.active && !old.active && !still) {
+      _controller.forward(from: 0);
     }
   }
 
@@ -782,11 +770,8 @@ class _FlowArrowState extends State<_FlowArrow>
     super.dispose();
   }
 
-  /// 1 while the wave passes dot [i], fading to 0 behind it.
-  double _glow(int i) {
-    final phase = (_controller.value * 3 - i) % 3;
-    return phase < 1 ? 1 - phase : 0;
-  }
+  /// How lit dot [i] is: the light reaches it in turn and it stays on.
+  double _glow(int i) => (_controller.value * 3 - i).clamp(0.0, 1.0);
 
   @override
   Widget build(BuildContext context) {

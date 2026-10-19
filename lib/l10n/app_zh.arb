@@ -1370,6 +1370,15 @@
   "macPermissionDenied": "未允许",
   "macPermissionNotAsked": "未设置",
   "macPermissionOptional": "可选",
+  "windowStreamQuality": "画质",
+  "windowStreamQualitySmooth": "流畅",
+  "windowStreamQualityStandard": "标准",
+  "windowStreamQualityHigh": "高清",
+  "windowStreamQualityBest": "超清",
+  "windowStreamQualityHint": "越高越清晰，也越占网络",
+  "windowStreamReceiveOnly": "只接收窗口",
+  "windowStreamNotConnected": "未连接",
+  "windowStreamConnectFirst": "先在 Whisper 里连上这台手机，才能流转它的应用",
   "windowStreamOpenHereDetail": "用 {device} 上的应用",
   "@windowStreamOpenHereDetail": {
     "placeholders": {

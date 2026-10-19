@@ -365,6 +365,37 @@ void main() {
     expect(plugin, contains('WIFI_MODE_FULL_LOW_LATENCY'));
   });
 
+  test('an app\'s untitled parts are not listed beside its windows', () {
+    // Feishu lays an untitled window of the same size over its own, and a
+    // full-screen Chrome keeps its toolbar in an untitled strip: people see
+    // one window, Flow listed two.
+    final catalog = File(
+      'packages/window_stream_native/macos/Classes/CaptureCatalog.swift',
+    ).readAsStringSync();
+    expect(catalog, contains('let titledApps = Set('));
+    expect(
+      catalog,
+      contains(
+        '(\$0["title"] as? String ?? "").isEmpty && titledApps.contains(',
+      ),
+    );
+  });
+
+  test('frames from the stream isolate always get a real answer', () {
+    // An empty answer reaches a background isolate as null: it threw on
+    // every frame and kept every frame's wait (seen on a real iPad).
+    final ios = File(
+      'packages/window_stream_native/ios/Classes/WindowStreamNativePlugin.swift',
+    ).readAsStringSync();
+    expect(ios, contains('reply(WindowStreamNativePlugin.frameAck)'));
+    expect(ios, isNot(contains('reply(nil)')));
+    final android = File(
+      'android/app/src/main/kotlin/com/vireen/whisper/WindowStreamReceiverPlugin.kt',
+    ).readAsStringSync();
+    expect(android, contains('reply.reply(ByteBuffer.allocateDirect(1)'));
+    expect(android, isNot(contains('reply.reply(null)')));
+  });
+
   test('Flow lists only phones that are there now', () {
     final coordinator = File(
       'lib/window_stream/window_stream_coordinator.dart',

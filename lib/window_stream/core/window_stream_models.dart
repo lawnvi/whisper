@@ -154,6 +154,32 @@ class OpenTask extends OpenTarget {
 
 enum QualityTier { focused, background, minimal }
 
+/// How much picture a streamed window gets, as its viewer chose: the
+/// device sending it spends [bitRateScale] times its usual bit rate (text
+/// stays sharp at the higher ones, a weak network keeps up at the lower).
+enum WindowStreamQuality {
+  smooth(0.5),
+  standard(1),
+  high(2),
+  best(3.5);
+
+  const WindowStreamQuality(this.bitRateScale);
+
+  final double bitRateScale;
+
+  /// What a viewer starts with.
+  static const fallback = WindowStreamQuality.high;
+
+  /// From the wire or settings; anything unknown is [fallback].
+  static WindowStreamQuality fromName(Object? name) => values.firstWhere(
+    (quality) => quality.name == name,
+    orElse: () => fallback,
+  );
+
+  /// [bitRate] (the usual one) at this quality.
+  int scale(int bitRate) => (bitRate * bitRateScale).round();
+}
+
 class StreamOptions {
   const StreamOptions({
     this.audio = true,
@@ -162,11 +188,25 @@ class StreamOptions {
     this.displayWidth,
     this.displayHeight,
     this.displayDpi,
+    this.quality = WindowStreamQuality.fallback,
   });
 
   final bool audio;
   final int maxFps;
+
+  /// The usual bit rate; [quality] scales it.
   final int videoBitRate;
+  final WindowStreamQuality quality;
+
+  StreamOptions withQuality(WindowStreamQuality quality) => StreamOptions(
+    audio: audio,
+    maxFps: maxFps,
+    videoBitRate: videoBitRate,
+    displayWidth: displayWidth,
+    displayHeight: displayHeight,
+    displayDpi: displayDpi,
+    quality: quality,
+  );
 
   /// Virtual display size; null keeps the phone's own layout.
   final int? displayWidth;

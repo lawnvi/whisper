@@ -121,6 +121,9 @@ class _HostStream {
   /// How much of the viewer's screen bottom its keyboard covers.
   double keyboardInset = 0;
 
+  /// The picture quality the viewer chose (older viewers: the usual one).
+  WindowStreamQuality quality = WindowStreamQuality.standard;
+
   /// Keeps the viewer's radio awake while the picture is still.
   Timer? tick;
 
@@ -146,7 +149,13 @@ class _HostStream {
     }
     final keyboard = payload['keyboardInset'];
     keyboardInset = keyboard is num ? keyboard.toDouble().clamp(0, 0.8) : 0;
+    if (payload['quality'] case final String name) {
+      quality = WindowStreamQuality.fromName(name);
+    }
   }
+
+  /// The bit rate this stream is sent at.
+  int get bitRate => quality.scale(WindowStreamHost.usualBitRate);
 }
 
 /// This device as a window source for other Whisper peers: desktops (macOS,
@@ -169,6 +178,9 @@ class WindowStreamHost {
 
   static const String route = '/window';
   static const String namespace = 'window-stream';
+
+  /// A stream's bit rate at the standard quality.
+  static const int usualBitRate = 12000000;
   static const int maxInputMessageBytes = 8 * 1024;
 
   /// Where windows, pictures and input go: the desktop's native capture or
@@ -587,8 +599,14 @@ class WindowStreamHost {
       case WindowStreamControlAction.viewport:
         final stream = _streams[message.sessionId];
         if (stream != null) {
+          final bitRate = stream.bitRate;
           stream.readViewport(message.payload);
           _applyViewport(stream);
+          final capture = stream.captureId;
+          if (capture != null && stream.bitRate != bitRate) {
+            _log(stream, 'quality ${stream.quality.name}');
+            _backend.captureSetBitRate(capture, stream.bitRate);
+          }
         }
       case WindowStreamControlAction.closeWindow:
         // Only a window this viewer was shown, as its close button would.
@@ -1158,7 +1176,7 @@ class WindowStreamHost {
           viewerPeerId: stream.viewerPeerId,
           maxEdge: 2560,
           fps: 60,
-          bitRate: 12000000,
+          bitRate: stream.bitRate,
           audio: stream.audio,
           viewportWidth: stream.viewportWidth,
           viewportHeight: stream.viewportHeight,
@@ -1387,6 +1405,8 @@ class WindowStreamHost {
         },
         'videoInFlight': stream.videoInFlight,
         'busy': stream.busy,
+        'quality': stream.quality.name,
+        'bitRate': stream.bitRate,
         'audio': {
           'asked': stream.audio,
           'on': stream.audioOn,
@@ -1588,6 +1608,9 @@ abstract interface class WindowCaptureBackend {
   /// The viewer's pixels per point: a host drawing the window at a higher
   /// density sends no more pixels than the viewer shows.
   void captureSetPixelRatio(int capture, double ratio);
+
+  /// The encoder's bit rate from now on (the viewer chose a quality).
+  void captureSetBitRate(int capture, int bitRate);
 
   /// [WsnCaptureAudio] mode; sound arrives as [CaptureAudio].
   void captureSetAudio(int capture, int mode);
@@ -1798,6 +1821,10 @@ class _NativeCaptureBackend implements WindowCaptureBackend {
   @override
   void captureSetPixelRatio(int capture, double ratio) =>
       _bindings?.captureSetPixelRatio(capture, ratio);
+
+  @override
+  void captureSetBitRate(int capture, int bitRate) =>
+      _bindings?.captureSetBitRate(capture, bitRate);
 
   @override
   void captureSetInset(int capture, double fraction) =>

@@ -72,7 +72,7 @@ void main() {
     final handle =
         await source.open(
               OpenTask(const TaskEntry(id: 7, appId: 'app', label: 'App')),
-              const StreamOptions(),
+              const StreamOptions(quality: WindowStreamQuality.best),
             )
             as RemoteStreamHandle;
     final accept = p.toViewer.firstWhere(
@@ -112,9 +112,20 @@ void main() {
     expect(p.dialledByHost, expectHostDials ? 1 : 0);
     expect(p.dialledByViewer, expectHostDials ? 0 : 1);
 
-    // The host starts capturing once its media is up.
+    // The host starts capturing once its media is up, at the quality the
+    // viewer chose.
     await _until(() => p.backend.started != null);
     final capture = p.backend.started!;
+    expect(
+      p.backend.startBitRate,
+      WindowStreamQuality.best.scale(WindowStreamHost.usualBitRate),
+    );
+    // Chosen again while it streams, the encoder follows.
+    handle.setStreamQuality(WindowStreamQuality.smooth);
+    await _until(() => p.backend.bitRates.isNotEmpty);
+    expect(p.backend.bitRates, [
+      WindowStreamQuality.smooth.scale(WindowStreamHost.usualBitRate),
+    ]);
     p.backend.emit(
       CaptureVideo(
         capture,
@@ -535,6 +546,8 @@ Future<HttpServer> _mediaServer({
 class _FakeBackend implements WindowCaptureBackend {
   void Function(CaptureEvent event)? _onEvent;
   int? started;
+  int? startBitRate;
+  final bitRates = <int>[];
   final inputs = <({double x, double y, String? text})>[];
 
   void emit(CaptureEvent event) => _onEvent?.call(event);
@@ -593,6 +606,7 @@ class _FakeBackend implements WindowCaptureBackend {
   @override
   int captureStart(CaptureRequest request) {
     expect(request.audio, isTrue);
+    startBitRate = request.bitRate;
     return started = 41;
   }
 
@@ -617,6 +631,8 @@ class _FakeBackend implements WindowCaptureBackend {
   void captureSetInset(int capture, double fraction) {}
   @override
   void captureSetPixelRatio(int capture, double ratio) {}
+  @override
+  void captureSetBitRate(int capture, int bitRate) => bitRates.add(bitRate);
   @override
   void captureSetAudio(int capture, int mode) {}
 

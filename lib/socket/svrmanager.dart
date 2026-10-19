@@ -3350,7 +3350,7 @@ class WsSvrManager {
       _remoteClipboardTransfer.clearPeer(peerId),
       WindowStreamHost.shared.closePeer(peerId),
     ]);
-    WindowStreamViewer.shared.peerGone(peerId);
+    WindowStreamViewer.shared.peerDisconnected(peerId);
     FileBrowseHost.shared.closePeer(peerId);
     RemoteFilesClient.peerGone(peerId);
     if (!ownsCleanup()) {
@@ -5359,7 +5359,7 @@ class WsSvrManager {
     if (hasPeerId) {
       if (profile == null) {
         _remoteProfilesByPeerId.remove(peerId);
-        WindowStreamViewer.shared.peerGone(peerId);
+        WindowStreamViewer.shared.peerDisconnected(peerId);
       } else {
         _remoteProfilesByPeerId[peerId] = profile;
         if (profile.formFactor.isNotEmpty) {
@@ -5367,6 +5367,16 @@ class WsSvrManager {
             DeviceFormFactors.shared.record(peerId, profile.formFactor),
           );
         }
+        WindowStreamViewer.shared.peerConnected(
+          WindowStreamPeer(
+            peerId: peerId,
+            name: profile.device.name,
+            platform: windowStreamPlatformOf(profile.device.platform),
+            takesWindows:
+                profile.protocolVersion >= 12 &&
+                profile.capabilities.windowStreamOfferV1,
+          ),
+        );
         if (profile.protocolVersion >= 12 &&
             profile.capabilities.windowStreamSourceV1 &&
             supportsWindowStreamSink()) {

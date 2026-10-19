@@ -55,6 +55,15 @@ enum CaptureCatalog {
           "active": running?.isActive ?? false,
         ])
       }
+      // An app's untitled windows beside titled ones are parts of them, not
+      // windows of their own: the layer an Electron app (Feishu) lays over
+      // its window, the toolbar strip of a full-screen Chrome. People see
+      // one window there; an app with only untitled windows keeps them.
+      let titledApps = Set(
+        windows.compactMap { ($0["title"] as? String ?? "").isEmpty ? nil : $0["pid"] as? Int })
+      windows.removeAll {
+        ($0["title"] as? String ?? "").isEmpty && titledApps.contains($0["pid"] as? Int ?? -1)
+      }
       // A locked session gets no frames at all; say so instead of timing out.
       let session = CGSessionCopyCurrentDictionary() as? [String: Any]
       let locked = (session?["CGSSessionScreenIsLocked"] as? Bool) ?? false

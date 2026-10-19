@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/page/window_stream/flow_recents_deck.dart';
@@ -173,5 +175,29 @@ void main() {
       await tester.pumpAndSettle();
       await tester.pump(const Duration(seconds: 1));
     }
+  });
+
+  test('swiping stays light on a slow tablet', () {
+    // Measured on an iPad (A10) with tool/perf/switcher_perf.dart: live
+    // card shadows, a wide blur under each name and the page drawn under
+    // the switcher every frame made half the frames late.
+    final source = File(
+      'lib/page/window_stream/flow_switcher.dart',
+    ).readAsStringSync();
+    final card = source.substring(
+      source.indexOf('class _SwitcherCard'),
+      source.indexOf('class _CardShadow'),
+    );
+    expect(card, isNot(contains('BoxShadow(')));
+    expect(card, contains('CustomPaint(painter: _CardShadow())'));
+    expect(card, contains('blurRadius: 2'));
+    expect(source, contains('overlayEntries.first.opaque = true'));
+    expect(source, contains('route.backdropShown()'));
+    // The dim is in the picture, not a layer over it.
+    expect(
+      source,
+      contains('canvas.drawColor(const Color(0x4D000000), BlendMode.srcOver)'),
+    );
+    expect(source, isNot(contains('ColoredBox(color: Color(0x4D000000))')));
   });
 }

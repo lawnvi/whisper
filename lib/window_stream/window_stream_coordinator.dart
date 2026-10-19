@@ -220,6 +220,9 @@ class WindowStreamCoordinator extends ChangeNotifier
   /// appear twice. The adb path wins: it talks to the agent directly, one
   /// hop, without relaying through the phone's Whisper app, so the Whisper
   /// peer source for a phone already covered over adb is dropped.
+  ///
+  /// An adb phone counts only while its Whisper is connected here, as every
+  /// other device does: the cable alone does not make it one to stream.
   List<WindowSource> get sources {
     final seen = <String>{};
     final adbPeerIds = <String>{
@@ -228,12 +231,25 @@ class WindowStreamCoordinator extends ChangeNotifier
     };
     return [
       for (final device in _devices.values)
-        if (device.source != null && seen.add(device.source!.info.id))
+        if (device.source != null &&
+            isAdbPhoneConnected(device) &&
+            seen.add(device.source!.info.id))
           device.source!,
       for (final source in WindowStreamViewer.shared.sources)
         if (!adbPeerIds.contains(source.peerId)) source,
     ];
   }
+
+  /// [device]'s Whisper is connected here (see [sources]).
+  bool isAdbPhoneConnected(WindowStreamDevice device) {
+    final peerId = device.peerId;
+    return peerId != null && peerConnected(peerId);
+  }
+
+  /// Whether a Whisper peer is connected now.
+  @visibleForTesting
+  bool Function(String peerId) peerConnected =
+      WindowStreamViewer.shared.isConnected;
 
   /// The Whisper peer an adb phone's source belongs to.
   String? peerIdFor(WindowSource source) {
@@ -248,7 +264,9 @@ class WindowStreamCoordinator extends ChangeNotifier
   /// The source for a Whisper peer: its adb phone or the peer itself.
   WindowSource? sourceForPeer(String peerId) {
     for (final device in _devices.values) {
-      if (device.peerId == peerId && device.source != null) {
+      if (device.peerId == peerId &&
+          device.source != null &&
+          isAdbPhoneConnected(device)) {
         return device.source;
       }
     }
@@ -273,6 +291,35 @@ class WindowStreamCoordinator extends ChangeNotifier
     mute: strings.mute,
     unmute: strings.unmute,
   );
+
+  /// The picture quality windows are streamed at here, as last chosen.
+  final quality = ValueNotifier<WindowStreamQuality>(
+    WindowStreamQuality.fallback,
+  );
+  static const _qualityKey = 'window_stream.quality';
+  Future<void>? _qualityLoaded;
+
+  /// Reads the quality chosen before (once).
+  Future<void> loadQuality() => _qualityLoaded ??= () async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      quality.value = WindowStreamQuality.fromName(
+        prefs.getString(_qualityKey),
+      );
+    } catch (_) {
+      // Settings unavailable: the default stands.
+    }
+  }();
+
+  /// Streams every open window and every one opened later at [value].
+  Future<void> setQuality(WindowStreamQuality value) async {
+    quality.value = value;
+    for (final session in _sessions.values) {
+      session.handle.setStreamQuality(value);
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_qualityKey, value.name);
+  }
 
   /// Starts discovery and the stream isolate. Idempotent.
   Future<void> start() {
@@ -649,7 +696,11 @@ class WindowStreamCoordinator extends ChangeNotifier
       backend.focus(open.surface);
       return open;
     }
-    final handle = await source.open(target, options);
+    await loadQuality();
+    final handle = await source.open(
+      target,
+      options.withQuality(quality.value),
+    );
     final title =
         '${handle.title}${strings.deviceSeparator}${source.info.name}';
     final initial = handle.state.value;

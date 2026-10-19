@@ -2455,6 +2455,33 @@ class AppLocalizationsZh extends AppLocalizations {
   String get macPermissionOptional => '可选';
 
   @override
+  String get windowStreamQuality => '画质';
+
+  @override
+  String get windowStreamQualitySmooth => '流畅';
+
+  @override
+  String get windowStreamQualityStandard => '标准';
+
+  @override
+  String get windowStreamQualityHigh => '高清';
+
+  @override
+  String get windowStreamQualityBest => '超清';
+
+  @override
+  String get windowStreamQualityHint => '越高越清晰，也越占网络';
+
+  @override
+  String get windowStreamReceiveOnly => '只接收窗口';
+
+  @override
+  String get windowStreamNotConnected => '未连接';
+
+  @override
+  String get windowStreamConnectFirst => '先在 Whisper 里连上这台手机，才能流转它的应用';
+
+  @override
   String windowStreamOpenHereDetail(String device) {
     return '用 $device 上的应用';
   }

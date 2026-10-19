@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
+import '../../helper/device_form_factor.dart';
 import '../../helper/toast.dart';
 import '../../l10n/app_localizations.dart';
 import '../../window_stream/adb/adb_host_client.dart';
@@ -21,8 +22,10 @@ import '../../window_stream/remote/window_stream_host.dart';
 import '../../socket/svrmanager.dart';
 import '../../window_stream/window_stream_coordinator.dart';
 import '../../window_stream/window_stream_support.dart';
+import '../remote_files/files_menu.dart';
 import 'flow_animated_grid.dart';
 import 'flow_app_icon.dart';
+import 'flow_desktop_switcher.dart';
 import 'flow_recents_deck.dart';
 import 'flow_space_controller.dart';
 import 'flow_space_theme.dart';
@@ -104,6 +107,7 @@ class _FlowSpacePageState extends State<FlowSpacePage> {
         setState(() => _startError = error);
       }
     });
+    unawaited(_coordinator.loadQuality());
   }
 
   @override
@@ -183,6 +187,14 @@ class _FlowSpacePageState extends State<FlowSpacePage> {
     return l10n.windowStreamViaWhisper;
   }
 
+  /// [source]'s device said it is a tablet.
+  bool _isTablet(WindowSource source) {
+    final peerId = source is RemotePeerSource
+        ? source.peerId
+        : _coordinator.peerIdFor(source);
+    return peerId != null && DeviceFormFactors.shared.isTablet(peerId);
+  }
+
   Color _hue(WindowSource source) =>
       FlowSpaceTokens.deviceHue(source.info.id, Theme.of(context).brightness);
 
@@ -193,7 +205,8 @@ class _FlowSpacePageState extends State<FlowSpacePage> {
   /// need the row.
   bool get _showShelf =>
       !_touchScreen ||
-      (widget.focusPeerId == null && _controller.sources.length > 1);
+      (widget.focusPeerId == null &&
+          _controller.sources.length + _controller.sendOnly.length > 1);
 
   /// The page, for the switcher's blurred background.
   final _pageShot = GlobalKey();
@@ -276,7 +289,88 @@ class _FlowSpacePageState extends State<FlowSpacePage> {
             ),
           ),
           const Spacer(),
+          _buildQualityButton(context),
         ],
+      ),
+    );
+  }
+
+  String _qualityName(WindowStreamQuality quality) => switch (quality) {
+    WindowStreamQuality.smooth => l10n.windowStreamQualitySmooth,
+    WindowStreamQuality.standard => l10n.windowStreamQualityStandard,
+    WindowStreamQuality.high => l10n.windowStreamQualityHigh,
+    WindowStreamQuality.best => l10n.windowStreamQualityBest,
+  };
+
+  /// How sharp windows come over: for every window, open ones at once.
+  Widget _buildQualityButton(BuildContext context) {
+    final colors = FlowSpaceColors.of(context);
+    return ValueListenableBuilder<WindowStreamQuality>(
+      valueListenable: _coordinator.quality,
+      builder: (context, quality, _) => Semantics(
+        button: true,
+        label: '${l10n.windowStreamQuality}, ${_qualityName(quality)}',
+        child: CupertinoButton(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          minimumSize: const Size(36, 32),
+          color: colors.dark
+              ? Colors.white.withValues(alpha: 0.09)
+              : Colors.black.withValues(alpha: 0.055),
+          borderRadius: BorderRadius.circular(16),
+          onPressed: () {
+            final box = context.findRenderObject() as RenderBox?;
+            final at = box == null
+                ? Offset.zero
+                : box.localToGlobal(box.size.bottomRight(Offset.zero));
+            unawaited(
+              showFilesMenu(
+                context,
+                position: at + const Offset(0, 6),
+                alignRight: true,
+                touch: _touchScreen,
+                items: [
+                  FilesMenuItem(
+                    label: l10n.windowStreamQualityHint,
+                    enabled: false,
+                  ),
+                  const FilesMenuItem.separator(),
+                  for (final option in WindowStreamQuality.values.reversed)
+                    FilesMenuItem(
+                      label: _qualityName(option),
+                      checked: option == quality,
+                      onSelected: () =>
+                          unawaited(_coordinator.setQuality(option)),
+                    ),
+                ],
+              ),
+            );
+          },
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                CupertinoIcons.sparkles,
+                size: 15,
+                color: colors.secondaryLabel,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                _qualityName(quality),
+                style: TextStyle(
+                  color: colors.label,
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(width: 3),
+              Icon(
+                CupertinoIcons.chevron_down,
+                size: 11,
+                color: colors.secondaryLabel,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -309,11 +403,13 @@ class _FlowSpacePageState extends State<FlowSpacePage> {
     final problems = _coordinator.devices
         .where(
           (device) =>
-              device.source == null &&
+              (device.source == null ||
+                  !_coordinator.isAdbPhoneConnected(device)) &&
               !knownModels.contains(device.adb.model) &&
               seenModels.add(device.adb.model),
         )
         .toList();
+    final target = _controller.selectedTarget;
     return SizedBox(
       height: FlowDeviceCard.height + 20,
       child: ListView(
@@ -327,11 +423,30 @@ class _FlowSpacePageState extends State<FlowSpacePage> {
               name: source.info.name,
               subtitle: _sourceSubtitle(source),
               platform: source.info.platform,
+              tablet: _isTablet(source),
               hue: _hue(source),
               selected: identical(source, selected),
               receiving: _receivingSourceId == source.info.id,
               windowCount: _coordinator.sessionsFor(source).length,
               onTap: () => _controller.select(source),
+            ),
+            const SizedBox(width: 12),
+          ],
+          // Devices that only take windows from here: an iPad.
+          for (final peer in _controller.sendOnly) ...[
+            FlowDeviceCard(
+              key: _deviceCardKeys.putIfAbsent(
+                _targetCardId(peer),
+                GlobalKey.new,
+              ),
+              name: peer.name,
+              subtitle: l10n.windowStreamReceiveOnly,
+              platform: peer.platform,
+              tablet: DeviceFormFactors.shared.isTablet(peer.peerId),
+              hue: _targetHue(peer),
+              selected: target?.peerId == peer.peerId,
+              receiving: _receivingSourceId == _targetCardId(peer),
+              onTap: () => _controller.selectTarget(peer),
             ),
             const SizedBox(width: 12),
           ],
@@ -342,6 +457,8 @@ class _FlowSpacePageState extends State<FlowSpacePage> {
                   : device.adb.model,
               subtitle: _isRefused(device)
                   ? l10n.windowStreamNotPaired
+                  : device.source != null
+                  ? l10n.windowStreamNotConnected
                   : switch (device.adb.state) {
                       AdbDeviceState.unauthorized ||
                       AdbDeviceState.authorizing =>
@@ -351,6 +468,9 @@ class _FlowSpacePageState extends State<FlowSpacePage> {
                       _ => l10n.windowStreamDeviceOffline,
                     },
               platform: WindowStreamPlatform.android,
+              tablet:
+                  device.peerId != null &&
+                  DeviceFormFactors.shared.isTablet(device.peerId!),
               hue: FlowSpaceTokens.deviceHue(
                 device.adb.serial,
                 Theme.of(context).brightness,
@@ -360,6 +480,8 @@ class _FlowSpacePageState extends State<FlowSpacePage> {
               onTap: () => showAppToast(
                 _isRefused(device)
                     ? _failureText(device.failure!.reason)
+                    : device.source != null
+                    ? l10n.windowStreamConnectFirst
                     : device.adb.state == AdbDeviceState.unauthorized
                     ? l10n.windowStreamUnauthorized
                     : l10n.windowStreamDeviceOffline,
@@ -387,7 +509,8 @@ class _FlowSpacePageState extends State<FlowSpacePage> {
     }
     final adbFailure = _coordinator.adbFailure;
     final refused = _coordinator.devices.where(_isRefused).firstOrNull;
-    if (_controller.sources.isEmpty && refused != null) {
+    final nothing = _controller.sources.isEmpty && _controller.sendOnly.isEmpty;
+    if (nothing && refused != null) {
       return FlowEmptyState(
         icon: CupertinoIcons.lock_shield,
         title: refused.adb.model.isEmpty
@@ -396,7 +519,7 @@ class _FlowSpacePageState extends State<FlowSpacePage> {
         detail: _failureText(refused.failure!.reason),
       );
     }
-    if (_controller.sources.isEmpty && _coordinator.devices.isEmpty) {
+    if (nothing && _coordinator.devices.isEmpty) {
       return FlowEmptyState(
         icon: CupertinoIcons.rectangle_stack,
         title: l10n.windowStreamNoDevices,
@@ -473,6 +596,7 @@ class _FlowSpacePageState extends State<FlowSpacePage> {
           sendSelected: _mode == _FlowMode.send,
           hue: _hue(source),
           devicePlatform: source.info.platform,
+          deviceTablet: _isTablet(source),
           openTitle: l10n.windowStreamOpenHere,
           openDetail: l10n.windowStreamOpenHereDetail(name),
           sendTitle: l10n.windowStreamSendTo(name),
@@ -486,6 +610,28 @@ class _FlowSpacePageState extends State<FlowSpacePage> {
   }
 
   Widget _buildModeContent(BuildContext context, {required bool compact}) {
+    final target = _controller.selectedTarget;
+    if (target != null) {
+      return FlowSendPanel(
+        key: ValueKey('send:${target.peerId}'),
+        deviceName: target.name,
+        available: WsSvrManager().canOfferWindowsTo(target.peerId),
+        gutter: compact
+            ? FlowSpaceTokens.compactGutter
+            : FlowSpaceTokens.gutter,
+        onSend: (window, from, picture) => unawaited(
+          _send(
+            cardId: _targetCardId(target),
+            name: target.name,
+            hue: _targetHue(target),
+            peerId: target.peerId,
+            window: window,
+            from: from,
+            picture: picture,
+          ),
+        ),
+      );
+    }
     final source = _controller.selected;
     final peerId = _sendPeerOf(source);
     if (source == null || peerId == null || _mode == _FlowMode.open) {
@@ -496,22 +642,40 @@ class _FlowSpacePageState extends State<FlowSpacePage> {
       deviceName: source.info.name,
       available: WsSvrManager().canOfferWindowsTo(peerId),
       gutter: compact ? FlowSpaceTokens.compactGutter : FlowSpaceTokens.gutter,
-      onSend: (window, from, picture) =>
-          unawaited(_send(source, peerId, window, from, picture)),
+      onSend: (window, from, picture) => unawaited(
+        _send(
+          cardId: source.info.id,
+          name: source.info.name,
+          hue: _hue(source),
+          peerId: peerId,
+          window: window,
+          from: from,
+          picture: picture,
+        ),
+      ),
     );
   }
 
+  String _targetCardId(WindowStreamPeer peer) => 'send:${peer.peerId}';
+
+  Color _targetHue(WindowStreamPeer peer) => FlowSpaceTokens.deviceHue(
+    _targetCardId(peer),
+    Theme.of(context).brightness,
+  );
+
   /// Sends [window] to [peerId]: the card flies onto the device's card on
   /// the shelf while the offer goes out; the device card swells as it lands.
-  Future<void> _send(
-    WindowSource source,
-    String peerId,
-    RemoteWindowInfo window,
-    Rect from,
-    Uint8List? picture,
-  ) async {
+  Future<void> _send({
+    required String cardId,
+    required String name,
+    required Color hue,
+    required String peerId,
+    required RemoteWindowInfo window,
+    required Rect from,
+    required Uint8List? picture,
+  }) async {
     final targetBox =
-        _deviceCardKeys[source.info.id]?.currentContext?.findRenderObject()
+        _deviceCardKeys[cardId]?.currentContext?.findRenderObject()
             as RenderBox?;
     final to = targetBox != null && targetBox.hasSize
         ? targetBox.localToGlobal(Offset.zero) & targetBox.size
@@ -521,13 +685,13 @@ class _FlowSpacePageState extends State<FlowSpacePage> {
       context,
       from: from,
       to: to,
-      hue: _hue(source),
+      hue: hue,
       picture: picture,
     );
     if (!mounted) {
       return;
     }
-    setState(() => _receivingSourceId = source.info.id);
+    setState(() => _receivingSourceId = cardId);
     Timer(const Duration(milliseconds: 380), () {
       if (mounted) {
         setState(() => _receivingSourceId = null);
@@ -538,9 +702,7 @@ class _FlowSpacePageState extends State<FlowSpacePage> {
       return;
     }
     showAppToast(
-      ok
-          ? l10n.windowStreamSent(source.info.name)
-          : l10n.windowStreamSendFailed,
+      ok ? l10n.windowStreamSent(name) : l10n.windowStreamSendFailed,
       tone: ok ? AppToastTone.success : AppToastTone.error,
     );
   }
@@ -701,8 +863,10 @@ class _FlowSpacePageState extends State<FlowSpacePage> {
                     onOpen: openCard,
                     closeLabel: l10n.windowStreamCloseWindow,
                     onClose: closeCard,
-                    // Touch screens: every window full screen to choose
-                    // from, like a phone's recent apps.
+                    curvedStack: _touchScreen,
+                    // Every window to choose from: full screen like a
+                    // phone's recent apps on a touch screen, a grid a mouse
+                    // reaches on a desktop.
                     onShowAll: _touchScreen
                         ? (origins) => showFlowSwitcher(
                             context,
@@ -715,7 +879,16 @@ class _FlowSpacePageState extends State<FlowSpacePage> {
                             closeLabel: l10n.windowStreamCloseWindow,
                             rotateLabel: l10n.windowStreamSwitcherRotate,
                           )
-                        : null,
+                        : (origins) => showFlowDesktopSwitcher(
+                            context,
+                            cards: cards,
+                            cardAspect: cardAspect,
+                            origins: origins,
+                            onOpen: openCard,
+                            onClose: closeCard,
+                            title: l10n.windowStreamRecents,
+                            closeLabel: l10n.windowStreamCloseWindow,
+                          ),
                   ),
                 ),
         ),

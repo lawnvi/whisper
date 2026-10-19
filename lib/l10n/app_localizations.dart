@@ -4462,6 +4462,60 @@ abstract class AppLocalizations {
   /// **'可选'**
   String get macPermissionOptional;
 
+  /// No description provided for @windowStreamQuality.
+  ///
+  /// In zh, this message translates to:
+  /// **'画质'**
+  String get windowStreamQuality;
+
+  /// No description provided for @windowStreamQualitySmooth.
+  ///
+  /// In zh, this message translates to:
+  /// **'流畅'**
+  String get windowStreamQualitySmooth;
+
+  /// No description provided for @windowStreamQualityStandard.
+  ///
+  /// In zh, this message translates to:
+  /// **'标准'**
+  String get windowStreamQualityStandard;
+
+  /// No description provided for @windowStreamQualityHigh.
+  ///
+  /// In zh, this message translates to:
+  /// **'高清'**
+  String get windowStreamQualityHigh;
+
+  /// No description provided for @windowStreamQualityBest.
+  ///
+  /// In zh, this message translates to:
+  /// **'超清'**
+  String get windowStreamQualityBest;
+
+  /// No description provided for @windowStreamQualityHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'越高越清晰，也越占网络'**
+  String get windowStreamQualityHint;
+
+  /// No description provided for @windowStreamReceiveOnly.
+  ///
+  /// In zh, this message translates to:
+  /// **'只接收窗口'**
+  String get windowStreamReceiveOnly;
+
+  /// No description provided for @windowStreamNotConnected.
+  ///
+  /// In zh, this message translates to:
+  /// **'未连接'**
+  String get windowStreamNotConnected;
+
+  /// No description provided for @windowStreamConnectFirst.
+  ///
+  /// In zh, this message translates to:
+  /// **'先在 Whisper 里连上这台手机，才能流转它的应用'**
+  String get windowStreamConnectFirst;
+
   /// No description provided for @windowStreamOpenHereDetail.
   ///
   /// In zh, this message translates to:

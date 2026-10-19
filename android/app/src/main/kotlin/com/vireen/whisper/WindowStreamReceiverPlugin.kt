@@ -134,7 +134,10 @@ class WindowStreamReceiverPlugin : FlutterPlugin, MethodChannel.MethodCallHandle
             if (message != null) {
                 onFrame(message)
             }
-            reply.reply(null)
+            // Not null: the frames come from a background isolate, which
+            // takes an empty answer for a broken one and never lets go of
+            // its wait.
+            reply.reply(ByteBuffer.allocateDirect(1).put(0.toByte()))
         }
     }
 

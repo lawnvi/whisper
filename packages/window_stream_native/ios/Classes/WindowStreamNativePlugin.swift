@@ -45,6 +45,8 @@ public final class WindowStreamNativePlugin: NSObject, FlutterPlugin {
     observers.forEach { NotificationCenter.default.removeObserver($0) }
   }
 
+  private static let frameAck = Data([0])
+
   public static func register(with registrar: FlutterPluginRegistrar) {
     let plugin = WindowStreamNativePlugin(registrar: registrar)
     registrar.addMethodCallDelegate(plugin, channel: plugin.control)
@@ -56,7 +58,9 @@ public final class WindowStreamNativePlugin: NSObject, FlutterPlugin {
       if let data = message as? Data {
         plugin?.onFrame(data)
       }
-      reply(nil)
+      // Not nil: the frames come from a background isolate, which takes an
+      // empty answer for a broken one and never lets go of its wait.
+      reply(WindowStreamNativePlugin.frameAck)
     }
     plugin.frames = frames
   }

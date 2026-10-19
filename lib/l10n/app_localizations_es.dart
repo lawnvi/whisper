@@ -2642,6 +2642,35 @@ class AppLocalizationsEs extends AppLocalizations {
   String get macPermissionOptional => 'Opcional';
 
   @override
+  String get windowStreamQuality => 'Calidad';
+
+  @override
+  String get windowStreamQualitySmooth => 'Fluida';
+
+  @override
+  String get windowStreamQualityStandard => 'Estándar';
+
+  @override
+  String get windowStreamQualityHigh => 'Alta';
+
+  @override
+  String get windowStreamQualityBest => 'Máxima';
+
+  @override
+  String get windowStreamQualityHint =>
+      'Más nítida cuanto más alta, con más uso de red';
+
+  @override
+  String get windowStreamReceiveOnly => 'Solo recibe ventanas';
+
+  @override
+  String get windowStreamNotConnected => 'Sin conectar';
+
+  @override
+  String get windowStreamConnectFirst =>
+      'Conéctate primero a este teléfono en Whisper para transmitir sus apps';
+
+  @override
   String windowStreamOpenHereDetail(String device) {
     return 'Usa las apps de $device';
   }

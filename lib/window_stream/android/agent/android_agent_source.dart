@@ -378,7 +378,7 @@ class AndroidAgentSource implements WindowSource, ClosesTasks {
         if (width != null && height != null) 'width': width,
         if (width != null && height != null) 'height': height,
         if (options.displayDpi != null) 'dpi': options.displayDpi,
-        'bitRate': options.videoBitRate,
+        'bitRate': options.quality.scale(options.videoBitRate),
         'maxFps': options.maxFps,
         'audio': audio,
       });
@@ -393,6 +393,7 @@ class AndroidAgentSource implements WindowSource, ClosesTasks {
       stream: stream,
       target: target,
       bitRate: options.videoBitRate,
+      quality: options.quality,
       transport: ScrcpySocketsSpec(
         port: _localPort,
         audio: audio,
@@ -530,7 +531,9 @@ class AgentStreamHandle implements StreamHandle {
     required this.target,
     required this.transport,
     required int bitRate,
-  }) : _bitRate = bitRate;
+    required WindowStreamQuality quality,
+  }) : _bitRate = bitRate,
+       _quality = quality;
 
   @override
   final AndroidAgentSource source;
@@ -541,7 +544,10 @@ class AgentStreamHandle implements StreamHandle {
   final OpenTarget target;
   @override
   final StreamTransportSpec transport;
+
+  /// The usual bit rate; [_quality] scales it.
   final int _bitRate;
+  WindowStreamQuality _quality;
 
   final _state = ValueNotifier<StreamState>(
     const StreamState(StreamStatus.opening),
@@ -626,9 +632,23 @@ class AgentStreamHandle implements StreamHandle {
       return;
     }
     _tier = tier;
-    final bitRate = switch (tier) {
-      QualityTier.focused => _bitRate,
-      QualityTier.background => max(1500000, _bitRate ~/ 2),
+    _applyBitRate();
+  }
+
+  @override
+  void setStreamQuality(WindowStreamQuality quality) {
+    if (quality == _quality) {
+      return;
+    }
+    _quality = quality;
+    _applyBitRate();
+  }
+
+  void _applyBitRate() {
+    final chosen = _quality.scale(_bitRate);
+    final bitRate = switch (_tier) {
+      QualityTier.focused => chosen,
+      QualityTier.background => max(1500000, chosen ~/ 2),
       QualityTier.minimal => 800000,
     };
     unawaited(_quietCall('bitRate', {'bitRate': bitRate}));

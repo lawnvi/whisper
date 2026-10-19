@@ -2611,6 +2611,35 @@ class AppLocalizationsEn extends AppLocalizations {
   String get macPermissionOptional => 'Optional';
 
   @override
+  String get windowStreamQuality => 'Quality';
+
+  @override
+  String get windowStreamQualitySmooth => 'Smooth';
+
+  @override
+  String get windowStreamQualityStandard => 'Standard';
+
+  @override
+  String get windowStreamQualityHigh => 'High';
+
+  @override
+  String get windowStreamQualityBest => 'Best';
+
+  @override
+  String get windowStreamQualityHint =>
+      'Sharper as it goes up, using more network';
+
+  @override
+  String get windowStreamReceiveOnly => 'Receives windows only';
+
+  @override
+  String get windowStreamNotConnected => 'Not connected';
+
+  @override
+  String get windowStreamConnectFirst =>
+      'Connect to this phone in Whisper first to stream its apps';
+
+  @override
   String windowStreamOpenHereDetail(String device) {
     return 'Use apps from $device';
   }

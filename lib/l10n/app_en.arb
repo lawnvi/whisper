@@ -1253,6 +1253,24 @@
   "@macPermissionOptional": {
     "description": "Status of an optional macOS permission that is not turned on"
   },
+  "windowStreamQuality": "Quality",
+  "windowStreamQualitySmooth": "Smooth",
+  "windowStreamQualityStandard": "Standard",
+  "windowStreamQualityHigh": "High",
+  "windowStreamQualityBest": "Best",
+  "windowStreamQualityHint": "Sharper as it goes up, using more network",
+  "windowStreamReceiveOnly": "Receives windows only",
+  "@windowStreamReceiveOnly": {
+    "description": "Subtitle of a Flow device card for a device (an iPad) that can only show windows sent to it"
+  },
+  "windowStreamNotConnected": "Not connected",
+  "@windowStreamNotConnected": {
+    "description": "Subtitle of a Flow device card for a USB phone whose Whisper is not connected"
+  },
+  "windowStreamConnectFirst": "Connect to this phone in Whisper first to stream its apps",
+  "@windowStreamConnectFirst": {
+    "description": "Toast when tapping a USB phone in Flow whose Whisper is not connected"
+  },
   "windowStreamOpenHereDetail": "Use apps from {device}",
   "@windowStreamOpenHereDetail": {
     "placeholders": {

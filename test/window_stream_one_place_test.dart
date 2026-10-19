@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'dart:ui' show Size;
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:whisper/window_stream/android/agent/phone_capture_backend.dart';
 import 'package:whisper/window_stream/core/window_stream_models.dart';
 import 'package:whisper/window_stream/remote/window_stream_control.dart';
@@ -107,6 +108,31 @@ void main() {
       ).readAsStringSync();
       expect(page, contains('l10n.flowTaskOpenOn('));
     });
+  });
+
+  group('picture quality', () {
+    test(
+      'the viewer\'s choice is remembered and scales the bit rate',
+      () async {
+        SharedPreferences.setMockInitialValues({
+          'window_stream.quality': 'smooth',
+        });
+        final coordinator = WindowStreamCoordinator.shared;
+        await coordinator.loadQuality();
+        expect(coordinator.quality.value, WindowStreamQuality.smooth);
+        await coordinator.setQuality(WindowStreamQuality.best);
+        final prefs = await SharedPreferences.getInstance();
+        expect(prefs.getString('window_stream.quality'), 'best');
+
+        expect(
+          WindowStreamQuality.fromName('nonsense'),
+          WindowStreamQuality.high,
+        );
+        expect(WindowStreamQuality.standard.scale(12000000), 12000000);
+        expect(WindowStreamQuality.high.scale(12000000), 24000000);
+        expect(WindowStreamQuality.smooth.scale(8000000), 4000000);
+      },
+    );
   });
 
   group('picture size', () {
@@ -265,6 +291,8 @@ class _Backend implements WindowCaptureBackend {
   void captureSetInset(int capture, double fraction) {}
   @override
   void captureSetPixelRatio(int capture, double ratio) {}
+  @override
+  void captureSetBitRate(int capture, int bitRate) {}
   @override
   void captureSetAudio(int capture, int mode) {}
   @override

@@ -38,11 +38,11 @@ class FlowTaskCard {
   final String closingLabel;
 }
 
-/// Recent tasks as a stack, laid out like the switcher ([FlowStack]): the
-/// newest in front, older ones tucked under it to the left. On a touch
-/// screen a tap opens the switcher, every card growing from where it lies
-/// here; with a mouse, hovering fans the cards out into a row instead, and
-/// a click on one opens it.
+/// Recent tasks as a stack: the newest in front, older ones tucked under
+/// it. A click on the stack shows every window ([onShowAll]: the phone's
+/// switcher on a touch screen, a grid on a desktop), each growing from
+/// where it lies here; without [onShowAll], hovering fans the cards out
+/// into a row and a click on one opens it.
 class FlowRecentsDeck extends StatefulWidget {
   const FlowRecentsDeck({
     super.key,
@@ -54,7 +54,12 @@ class FlowRecentsDeck extends StatefulWidget {
     this.cardAspect = 9 / 19.5,
     this.maxVisible = 7,
     this.onShowAll,
+    this.curvedStack = false,
   });
+
+  /// Stacked on the switcher's curve ([FlowStack], touch screens: the
+  /// switcher grows straight out of it), else diagonally (a mouse).
+  final bool curvedStack;
 
   /// Touch screens: a tap on the stack shows every window full screen
   /// (the switcher) instead of fanning the stack out. [cards] tells each
@@ -92,7 +97,7 @@ class _FlowRecentsDeckState extends State<FlowRecentsDeck> {
   static const _shownInStack = 5;
 
   /// Touch screens stack like the switcher they open into.
-  bool get _switcherStyle => widget.onShowAll != null;
+  bool get _switcherStyle => widget.curvedStack;
 
   /// The diagonal stack (mouse): how far each card behind steps right and up.
   static const _stepX = 22.0;
@@ -167,13 +172,15 @@ class _FlowRecentsDeckState extends State<FlowRecentsDeck> {
       child: FocusableActionDetector(
         onShowHoverHighlight: (value) => setState(() {
           _pointerHovering = value;
-          _expanded = value;
+          // With every window a click away, the stack stays put (fanning
+          // out pushed the later ones past where a mouse could reach).
+          _expanded = value && widget.onShowAll == null;
           if (!value) {
             _hovered = null;
           }
         }),
         onShowFocusHighlight: (value) {
-          if (value) {
+          if (value && widget.onShowAll == null) {
             setState(() => _expanded = true);
           }
         },
@@ -278,7 +285,10 @@ class _FlowRecentsDeckState extends State<FlowRecentsDeck> {
               key: _keyFor(card.key),
               card: card,
               shade: shade,
-              elevated: _expanded && _hovered == index,
+              // Pointed at, the stack lifts its front card.
+              elevated: _expanded
+                  ? _hovered == index
+                  : _pointerHovering && index == 0,
               closeLabel: widget.closeLabel,
               // The close button shows on a fanned-out card: hovered with
               // a mouse, always on a touch screen.
@@ -295,7 +305,10 @@ class _FlowRecentsDeckState extends State<FlowRecentsDeck> {
                 }
                 HapticFeedback.selectionClick();
                 final showAll = widget.onShowAll;
-                if (!_expanded && showAll != null) {
+                // A single window on a desktop opens at once.
+                if (!_expanded &&
+                    showAll != null &&
+                    (widget.curvedStack || cards.length > 1)) {
                   unawaited(_present(showAll));
                   return;
                 }
@@ -434,19 +447,22 @@ class _DeckCard extends StatelessWidget {
                     color: Colors.black.withValues(alpha: shade),
                   ),
                 ),
+                // Built only while closing: a spinner kept at zero opacity
+                // still turned, and redrew the page every frame.
                 IgnorePointer(
-                  child: AnimatedOpacity(
+                  child: AnimatedSwitcher(
                     duration: FlowSpaceTokens.quickDuration,
-                    opacity: card.closing ? 1 : 0,
-                    child: const ColoredBox(
-                      color: Color(0x73000000),
-                      child: Center(
-                        child: CupertinoActivityIndicator(
-                          color: Colors.white,
-                          radius: 11,
-                        ),
-                      ),
-                    ),
+                    child: card.closing
+                        ? const ColoredBox(
+                            color: Color(0x73000000),
+                            child: Center(
+                              child: CupertinoActivityIndicator(
+                                color: Colors.white,
+                                radius: 11,
+                              ),
+                            ),
+                          )
+                        : const SizedBox.expand(),
                   ),
                 ),
                 if (card.badge != null)
