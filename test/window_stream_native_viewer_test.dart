@@ -83,16 +83,22 @@ void main() {
     expect(control, contains('WSNConst.windowVolume'));
     expect(read('$swift/StreamSurface.swift'), contains('showVolumeControl()'));
     // Windows: a layered button owned by the window (only its face takes
-    // the pointer) and a flyout with a trackbar and a mute toggle.
+    // the pointer) and a Windows 11 style flyout drawn with Direct2D: a
+    // rounded window over the system backdrop, a mute button and a slider
+    // that UI Automation reads as one.
     final win = read('$windows/volume_control.cpp');
     expect(
       win,
       contains('WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE'),
     );
     expect(win, contains('return MA_NOACTIVATE;'));
-    expect(win, contains('TRACKBAR_CLASSW'));
-    expect(win, contains('BS_OWNERDRAW'));
     expect(win, contains('ULW_ALPHA'));
+    expect(win, contains('D2D1_ALPHA_MODE_PREMULTIPLIED'));
+    expect(win, contains('kDwmWindowCornerPreference'));
+    expect(win, contains('kDwmSystemBackdropType'));
+    expect(win, contains('UIA_RangeValuePatternId'));
+    // A click outside closes it without reaching the window under it.
+    expect(win, contains('SetWindowsHookExW(WH_MOUSE, DismissalHook'));
     final winSurface = read('$windows/surface.cpp');
     expect(winSurface, contains('volume_control_->SetAvailable()'));
     expect(winSurface, contains('EmitWindow(id, WSN_WINDOW_VOLUME, volume)'));
