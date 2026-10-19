@@ -18,6 +18,7 @@ import 'package:whisper/audio/audio_protocol.dart';
 import 'package:whisper/audio/audio_share_manager.dart';
 import 'package:whisper/helper/clipboard_sync.dart';
 import 'package:whisper/helper/connection_request_notifications.dart';
+import 'package:whisper/helper/device_form_factor.dart';
 import 'package:whisper/helper/folder_transfer_store.dart';
 import 'package:whisper/helper/helper.dart';
 import 'package:whisper/helper/local.dart';
@@ -1819,6 +1820,7 @@ class WsSvrManager {
           protocolVersion: currentProfile.protocolVersion,
           capabilities: currentProfile.capabilities,
           displayTopology: currentProfile.displayTopology,
+          formFactor: currentProfile.formFactor,
         ),
         peerId: peerId,
       );
@@ -4154,6 +4156,7 @@ class WsSvrManager {
             protocolVersion: session.remoteProfile!.protocolVersion,
             capabilities: session.remoteProfile!.capabilities,
             displayTopology: session.remoteProfile!.displayTopology,
+            formFactor: session.remoteProfile!.formFactor,
           );
           await _waitForAuthCommitBarrier(
             ConnectionAuthCommitStage.afterPersistence,
@@ -5304,8 +5307,14 @@ class WsSvrManager {
         remoteFilesV1: true,
       ),
       displayTopology: topology,
+      formFactor: await _localFormFactor(),
     );
     return profile;
+  }
+
+  Future<String> _localFormFactor() async {
+    await DeviceFormFactors.shared.load();
+    return DeviceFormFactors.shared.local;
   }
 
   Future<PeerProfile?> requestRemoteProfileRefresh({
@@ -5353,6 +5362,11 @@ class WsSvrManager {
         WindowStreamViewer.shared.peerGone(peerId);
       } else {
         _remoteProfilesByPeerId[peerId] = profile;
+        if (profile.formFactor.isNotEmpty) {
+          unawaited(
+            DeviceFormFactors.shared.record(peerId, profile.formFactor),
+          );
+        }
         if (profile.protocolVersion >= 12 &&
             profile.capabilities.windowStreamSourceV1 &&
             supportsWindowStreamSink()) {
@@ -5508,9 +5522,14 @@ class WsSvrManager {
       }
     }
     final profile = await _localPeerProfile();
+    // As the handshake agreed with this peer: an older one rejects a
+    // profile carrying fields it does not know.
+    final agreed =
+        _sessionsByPeerId[targetPeerId]?.localProfile.protocolVersion ??
+        profile.protocolVersion;
     var message = _buildMessage(
       MessageEnum.Heartbeat,
-      profile.toJsonString(),
+      jsonEncode(profile.toWireProfile().forProtocolVersion(agreed).toJson()),
       profileRefreshRequest ? _profileRefreshRequestMessage : "",
       "",
       0,

@@ -5,6 +5,8 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../helper/device_form_factor.dart';
+import '../../widget/device_glyph.dart';
 import '../../window_stream/core/window_stream_models.dart';
 import 'flow_app_icon.dart';
 import 'flow_space_theme.dart';
@@ -159,10 +161,12 @@ class FlowToggleChip extends StatelessWidget {
   }
 }
 
-IconData flowDeviceGlyph(WindowStreamPlatform platform) {
+/// [tablet]: the device said it is one (`DeviceFormFactors`); show it with
+/// [DeviceGlyph], which stands the tablet upright.
+IconData flowDeviceGlyph(WindowStreamPlatform platform, {bool tablet = false}) {
   return switch (platform) {
-    WindowStreamPlatform.android => CupertinoIcons.device_phone_portrait,
-    WindowStreamPlatform.ios => CupertinoIcons.device_phone_portrait,
+    WindowStreamPlatform.android || WindowStreamPlatform.ios =>
+      tablet ? tabletGlyph : CupertinoIcons.device_phone_portrait,
     WindowStreamPlatform.macos => CupertinoIcons.device_laptop,
     WindowStreamPlatform.windows => CupertinoIcons.desktopcomputer,
     WindowStreamPlatform.linux => CupertinoIcons.desktopcomputer,
@@ -184,11 +188,15 @@ class FlowDeviceCard extends StatefulWidget {
     this.windowCount = 0,
     this.problem = false,
     this.receiving = false,
+    this.tablet = false,
   });
 
   final String name;
   final String subtitle;
   final WindowStreamPlatform platform;
+
+  /// A phone platform's tablet: drawn wider, without the island.
+  final bool tablet;
   final Color hue;
   final bool selected;
   final VoidCallback onTap;
@@ -284,6 +292,7 @@ class _FlowDeviceCardState extends State<FlowDeviceCard> {
                           size: Size.infinite,
                           painter: _DevicePainter(
                             platform: widget.platform,
+                            tablet: widget.tablet,
                             hue: widget.hue,
                             lit: lit,
                             windows: widget.windowCount,
@@ -347,6 +356,7 @@ class _FlowDeviceCardState extends State<FlowDeviceCard> {
 class _DevicePainter extends CustomPainter {
   const _DevicePainter({
     required this.platform,
+    required this.tablet,
     required this.hue,
     required this.lit,
     required this.windows,
@@ -354,6 +364,7 @@ class _DevicePainter extends CustomPainter {
   });
 
   final WindowStreamPlatform platform;
+  final bool tablet;
   final Color hue;
   final double lit;
   final int windows;
@@ -369,6 +380,25 @@ class _DevicePainter extends CustomPainter {
     final Rect screen;
     final center = size.center(Offset.zero);
     switch (platform) {
+      case WindowStreamPlatform.android || WindowStreamPlatform.ios when tablet:
+        // Held upright: about 3:4, thin even bezels, a camera dot.
+        final h = size.height;
+        final w = h * 0.76;
+        final outer = RRect.fromRectAndRadius(
+          Rect.fromCenter(center: center, width: w, height: h),
+          Radius.circular(w * 0.1),
+        );
+        screen = outer.outerRect.deflate(4.5);
+        _screen(
+          canvas,
+          RRect.fromRectAndRadius(screen, Radius.circular(w * 0.06)),
+        );
+        canvas.drawRRect(outer, stroke);
+        canvas.drawCircle(
+          Offset(center.dx, outer.top + 2.4),
+          1.1,
+          Paint()..color = body.withValues(alpha: 0.8),
+        );
       case WindowStreamPlatform.android || WindowStreamPlatform.ios:
         final h = size.height;
         final w = h * 0.52;
@@ -504,7 +534,8 @@ class _DevicePainter extends CustomPainter {
       old.windows != windows ||
       old.hue != hue ||
       old.dark != dark ||
-      old.platform != platform;
+      old.platform != platform ||
+      old.tablet != tablet;
 }
 
 /// Which way windows go between this device and the selected one: two
@@ -522,11 +553,15 @@ class FlowDirectionPicker extends StatelessWidget {
     required this.sendDetail,
     required this.onChanged,
     this.compact = false,
+    this.deviceTablet = false,
   });
 
   final bool sendSelected;
   final Color hue;
   final WindowStreamPlatform devicePlatform;
+
+  /// The other device is a tablet (see [flowDeviceGlyph]).
+  final bool deviceTablet;
   final String openTitle;
   final String openDetail;
   final String sendTitle;
@@ -542,6 +577,7 @@ class FlowDirectionPicker extends StatelessWidget {
         hue: hue,
         send: send,
         devicePlatform: devicePlatform,
+        deviceTablet: deviceTablet,
         title: send ? sendTitle : openTitle,
         detail: send ? sendDetail : openDetail,
         compact: compact,
@@ -563,6 +599,7 @@ class _DirectionOption extends StatefulWidget {
     required this.hue,
     required this.send,
     required this.devicePlatform,
+    required this.deviceTablet,
     required this.title,
     required this.detail,
     required this.compact,
@@ -573,6 +610,7 @@ class _DirectionOption extends StatefulWidget {
   final Color hue;
   final bool send;
   final WindowStreamPlatform devicePlatform;
+  final bool deviceTablet;
   final String title;
   final String detail;
   final bool compact;
@@ -592,9 +630,17 @@ class _DirectionOptionState extends State<_DirectionOption> {
     final here = Platform.isMacOS
         ? CupertinoIcons.device_laptop
         : (Platform.isAndroid || Platform.isIOS)
-        ? CupertinoIcons.device_phone_portrait
+        ? flowDeviceGlyph(
+            Platform.isIOS
+                ? WindowStreamPlatform.ios
+                : WindowStreamPlatform.android,
+            tablet: DeviceFormFactors.shared.localIsTablet,
+          )
         : CupertinoIcons.desktopcomputer;
-    final there = flowDeviceGlyph(widget.devicePlatform);
+    final there = flowDeviceGlyph(
+      widget.devicePlatform,
+      tablet: widget.deviceTablet,
+    );
     final glyph = selected ? widget.hue : colors.secondaryLabel;
     return Semantics(
       button: true,
@@ -637,12 +683,12 @@ class _DirectionOptionState extends State<_DirectionOption> {
             child: Row(
               children: [
                 // From → to: the arrow points the way windows go.
-                Icon(widget.send ? here : there, size: 18, color: glyph),
+                DeviceGlyph(widget.send ? here : there, size: 18, color: glyph),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 3),
                   child: _FlowArrow(color: glyph, active: selected),
                 ),
-                Icon(widget.send ? there : here, size: 18, color: glyph),
+                DeviceGlyph(widget.send ? there : here, size: 18, color: glyph),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(

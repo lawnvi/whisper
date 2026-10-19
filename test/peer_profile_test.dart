@@ -44,6 +44,49 @@ void main() {
     expect(decoded.capabilities.remoteInputWorkspaceGraphV1, isFalse);
   });
 
+  group('form factor', () {
+    const ipad = WirePeerProfile(
+      uid: 'ipad',
+      name: 'iPad',
+      platform: 'ios',
+      formFactor: DeviceFormFactor.tablet,
+    );
+
+    test('a tablet says so to peers of this version', () {
+      final json = ipad.toJson();
+      expect(json['formFactor'], 'tablet');
+      final decoded = WirePeerProfile.fromJson(json);
+      expect(decoded.formFactor, DeviceFormFactor.tablet);
+      expect(decoded, ipad);
+      // Both ends hash the same profile (the handshake checks it).
+      expect(decoded.canonicalDigest(), ipad.canonicalDigest());
+      expect(PeerProfile.fromWire(decoded).formFactor, 'tablet');
+      expect(PeerProfile.fromWire(decoded).toWireProfile(), ipad);
+    });
+
+    test('an older peer (0.0.57 speaks 11) is never sent the field', () {
+      final legacy = ipad.forProtocolVersion(11);
+      expect(legacy.toJson(), isNot(contains('formFactor')));
+      // Its strict parser takes the profile as it always did.
+      expect(WirePeerProfile.fromJson(legacy.toJson()).formFactor, isEmpty);
+    });
+
+    test('a computer, or an older version, says nothing', () {
+      const mac = WirePeerProfile(uid: 'mac', name: 'Mac', platform: 'macos');
+      expect(mac.toJson(), isNot(contains('formFactor')));
+      expect(WirePeerProfile.fromJson(mac.toJson()).formFactor, isEmpty);
+    });
+
+    test('rejects a form factor that is not a short string', () {
+      for (final bad in <Object?>['', 42, 'x' * 17]) {
+        expect(
+          () => WirePeerProfile.fromJson({...ipad.toJson(), 'formFactor': bad}),
+          throwsFormatException,
+        );
+      }
+    });
+  });
+
   group('wire display topology validation', () {
     Map<String, Object?> profileWith(Object? topology) => <String, Object?>{
       'uid': 'peer-a',

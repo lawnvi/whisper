@@ -5,6 +5,17 @@ import 'package:crypto/crypto.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/remote_input/remote_input_layout.dart';
 
+/// What a phone-sized or tablet-sized device says it is, so others can draw
+/// it as one ([PeerProfile.formFactor]). Computers send nothing.
+abstract final class DeviceFormFactor {
+  static const phone = 'phone';
+  static const tablet = 'tablet';
+
+  /// Sent from this protocol version on: an older peer rejects a profile
+  /// field it does not know (and 0.0.57 speaks 11).
+  static const sinceProtocolVersion = 12;
+}
+
 class WirePeerProfile {
   const WirePeerProfile({
     required this.uid,
@@ -13,6 +24,7 @@ class WirePeerProfile {
     this.protocolVersion = 12,
     this.capabilities = const PeerCapabilities(),
     this.displayTopology,
+    this.formFactor = '',
   });
 
   static const Set<String> _allowedKeys = <String>{
@@ -22,6 +34,7 @@ class WirePeerProfile {
     'protocolVersion',
     'capabilities',
     'displayTopology',
+    'formFactor',
   };
 
   final String uid;
@@ -31,6 +44,10 @@ class WirePeerProfile {
   final PeerCapabilities capabilities;
   final RemoteInputTopology? displayTopology;
 
+  /// [DeviceFormFactor.phone] or [DeviceFormFactor.tablet]; empty when not
+  /// said (a computer, an older version).
+  final String formFactor;
+
   WirePeerProfile forProtocolVersion(int version) => WirePeerProfile(
     uid: uid,
     name: name,
@@ -38,6 +55,7 @@ class WirePeerProfile {
     protocolVersion: version,
     capabilities: capabilities,
     displayTopology: displayTopology,
+    formFactor: formFactor,
   );
 
   Map<String, Object?> toJson() => <String, Object?>{
@@ -47,6 +65,9 @@ class WirePeerProfile {
     'protocolVersion': protocolVersion,
     'capabilities': capabilities.toWireJson(protocolVersion),
     if (displayTopology != null) 'displayTopology': displayTopology!.toJson(),
+    if (formFactor.isNotEmpty &&
+        protocolVersion >= DeviceFormFactor.sinceProtocolVersion)
+      'formFactor': formFactor,
   };
 
   String toJsonString() => jsonEncode(toJson());
@@ -96,6 +117,9 @@ class WirePeerProfile {
     final topology = json.containsKey('displayTopology')
         ? _wireTopologyFromJson(json['displayTopology'])
         : null;
+    final formFactor = json.containsKey('formFactor')
+        ? _requiredProfileString(json, 'formFactor', maxBytes: 16)
+        : '';
     return WirePeerProfile(
       uid: uid,
       name: name,
@@ -106,6 +130,7 @@ class WirePeerProfile {
         protocolVersion: protocolVersion,
       ),
       displayTopology: topology,
+      formFactor: formFactor,
     );
   }
 
@@ -119,7 +144,8 @@ class WirePeerProfile {
       _canonicalJson(other.capabilities.toJson()) ==
           _canonicalJson(capabilities.toJson()) &&
       _canonicalJson(other.displayTopology?.toJson()) ==
-          _canonicalJson(displayTopology?.toJson());
+          _canonicalJson(displayTopology?.toJson()) &&
+      other.formFactor == formFactor;
 
   @override
   int get hashCode => Object.hash(
@@ -129,6 +155,7 @@ class WirePeerProfile {
     protocolVersion,
     _canonicalJson(capabilities.toJson()),
     _canonicalJson(displayTopology?.toJson()),
+    formFactor,
   );
 }
 
@@ -141,6 +168,7 @@ class PeerProfile {
     this.protocolVersion = 12,
     this.capabilities = const PeerCapabilities(),
     this.displayTopology,
+    this.formFactor = '',
   });
 
   final DeviceData device;
@@ -150,6 +178,9 @@ class PeerProfile {
   final int protocolVersion;
   final PeerCapabilities capabilities;
   final RemoteInputTopology? displayTopology;
+
+  /// See [WirePeerProfile.formFactor].
+  final String formFactor;
 
   bool trustsPeer(String peerId) {
     return trustedPeerIds.contains(peerId);
@@ -206,6 +237,7 @@ class PeerProfile {
       protocolVersion: wire.protocolVersion,
       capabilities: wire.capabilities,
       displayTopology: wire.displayTopology,
+      formFactor: wire.formFactor,
     );
   }
 
@@ -216,6 +248,7 @@ class PeerProfile {
     protocolVersion: protocolVersion,
     capabilities: capabilities,
     displayTopology: displayTopology,
+    formFactor: formFactor,
   );
 }
 

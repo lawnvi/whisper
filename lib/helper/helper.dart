@@ -111,14 +111,17 @@ String formatTimestamp(int timestamp) {
   return DateFormat('yyyy/MM/dd HH:mm:ss').format(dateTime);
 }
 
-IconData platformIcon(String platform) {
+/// [tablet]: the device said it is one (see `DeviceFormFactors`); phones
+/// keep their platform's mark.
+IconData platformIcon(String platform, {bool tablet = false}) {
   switch (platform.trim().toLowerCase()) {
     case 'android':
-      return Icons.android_rounded;
+      return tablet ? Icons.tablet_android_rounded : Icons.android_rounded;
+    case 'ipad':
+      return Icons.tablet_mac_rounded;
     case 'ios':
     case 'iphone':
-    case 'ipad':
-      return Icons.apple_rounded;
+      return tablet ? Icons.tablet_mac_rounded : Icons.apple_rounded;
     case 'mac':
     case 'macos':
     case 'darwin':
@@ -133,14 +136,15 @@ IconData platformIcon(String platform) {
   }
 }
 
-String platformLabel(String platform) {
+String platformLabel(String platform, {bool tablet = false}) {
   switch (platform.trim().toLowerCase()) {
     case 'android':
       return 'Android';
+    case 'ipad':
+      return 'iPad';
     case 'ios':
     case 'iphone':
-    case 'ipad':
-      return 'iPhone / iPad';
+      return tablet ? 'iPad' : 'iPhone / iPad';
     case 'mac':
     case 'macos':
     case 'darwin':

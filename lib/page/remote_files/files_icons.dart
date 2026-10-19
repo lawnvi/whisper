@@ -5,9 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
 
+import '../../helper/device_form_factor.dart';
 import '../../helper/transfer_notification_aggregator.dart'
     show formatBytesForNotification;
 import '../../l10n/app_localizations.dart';
+import '../../widget/device_glyph.dart';
 import '../../remote_files/fs_browser.dart';
 import '../../remote_files/fs_host_files.dart';
 import 'files_model.dart';
@@ -89,11 +91,22 @@ IconData fsPlaceIcon(String kind) => switch (kind) {
   _ => CupertinoIcons.folder,
 };
 
-IconData fsDeviceIcon(String platform) => switch (platform) {
-  'android' || 'ios' => CupertinoIcons.device_phone_portrait,
-  'macos' => CupertinoIcons.device_laptop,
-  _ => CupertinoIcons.desktopcomputer,
-};
+IconData fsDeviceIcon(String platform, {bool tablet = false}) =>
+    switch (platform) {
+      'android' || 'ios' when tablet => tabletGlyph,
+      'android' || 'ios' => CupertinoIcons.device_phone_portrait,
+      'macos' => CupertinoIcons.device_laptop,
+      _ => CupertinoIcons.desktopcomputer,
+    };
+
+/// [device]'s icon, a tablet's when it said it is one (show it with
+/// [DeviceGlyph]).
+IconData filesDeviceIcon(FilesDevice device) => fsDeviceIcon(
+  device.platform,
+  tablet: device.isLocal
+      ? DeviceFormFactors.shared.localIsTablet
+      : DeviceFormFactors.shared.isTablet(device.id),
+);
 
 String fsKindName(AppLocalizations l10n, FsKind kind) => switch (kind) {
   FsKind.folder => l10n.remoteFilesKindFolder,

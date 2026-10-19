@@ -11,8 +11,13 @@ void main() {
     expect(source.contains('message.toJsonString()'), isFalse,
         reason: 'MessageData 编码必须走 encodeWireMessage');
     expect(source.contains('encodeWireMessage('), isTrue);
-    // PeerProfile 载荷不受影响
-    expect(source.contains('profile.toJsonString()'), isTrue);
+    // PeerProfile 载荷不受影响(按和对方协商的协议版本编码)
+    expect(
+      source.contains(
+        'jsonEncode(profile.toWireProfile().forProtocolVersion(agreed).toJson())',
+      ),
+      isTrue,
+    );
   });
 
   test('all MessageData wire decodes go through decodeWireMessage', () {

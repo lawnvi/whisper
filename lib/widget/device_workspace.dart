@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:whisper/helper/device_form_factor.dart';
 import 'package:whisper/helper/helper.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/theme/app_theme.dart';
@@ -220,7 +221,12 @@ class DeviceWorkspaceTile extends StatelessWidget {
                       backgroundColor:
                           colorScheme.primary.withValues(alpha: 0.12),
                       child: Icon(
-                        platformIcon(data.device.platform),
+                        platformIcon(
+                          data.device.platform,
+                          tablet: DeviceFormFactors.shared.isTablet(
+                            data.device.uid,
+                          ),
+                        ),
                         color: data.isConnected
                             ? palette.connected
                             : colorScheme.primary,
@@ -399,7 +405,10 @@ class DeviceWorkspaceDetail extends StatelessWidget {
                       backgroundColor:
                           colorScheme.primary.withValues(alpha: 0.12),
                       child: Icon(
-                        platformIcon(device.platform),
+                        platformIcon(
+                          device.platform,
+                          tablet: DeviceFormFactors.shared.isTablet(device.uid),
+                        ),
                         size: 28,
                         color: colorScheme.primary,
                       ),

@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:whisper/helper/android_document_picker.dart';
+import 'package:whisper/helper/device_form_factor.dart';
 import 'package:whisper/helper/helper.dart'
     show formatSize, platformIcon, platformLabel;
 import 'package:whisper/helper/memory_bounded_image.dart';
@@ -263,9 +264,10 @@ class QuickSendTargetTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final palette = context.whisperPalette;
+    final tablet = DeviceFormFactors.shared.isTablet(target.id);
     final platform = target.platform.trim().isEmpty
         ? ''
-        : platformLabel(target.platform);
+        : platformLabel(target.platform, tablet: tablet);
     return Semantics(
       selected: selected,
       button: true,
@@ -286,7 +288,7 @@ class QuickSendTargetTile extends StatelessWidget {
                   radius: 18,
                   backgroundColor: Colors.lightBlue,
                   child: Icon(
-                    platformIcon(target.platform),
+                    platformIcon(target.platform, tablet: tablet),
                     size: 18,
                     color: Colors.white,
                   ),

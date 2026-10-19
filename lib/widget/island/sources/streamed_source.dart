@@ -5,7 +5,9 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../helper/device_form_factor.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../device_glyph.dart';
 import '../island_activity.dart';
 import '../island_views.dart';
 
@@ -192,9 +194,11 @@ class StreamedPresenter extends IslandPresenter {
       ? l10n.islandStreamedStopping
       : l10n.islandStreamedWindows(windows);
 
-  Widget _picture(double size) => Icon(
+  Widget _picture(double size) => DeviceGlyph(
     ended
-        ? CupertinoIcons.device_phone_portrait
+        ? (DeviceFormFactors.shared.localIsTablet
+              ? tabletGlyph
+              : CupertinoIcons.device_phone_portrait)
         : CupertinoIcons.dot_radiowaves_left_right,
     size: size * 0.78,
     color: _tint,

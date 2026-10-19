@@ -37,6 +37,7 @@ import 'package:whisper/helper/desktop_clipboard_image.dart';
 import 'package:whisper/helper/desktop_quick_send_hotkey.dart';
 import 'package:whisper/helper/desktop_window_attention.dart';
 import 'package:whisper/helper/file.dart';
+import 'package:whisper/helper/device_form_factor.dart';
 import 'package:whisper/helper/helper.dart';
 import 'package:whisper/helper/local_network_permission.dart';
 import 'package:whisper/helper/privacy_log.dart';
@@ -2582,7 +2583,10 @@ class _DeviceListScreen extends State<DeviceListScreen>
         Tooltip(
           message: candidate.platform,
           child: Icon(
-            platformIcon(candidate.platform),
+            platformIcon(
+              candidate.platform,
+              tablet: DeviceFormFactors.shared.isTablet(candidate.uid),
+            ),
             size: 18,
             color: palette.textMuted,
           ),
@@ -2789,15 +2793,24 @@ class _DeviceListScreen extends State<DeviceListScreen>
         ? Colors.green
         : (isDark ? Colors.grey[700]! : Colors.grey[300]!);
     return Tooltip(
-      message: platformLabel(session.device.platform),
+      message: platformLabel(
+        session.device.platform,
+        tablet: DeviceFormFactors.shared.isTablet(session.device.uid),
+      ),
       child: CircleAvatar(
         radius: 24,
         backgroundColor: background,
         child: Icon(
-          platformIcon(session.device.platform),
+          platformIcon(
+            session.device.platform,
+            tablet: DeviceFormFactors.shared.isTablet(session.device.uid),
+          ),
           size: 24,
           color: Colors.white,
-          semanticLabel: platformLabel(session.device.platform),
+          semanticLabel: platformLabel(
+            session.device.platform,
+            tablet: DeviceFormFactors.shared.isTablet(session.device.uid),
+          ),
         ),
       ),
     );

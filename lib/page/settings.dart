@@ -14,6 +14,7 @@ import 'package:whisper/helper/app_update.dart';
 import 'package:whisper/helper/desktop_startup.dart';
 import 'package:whisper/helper/desktop_screenshot.dart';
 import 'package:whisper/helper/file.dart';
+import 'package:whisper/helper/device_form_factor.dart';
 import 'package:whisper/helper/helper.dart';
 import 'package:whisper/helper/local.dart';
 import 'package:whisper/helper/notification.dart';
@@ -460,7 +461,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       _buildSettingItem(
                         l10n.nickname,
                         Icon(
-                          platformIcon(device?.platform ?? ""),
+                          platformIcon(
+                            device?.platform ?? "",
+                            tablet: DeviceFormFactors.shared.localIsTablet,
+                          ),
                           color: isDark
                               ? Colors.grey[400]
                               : CupertinoColors.systemGrey,

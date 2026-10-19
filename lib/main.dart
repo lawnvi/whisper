@@ -9,6 +9,7 @@ import 'package:sodium/sodium.dart';
 import 'package:whisper/debug/automation_hooks.dart';
 import 'package:whisper/share_links/share_debug_hooks.dart';
 import 'package:whisper/share_links/share_link_store.dart';
+import 'package:whisper/helper/device_form_factor.dart';
 import 'package:whisper/helper/connection_request_notifications.dart';
 import 'package:whisper/helper/desktop_screenshot.dart';
 import 'package:whisper/helper/folder_transfer_stager.dart';
@@ -86,6 +87,8 @@ Future<void> main(List<String> arguments) async {
     return;
   }
   await applyImageMemoryBudget();
+  // Which devices are tablets, for their icons from the first frame.
+  unawaited(DeviceFormFactors.shared.load());
   final sodium = await SodiumInit.init();
   WhisperAead.installNativeAcceleration(sodium);
   AuthSessionKeys.installNativeAcceleration(sodium);
