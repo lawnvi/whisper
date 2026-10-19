@@ -2423,6 +2423,38 @@ class AppLocalizationsZh extends AppLocalizations {
   String get windowStreamTextSize => '文字大小';
 
   @override
+  String get macPermissionAccessibility => '辅助功能';
+
+  @override
+  String get macPermissionAccessibilityDesc => '共享键盘鼠标、在流转来的窗口里操作时需要';
+
+  @override
+  String get macPermissionScreenRecording => '屏幕与系统录音';
+
+  @override
+  String get macPermissionScreenRecordingDesc =>
+      '把窗口流转出去、当扬声器、截图时需要；改了之后重新打开 Whisper 才生效';
+
+  @override
+  String get macPermissionAudioCapture => '仅系统录音';
+
+  @override
+  String get macPermissionAudioCaptureDesc =>
+      '可选。不开也会把声音带过去；开了以后 Mac 这边静音，浏览器的声音也能带上';
+
+  @override
+  String get macPermissionGranted => '已允许';
+
+  @override
+  String get macPermissionDenied => '未允许';
+
+  @override
+  String get macPermissionNotAsked => '未设置';
+
+  @override
+  String get macPermissionOptional => '可选';
+
+  @override
   String windowStreamOpenHereDetail(String device) {
     return '用 $device 上的应用';
   }

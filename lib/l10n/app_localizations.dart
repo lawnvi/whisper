@@ -4402,6 +4402,66 @@ abstract class AppLocalizations {
   /// **'文字大小'**
   String get windowStreamTextSize;
 
+  /// No description provided for @macPermissionAccessibility.
+  ///
+  /// In zh, this message translates to:
+  /// **'辅助功能'**
+  String get macPermissionAccessibility;
+
+  /// No description provided for @macPermissionAccessibilityDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'共享键盘鼠标、在流转来的窗口里操作时需要'**
+  String get macPermissionAccessibilityDesc;
+
+  /// No description provided for @macPermissionScreenRecording.
+  ///
+  /// In zh, this message translates to:
+  /// **'屏幕与系统录音'**
+  String get macPermissionScreenRecording;
+
+  /// No description provided for @macPermissionScreenRecordingDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'把窗口流转出去、当扬声器、截图时需要；改了之后重新打开 Whisper 才生效'**
+  String get macPermissionScreenRecordingDesc;
+
+  /// No description provided for @macPermissionAudioCapture.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅系统录音'**
+  String get macPermissionAudioCapture;
+
+  /// No description provided for @macPermissionAudioCaptureDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'可选。不开也会把声音带过去；开了以后 Mac 这边静音，浏览器的声音也能带上'**
+  String get macPermissionAudioCaptureDesc;
+
+  /// No description provided for @macPermissionGranted.
+  ///
+  /// In zh, this message translates to:
+  /// **'已允许'**
+  String get macPermissionGranted;
+
+  /// No description provided for @macPermissionDenied.
+  ///
+  /// In zh, this message translates to:
+  /// **'未允许'**
+  String get macPermissionDenied;
+
+  /// No description provided for @macPermissionNotAsked.
+  ///
+  /// In zh, this message translates to:
+  /// **'未设置'**
+  String get macPermissionNotAsked;
+
+  /// No description provided for @macPermissionOptional.
+  ///
+  /// In zh, this message translates to:
+  /// **'可选'**
+  String get macPermissionOptional;
+
   /// No description provided for @windowStreamOpenHereDetail.
   ///
   /// In zh, this message translates to:

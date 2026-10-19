@@ -26,6 +26,8 @@ import 'package:whisper/main.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/page/appList.dart';
 import 'package:whisper/page/window_stream/android_service/android_service_page.dart';
+import 'package:whisper/helper/macos_permissions.dart';
+import 'package:whisper/widget/macos_permission_setting.dart';
 import 'package:whisper/remote_files/fs_host.dart';
 import 'package:whisper/remote_input/remote_input_coordinator.dart';
 import 'package:whisper/socket/svrmanager.dart';
@@ -675,6 +677,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     l10n.settingsSectionPermissionsSharing,
                     l10n.settingsSectionPermissionsSharingDesc,
                     [
+                      if (MacPermissions.supported)
+                        ..._buildMacPermissionItems(l10n, isDark),
                       if (!_isMobilePlatform)
                         _buildSettingItem(
                           l10n.windowStreamShareSetting,
@@ -1899,6 +1903,56 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ),
     );
+  }
+
+  /// What macOS allows Whisper, each row opening the system's prompt or
+  /// the pane where it is changed. A permission macOS does not report
+  /// (System Audio Recording Only before it existed) has no row.
+  List<Widget> _buildMacPermissionItems(AppLocalizations l10n, bool isDark) {
+    final iconColor = isDark ? Colors.grey[400] : CupertinoColors.systemGrey;
+    Widget row(
+      MacPermission permission,
+      String title,
+      String desc,
+      IconData icon, {
+      bool optional = false,
+    }) => _buildSettingItem(
+      title,
+      Icon(icon, color: iconColor),
+      desc: desc,
+      onTap: () => unawaited(MacPermissions.shared.request(permission)),
+      trailing: MacPermissionStatus(permission: permission, optional: optional),
+    );
+    return [
+      row(
+        MacPermission.accessibility,
+        l10n.macPermissionAccessibility,
+        l10n.macPermissionAccessibilityDesc,
+        Icons.accessibility_new_rounded,
+      ),
+      row(
+        MacPermission.screenRecording,
+        l10n.macPermissionScreenRecording,
+        l10n.macPermissionScreenRecordingDesc,
+        Icons.screen_share_outlined,
+      ),
+      AnimatedBuilder(
+        animation: MacPermissions.shared,
+        builder: (context, _) =>
+            MacPermissions.shared.stateOf(MacPermission.audioCapture) ==
+                MacPermissionState.unknown
+            ? const SizedBox.shrink()
+            : row(
+                MacPermission.audioCapture,
+                l10n.macPermissionAudioCapture,
+                l10n.macPermissionAudioCaptureDesc,
+                Icons.graphic_eq_rounded,
+                // Sound goes along with screen recording alone; this only
+                // silences the app here and adds helper processes' sound.
+                optional: true,
+              ),
+      ),
+    ];
   }
 
   Widget _buildSaveDirectoryItem(AppLocalizations l10n) {

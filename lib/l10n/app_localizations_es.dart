@@ -2608,6 +2608,40 @@ class AppLocalizationsEs extends AppLocalizations {
   String get windowStreamTextSize => 'Tamaño del texto';
 
   @override
+  String get macPermissionAccessibility => 'Accesibilidad';
+
+  @override
+  String get macPermissionAccessibilityDesc =>
+      'Necesario para compartir teclado y ratón y usar ventanas transmitidas';
+
+  @override
+  String get macPermissionScreenRecording =>
+      'Grabación de pantalla y audio del sistema';
+
+  @override
+  String get macPermissionScreenRecordingDesc =>
+      'Necesario para transmitir ventanas, reproducir el sonido del Mac en otro sitio y hacer capturas; se aplica al volver a abrir Whisper';
+
+  @override
+  String get macPermissionAudioCapture => 'Solo grabación de audio del sistema';
+
+  @override
+  String get macPermissionAudioCaptureDesc =>
+      'Opcional. Sin él el sonido también se envía; con él este Mac queda en silencio y también llega el sonido de los navegadores';
+
+  @override
+  String get macPermissionGranted => 'Permitido';
+
+  @override
+  String get macPermissionDenied => 'No permitido';
+
+  @override
+  String get macPermissionNotAsked => 'Sin configurar';
+
+  @override
+  String get macPermissionOptional => 'Opcional';
+
+  @override
   String windowStreamOpenHereDetail(String device) {
     return 'Usa las apps de $device';
   }

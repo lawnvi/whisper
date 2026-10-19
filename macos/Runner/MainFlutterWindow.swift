@@ -142,6 +142,8 @@ class MainFlutterWindow: NSWindow {
       with: flutterViewController.registrar(forPlugin: "DesktopClipboardImagePlugin"))
     ScreenshotPlugin.register(
       with: flutterViewController.registrar(forPlugin: "ScreenshotPlugin"))
+    MacPermissionsPlugin.register(
+      with: flutterViewController.registrar(forPlugin: "MacPermissionsPlugin"))
     registerWindowThemeChannel(with: flutterViewController)
     registerFileManagerChannel(with: flutterViewController)
     registerDesktopQuickSendChannel(with: flutterViewController)
@@ -4042,5 +4044,115 @@ enum FileThumbnails {
         destination, image, [kCGImageDestinationLossyCompressionQuality: 0.8] as CFDictionary)
       completion(CGImageDestinationFinalize(destination) ? data as Data : nil)
     }
+  }
+}
+
+/// The privacy permissions Whisper's features need, for Settings to show:
+/// Accessibility (keyboard and mouse sharing, acting in streamed windows),
+/// Screen & System Audio Recording (streaming windows out, playing this
+/// Mac's sound elsewhere, screenshots) and System Audio Recording Only (a
+/// streamed window's own sound). Asking shows the system's prompt where it
+/// still can, else opens the pane where the switch is.
+final class MacPermissionsPlugin: NSObject, FlutterPlugin {
+  static func register(with registrar: FlutterPluginRegistrar) {
+    let channel = FlutterMethodChannel(
+      name: "com.vireen.whisper/macos_permissions",
+      binaryMessenger: registrar.messenger)
+    registrar.addMethodCallDelegate(MacPermissionsPlugin(), channel: channel)
+  }
+
+  func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    switch call.method {
+    case "status":
+      result(Self.status())
+    case "request":
+      let kind = (call.arguments as? [String: Any])?["kind"] as? String ?? ""
+      Self.request(kind) { result(Self.status()) }
+    default:
+      result(FlutterMethodNotImplemented)
+    }
+  }
+
+  private static func status() -> [String: Any] {
+    [
+      "accessibility": AXIsProcessTrusted(),
+      "screenRecording": CGPreflightScreenCaptureAccess(),
+      "audioCapture": AudioCaptureAccess.status(),
+    ]
+  }
+
+  private static func request(_ kind: String, done: @escaping () -> Void) {
+    switch kind {
+    case "accessibility":
+      if !AXIsProcessTrusted() {
+        // Puts Whisper in the list and offers to open it.
+        let prompt = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
+        _ = AXIsProcessTrustedWithOptions([prompt: true] as CFDictionary)
+      } else {
+        openPane("Privacy_Accessibility")
+      }
+      done()
+    case "screenRecording":
+      // The system prompts only the first time; the pane is where the
+      // switch is after that (and to turn it off).
+      if CGPreflightScreenCaptureAccess() || !CGRequestScreenCaptureAccess() {
+        openPane("Privacy_ScreenCapture")
+      }
+      done()
+    case "audioCapture":
+      if AudioCaptureAccess.status() == "notAsked",
+         AudioCaptureAccess.request({ _ in DispatchQueue.main.async(execute: done) }) {
+        return
+      }
+      // System Audio Recording Only sits under Screen & System Audio
+      // Recording.
+      openPane("Privacy_ScreenCapture")
+      done()
+    default:
+      done()
+    }
+  }
+
+  private static func openPane(_ anchor: String) {
+    if let url = URL(
+      string: "x-apple.systempreferences:com.apple.preference.security?\(anchor)") {
+      NSWorkspace.shared.open(url)
+    }
+  }
+}
+
+/// System Audio Recording Only (kTCCServiceAudioCapture), which process
+/// taps need. There is no public API to read or ask for it; TCC's own is
+/// looked up at run time ("unknown" when it is not there).
+private enum AudioCaptureAccess {
+  private typealias PreflightFn = @convention(c) (CFString, CFDictionary?) -> Int32
+  private typealias RequestFn = @convention(c) (
+    CFString, CFDictionary?, @escaping @convention(block) (Bool) -> Void
+  ) -> Void
+
+  private static let service = "kTCCServiceAudioCapture" as CFString
+  private static let framework: UnsafeMutableRawPointer? = dlopen(
+    "/System/Library/PrivateFrameworks/TCC.framework/Versions/A/TCC", RTLD_NOW)
+  private static let preflight: PreflightFn? = framework
+    .flatMap { dlsym($0, "TCCAccessPreflight") }
+    .map { unsafeBitCast($0, to: PreflightFn.self) }
+  private static let requestFn: RequestFn? = framework
+    .flatMap { dlsym($0, "TCCAccessRequest") }
+    .map { unsafeBitCast($0, to: RequestFn.self) }
+
+  static func status() -> String {
+    guard let preflight = preflight else { return "unknown" }
+    switch preflight(service, nil) {
+    case 0: return "granted"
+    case 1: return "denied"
+    default: return "notAsked"
+    }
+  }
+
+  /// Shows the system's prompt; false if it cannot be asked.
+  static func request(_ done: @escaping (Bool) -> Void) -> Bool {
+    guard let requestFn = requestFn else { return false }
+    requestFn(service, nil, done)
+    return true
   }
 }

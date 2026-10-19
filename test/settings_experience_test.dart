@@ -9,6 +9,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:whisper/helper/app_update.dart';
+import 'package:whisper/helper/macos_permissions.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/page/settings.dart';
@@ -1054,6 +1055,54 @@ void main() {
     expect(find.text('Device and appearance'), findsOneWidget);
   });
 
+  testWidgets(
+    'a Mac shows what it allows Whisper, each row asking for it',
+    (tester) async {
+      const channel = MethodChannel(MacPermissions.channelName);
+      final asked = <Object?>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (
+        call,
+      ) async {
+        if (call.method == 'request') {
+          asked.add((call.arguments as Map)['kind']);
+        }
+        return <String, Object?>{
+          'accessibility': true,
+          'screenRecording': false,
+          'audioCapture': 'notAsked',
+        };
+      });
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          channel,
+          null,
+        ),
+      );
+      await _pumpAt(tester, width: 760);
+      final accessibility = _settingRow('Accessibility');
+      await tester.ensureVisible(accessibility);
+      await tester.pump();
+      expect(
+        find.descendant(of: accessibility, matching: find.text('Allowed')),
+        findsOneWidget,
+      );
+      final recording = _settingRow('Screen & System Audio Recording');
+      expect(
+        find.descendant(of: recording, matching: find.text('Not allowed')),
+        findsOneWidget,
+      );
+      final audio = _settingRow('System Audio Recording Only');
+      expect(
+        find.descendant(of: audio, matching: find.text('Optional')),
+        findsOneWidget,
+      );
+      await tester.tap(recording);
+      await tester.pump();
+      expect(asked, ['screenRecording']);
+    },
+    skip: !Platform.isMacOS,
+  );
+
   testWidgets('successful mutation refresh preserves list scroll', (
     tester,
   ) async {
@@ -1077,6 +1126,9 @@ void main() {
     await tester.drag(find.byType(ListView).first, const Offset(0, -500));
     await tester.pump();
     final clipboard = _settingRow('Access Clipboard');
+    // On a Mac the permission rows come first and push it further down.
+    await tester.ensureVisible(clipboard);
+    await tester.pump();
     final scrollable = tester.state<ScrollableState>(
       find.byType(Scrollable).first,
     );

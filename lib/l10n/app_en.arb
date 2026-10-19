@@ -1240,6 +1240,19 @@
   },
   "remoteFilesClipboardReady": "Ready to paste in other apps",
   "windowStreamTextSize": "Text Size",
+  "macPermissionAccessibility": "Accessibility",
+  "macPermissionAccessibilityDesc": "Needed to share keyboard and mouse and to work in streamed windows",
+  "macPermissionScreenRecording": "Screen & System Audio Recording",
+  "macPermissionScreenRecordingDesc": "Needed to stream windows out, play this Mac's sound elsewhere and take screenshots; takes effect once Whisper is reopened",
+  "macPermissionAudioCapture": "System Audio Recording Only",
+  "macPermissionAudioCaptureDesc": "Optional. Sound goes along without it; with it this Mac stays quiet and browsers' sound comes too",
+  "macPermissionGranted": "Allowed",
+  "macPermissionDenied": "Not allowed",
+  "macPermissionNotAsked": "Not set",
+  "macPermissionOptional": "Optional",
+  "@macPermissionOptional": {
+    "description": "Status of an optional macOS permission that is not turned on"
+  },
   "windowStreamOpenHereDetail": "Use apps from {device}",
   "@windowStreamOpenHereDetail": {
     "placeholders": {
