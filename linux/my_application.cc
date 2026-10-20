@@ -14,7 +14,37 @@
 #include "remote_input_plugin.h"
 #include "screenshot_plugin.h"
 
+#include <vector>
+
 namespace {
+
+// fl_register_plugins without clipboard_watcher's PRIMARY callback. The
+// plugin connects it with a bare pointer to its plugin object and never
+// disconnects it; the object is freed when its channel goes (Whisper's
+// clipboard plugin takes the name over, a sub-window's engine shuts down),
+// and the next PRIMARY change, which on Wayland every focus change makes,
+// then crashes. Whisper follows CLIPBOARD only.
+void RegisterGeneratedPlugins(FlPluginRegistry* registry) {
+  GtkClipboard* primary = gtk_clipboard_get(GDK_SELECTION_PRIMARY);
+  const guint owner_change = g_signal_lookup("owner-change", GTK_TYPE_CLIPBOARD);
+  const auto unblocked = static_cast<GSignalMatchType>(G_SIGNAL_MATCH_ID |
+                                                       G_SIGNAL_MATCH_UNBLOCKED);
+  std::vector<gulong> earlier;
+  gulong handler;
+  while ((handler = g_signal_handler_find(primary, unblocked, owner_change, 0,
+                                          nullptr, nullptr, nullptr)) != 0) {
+    g_signal_handler_block(primary, handler);
+    earlier.push_back(handler);
+  }
+  fl_register_plugins(registry);
+  while ((handler = g_signal_handler_find(primary, unblocked, owner_change, 0,
+                                          nullptr, nullptr, nullptr)) != 0) {
+    g_signal_handler_disconnect(primary, handler);
+  }
+  for (const gulong id : earlier) {
+    g_signal_handler_unblock(primary, id);
+  }
+}
 
 enum class ApplicationLogReason {
   kRegistrationFailed,
@@ -94,9 +124,9 @@ static void my_application_activate(GApplication* application) {
   gtk_widget_show(GTK_WIDGET(view));
   gtk_container_add(GTK_CONTAINER(window), GTK_WIDGET(view));
 
-  fl_register_plugins(FL_PLUGIN_REGISTRY(view));
+  RegisterGeneratedPlugins(FL_PLUGIN_REGISTRY(view));
   desktop_multi_window_plugin_set_window_created_callback(
-      [](FlPluginRegistry* registry) { fl_register_plugins(registry); });
+      [](FlPluginRegistry* registry) { RegisterGeneratedPlugins(registry); });
   audio_share_plugin_register(FL_PLUGIN_REGISTRY(view));
   remote_input_plugin_register(FL_PLUGIN_REGISTRY(view));
   desktop_clipboard_image_plugin_register(FL_PLUGIN_REGISTRY(view));

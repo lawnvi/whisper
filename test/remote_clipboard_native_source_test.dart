@@ -71,6 +71,33 @@ void main() {
     expect(linux, contains('owner-change'));
   });
 
+  test('Linux takes over the watcher channel without a dangling callback', () {
+    final linux = File(
+      'linux/desktop_clipboard_image_plugin.cc',
+    ).readAsStringSync();
+    final app = File('linux/my_application.cc').readAsStringSync();
+    expect(linux, contains('ClipboardWatcherCallback'));
+    // Taking the channel frees clipboard_watcher's plugin, so its PRIMARY
+    // callback must not survive registration, in sub-windows either.
+    final register = app.substring(
+      app.indexOf('void RegisterGeneratedPlugins('),
+      app.indexOf('}  // namespace'),
+    );
+    expect(
+      register.indexOf('g_signal_handler_block'),
+      lessThan(register.indexOf('fl_register_plugins(registry)')),
+    );
+    expect(
+      register.indexOf('g_signal_handler_disconnect'),
+      greaterThan(register.indexOf('fl_register_plugins(registry)')),
+    );
+    expect(app, isNot(contains('fl_register_plugins(FL_PLUGIN_REGISTRY')));
+    expect(
+      app,
+      contains('[](FlPluginRegistry* registry) { RegisterGeneratedPlugins('),
+    );
+  });
+
   test('macOS controller intercepts and replays local paste on demand', () {
     final mac = File('macos/Runner/MainFlutterWindow.swift').readAsStringSync();
     final platform = File(

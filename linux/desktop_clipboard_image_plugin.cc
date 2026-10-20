@@ -22,6 +22,7 @@ struct ClipboardPayload {
 };
 
 FlMethodChannel* g_clipboard_watcher_channel = nullptr;
+bool g_clipboard_watching = false;
 
 GtkTargetEntry kFileClipboardTargets[] = {
     {const_cast<gchar*>("text/uri-list"), 0, kUriListTarget},
@@ -89,7 +90,7 @@ bool WriteClipboardPayload(GtkClipboard* clipboard, ClipboardPayload* payload) {
 }
 
 void NotifyClipboardChanged(GtkClipboard*, GdkEvent*, gpointer) {
-  if (g_clipboard_watcher_channel == nullptr) {
+  if (g_clipboard_watcher_channel == nullptr || !g_clipboard_watching) {
     return;
   }
   g_autoptr(FlValue) args = fl_value_new_map();
@@ -240,6 +241,19 @@ void MethodCallCallback(FlMethodChannel*,
   fl_method_call_respond(method_call, response, nullptr);
 }
 
+void ClipboardWatcherCallback(FlMethodChannel*, FlMethodCall* method_call,
+                              gpointer) {
+  const gchar* method = fl_method_call_get_name(method_call);
+  g_autoptr(FlMethodResponse) response = nullptr;
+  if (std::strcmp(method, "start") == 0 || std::strcmp(method, "stop") == 0) {
+    g_clipboard_watching = std::strcmp(method, "start") == 0;
+    response = FL_METHOD_RESPONSE(fl_method_success_response_new(nullptr));
+  } else {
+    response = FL_METHOD_RESPONSE(fl_method_not_implemented_response_new());
+  }
+  fl_method_call_respond(method_call, response, nullptr);
+}
+
 }  // namespace
 
 void desktop_clipboard_image_plugin_register(FlPluginRegistry* registry) {
@@ -251,12 +265,15 @@ void desktop_clipboard_image_plugin_register(FlPluginRegistry* registry) {
       kDesktopClipboardImageChannel, FL_METHOD_CODEC(codec));
   fl_method_channel_set_method_call_handler(channel, MethodCallCallback,
                                             nullptr, nullptr);
-  // clipboard_watcher 0.3 listens to PRIMARY on Linux. Screenshots and image
-  // clipboard writes use CLIPBOARD, so mirror its event onto the same Dart
-  // channel to keep remote clipboard sync responsive.
+  // clipboard_watcher 0.3 listens to PRIMARY on Linux, but syncing follows
+  // CLIPBOARD (copies, screenshots, image writes). This channel takes over
+  // the plugin's name and so frees the plugin; my_application.cc has already
+  // disconnected its PRIMARY callback.
   g_clipboard_watcher_channel = fl_method_channel_new(
       fl_plugin_registrar_get_messenger(registrar), "clipboard_watcher",
       FL_METHOD_CODEC(codec));
+  fl_method_channel_set_method_call_handler(
+      g_clipboard_watcher_channel, ClipboardWatcherCallback, nullptr, nullptr);
   GtkClipboard* clipboard = gtk_clipboard_get(GDK_SELECTION_CLIPBOARD);
   g_signal_connect(clipboard, "owner-change", G_CALLBACK(NotifyClipboardChanged),
                    nullptr);
