@@ -92,7 +92,7 @@ The [user guide](docs/user-guide_en.md) covers every feature in full.
 | Mount on this computer | Can be mounted only | ✅ | ✅ | Needs fuse3 |
 | Share links | ✅ | ✅ | ✅ | ✅ |
 | Window flow: view | ✅ | ✅ | ✅ | ✅ |
-| Window flow: share | Android 10 or later, with USB or wireless debugging on | ✅ | ✅ | GNOME (Wayland) only |
+| Window flow: share | Android 10 or later, USB debugging, adb on the computer | ✅ | ✅ | GNOME (Wayland) only |
 | Clipboard sync | Text only, in the foreground | ✅ | ✅ | ✅ |
 | Keyboard and mouse sharing | — | ✅ | ✅ | X11 only |
 | Phone controller | Controls | Controlled | Controlled | Controlled, X11 only |

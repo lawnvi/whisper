@@ -143,7 +143,7 @@ On Linux, showing windows from other devices needs FFmpeg's libavcodec.
 
 Apps on an Android phone can flow to a computer. Whisper on the phone must be paired with the computer and connected.
 
-The first time, start it from a computer: turn on "USB debugging" in the phone's Developer options, connect the phone to a computer running Whisper with a cable, and allow that computer to debug on the phone ("Wireless debugging" also works). The phone's apps then show up in that computer's Flow.
+The first time, start it from a computer that has adb installed (Android SDK Platform-Tools; Whisper looks in the Android SDK's default location and on PATH, and the installers do not include it). Turn on "USB debugging" in the phone's Developer options, connect the phone to that computer with a cable, and allow it to debug on the phone ("Wireless debugging" also works). The phone's apps then show up in that computer's Flow.
 
 Once started, the phone's window flow service keeps running, and your other trusted computers can show this phone's apps without a cable; after the phone restarts, start it from a computer again. The service's status is under Settings → "Window flow service" in Whisper on the phone, where you can stop it at any time.
 
