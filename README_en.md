@@ -92,16 +92,18 @@ The [user guide](docs/user-guide_en.md) covers every feature in full.
 | Mount on this computer | Can be mounted only | ✅ | ✅ | Needs fuse3 |
 | Share links | ✅ | ✅ | ✅ | ✅ |
 | Window flow: view | ✅ | ✅ | ✅ | ✅ |
-| Window flow: share | Android 10 or later, USB debugging, adb on the computer | ✅ | ✅ | GNOME (Wayland) only |
+| Window flow: share | Android 10 or later, USB debugging, adb on the computer | ✅ | ✅ | GNOME 45 or later (Wayland) only |
 | Clipboard sync | Text only, in the foreground | ✅ | ✅ | ✅ |
-| Keyboard and mouse sharing | — | ✅ | ✅ | X11 only |
-| Phone controller | Controls | Controlled | Controlled | Controlled, X11 only |
+| Keyboard and mouse sharing | — | ✅ | ✅ | X11 or GNOME on Wayland |
+| Phone controller | Controls | Controlled | Controlled | Controlled, X11 or GNOME on Wayland |
 | System audio sharing | Playback only | ✅ | ✅ | ✅ |
 | Notification forwarding | Sends | Receives | Receives | Receives |
 | Desktop screenshots | — | ✅ | ✅ | Depends on the desktop environment |
 | TV casting receiver | — | ✅ | ✅ | ✅ |
 
-On Linux, discovery depends on Avahi. Video previews and TV casting need libmpv, and window flow needs FFmpeg's libavcodec; everything else works without them. Before other devices can show this computer's windows, install the GNOME component from Settings, then log out and back in once.
+On Linux, discovery depends on Avahi. Video previews and TV casting need libmpv, and window flow needs FFmpeg 4 or later; everything else works without them. Before other devices can show this computer's windows, FFmpeg also needs an H.264 encoder (x264 or openh264; Fedora ships without one), and you install the GNOME component from Settings, then log out and back in once.
+
+On Wayland, keyboard and mouse sharing supports GNOME only, with no permission prompt. GNOME before 46 (Ubuntu 22.04, for example) can only be controlled; to control other computers from one, choose "Ubuntu on Xorg" on the login screen. Typing text the current keyboard layout cannot produce, such as Chinese from a phone, needs the GNOME component above. Other Wayland desktops such as KDE go through the system's permission prompt and have not been verified.
 
 ## Troubleshooting
 

@@ -134,10 +134,10 @@ Linux 的自动发现依赖 Avahi。网络禁用了 mDNS / Bonjour 时，用 IP 
 | --- | --- |
 | macOS | 12.3 及以上。在「系统设置 › 隐私与安全性」里允许 Whisper 使用「屏幕与系统录音」，要让对方操作还需要「辅助功能」。「设置 → 权限与共享」里能看到这些权限的状态 |
 | Windows | Windows 10（1903）及以上 |
-| Linux | GNOME 的 Wayland 会话。第一次要在设置里安装「窗口流转组件」，装好后注销并重新登录一次。KDE 和 X11 暂时只能接收 |
+| Linux | GNOME 45 及以上的 Wayland 会话。第一次要在设置里安装「窗口流转组件」，装好后注销并重新登录一次。KDE 和 X11 暂时只能接收 |
 | Android | Android 10 及以上，见下文 |
 
-Linux 上显示流转来的画面需要 FFmpeg 的 libavcodec。
+Linux 上显示流转来的画面需要 FFmpeg（4 及以上）。让别的设备流转本机窗口时，FFmpeg 还要带 H.264 编码器（x264 或 openh264，Fedora 默认没有）。
 
 ### 流转安卓手机的应用
 
@@ -182,7 +182,7 @@ Android 只同步文本。受 [Android 10 的隐私限制](https://developer.and
 ### 权限与平台限制
 
 - **macOS**：按提示授予辅助功能权限。
-- **Linux**：需要 X11，Wayland 下不可用。
+- **Linux**：X11 会话都可以用。Wayland 下支持 GNOME，不用额外授权，控制期间顶栏会显示远程控制的图标。GNOME 46 以前的版本（如 Ubuntu 22.04）只能被控制，要用它控制别的电脑，请在登录界面选「Ubuntu on Xorg」。从手机输入中文等当前键盘布局打不出的字，需要装上设置里的「窗口流转组件」（GNOME 45 及以上）。KDE 等其他 Wayland 桌面第一次会弹出系统的授权窗口，还没有完整验证，不保证可用。
 - **Windows**：如果指针一顿一顿地移动，或文件传输时快时慢，检查「设置 → 系统 → 投影到此电脑」。它开启时无线网卡可能要同时维持一个 Wi-Fi Direct 网络，使 Wi-Fi 连接出现周期性延迟；不用无线投屏时设为「始终关闭」。
 
 ### Windows 锁屏与 UAC

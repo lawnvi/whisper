@@ -6,7 +6,7 @@
 - Purpose: send text, files, clipboard content, Android notifications, desktop system audio, and keyboard/mouse input between trusted devices on the same local network.
 - Primary users: people moving work between their own computers and phones without a public relay.
 - Platforms: Android, macOS, Linux, Windows, and a Next.js product site under `whisper-web/`.
-- Important constraints: transfers stay on the LAN, authenticated application data is encrypted end to end (discovery metadata and local storage are not), Linux discovery depends on Avahi, Linux audio depends on PulseAudio or PipeWire Pulse, and Linux keyboard/mouse sharing currently expects X11.
+- Important constraints: transfers stay on the LAN, authenticated application data is encrypted end to end (discovery metadata and local storage are not), Linux discovery depends on Avahi, Linux audio depends on PulseAudio or PipeWire Pulse, and Linux keyboard/mouse sharing works on X11 (XTest) and on GNOME Wayland (Mutter, no prompt); other Wayland desktops go through the desktop portal, which asks once.
 
 ## Setup Commands
 
