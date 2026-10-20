@@ -3248,6 +3248,28 @@ class RemoteInputPlugin {
                                cursor_y);
   }
 
+  // The barrier nearest to where the pointer crossed.
+  const InputCaptureBarrier* InputCaptureBarrierNearLocked(double x,
+                                                           double y) const {
+    const InputCaptureBarrier* nearest = nullptr;
+    double nearest_distance = 0;
+    const auto outside = [](double value, int a, int b) {
+      const double low = std::min(a, b);
+      const double high = std::max(a, b);
+      return value < low ? low - value : value > high ? value - high : 0.0;
+    };
+    for (const auto& barrier : input_capture_barriers_) {
+      const double dx = outside(x, barrier.x1, barrier.x2);
+      const double dy = outside(y, barrier.y1, barrier.y2);
+      const double distance = dx * dx + dy * dy;
+      if (nearest == nullptr || distance < nearest_distance) {
+        nearest = &barrier;
+        nearest_distance = distance;
+      }
+    }
+    return nearest;
+  }
+
   void ActivateInputCaptureLocked(uint32_t barrier_id,
                                   uint32_t activation_id,
                                   bool has_cursor,
@@ -3255,6 +3277,13 @@ class RemoteInputPlugin {
                                   double cursor_y) {
     const InputCaptureBarrier* barrier =
         InputCaptureBarrierByIdLocked(barrier_id);
+    // KDE leaves barrier_id out of Activated; the crossing point tells.
+    if (barrier == nullptr && barrier_id == 0) {
+      barrier = has_cursor ? InputCaptureBarrierNearLocked(cursor_x, cursor_y)
+                : input_capture_barriers_.size() == 1
+                    ? &input_capture_barriers_.front()
+                    : nullptr;
+    }
     if (barrier != nullptr) {
       input_capture_active_route_id_ = barrier->route.route_id;
       input_capture_active_display_id_ = barrier->route.source_display_id;

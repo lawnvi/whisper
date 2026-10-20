@@ -60,6 +60,19 @@ void main() {
       expect(plugin, contains('"/org/freedesktop/portal/desktop/request/"'));
     });
 
+    test('finds the crossed barrier when Activated has no barrier id', () {
+      final plugin = File('linux/remote_input_plugin.cc').readAsStringSync();
+      final activate = plugin.substring(
+        plugin.indexOf('  void ActivateInputCaptureLocked('),
+        plugin.indexOf('  void ClearHeldInputCaptureMotionLocked('),
+      );
+      expect(
+        activate,
+        contains('InputCaptureBarrierNearLocked(cursor_x, cursor_y)'),
+      );
+      expect(activate, contains('barrier_id == 0'));
+    });
+
     test('manual movement skips edge release and preserves pixel scroll', () {
       final plugin = File('linux/remote_input_plugin.cc').readAsStringSync();
       expect(plugin, contains('!manual_injection_ && !active_start'));
