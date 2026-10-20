@@ -79,4 +79,38 @@ void main() {
 
     expect(depends, contains('libayatana-appindicator3-1'));
   });
+
+  test(
+    'the deb names the libraries the binary links and the optional ones',
+    () {
+      final deb = File('linux/build_deb.sh').readAsStringSync();
+      final depends = deb.substring(deb.indexOf('Depends:')).split('\n').first;
+      final recommends = deb
+          .substring(deb.indexOf('Recommends:'))
+          .split('\n')
+          .first;
+
+      expect(depends, contains('libgtk-3-0t64 | libgtk-3-0'));
+      for (final library in ['libx11-6', 'libxtst6', 'libxi6', 'libxrandr2']) {
+        expect(depends, contains(library));
+      }
+      // Mounting other devices' files, and this computer as a window source.
+      expect(recommends, contains('fuse3'));
+      expect(recommends, contains('libpipewire-0.3-0t64 | libpipewire-0.3-0'));
+    },
+  );
+
+  test('the bundle leaves out the Android-only JNI library', () {
+    final cmake = File('linux/CMakeLists.txt').readAsStringSync();
+    final filter = cmake.indexOf(
+      'list(FILTER PLUGIN_BUNDLED_LIBRARIES EXCLUDE REGEX "TARGET_FILE:jni>")',
+    );
+
+    // It links libjvm.so, which made the RPM pull in a Java runtime.
+    expect(
+      filter,
+      greaterThan(cmake.indexOf('include(flutter/generated_plugins.cmake)')),
+    );
+    expect(filter, lessThan(cmake.indexOf('foreach(bundled_library')));
+  });
 }

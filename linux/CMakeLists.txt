@@ -138,6 +138,10 @@ set_target_properties(${BINARY_NAME}
 # Generated plugin build rules, which manage building the plugins and adding
 # them to the application.
 include(flutter/generated_plugins.cmake)
+# package:jni comes with path_provider_android and is only used on Android.
+# Its Linux library links libjvm.so, so the RPM would require a Java runtime
+# (Fedora installs OpenJDK with it); nothing on Linux loads it.
+list(FILTER PLUGIN_BUNDLED_LIBRARIES EXCLUDE REGEX "TARGET_FILE:jni>")
 if(TARGET tray_manager_plugin)
   target_compile_options(tray_manager_plugin PRIVATE -Wno-deprecated-declarations)
 endif()

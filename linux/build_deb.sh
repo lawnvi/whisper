@@ -41,8 +41,8 @@ Version: ${VERSION}
 Section: utils
 Priority: optional
 Architecture: ${ARCHITECTURE}
-Depends: libpulse0, libepoxy0, libsecret-1-0, libkeybinder-3.0-0, libayatana-appindicator3-1, libjsoncpp26 | libjsoncpp25 | libjsoncpp24 | libjsoncpp1, libgstreamer1.0-0, libgstreamer-plugins-base1.0-0, gstreamer1.0-plugins-good, gstreamer1.0-libav
-Recommends: libmpv2 | libmpv1, xdg-desktop-portal
+Depends: libgtk-3-0t64 | libgtk-3-0, libx11-6, libxtst6, libxi6, libxrandr2, libpulse0, libepoxy0, libsecret-1-0, libkeybinder-3.0-0, libayatana-appindicator3-1, libjsoncpp26 | libjsoncpp25 | libjsoncpp24 | libjsoncpp1, libgstreamer1.0-0, libgstreamer-plugins-base1.0-0, gstreamer1.0-plugins-good, gstreamer1.0-libav
+Recommends: libmpv2 | libmpv1, xdg-desktop-portal, fuse3, libpipewire-0.3-0t64 | libpipewire-0.3-0
 Maintainer: lawnvi
 Homepage: https://github.com/lawnvi/whisper
 Description: Cross-platform local network file and message transfer

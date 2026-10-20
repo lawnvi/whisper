@@ -18,7 +18,11 @@ void main() {
     expect(releaseWorkflow, contains('libepoxy-dev'));
     expect(releaseWorkflow, contains('libgstreamer1.0-dev'));
     expect(releaseWorkflow, contains('libgstreamer-plugins-base1.0-dev'));
-    expect(debScript, contains('Depends: libpulse0'));
+    final depends = debScript
+        .substring(debScript.indexOf('Depends:'))
+        .split('\n')
+        .first;
+    expect(depends, contains(' libpulse0,'));
     expect(debScript, contains('libmpv2'));
     expect(debScript, contains('libepoxy0'));
     expect(debScript, contains('libgstreamer1.0-0'));
