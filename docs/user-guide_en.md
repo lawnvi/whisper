@@ -134,7 +134,7 @@ A window opened elsewhere keeps running here in the background, off your screen:
 | --- | --- |
 | macOS | 12.3 or later. Allow Whisper under "Screen & System Audio Recording" in System Settings › Privacy & Security, and under "Accessibility" so the other device can control windows. Settings → Permissions and sharing shows the status of each |
 | Windows | Windows 10 (1903) or later |
-| Linux | A GNOME 45 or later session on Wayland. The first time, install the "Window sharing helper" from Settings, then log out and back in once. KDE and X11 can only view for now |
+| Linux | A GNOME 45 or later, or KDE Plasma 6, session on Wayland. On GNOME, install the "Window sharing helper" from Settings the first time, then log out and back in once; KDE Plasma needs nothing installed and asks for no permission. X11 can only view for now |
 | Android | Android 10 or later; see below |
 
 On Linux, showing windows from other devices needs FFmpeg 4 or later. Sharing this computer's windows also needs an H.264 encoder in FFmpeg (x264 or openh264; Fedora ships without one).
@@ -182,7 +182,7 @@ Turn on clipboard sync first if you want to paste across devices.
 ### Permissions and platform limits
 
 - **macOS**: grant the Accessibility permission when prompted.
-- **Linux**: any X11 session works. On Wayland, GNOME works without asking for permission and shows its remote control icon in the top bar while in use. GNOME before 46 (Ubuntu 22.04, for example) can only be controlled; to control other computers from one, choose "Ubuntu on Xorg" on the login screen. Typing text the current keyboard layout cannot produce, such as Chinese from a phone, needs the "Window sharing helper" from Settings (GNOME 45 or later). Other Wayland desktops such as KDE ask for permission the first time and have not been fully tested, so they may not work.
+- **Linux**: any X11 session works. On Wayland, GNOME works without asking for permission and shows its remote control icon in the top bar while in use. GNOME before 46 (Ubuntu 22.04, for example) can only be controlled; to control other computers from one, choose "Ubuntu on Xorg" on the login screen. Typing text the current keyboard layout cannot produce, such as Chinese from a phone, needs the "Window sharing helper" from Settings (GNOME 45 or later). KDE Plasma asks for permission the first time it is controlled, and not again once you tick "remember"; it takes any text, Chinese included. Controlling other computers from it asks every time it starts (a current KDE limit). Other Wayland desktops have not been tested, so they may not work.
 - **Windows**: if the pointer moves in small jumps, or file transfers swing between fast and slow, check Settings → System → Projecting to this PC. While it is on, the wireless adapter may have to keep a Wi-Fi Direct network alive as well, which adds periodic delay to the Wi-Fi connection; set it to "Always Off" when you do not use wireless projection.
 
 ### Windows lock screen and UAC
