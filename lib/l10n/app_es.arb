@@ -1117,7 +1117,7 @@
   "windowStreamHostPermissionMac": "{device} aún no permite que Whisper grabe la pantalla. En ese Mac, activa Whisper en Ajustes del Sistema › Privacidad y seguridad › Grabación de pantalla y audio del sistema.",
   "windowStreamHostPermission": "{device} no permite que Whisper grabe sus ventanas. Permite la grabación de pantalla para Whisper en los ajustes de privacidad de ese ordenador y vuelve a intentarlo.",
   "windowStreamHostHelper": "Falta un paso en {device}: cierra la sesión en ese ordenador y vuelve a iniciarla para poder mostrar aquí sus ventanas.",
-  "windowStreamHostDesktopUnsupported": "El escritorio de {device} aún no puede compartir ventanas. Necesita GNOME con Wayland.",
+  "windowStreamHostDesktopUnsupported": "El escritorio de {device} aún no puede compartir ventanas. Necesita GNOME o KDE Plasma con Wayland.",
   "windowStreamHostElevated": "Esta ventana se ejecuta como administrador y Whisper no puede mostrarla. En {device}, vuelve a abrir la app sin permisos de administrador.",
   "windowStreamHostProtected": "Esta ventana bloquea la grabación de pantalla, así que no se puede mostrar aquí.",
   "windowStreamHostEncoder": "{device} no pudo empezar a codificar el vídeo. Vuelve a intentarlo en un momento.",

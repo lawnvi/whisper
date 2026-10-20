@@ -229,7 +229,7 @@ void Stage::SetSink(std::shared_ptr<Encoder> encoder) {
 }
 
 void Stage::Fence(bool on) {
-  ShellHelper& helper = ShellHelper::Get();
+  WindowHelper& helper = WindowHelper::Get();
   if (fenced_ && (!on || fence_ != rect_)) {
     helper.SetFence(fence_, false);
     fenced_ = false;
@@ -401,10 +401,10 @@ void Session::Fail(int32_t error, const std::string& why) {
 
 void Session::Begin() {
   if (mode_ == Mode::kStopped) return;
-  ShellHelper& helper = ShellHelper::Get();
+  WindowHelper& helper = WindowHelper::Get();
   HelperState state = helper.Check();
   if (state != HelperState::kReady) {
-    Fail(WSN_CAPTURE_ERROR_HELPER, std::string("helper: ") + HelperStateName(state));
+    Fail(HelperFailure(state), std::string("helper: ") + HelperStateName(state));
     return;
   }
   std::string encoder;
@@ -473,7 +473,7 @@ void Session::PlaceWindow(int attempt) {
   int generation = ++generation_;
   Rect target = Target();
   std::weak_ptr<int> alive = life_;
-  ShellHelper::Get().Stage(window_, target, [this, alive, generation, attempt, target](bool ok, Rect frame,
+  WindowHelper::Get().Stage(window_, target, [this, alive, generation, attempt, target](bool ok, Rect frame,
                                                                                       const std::string& error) {
     if (alive.expired() || generation != generation_ || mode_ == Mode::kStopped || stage_ == nullptr ||
         stage_->owner() != this) {
@@ -512,14 +512,14 @@ void Session::InPlace(const std::string& why) {
   Note("streaming the window where it is: " + why);
   ReleaseHeld();
   if (stage_ != nullptr) {
-    if (stage_->owner() == this) ShellHelper::Get().Unstage(window_);
+    if (stage_->owner() == this) WindowHelper::Get().Unstage(window_);
     stage_->Leave(this);
     stage_ = nullptr;
   }
   mode_ = Mode::kInPlace;
   ++generation_;
   UpdateAudio();
-  if (info_.minimized) ShellHelper::Get().Unminimize(window_);
+  if (info_.minimized) WindowHelper::Get().Unminimize(window_);
   auto sink = std::make_shared<FrameSink>();
   {
     std::lock_guard<std::mutex> lock(sink->mutex);
@@ -527,7 +527,7 @@ void Session::InPlace(const std::string& why) {
   }
   place_sink_ = sink;
   cast_ = ScreenCast::Window(
-      info_.window_id, 0, 0, fps_,
+      info_, 0, 0, fps_,
       [sink](const Frame& frame) {
         std::shared_ptr<Encoder> encoder;
         {
@@ -569,18 +569,18 @@ void Session::OnStageLost() {
   // Gone: Mutter put the window somewhere; capture it where it is now.
   stage_->Leave(this);
   stage_ = nullptr;
-  ShellHelper::Get().Unstage(window_);
+  WindowHelper::Get().Unstage(window_);
   InPlace("the virtual monitor went away");
 }
 
 void Session::GoHome() {
   if (stage_ == nullptr) {
-    ShellHelper::Get().Unstage(window_);
+    WindowHelper::Get().Unstage(window_);
     return;
   }
   stage_->Hold();
   int64_t key = stage_->key();
-  ShellHelper::Get().Unstage(window_, [key](bool, const std::string&) {
+  WindowHelper::Get().Unstage(window_, [key](bool, const std::string&) {
     if (Stage* stage = Stage::Find(key)) stage->Release();
   });
 }
@@ -615,7 +615,7 @@ void Session::Check() {
   if (mode_ != Mode::kStaged && mode_ != Mode::kInPlace) return;
   int generation = generation_;
   std::weak_ptr<int> alive = life_;
-  ShellHelper::Get().ListWindows([this, alive, generation](bool ok, std::vector<HelperWindow> windows, bool locked) {
+  WindowHelper::Get().ListWindows([this, alive, generation](bool ok, std::vector<HelperWindow> windows, bool locked) {
     // Locked, the helper lists no windows: nothing is gone, nothing to check.
     if (alive.expired() || !ok || locked || generation != generation_) return;
     auto found = std::find_if(windows.begin(), windows.end(), [this](const HelperWindow& w) { return w.id == window_; });
@@ -634,7 +634,7 @@ void Session::Check() {
       return;
     }
     // Another app's window that landed here would be seen by nobody.
-    ShellHelper::Get().EvictStrangers(area, window_);
+    WindowHelper::Get().EvictStrangers(area, window_);
   });
 }
 
@@ -727,7 +727,7 @@ void Session::Stop() {
   ReleaseHeld();
   UpdateAudio();  // off now that the session is stopped: routes back
   // The pointer was still out on the monitor for the viewer: back first.
-  if (warp_pending) ShellHelper::Get().WarpHome();
+  if (warp_pending) WindowHelper::Get().WarpHome();
   if (staged) GoHome();
   if (stage_ != nullptr) {
     stage_->Leave(this);
@@ -758,8 +758,9 @@ void Session::OnTextFocus(bool focused) {
 
 void Session::OnHelperVanished() {
   if (mode_ == Mode::kStopped) return;
-  // It put the window back on its way out; nothing here can move it now.
-  Note("GNOME Shell helper went away");
+  // It put the window back on its way out (GNOME), or KWin does as the
+  // virtual monitor goes (KDE); nothing here can move it now.
+  Note("window helper went away");
   EmitCapture(id_, WSN_CAPTURE_FAILED, nullptr, 0, 0, WSN_CAPTURE_ERROR_HELPER);
 }
 
@@ -774,12 +775,12 @@ void Session::ScheduleWarp(guint delay_ms) {
   CancelTimer(warp_timer_);
   warp_timer_ = PostAfter(delay_ms, [this] {
     warp_timer_ = 0;
-    if (!button_down_) ShellHelper::Get().WarpHome();
+    if (!button_down_) WindowHelper::Get().WarpHome();
   });
 }
 
 void Session::SyncModifiers(int32_t modifiers) {
-  ShellHelper& helper = ShellHelper::Get();
+  WindowHelper& helper = WindowHelper::Get();
   struct Group {
     bool wanted;
     uint32_t left;
@@ -807,7 +808,7 @@ void Session::SyncModifiers(int32_t modifiers) {
 }
 
 void Session::ReleaseHeld() {
-  ShellHelper& helper = ShellHelper::Get();
+  WindowHelper& helper = WindowHelper::Get();
   for (uint32_t key : keys_down_) helper.Key(key, false);
   keys_down_.clear();
   for (uint32_t key : explicit_modifiers_) helper.Key(key, false);
@@ -827,7 +828,7 @@ void Session::Input(int32_t kind, int32_t code, int32_t modifiers, double x, dou
   // key or button the viewer let go of must never stay down here.
   bool release = kind == WSN_INPUT_KEY_UP || kind == WSN_INPUT_POINTER_UP || kind == WSN_INPUT_POINTER_CANCEL;
   if (!live && !release) return;
-  ShellHelper& helper = ShellHelper::Get();
+  WindowHelper& helper = WindowHelper::Get();
   Rect rect = live ? InputRect() : last_rect_;
   if (live && !rect.empty()) last_rect_ = rect;
   if (rect.empty()) {

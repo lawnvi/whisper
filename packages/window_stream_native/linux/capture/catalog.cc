@@ -10,7 +10,7 @@
 #include <vector>
 
 #include "capture/capture_thread.h"
-#include "capture/shell_helper.h"
+#include "capture/helper.h"
 #include "common/callbacks.h"
 #include "common/log.h"
 #include "common/main_thread.h"
@@ -96,12 +96,12 @@ void FailRequest(int64_t id, int32_t error) { EmitCapture(id, WSN_CAPTURE_FAILED
 }  // namespace
 
 void RequestCatalog(int64_t id) {
-  ShellHelper& helper = ShellHelper::Get();
+  WindowHelper& helper = WindowHelper::Get();
   HelperState state = helper.Check();
   if (state != HelperState::kReady) {
     // A note under id 0 (the host's log): the request id expects one answer.
-    EmitCaptureNote(0, std::string("catalog: GNOME Shell helper ") + HelperStateName(state));
-    FailRequest(id, WSN_CAPTURE_ERROR_HELPER);
+    EmitCaptureNote(0, std::string("catalog: window helper ") + HelperStateName(state));
+    FailRequest(id, HelperFailure(state));
     return;
   }
   helper.ListWindows([id](bool ok, std::vector<HelperWindow> windows, bool locked) {
@@ -153,9 +153,10 @@ void RequestCatalog(int64_t id) {
 }
 
 void RequestThumbnail(int64_t id, uint32_t window, int max_edge) {
-  ShellHelper& helper = ShellHelper::Get();
-  if (helper.Check() != HelperState::kReady) {
-    FailRequest(id, WSN_CAPTURE_ERROR_HELPER);
+  WindowHelper& helper = WindowHelper::Get();
+  HelperState state = helper.Check();
+  if (state != HelperState::kReady) {
+    FailRequest(id, HelperFailure(state));
     return;
   }
   int edge = max_edge > 0 ? std::min(max_edge, 2048) : 1024;
@@ -170,7 +171,7 @@ void RequestThumbnail(int64_t id, uint32_t window, int max_edge) {
       FailRequest(id, locked ? WSN_CAPTURE_ERROR_LOCKED : WSN_CAPTURE_ERROR_NOT_FOUND);
       return;
     }
-    ShellHelper::Get().Thumbnail(window, edge, [id](bool shot, std::vector<uint8_t> jpeg) {
+    WindowHelper::Get().Thumbnail(window, edge, [id](bool shot, std::vector<uint8_t> jpeg) {
       if (!shot) {
         FailRequest(id, WSN_CAPTURE_ERROR_NOT_FOUND);
         return;
@@ -181,7 +182,7 @@ void RequestThumbnail(int64_t id, uint32_t window, int max_edge) {
 }
 
 void CloseWindow(uint32_t window) {
-  ShellHelper& helper = ShellHelper::Get();
+  WindowHelper& helper = WindowHelper::Get();
   if (helper.Check() == HelperState::kReady) helper.Close(window);
 }
 

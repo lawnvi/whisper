@@ -2916,7 +2916,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String windowStreamHostDesktopUnsupported(String device) {
-    return 'El escritorio de $device aún no puede compartir ventanas. Necesita GNOME con Wayland.';
+    return 'El escritorio de $device aún no puede compartir ventanas. Necesita GNOME o KDE Plasma con Wayland.';
   }
 
   @override

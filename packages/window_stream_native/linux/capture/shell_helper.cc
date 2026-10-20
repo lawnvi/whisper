@@ -41,18 +41,6 @@ bool Lookup(GVariant* dict, const char* key, const char* type, void* out) {
 
 }  // namespace
 
-const char* HelperStateName(HelperState state) {
-  switch (state) {
-    case HelperState::kReady: return "ready";
-    case HelperState::kNoBus: return "no-bus";
-    case HelperState::kMissing: return "missing";
-    case HelperState::kUntrusted: return "untrusted";
-    case HelperState::kOutdated: return "outdated";
-    case HelperState::kDenied: return "denied";
-  }
-  return "?";
-}
-
 ShellHelper& ShellHelper::Get() {
   static ShellHelper* helper = new ShellHelper();
   return *helper;

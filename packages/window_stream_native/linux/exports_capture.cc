@@ -1,18 +1,23 @@
 // C ABI, capture half: this desktop as a window source
-// (window_stream_native.h), on GNOME Wayland.
+// (window_stream_native.h), on GNOME or KDE Plasma on Wayland.
 //
 // Every entry point only queues work on the capture thread
 // (capture/capture_thread.h), so callbacks never run inside an FFI call.
 // Windows are listed, moved and driven through Whisper's GNOME Shell
-// extension (capture/shell_helper.h); pictures come from Mutter's ScreenCast
-// API over PipeWire and are encoded with the system FFmpeg.
+// extension (capture/shell_helper.h) or a KWin script and KWin's own
+// protocols (capture/kwin_helper.h); pictures come from Mutter's ScreenCast
+// API or KWin's screencast protocol over PipeWire and are encoded with the
+// system FFmpeg.
 //
 // Failure codes Dart sees (WSN_CAPTURE_FAILED flags):
-//   7 DESKTOP    not GNOME on Wayland, or no Mutter ScreenCast / PipeWire
-//                (wsn_capture_supported() is 0 then)
-//   6 HELPER     the GNOME Shell helper is not ready: not installed, needs a
-//                new login, outdated, or does not trust this executable (a
-//                WSN_CAPTURE_NOTE "helper: <state>" says which)
+//   7 DESKTOP    not GNOME or KDE Plasma on Wayland, or no screencast /
+//                PipeWire (wsn_capture_supported() is 0 then); on KDE also
+//                when KWin withholds its protocols from this executable
+//   6 HELPER     the desktop's helper is not ready: on GNOME the Shell
+//                extension is not installed, needs a new login, is outdated,
+//                or does not trust this executable (a WSN_CAPTURE_NOTE
+//                "helper: <state>" says which); on KDE the KWin script
+//                does not answer
 //   10 LOCKED    the session is locked
 //   4 NOT_FOUND  the window (or app) is gone
 //   5 ENCODER    no usable H.264 encoder in the system FFmpeg
@@ -28,10 +33,12 @@
 #include "capture/capture_thread.h"
 #include "capture/catalog.h"
 #include "capture/encoder.h"
+#include "capture/helper.h"
+#include "capture/kwin_helper.h"
+#include "capture/kwin_wayland.h"
 #include "capture/pipewire_stream.h"
 #include "capture/screencast.h"
 #include "capture/session.h"
-#include "capture/shell_helper.h"
 #include "common/callbacks.h"
 #include "common/lifecycle.h"
 #include "common/log.h"
@@ -41,22 +48,14 @@ namespace {
 
 using wsn::capture::Post;
 using wsn::capture::Session;
-using wsn::capture::ShellHelper;
-
-bool Contains(const char* haystack, const char* needle) {
-  if (haystack == nullptr) return false;
-  gchar* lower = g_ascii_strdown(haystack, -1);
-  bool found = std::strstr(lower, needle) != nullptr;
-  g_free(lower);
-  return found;
-}
+using wsn::capture::WindowHelper;
 
 // Once per process, on the capture thread: route the helper's signals.
 void Init() {
   static bool done = false;
   if (done) return;
   done = true;
-  ShellHelper::Handlers handlers;
+  WindowHelper::Handlers handlers;
   handlers.window_gone = [](uint32_t window) {
     Session::ForEach([window](Session* s) {
       if (s->window() == window) s->OnWindowGone();
@@ -68,9 +67,15 @@ void Init() {
     });
   };
   handlers.vanished = [] { Session::ForEach([](Session* s) { s->OnHelperVanished(); }); };
-  ShellHelper::Get().SetHandlers(std::move(handlers));
+  WindowHelper::Get().SetHandlers(std::move(handlers));
   // Sound routes an earlier run left moved (it died while streaming) go back.
   wsn::capture::RecoverAudioRoutes();
+  // KWin takes a moment to see a new .desktop file: written now, it is
+  // there by the first stream.
+  if (wsn::capture::CurrentDesktop() == wsn::capture::Desktop::kKde && wsn_capture_supported() == 1) {
+    std::string why;
+    if (!wsn::capture::EnsureKWinPermission(&why)) WSN_LOG("capture: %s", why.c_str());
+  }
 }
 
 template <typename Fn>
@@ -105,12 +110,20 @@ void wsn_set_capture_callback(wsn_capture_callback callback) {
 
 int32_t wsn_capture_supported(void) {
   static int32_t supported = [] {
-    const char* type = g_getenv("XDG_SESSION_TYPE");
-    bool wayland = (type != nullptr && std::strcmp(type, "wayland") == 0) || g_getenv("WAYLAND_DISPLAY") != nullptr;
-    bool gnome = Contains(g_getenv("XDG_CURRENT_DESKTOP"), "gnome");
-    bool ok = wayland && gnome && wsn::capture::PipeWireStream::Available() && wsn::capture::ScreenCastAvailable();
-    WSN_LOG("capture: GNOME Wayland source %s (wayland %d, gnome %d)", ok ? "available" : "unavailable", wayland,
-            gnome);
+    using wsn::capture::Desktop;
+    Desktop desktop = wsn::capture::CurrentDesktop();
+    bool pipewire = wsn::capture::PipeWireStream::Available();
+    bool ok = false;
+    if (desktop == Desktop::kGnome) {
+      ok = pipewire && wsn::capture::ScreenCastAvailable();
+      WSN_LOG("capture: GNOME Wayland source %s", ok ? "available" : "unavailable");
+    } else if (desktop == Desktop::kKde) {
+      // Whether KWin lets this executable in shows at the first use.
+      ok = pipewire && wsn::capture::kwin::Compiled();
+      WSN_LOG("capture: KDE Plasma Wayland source %s", ok ? "available" : "unavailable");
+    } else {
+      WSN_LOG("capture: no window source here (neither GNOME nor KDE Plasma on Wayland)");
+    }
     return ok ? 1 : 0;
   }();
   return supported;
@@ -125,7 +138,7 @@ int32_t wsn_capture_input_permission(void) {
   wsn::capture::PostAndWait(
       [] {
         Init();
-        state = static_cast<int>(ShellHelper::Get().Check());
+        state = static_cast<int>(WindowHelper::Get().Check());
       },
       600);
   return state.load() == static_cast<int>(wsn::capture::HelperState::kReady) ? 1 : 0;

@@ -84,7 +84,7 @@ void main() {
           WindowStreamFailureReason.desktopUnsupported,
           WindowStreamPlatform.linux,
         ),
-        contains('GNOME on Wayland'),
+        contains('GNOME or KDE Plasma on Wayland'),
       );
       // A Mac's permission text points at System Settings; Windows does not.
       expect(

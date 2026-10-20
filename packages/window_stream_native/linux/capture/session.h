@@ -24,7 +24,7 @@
 #include "capture/display_config.h"
 #include "capture/encoder.h"
 #include "capture/screencast.h"
-#include "capture/shell_helper.h"
+#include "capture/helper.h"
 
 namespace wsn::capture {
 

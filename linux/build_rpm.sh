@@ -72,6 +72,10 @@ Type=Application
 Categories=Utility;
 MimeType=application/octet-stream;application/pdf;application/zip;text/plain;image/png;image/jpeg;audio/mpeg;video/mp4;
 Actions=QuickSend;
+# KDE Plasma: KWin grants window flow its screencast and input protocols
+# by this entry (it goes by the executable Exec names).
+X-KDE-Wayland-Interfaces=zkde_screencast_unstable_v1,org_kde_kwin_fake_input
+X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2
 
 [Desktop Action QuickSend]
 Name=Send with Whisper

@@ -1556,9 +1556,9 @@
       }
     }
   },
-  "windowStreamHostDesktopUnsupported": "{device}'s desktop can't share windows yet. It needs GNOME on Wayland.",
+  "windowStreamHostDesktopUnsupported": "{device}'s desktop can't share windows yet. It needs GNOME or KDE Plasma on Wayland.",
   "@windowStreamHostDesktopUnsupported": {
-    "description": "Window stream: a Linux source runs a desktop other than GNOME on Wayland (KDE, X11).",
+    "description": "Window stream: a Linux source runs a desktop other than GNOME or KDE Plasma on Wayland (X11, others), or KWin refused Whisper its screencast protocols.",
     "placeholders": {
       "device": {
         "type": "String"

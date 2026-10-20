@@ -1651,9 +1651,9 @@
       }
     }
   },
-  "windowStreamHostDesktopUnsupported": "{device} 的桌面暂不支持流转窗口，需要 GNOME（Wayland）",
+  "windowStreamHostDesktopUnsupported": "{device} 的桌面暂不支持流转窗口，需要 GNOME 或 KDE Plasma（Wayland）",
   "@windowStreamHostDesktopUnsupported": {
-    "description": "Window stream: a Linux source runs a desktop other than GNOME on Wayland (KDE, X11).",
+    "description": "Window stream: a Linux source runs a desktop other than GNOME or KDE Plasma on Wayland (X11, others), or KWin refused Whisper its screencast protocols.",
     "placeholders": {
       "device": {
         "type": "String"

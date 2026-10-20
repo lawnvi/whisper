@@ -4894,10 +4894,10 @@ abstract class AppLocalizations {
   /// **'{device} 还差一步：请在那台电脑上注销并重新登录一次，之后就能流转它的窗口'**
   String windowStreamHostHelper(String device);
 
-  /// Window stream: a Linux source runs a desktop other than GNOME on Wayland (KDE, X11).
+  /// Window stream: a Linux source runs a desktop other than GNOME or KDE Plasma on Wayland (X11, others), or KWin refused Whisper its screencast protocols.
   ///
   /// In zh, this message translates to:
-  /// **'{device} 的桌面暂不支持流转窗口，需要 GNOME（Wayland）'**
+  /// **'{device} 的桌面暂不支持流转窗口，需要 GNOME 或 KDE Plasma（Wayland）'**
   String windowStreamHostDesktopUnsupported(String device);
 
   /// Window stream: a Windows source's window belongs to an elevated (administrator) process.

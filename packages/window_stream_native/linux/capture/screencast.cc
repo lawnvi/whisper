@@ -10,6 +10,7 @@
 
 #include "capture/bus.h"
 #include "capture/capture_thread.h"
+#include "capture/kwin_screencast.h"
 #include "common/log.h"
 
 namespace wsn::capture {
@@ -57,6 +58,43 @@ bool IsVirtualConnector(const DisplayState& state, const std::string& connector)
   return connector.rfind("Meta-", 0) == 0 && state.monitors.count(connector) != 0;
 }
 
+class MutterScreenCast : public ScreenCast {
+ public:
+  MutterScreenCast(bool virtual_monitor, int pixel_width, int pixel_height, double scale, int fps,
+                   PipeWireStream::FrameCallback on_frame, Callbacks callbacks);
+  ~MutterScreenCast() override;
+
+  void Resize(int pixel_width, int pixel_height, double scale) override;
+  bool Begin(uint64_t window_id);
+
+  std::shared_ptr<bool> alive_;
+
+ private:
+  void OnNode(uint32_t node);
+  void OnNegotiated(int width, int height);
+  void FindMonitor(int attempt);
+  void OnLayoutChanged();
+  void Fail(const std::string& why);
+
+  const bool virtual_;
+  double wanted_scale_;
+  const int fps_;
+  PipeWireStream::FrameCallback on_frame_;
+  Callbacks callbacks_;
+
+  std::string session_path_;
+  std::string stream_path_;
+  guint node_signal_ = 0;
+  guint closed_signal_ = 0;
+  guint layout_signal_ = 0;
+  guint find_timer_ = 0;
+  guint deadline_timer_ = 0;  // creation must finish within kCreateTimeoutMs
+  std::unique_ptr<PipeWireStream> stream_;
+  bool failed_ = false;
+  bool resizing_ = false;
+  int placements_ = 0;  // re-placements in a row (no fight with the layout)
+};
+
 }  // namespace
 
 bool ScreenCastAvailable() {
@@ -83,23 +121,25 @@ bool ScreenCastAvailable() {
   return available;
 }
 
-ScreenCast::ScreenCast(bool virtual_monitor, int pixel_width, int pixel_height, double scale, int fps,
-                       PipeWireStream::FrameCallback on_frame, Callbacks callbacks)
-    : virtual_(virtual_monitor),
-      pixel_width_(pixel_width),
-      pixel_height_(pixel_height),
+MutterScreenCast::MutterScreenCast(bool virtual_monitor, int pixel_width, int pixel_height, double scale, int fps,
+                                   PipeWireStream::FrameCallback on_frame, Callbacks callbacks)
+    : ScreenCast(pixel_width, pixel_height),
+      alive_(std::make_shared<bool>(true)),
+      virtual_(virtual_monitor),
       wanted_scale_(scale),
       fps_(fps),
       on_frame_(std::move(on_frame)),
-      callbacks_(std::move(callbacks)),
-      alive_(std::make_shared<bool>(true)) {}
+      callbacks_(std::move(callbacks)) {}
 
 std::unique_ptr<ScreenCast> ScreenCast::Virtual(int pixel_width, int pixel_height, double scale, int fps,
                                                 PipeWireStream::FrameCallback on_frame, Callbacks callbacks) {
-  std::unique_ptr<ScreenCast> cast(
-      new ScreenCast(true, pixel_width, pixel_height, scale, fps, std::move(on_frame), std::move(callbacks)));
+  if (CurrentDesktop() == Desktop::kKde) {
+    return KWinVirtualCast(pixel_width, pixel_height, scale, fps, std::move(on_frame), std::move(callbacks));
+  }
+  auto cast = std::make_unique<MutterScreenCast>(true, pixel_width, pixel_height, scale, fps, std::move(on_frame),
+                                                 std::move(callbacks));
   std::weak_ptr<bool> alive = cast->alive_;
-  ScreenCast* self = cast.get();
+  MutterScreenCast* self = cast.get();
   auto begin = [self, alive] {
     if (alive.expired()) {
       NextCreation();
@@ -120,19 +160,23 @@ std::unique_ptr<ScreenCast> ScreenCast::Virtual(int pixel_width, int pixel_heigh
   return cast;
 }
 
-std::unique_ptr<ScreenCast> ScreenCast::Window(uint64_t window_id, int width, int height, int fps,
+std::unique_ptr<ScreenCast> ScreenCast::Window(const HelperWindow& window, int width, int height, int fps,
                                                PipeWireStream::FrameCallback on_frame, Callbacks callbacks) {
-  std::unique_ptr<ScreenCast> cast(
-      new ScreenCast(false, width, height, 1, fps, std::move(on_frame), std::move(callbacks)));
+  if (CurrentDesktop() == Desktop::kKde) {
+    return KWinWindowCast(window.uuid, fps, std::move(on_frame), std::move(callbacks));
+  }
+  uint64_t window_id = window.window_id;
+  auto cast = std::make_unique<MutterScreenCast>(false, width, height, 1, fps, std::move(on_frame),
+                                                 std::move(callbacks));
   std::weak_ptr<bool> alive = cast->alive_;
-  ScreenCast* self = cast.get();
+  MutterScreenCast* self = cast.get();
   Post([self, alive, window_id] {
     if (!alive.expired()) self->Begin(window_id);
   });
   return cast;
 }
 
-ScreenCast::~ScreenCast() {
+MutterScreenCast::~MutterScreenCast() {
   bool was_finding = virtual_ && !ready_ && !failed_ && !session_path_.empty();
   alive_.reset();
   stream_.reset();  // no frames after this
@@ -151,7 +195,7 @@ ScreenCast::~ScreenCast() {
   if (was_finding) NextCreation();
 }
 
-bool ScreenCast::Begin(uint64_t window_id) {
+bool MutterScreenCast::Begin(uint64_t window_id) {
   std::weak_ptr<bool> guard = alive_;
   deadline_timer_ = PostAfter(kCreateTimeoutMs, [this, guard] {
     if (guard.expired()) return;
@@ -212,7 +256,7 @@ bool ScreenCast::Begin(uint64_t window_id) {
   return true;
 }
 
-void ScreenCast::OnNode(uint32_t node) {
+void MutterScreenCast::OnNode(uint32_t node) {
   WSN_TRACE("capture: PipeWire node %u", node);
   std::weak_ptr<bool> alive = alive_;
   stream_ = PipeWireStream::Connect(
@@ -231,7 +275,7 @@ void ScreenCast::OnNode(uint32_t node) {
   if (stream_ == nullptr) Fail("PipeWire unavailable");
 }
 
-void ScreenCast::OnNegotiated(int width, int height) {
+void MutterScreenCast::OnNegotiated(int width, int height) {
   WSN_TRACE("capture: negotiated %dx%d", width, height);
   if (!virtual_) {
     pixel_width_ = width;
@@ -248,7 +292,7 @@ void ScreenCast::OnNegotiated(int width, int height) {
   if (find_timer_ == 0) FindMonitor(0);
 }
 
-void ScreenCast::FindMonitor(int attempt) {
+void MutterScreenCast::FindMonitor(int attempt) {
   find_timer_ = 0;
   DisplayState state;
   if (ReadDisplayState(&state)) {
@@ -291,7 +335,7 @@ void ScreenCast::FindMonitor(int attempt) {
   });
 }
 
-void ScreenCast::OnLayoutChanged() {
+void MutterScreenCast::OnLayoutChanged() {
   if (!ready_ || failed_ || connector_.empty()) return;
   DisplayState state;
   if (!ReadDisplayState(&state)) return;
@@ -326,7 +370,7 @@ void ScreenCast::OnLayoutChanged() {
   }
 }
 
-void ScreenCast::Resize(int pixel_width, int pixel_height, double scale) {
+void MutterScreenCast::Resize(int pixel_width, int pixel_height, double scale) {
   if (!virtual_ || stream_ == nullptr) return;
   pixel_width_ = pixel_width;
   pixel_height_ = pixel_height;
@@ -335,7 +379,7 @@ void ScreenCast::Resize(int pixel_width, int pixel_height, double scale) {
   stream_->Resize(pixel_width, pixel_height);
 }
 
-void ScreenCast::Fail(const std::string& why) {
+void MutterScreenCast::Fail(const std::string& why) {
   if (failed_) return;
   failed_ = true;
   WSN_LOG("capture: screencast %s", why.c_str());

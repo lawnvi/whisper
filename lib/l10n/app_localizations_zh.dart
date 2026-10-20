@@ -2724,7 +2724,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String windowStreamHostDesktopUnsupported(String device) {
-    return '$device 的桌面暂不支持流转窗口，需要 GNOME（Wayland）';
+    return '$device 的桌面暂不支持流转窗口，需要 GNOME 或 KDE Plasma（Wayland）';
   }
 
   @override

@@ -9,9 +9,15 @@ sign, right click, Cmd+A, the window not on the real screen, viewport and
 keyboard-inset resizes, pause/park/resume, stop restoring the window, the app
 killed and relaunched, remote close.
 
-Runs inside the desktop session (as its user, with its environment). This
-interpreter must be in the GNOME Shell helper's allowed-exe list (the checks
-also read the window list through the helper).
+Runs inside the desktop session (as its user, with its environment). On
+GNOME this interpreter must be in the GNOME Shell helper's allowed-exe list
+(the checks also read the window list through the helper). On KDE Plasma the
+plugin itself writes the .desktop file KWin wants for this interpreter
+(~/.local/share/applications/whisper-window-flow.desktop, which a later
+Whisper run takes over). KWin goes by the first entry naming the
+executable, and distributions ship one for python3, so run a copy of the
+interpreter from a path of its own (cp /usr/bin/python3 ~/wsn-python). The checks read windows and outputs with one-shot
+KWin scripts and the real screen with KWin's ScreenShot2.
 
 usage: wsn_capture_check.py <plugin.so> <wsn_test_window> <out_dir> [--quick] [--park]
 """
@@ -129,6 +135,64 @@ def log(msg):
 
 
 bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+KDE = "kde" in os.environ.get("XDG_CURRENT_DESKTOP", "").lower()
+
+
+class KWinQuery:
+    """One-shot KWin scripts that answer by calling Result on this process."""
+
+    XML = ("<node><interface name='com.vireen.Whisper.Check1'><method name='Result'>"
+           "<arg type='s' name='json' direction='in'/></method></interface></node>")
+
+    def __init__(self):
+        self.answers = queue.Queue()
+        node = Gio.DBusNodeInfo.new_for_xml(self.XML)
+        bus.register_object("/com/vireen/Whisper/Check", node.interfaces[0], self._call, None, None)
+        self.n = 0
+
+    def _call(self, conn, sender, path, iface, method, params, invocation):
+        self.answers.put(params.unpack()[0])
+        invocation.return_value(None)
+
+    def run(self, body):
+        self.n += 1
+        name = "whisper-check-%d-%d" % (os.getpid(), self.n)
+        path = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), name + ".js")
+        js = ("function answer(v) { callDBus(%r, '/com/vireen/Whisper/Check', 'com.vireen.Whisper.Check1', "
+              "'Result', JSON.stringify(v)); }\n" % bus.get_unique_name()) + body
+        open(path, "w").write(js)
+        kwin = lambda p, i, m, a, t=None: bus.call_sync("org.kde.KWin", p, i, m, a,  # noqa: E731
+                                                        GLib.VariantType(t) if t else None, 0, 3000, None)
+        try:
+            sid = kwin("/Scripting", "org.kde.kwin.Scripting", "loadScript", GLib.Variant("(ss)", (path, name)),
+                       "(i)").unpack()[0]
+            kwin("/Scripting/Script%d" % sid, "org.kde.kwin.Script", "run", None)
+            return json.loads(self.answers.get(timeout=3))
+        finally:
+            kwin("/Scripting", "org.kde.kwin.Scripting", "unloadScript", GLib.Variant("(s)", (name,)), "(b)")
+            os.unlink(path)
+
+
+KWIN = KWinQuery() if KDE else None
+
+
+def kwin_windows():
+    return KWIN.run("answer(workspace.windowList().filter(w => w.normalWindow).map(w => ({"
+                    "uuid: w.internalId.toString(), title: w.caption, pid: w.pid, x: Math.round(w.frameGeometry.x), "
+                    "y: Math.round(w.frameGeometry.y), width: Math.round(w.frameGeometry.width), "
+                    "height: Math.round(w.frameGeometry.height), output: w.output ? w.output.name : '', "
+                    "noBorder: w.noBorder, onAllDesktops: w.onAllDesktops})));")
+
+
+def kwin_outputs():
+    return KWIN.run("answer(workspace.screens.map(s => ({name: s.name, x: s.geometry.x, y: s.geometry.y, "
+                    "width: s.geometry.width, height: s.geometry.height, scale: s.devicePixelRatio})));")
+
+
+def virtual_monitors():
+    if KDE:
+        return [o for o in kwin_outputs() if o["name"].startswith("Virtual-Whisper-")]
+    return [m for m in display_state() if any(c.startswith("Meta-") for c in m["connectors"])]
 
 
 def helper_windows():
@@ -157,8 +221,46 @@ def write_png(path, w, h, rgb):
                            chunk(b"IDAT", zlib.compress(raw, 6)) + chunk(b"IEND", b""))
 
 
+def kwin_screen_frame(out_png):
+    """The first real output through KWin's ScreenShot2 (granted to this
+    interpreter by the plugin's .desktop file)."""
+    real = [o for o in kwin_outputs() if not o["name"].startswith("Virtual-")]
+    if not real:
+        return None
+    r, w = os.pipe()
+    fds = Gio.UnixFDList.new()
+    index = fds.append(w)
+    os.close(w)
+    res, _ = bus.call_with_unix_fd_list_sync(
+        "org.kde.KWin.ScreenShot2", "/org/kde/KWin/ScreenShot2", "org.kde.KWin.ScreenShot2", "CaptureScreen",
+        GLib.Variant("(sa{sv}h)", (real[0]["name"], {"native-resolution": GLib.Variant("b", True)}, index)),
+        GLib.VariantType("(a{sv})"), 0, 5000, fds, None)
+    fds = None
+    meta = dict(res.unpack()[0])
+    need = meta["stride"] * meta["height"]
+    data = b""
+    while len(data) < need:
+        chunk = os.read(r, 1 << 20)
+        if not chunk:
+            break
+        data += chunk
+    os.close(r)
+    width, height, stride = meta["width"], meta["height"], meta["stride"]
+    rgb = bytearray(width * height * 3)
+    for y in range(height):
+        row = data[y * stride:y * stride + width * 4]
+        rgb[y * width * 3:(y + 1) * width * 3:3] = row[2::4]
+        rgb[y * width * 3 + 1:(y + 1) * width * 3:3] = row[1::4]
+        rgb[y * width * 3 + 2:(y + 1) * width * 3:3] = row[0::4]
+    rgb = bytes(rgb)
+    write_png(out_png, width, height, rgb)
+    return width, height, rgb
+
+
 def real_screen_frame(out_png):
     """One frame of each real monitor (RecordMonitor), to prove the window left it."""
+    if KDE:
+        return kwin_screen_frame(out_png)
     Gst.init(None)
     real = [c for m in display_state() for c in m["connectors"] if not c.startswith("Meta-")]
     if not real:
@@ -238,17 +340,27 @@ class Checks:
                                      stderr=subprocess.DEVNULL)
         for _ in range(50):
             time.sleep(0.1)
-            for w in helper_windows():
+            for w in self.windows():
                 if w["title"] == title and w["pid"] == self.proc.pid and w["width"] > 100:
                     time.sleep(0.3)  # mapped and settled
-                    return [v for v in helper_windows() if v["id"] == w["id"]][0]
+                    return self.current(w)
         return None
+
+    def windows(self):
+        return kwin_windows() if KDE else helper_windows()
+
+    def current(self, win):
+        """The test window as the desktop sees it now (by pid on KDE, where
+        the catalog's ids are the Whisper script's own)."""
+        if KDE:
+            return [w for w in kwin_windows() if w["pid"] == self.proc.pid][0]
+        return [w for w in helper_windows() if w["id"] == win["id"]][0]
 
     def catalog(self, title):
         rid = self.p.lib.wsn_capture_request_catalog()
         e = self.p.wait(rid, {CATALOG, FAILED}, 6)
         if e is None or e[2] != CATALOG:
-            return None, e
+            return None, []
         data = json.loads(e[3])
         return data, [w for w in data["windows"] if w["title"] == title]
 
@@ -297,14 +409,20 @@ class Checks:
 
     def run(self):
         p = self.p
+        if KDE:
+            # A .desktop file written at attach reaches KWin within a second or two.
+            for _ in range(16):
+                if p.lib.wsn_capture_input_permission() == 1:
+                    break
+                time.sleep(0.25)
         log(f"api {p.lib.wsn_api_version()} supported {p.lib.wsn_capture_supported()} "
             f"input {p.lib.wsn_capture_input_permission()}")
-        self.result("supported (GNOME Wayland)", p.lib.wsn_capture_supported() == 1)
+        self.result("supported (%s Wayland)" % ("KDE Plasma" if KDE else "GNOME"), p.lib.wsn_capture_supported() == 1)
         self.result("helper ready (input permission)", p.lib.wsn_capture_input_permission() == 1)
 
         title = "WSN Harness %d" % os.getpid()
         hw = self.launch_window(title)
-        self.result("test window opened", hw is not None, json.dumps(hw and {k: hw[k] for k in ("id", "x", "y", "width", "height")}))
+        self.result("test window opened", hw is not None, json.dumps(hw and {k: hw.get(k) for k in ("id", "uuid", "x", "y", "width", "height")}))
         if hw is None:
             return
         original = (hw["x"], hw["y"], hw["width"], hw["height"])
@@ -321,7 +439,9 @@ class Checks:
             open(os.path.join(self.out, "thumbnail.jpg"), "wb").write(e[3])
         self.result("thumbnail (JPEG)", ok, f"{len(e[3]) if e else 0} bytes")
         app = next((a for a in data["apps"] if a["bundleId"] in ("org.gnome.TextEditor.desktop",
-                                                                  "org.gnome.Nautilus.desktop")), None)
+                                                                  "org.gnome.Nautilus.desktop",
+                                                                  "org.kde.dolphin.desktop",
+                                                                  "org.kde.konsole.desktop")), None)
         app = app or (data["apps"][0] if data["apps"] else None)
         if app:
             rid = p.lib.wsn_capture_request_icon(app["bundleId"].encode(), 128)
@@ -355,9 +475,8 @@ class Checks:
         staged = next((n for n in notes if n.startswith("staged on its own monitor")), "")
         self.result("staged on a virtual monitor", bool(staged), staged)
         time.sleep(0.6)
-        cur = [w for w in helper_windows() if w["id"] == win["id"]][0]
-        monitors = display_state()
-        vm = [m for m in monitors if any(c.startswith("Meta-") for c in m["connectors"])]
+        cur = self.current(win)
+        monitors = kwin_outputs() if KDE else display_state()
         self.mon_w, self.mon_h = cur["width"], cur["height"]
         log(f"  window now {cur['x']},{cur['y']} {cur['width']}x{cur['height']} monitors {monitors}")
         t0 = time.monotonic()
@@ -402,9 +521,12 @@ class Checks:
         entry_y = (self.mon_h - 17) / self.mon_h
         p.input(DOWN, 0, 0, 0.5, entry_y)
         p.input(UP, 0, 0, 0.5, entry_y)
-        focus = p.wait(cid, {TEXT_FOCUS}, 3)
-        self.result("text focus reported", focus is not None and focus[4] == 1,
-                    f"{focus and (focus[0] - t0):.2f}" if focus else "none")
+        if KDE:
+            time.sleep(0.4)  # no text-focus reports on KDE (the keyboard is not raised by itself there)
+        else:
+            focus = p.wait(cid, {TEXT_FOCUS}, 3)
+            self.result("text focus reported", focus is not None and focus[4] == 1,
+                        f"{focus and (focus[0] - t0):.2f}" if focus else "none")
         n0 = len(input_log(self.log_path))
         p.input(TEXT, text="Hello 你好")
         time.sleep(0.8)
@@ -449,19 +571,19 @@ class Checks:
         p.lib.wsn_capture_set_viewport(cid, 915.0, 412.0, 1.0)
         size2 = p.wait(cid, {SIZE}, 6)
         time.sleep(0.8)
-        cur = [w for w in helper_windows() if w["id"] == win["id"]][0]
+        cur = self.current(win)
         self.result("rotated viewport resizes monitor and window", size2 is not None and size2[5] > size2[6],
                     f"stream {size2 and size2[5]}x{size2 and size2[6]}, window {cur['width']}x{cur['height']}")
         before_h = cur["height"]
         p.lib.wsn_capture_set_inset(cid, 0.4)
         time.sleep(1.0)
-        cur = [w for w in helper_windows() if w["id"] == win["id"]][0]
+        cur = self.current(win)
         self.result("keyboard inset shortens the window", cur["height"] < before_h * 0.7,
                     f"{before_h} -> {cur['height']}")
         p.lib.wsn_capture_set_inset(cid, 0.0)
         p.lib.wsn_capture_set_viewport(cid, 412.0, 915.0, 1.0)
         time.sleep(1.5)
-        log(f"  monitors {display_state()}")
+        log(f"  monitors {kwin_outputs() if KDE else display_state()}")
 
         # ---- stream file and counter
         h264, segments = self.write_stream(os.path.join(self.out, "stream.h264"))
@@ -485,8 +607,8 @@ class Checks:
             park = int(os.environ.get("WHISPER_WSN_PARK_SECONDS", "60"))
             log(f"  paused; waiting {park + 3} s for the window to go home")
             time.sleep(park + 3)
-            cur = [w for w in helper_windows() if w["id"] == win["id"]][0]
-            vms = [m for m in display_state() if any(c.startswith("Meta-") for c in m["connectors"])]
+            cur = self.current(win)
+            vms = virtual_monitors()
             self.result("paused 60 s: window home, monitor gone",
                         (cur["x"], cur["y"], cur["width"], cur["height"]) == original and not vms,
                         f"{(cur['x'], cur['y'], cur['width'], cur['height'])} vs {original}, virtual monitors {len(vms)}")
@@ -497,7 +619,7 @@ class Checks:
             moved_at = None
             for _ in range(60):
                 time.sleep(0.05)
-                cur = [w for w in helper_windows() if w["id"] == win["id"]][0]
+                cur = self.current(win)
                 if (cur["x"], cur["y"]) != original[:2]:
                     moved_at = time.monotonic()
                     break
@@ -511,9 +633,9 @@ class Checks:
         # ---- stop restores exactly
         p.lib.wsn_capture_stop(cid)
         time.sleep(1.5)
-        cur = [w for w in helper_windows() if w["id"] == win["id"]][0]
+        cur = self.current(win)
         now = (cur["x"], cur["y"], cur["width"], cur["height"])
-        vms = [m for m in display_state() if any(c.startswith("Meta-") for c in m["connectors"])]
+        vms = virtual_monitors()
         self.result("stop: window back exactly, monitor gone", now == original and not vms,
                     f"{now} vs {original}, virtual monitors {len(vms)}")
 
@@ -551,7 +673,7 @@ class Checks:
             self.result("remote close closes the window", gone is not None and bool(closed))
             p.lib.wsn_capture_stop(cid)
         time.sleep(1)
-        vms = [m for m in display_state() if any(c.startswith("Meta-") for c in m["connectors"])]
+        vms = virtual_monitors()
         self.result("nothing left behind (no virtual monitors)", not vms, f"{len(vms)}")
 
 
