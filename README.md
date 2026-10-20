@@ -54,7 +54,7 @@ Whisper 是一个局域网协作工具。设备配对后通过加密通道直接
 | Windows | 10 / 11，64 位 | `windows-x86_64.exe` |
 | Linux | x86_64 | `.deb`、`.rpm` 或 `.AppImage` |
 
-iOS / iPadOS：项目没有付费的 Apple 开发者账号，所以不上架 App Store。每次发布附带一个未签名的 `ios-unsigned.ipa`，可以用 AltStore、Sideloadly 等工具以自己的 Apple ID 签名安装（免费 Apple ID 签的应用每 7 天要重签一次）。目前只在一台 iPad 上测过窗口流转和浏览文件，其他功能没有经过真机测试，遇到问题欢迎反馈。
+iOS / iPadOS：项目没有付费的 Apple 开发者账号，所以不上架 App Store。每次发布附带一个未签名的 `ios-unsigned.ipa`，可以用 AltStore、Sideloadly 等工具以自己的 Apple ID 签名安装（免费 Apple ID 签的应用每 7 天要重签一次）。它没有经过完整的真机测试，不保证可用，遇到问题欢迎反馈。
 
 ## 快速开始
 
@@ -100,8 +100,6 @@ iOS / iPadOS：项目没有付费的 Apple 开发者账号，所以不上架 App
 | 通知转发 | 发送 | 接收 | 接收 | 接收 |
 | 桌面截图 | — | ✅ | ✅ | 取决于桌面环境 |
 | 电视投屏接收 | — | ✅ | ✅ | ✅ |
-
-iOS / iPadOS 版可以接收流转的窗口、浏览其他设备的文件。
 
 Linux 的自动发现依赖 Avahi。视频预览和电视投屏需要系统装有 libmpv，窗口流转需要 FFmpeg 的 libavcodec，缺了这些其他功能照常可用。让别的设备流转本机窗口时，要先在设置里装一个 GNOME 组件，装完注销并重新登录一次。
 

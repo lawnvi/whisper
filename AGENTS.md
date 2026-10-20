@@ -43,6 +43,10 @@ CI currently runs `flutter pub get`, `flutter analyze`, and `flutter test` on pu
 - `lib/model/`: Drift database, device/message/transfer models, and generated database code.
 - `lib/audio/`: audio sharing protocol, codecs, capture/playback abstractions, transport, and runtime coordinator.
 - `lib/remote_input/`: keyboard/mouse sharing protocol, topology/layout, native platform bridges, transport, and coordinator.
+- `lib/window_stream/`: window flow — protocol models, coordinator, this device as a source (`remote/`), adb and the Android agent link (`adb/`, `android/`), GNOME helper installer (`linux/`), and the frame pipeline. Capture, encoding, and display are native, in the FFI plugin `packages/window_stream_native/`; the phone-side agent is `android_agent/`, rebuilt with `./script/build_window_agent.sh` after any change.
+- `lib/remote_files/`: cross-device file browser — the FileBrowse protocol, host and client, copies, and `mount/` for "Mount on this computer" (macOS NFS server, Linux FUSE, Windows Cloud Files through `windows/cloud_files/`), each mount in its own isolate.
+- `lib/share_links/`: LAN share links — the HTTP file server (port 10003 by default, only while a link is on), link store, routes, passwords, pages, and streamed zips.
+- `lib/widget/island/`: the in-app island that gathers transfers, copies, audio, and window flow activity.
 - `lib/helper/`: platform helpers for files, settings, notifications, background services, desktop startup, and general utilities.
 - `lib/l10n/`: ARB files and generated Flutter localization classes for Chinese, English, and Spanish.
 - `lib/theme/`: Material 3 theme and `WhisperPalette` tokens.
@@ -65,7 +69,7 @@ CI currently runs `flutter pub get`, `flutter analyze`, and `flutter test` on pu
 
 - Follow the existing Flutter/Dart style and `flutter_lints` baseline in `analysis_options.yaml`.
 - Keep platform-specific behavior behind the existing helper, coordinator, or native plugin boundaries.
-- Prefer explicit protocol/state transitions over implicit side effects, especially in `lib/socket/`, `lib/audio/`, and `lib/remote_input/`.
+- Prefer explicit protocol/state transitions over implicit side effects, especially in `lib/socket/`, `lib/audio/`, `lib/remote_input/`, `lib/window_stream/`, and `lib/remote_files/`.
 - Keep UI strings localized through ARB files; avoid adding hardcoded user-facing copy in widgets.
 - Use existing singleton coordinators and managers when extending current flows; introduce new abstractions only when they reduce real duplication.
 - Preserve current Material 3 theme tokens from `AppTheme` and `WhisperPalette` when adding UI.

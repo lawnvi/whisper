@@ -5,6 +5,9 @@
 - [Connect devices](#connect-devices)
 - [Send text and files](#send-text-and-files)
 - [Search, favorite, and delete](#search-favorite-and-delete)
+- [Browse files](#browse-files)
+- [Share links](#share-links)
+- [Window flow](#window-flow)
 - [Clipboard sync](#clipboard-sync)
 - [Keyboard and mouse sharing](#keyboard-and-mouse-sharing)
 - [Control a computer from Android](#control-a-computer-from-android)
@@ -44,6 +47,113 @@ On desktop you can also send a whole folder: drop it into the conversation, or c
 Open "Search chat history" from the conversation settings; wide desktop windows also have a search button. Search covers the text of the current conversation, and results let you select text, expand long messages, favorite, or copy everything. The "Favorites" filter at the top shows saved text.
 
 Long-press a message on a phone or right-click it on desktop to delete it or enter multi-select. A confirmation appears first: received local files are deleted too by default, or select "Keep received files" to remove only the records. Files you sent are always kept.
+
+## Browse files
+
+Select ⋯ at the top right of a conversation to open "Device Details", then select "Files" to browse the other device's files as you would in your own file manager. The other device must be connected and running a recent version of Whisper.
+
+Each time, the other device asks whether you may browse its files, with "Don't allow", "Allow this time", and "Always allow". Turning off "Always Allow Browsing My Files" in a device's details takes back an earlier "Always allow".
+
+- **Computer**: the other device sees your home folder (and each drive on Windows). Deleted files go to the Trash.
+- **Android**: the other device sees internal storage. Phones have no Trash, so deleting asks once more.
+
+| To do this | Do this |
+| --- | --- |
+| Copy to this device | On desktop, drag files into Finder or File Explorer; they are written as they arrive. Or right-click and choose "Copy To…" |
+| Copy to the other device | Drop files from this device into the window, or copy them and paste into a folder on the other device |
+| Create, rename, or delete | Right-click an item or an empty area; long-press on a phone |
+| Switch between list and icons | Use the switch in the toolbar, or press `Cmd+1` / `Cmd+2` (`Ctrl+1` / `Ctrl+2` on Windows / Linux) |
+
+Copy progress shows at the top of the window. "Transfers" in the sidebar lists every copy, where you can resume, retry, or stop it; after a disconnect a copy waits for the device to come back and continues. Pasting the same files into the same place again within a few seconds counts as one copy.
+
+### Mount on this computer
+
+On macOS, Windows, and Linux you can also put the other device's files into the system file manager and open them in any app without copying them first. Android phones and computers can both be mounted.
+
+- Turn on "Mount on this computer" in the device details, and the files are mounted whenever the device connects. For a one-off, right-click the device in the sidebar of the "Files" window and choose "Open in Finder" ("Open in File Explorer" on Windows).
+- Where the files appear:
+  - **macOS**: under Locations in the Finder sidebar, named after the device.
+  - **Windows**: in the File Explorer navigation pane, with the Whisper icon.
+  - **Linux**: in `Whisper/<device name>` in your home folder, also shown in the GNOME Files sidebar. Install fuse3 first.
+- Mounts are read-only: you can open and copy files out, but not change, create, or delete anything there. Use the "Files" window to change the other device's files.
+- Only the parts of a file that are opened are transferred, so speed depends on the network and the other device.
+- Unless the other device chose "Always allow", it has to allow each mount.
+- A mount goes away when the device disconnects, "Mount on this computer" stays on, and the files come back when it reconnects. Ejecting the mount in Finder or a Linux file manager turns the switch off.
+- On Windows, files changed on the other device update within about 5 seconds, and new files appear the next time you open their folder.
+
+## Share links
+
+To give files on this device to a device without Whisper, create a link. Devices on the same local network can open it in a browser and download, with no pairing. Available on Android, macOS, Windows, and Linux.
+
+1. Open "Files" for any device and choose "This device" in the sidebar.
+2. Right-click a file or folder, or several selected ones, and choose "Create Share Link…". On a phone, long-press an item, or select several and choose "Share Link" at the bottom.
+3. Set a route and password if you like:
+   - Leave the route empty for a random one; "Short Route" makes it 4 characters, easy to say out loud.
+   - The password is optional.
+4. The link and its QR code appear once it is created. Copy the link, or let the other person scan the code with a phone camera. On a computer with several networks, you can switch the address in the link.
+
+When someone opens the link:
+
+- A single file shows a download page. A folder or several files can be browsed level by level and downloaded one by one, or all at once as a zip.
+- Large downloads can resume after an interruption, and video and audio play right in the browser.
+- With a password set, the password comes first.
+
+All links are listed under "Share Links" in the sidebar (on the "Files" home screen on a phone):
+
+- Each link shows its status, visits, downloads, and last visit, and can be copied, shown as a QR code, turned on or off, or deleted. Deleting a link leaves the files on this device alone.
+- "File Server" at the top shows this device's address and port (`10003` by default, or another one when that is taken). The server only runs while at least one link is on; turning it off keeps the links, which just cannot be opened for now.
+- Only devices on the local network are let in. Links use plain HTTP, so others on the same network may be able to see what is downloaded; the password only keeps people from opening the link casually.
+
+## Window flow
+
+Open a window or app from one device on another and use it there: carry on with a computer's app on a phone or tablet, use an Android phone's apps on a computer with a keyboard and mouse, or move a window from one computer to another's screen.
+
+### Open the other device's windows
+
+Select "Flow" in the device details. It lists the other device's recent tasks, windows, and apps; select one to open it here.
+
+- **Phones and tablets**: the window fills the screen and works with touch, or with a keyboard and mouse. When the on-screen keyboard comes up, the window on the other device gets shorter so nothing is hidden. You can rotate to landscape.
+- **Computers**: each window opens as its own system window that you can resize or make full screen, and use with this computer's keyboard, mouse, and input methods.
+- Open windows form a stack of cards you can switch between.
+- The window's sound comes along.
+- "Quality" has four levels, Smooth, Standard, High, and Best; higher looks sharper and uses more of the network.
+- "Pause" stops only the picture, to save the network. Phones and tablets pause a window when you leave it, and close it after 10 minutes paused.
+- Closing the window here puts it back where it was on the other device. "Close Window" really closes it there; an app with unsaved work may ask whether to save first.
+
+### Send a window
+
+In Flow, select "Send to <device>" and choose one of this computer's windows. The window moves to that device and leaves this screen; when it is closed there, it comes back. A phone or tablet shows "<device> sent you a window", where "View" opens it; a computer opens it straight away.
+
+### The device being shown
+
+A window opened elsewhere keeps running here in the background, off your screen: on macOS and Linux it moves to an invisible virtual display, and on Windows it moves off screen. It returns to where it was afterwards. A few Windows apps cannot run in the background and are shared in place.
+
+"Share This Computer's Windows" under Settings → Permissions and sharing on desktop is on by default; turn it off and other devices no longer see this computer's windows. Nothing can be shown while the computer is locked, and windows running as administrator or that block screen capture cannot be shown.
+
+| System | Requirement |
+| --- | --- |
+| macOS | 12.3 or later. Allow Whisper under "Screen & System Audio Recording" in System Settings › Privacy & Security, and under "Accessibility" so the other device can control windows. Settings → Permissions and sharing shows the status of each |
+| Windows | Windows 10 (1903) or later |
+| Linux | A GNOME session on Wayland. The first time, install the "Window sharing helper" from Settings, then log out and back in once. KDE and X11 can only view for now |
+| Android | Android 10 or later; see below |
+
+On Linux, showing windows from other devices needs FFmpeg's libavcodec.
+
+### Android apps
+
+Apps on an Android phone can flow to a computer. Whisper on the phone must be paired with the computer and connected.
+
+The first time, start it from a computer: turn on "USB debugging" in the phone's Developer options, connect the phone to a computer running Whisper with a cable, and allow that computer to debug on the phone ("Wireless debugging" also works). The phone's apps then show up in that computer's Flow.
+
+Once started, the phone's window flow service keeps running, and your other trusted computers can show this phone's apps without a cable; after the phone restarts, start it from a computer again. The service's status is under Settings → "Window flow service" in Whisper on the phone, where you can stop it at any time.
+
+Flowed apps run on a virtual display on the phone, so you can keep using the phone for other things. Also:
+
+- Opening a flowed app on the phone brings it back to the phone's screen; select it on the computer to bring it back there.
+- The app's sound comes to the computer too (Android 13 or later).
+- Apps that block screen capture, such as some banking apps, cannot be shown.
+- On some phones the picture stops while the phone is locked.
+- On Xiaomi phones, also turn on "USB debugging (Security settings)" in Developer options, then restart the phone.
 
 ## Clipboard sync
 

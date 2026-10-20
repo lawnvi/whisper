@@ -10,7 +10,7 @@ This file focuses on the big-picture architecture that is not obvious from readi
 
 ## What this is
 
-Whisper is a Flutter LAN-collaboration app (Android, macOS, Linux, Windows; iOS runner kept but untested) that moves text, files, clipboard, Android notifications, desktop system audio, and keyboard/mouse input between trusted devices on the same network over a direct WebSocket connection. It is **not** related to the OpenAI Whisper speech model. Authenticated application data uses X25519 and XChaCha20-Poly1305; discovery metadata and local storage are not encrypted, and the implementation has not had an independent cryptographic audit. `whisper-web/` is a separate Next.js 15 product site.
+Whisper is a Flutter LAN-collaboration app (Android, macOS, Linux, Windows; iOS runner kept but untested) that moves text, files, clipboard, Android notifications, desktop system audio, and keyboard/mouse input between trusted devices on the same network over a direct WebSocket connection. Trusted devices can also browse and mount each other's files and show each other's windows and apps (window flow); share links serve files to browsers on the LAN. It is **not** related to the OpenAI Whisper speech model. Authenticated application data uses X25519 and XChaCha20-Poly1305; discovery metadata and local storage are not encrypted, and the implementation has not had an independent cryptographic audit. `whisper-web/` is a separate Next.js 15 product site.
 
 ## Common commands
 
@@ -50,6 +50,9 @@ Coordinators that sit above the socket layer: `connection_coordinator.dart` (con
 ### Feature subsystems (self-contained, protocol + coordinator + platform bridge)
 - `lib/audio/` — system-audio sharing. Capture → Opus codec → packet transport → fan-out to one or more playback sinks, with clock sync and channel/group roles. Entry points: `audio_share_coordinator.dart`, `audio_group_coordinator.dart`, `audio_share_manager.dart`.
 - `lib/remote_input/` — keyboard/mouse sharing. Screen-topology/layout drives edge-crossing between devices; native bridges per platform (Linux is X11-only). Entry points: `remote_input_coordinator.dart`, `remote_input_workspace_coordinator.dart`, `remote_input_layout.dart`.
+- `lib/window_stream/` — window flow: one device's windows or apps shown and controlled on another. Desktops are sources through `remote/window_stream_host.dart`; Android phones through adb and the bundled agent (`android_agent/`, rebuilt by `script/build_window_agent.sh`). Capture/encode/decode/display are native in the FFI plugin `packages/window_stream_native/` (Linux sources need GNOME on Wayland plus the GNOME Shell helper). Entry point: `window_stream_coordinator.dart`.
+- `lib/remote_files/` — cross-device file browser over the FileBrowse protocol (`fs_protocol.dart`, `fs_host.dart`, `fs_client.dart`, `fs_copies.dart`). `mount/` puts another device's files in the system file manager, read-only: a loopback NFSv3 server on macOS, FUSE on Linux, Cloud Files on Windows (`windows/cloud_files/`); file reads travel as `browseData` frames, and each mount runs in its own isolate so Whisper never blocks on its own mount. Entry point: `mount/remote_mounts.dart`.
+- `lib/share_links/` — share links for devices without Whisper: a LAN-only HTTP server that runs only while a link is on. Entry points: `share_link_store.dart`, `share_server.dart`.
 
 Each subsystem follows the same shape: a `*_protocol.dart` (wire format), a `*_coordinator.dart` / `*_manager.dart` (orchestration), a `*_packet_transport.dart`, and a `*_platform.dart` native abstraction. Prefer explicit protocol/state transitions over implicit side effects here.
 

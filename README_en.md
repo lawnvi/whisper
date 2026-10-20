@@ -54,7 +54,7 @@ Get the installer for your platform from the [Releases](https://github.com/lawnv
 | Windows | 10 / 11, 64-bit | `windows-x86_64.exe` |
 | Linux | x86_64 | `.deb`, `.rpm`, or `.AppImage` |
 
-iOS / iPadOS: the project has no paid Apple Developer account, so the app is not on the App Store. Every release includes an unsigned `ios-unsigned.ipa` that you can sign with your own Apple ID using a tool such as AltStore or Sideloadly (apps signed with a free Apple ID must be re-signed every 7 days). Only window flow and file browsing have been tested, on one iPad; the rest has not been tested on a real device, so please report any problems.
+iOS / iPadOS: the project has no paid Apple Developer account, so the app is not on the App Store. Every release includes an unsigned `ios-unsigned.ipa` that you can sign with your own Apple ID using a tool such as AltStore or Sideloadly (apps signed with a free Apple ID must be re-signed every 7 days). It has not been fully tested on a real device and may not work, so please report any problems.
 
 ## Quick start
 
@@ -100,8 +100,6 @@ The [user guide](docs/user-guide_en.md) covers every feature in full.
 | Notification forwarding | Sends | Receives | Receives | Receives |
 | Desktop screenshots | — | ✅ | ✅ | Depends on the desktop environment |
 | TV casting receiver | — | ✅ | ✅ | ✅ |
-
-The iOS / iPadOS app can view windows flowed from other devices and browse their files.
 
 On Linux, discovery depends on Avahi. Video previews and TV casting need libmpv, and window flow needs FFmpeg's libavcodec; everything else works without them. Before other devices can show this computer's windows, install the GNOME component from Settings, then log out and back in once.
 
