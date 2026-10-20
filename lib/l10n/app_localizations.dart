@@ -4642,6 +4642,42 @@ abstract class AppLocalizations {
   /// **'文件管理器'**
   String get remoteFilesFileManager;
 
+  /// No description provided for @remoteFilesShowInApp.
+  ///
+  /// In zh, this message translates to:
+  /// **'在{app}中打开'**
+  String remoteFilesShowInApp(String app);
+
+  /// No description provided for @remoteFilesEject.
+  ///
+  /// In zh, this message translates to:
+  /// **'推出'**
+  String get remoteFilesEject;
+
+  /// No description provided for @remoteFilesMountTooOld.
+  ///
+  /// In zh, this message translates to:
+  /// **'{device} 上的 Whisper 需要更新，才能在{app}中打开它的文件'**
+  String remoteFilesMountTooOld(String device, String app);
+
+  /// No description provided for @remoteFilesMountDenied.
+  ///
+  /// In zh, this message translates to:
+  /// **'{device} 没有允许访问它的文件'**
+  String remoteFilesMountDenied(String device);
+
+  /// No description provided for @remoteFilesMountFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'{app}没能打开 {device} 的文件'**
+  String remoteFilesMountFailed(String app, String device);
+
+  /// No description provided for @remoteFilesMountNeedsFuse.
+  ///
+  /// In zh, this message translates to:
+  /// **'要在{app}中打开其他设备的文件，需要先安装 fuse3'**
+  String remoteFilesMountNeedsFuse(String app);
+
   /// No description provided for @remoteFilesCopyFromDevice.
   ///
   /// In zh, this message translates to:
@@ -5697,6 +5733,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'始终允许浏览我的文件'**
   String get deviceFilesAlwaysAllowed;
+
+  /// No description provided for @deviceMountHere.
+  ///
+  /// In zh, this message translates to:
+  /// **'挂载到本机'**
+  String get deviceMountHere;
 
   /// Toast after closing a window from the recents: the window stayed open on its device (for example a save prompt).
   ///

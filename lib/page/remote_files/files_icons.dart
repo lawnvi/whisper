@@ -11,7 +11,9 @@ import '../../helper/transfer_notification_aggregator.dart'
 import '../../l10n/app_localizations.dart';
 import '../../widget/device_glyph.dart';
 import '../../remote_files/fs_browser.dart';
+import '../../remote_files/fs_client.dart';
 import '../../remote_files/fs_host_files.dart';
+import '../../remote_files/mount/remote_mounts.dart';
 import 'files_model.dart';
 
 /// Labels for places, by shortcut kind.
@@ -41,6 +43,36 @@ String fsPlaceLabel(AppLocalizations l10n, FsPlace place) =>
       'music' => l10n.remoteFilesPlaceMusic,
       _ => place.path,
     };
+
+/// What one of another device's roots is called as a top folder of its
+/// mount ("C 盘", "内部存储").
+String fsRootLabel(AppLocalizations l10n, RemoteFsRoot root) => fsPlaceLabel(
+  l10n,
+  FsPlace(
+    root: root.id,
+    path: '',
+    kind: 'root',
+    rootKind: root.kind,
+    label: root.name,
+    drive: root.drive,
+    removable: root.removable,
+  ),
+);
+
+/// Why [device]'s files could not be mounted, for a toast.
+String mountFailureText(
+  AppLocalizations l10n,
+  MountFailure failure,
+  String device,
+  String app,
+) => switch (failure) {
+  MountFailure.hostTooOld => l10n.remoteFilesMountTooOld(device, app),
+  MountFailure.denied => l10n.remoteFilesMountDenied(device),
+  MountFailure.offline => l10n.remoteFilesOffline(device),
+  MountFailure.noFuse => l10n.remoteFilesMountNeedsFuse(app),
+  MountFailure.unsupported ||
+  MountFailure.system => l10n.remoteFilesMountFailed(app, device),
+};
 
 /// "本机" for this device, else the device's own name.
 String filesDeviceName(AppLocalizations l10n, FilesDevice device) =>

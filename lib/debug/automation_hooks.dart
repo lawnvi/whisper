@@ -23,6 +23,7 @@ import '../remote_files/fs_host.dart';
 import '../remote_files/fs_host_files.dart';
 import '../remote_files/fs_paths.dart';
 import '../remote_files/fs_platform.dart';
+import '../remote_files/mount/remote_mounts.dart';
 import '../socket/svrmanager.dart';
 import '../state/connection_attempt.dart';
 import '../state/pairing_request.dart';
@@ -125,6 +126,10 @@ final Map<String, AutomationHook> automationHooks = {
   'files.pending': _filesPending,
   'files.answer': _filesAnswer,
   'files.close': _filesClose,
+  'files.mount': _filesMount,
+  'files.unmount': _filesUnmount,
+  'files.mounts': _filesMounts,
+  'files.mountHere': _filesMountHere,
   // Transfers.
   'transfers.get': _transfersGet,
   'transfers.cancel': _transfersCancel,
@@ -1066,6 +1071,59 @@ Future<Map<String, Object?>> _filesClose(HookParams params) async {
   await client?.close();
   return {'closed': client != null};
 }
+
+/// Mounts `peer`'s files in the system's file manager (as `name`) without
+/// opening a window there.
+Future<Map<String, Object?>> _filesMount(HookParams params) async {
+  final peer = params.string('peer');
+  try {
+    final mount = await RemoteMounts.shared.mount(
+      peer,
+      params.optString('name') ?? peer,
+    );
+    return {'mounted': true, 'path': mount.path};
+  } on MountFailed catch (failed) {
+    return {'mounted': false, 'failure': failed.failure.name};
+  }
+}
+
+Future<Map<String, Object?>> _filesUnmount(HookParams params) async {
+  final peer = params.string('peer');
+  final was = RemoteMounts.shared.of(peer) != null;
+  await RemoteMounts.shared.unmount(peer);
+  return {'unmounted': was};
+}
+
+/// The device page's "挂载到本机" switch for `peer` (`on`: true/false).
+Future<Map<String, Object?>> _filesMountHere(HookParams params) async {
+  final peer = params.string('peer');
+  final on = params.string('on') == 'true';
+  try {
+    final mount = await RemoteMounts.shared.setWanted(
+      peer,
+      params.optString('name') ?? peer,
+      on,
+    );
+    return {'wanted': RemoteMounts.shared.wants(peer), 'path': mount?.path};
+  } on MountFailed catch (failed) {
+    return {
+      'wanted': RemoteMounts.shared.wants(peer),
+      'failure': failed.failure.name,
+    };
+  }
+}
+
+Future<Map<String, Object?>> _filesMounts(HookParams params) async => {
+  'mounts': [
+    for (final mount in RemoteMounts.shared.all)
+      {'peer': mount.peerId, 'name': mount.name, 'path': mount.path},
+  ],
+  if (params.optString('peer') case final peer?) ...{
+    'wanted': RemoteMounts.shared.wants(peer),
+    'mounting': RemoteMounts.shared.isMounting(peer),
+    'failure': RemoteMounts.shared.failureOf(peer)?.name,
+  },
+};
 
 // ----------------------------------------------------------------- transfers
 

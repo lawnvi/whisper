@@ -5,12 +5,15 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
+import '../../helper/file.dart';
 import '../../helper/toast.dart';
 import '../../l10n/app_localizations.dart';
 import '../../remote_files/fs_host_files.dart';
 import '../../remote_files/fs_protocol.dart';
+import '../../remote_files/mount/remote_mounts.dart';
 import '../window_stream/flow_space_theme.dart';
 import 'files_confirm.dart';
+import 'files_copy_island.dart';
 import 'files_desktop.dart';
 import 'files_icons.dart';
 import 'files_model.dart';
@@ -127,6 +130,27 @@ class FilesActions {
     controller.copyList.show(same);
     return true;
   }
+
+  /// Opens [device]'s files in the system's file manager, mounting them
+  /// there first; they stay until ejected or the device goes away.
+  Future<void> showInFileManager(FilesDevice device) async {
+    final l10n = this.l10n;
+    final app = systemFileManagerName(l10n);
+    final name = filesDeviceName(l10n, device);
+    try {
+      final mount = await RemoteMounts.shared.mount(device.id, name);
+      await openDir(mount.path);
+    } on MountFailed catch (failed) {
+      showAppToast(
+        mountFailureText(l10n, failed.failure, name, app),
+        tone: AppToastTone.error,
+      );
+    }
+  }
+
+  /// Takes [device]'s files out of the system's file manager.
+  Future<void> eject(FilesDevice device) =>
+      RemoteMounts.shared.unmount(device.id);
 
   String _remoteName(String a, String b) {
     final id = a == FilesDevice.localId ? b : a;

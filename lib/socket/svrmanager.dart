@@ -43,6 +43,7 @@ import 'package:whisper/socket/quick_send_identity_gate.dart';
 import 'package:whisper/socket/socket_admission.dart';
 import 'package:whisper/socket/session_upgrade_token_registry.dart';
 import 'package:whisper/remote_files/fs_client.dart';
+import 'package:whisper/remote_files/mount/remote_mounts.dart';
 import 'package:whisper/socket/no_delay_socket.dart';
 import 'package:whisper/remote_files/fs_host.dart';
 import 'package:whisper/remote_files/fs_copies.dart';
@@ -1336,7 +1337,8 @@ class WsSvrManager {
       FileBrowseHost.shared
         ..sender = sendFileBrowseControlTo
         ..sendFile = _sendCopiedFile
-        ..sendFolder = _sendCopiedFolder;
+        ..sendFolder = _sendCopiedFolder
+        ..sendData = _sendFileBrowseData;
       RemoteFilesClient.sender = sendFileBrowseControlTo;
       RemoteFilesClient.localPeerId = localPeerIdFor;
       RemoteFilesClient.sendFile = _sendCopiedFile;
@@ -4457,7 +4459,8 @@ class WsSvrManager {
       throw const WireInputRejected(WireInputReason.sessionNotAuthenticated);
     }
     if ((frame.type == WhisperFrameType.fileData ||
-            frame.type == WhisperFrameType.clipboardData) &&
+            frame.type == WhisperFrameType.clipboardData ||
+            frame.type == WhisperFrameType.browseData) &&
         frame.payload.length > _maxFileDataPayloadBytes) {
       throw const WireInputRejected(WireInputReason.transferPayloadInvalid);
     }
@@ -4525,6 +4528,14 @@ class WsSvrManager {
             sessionId: clipboardSessionId,
           );
         }
+        break;
+      case WhisperFrameType.browseData:
+        RemoteFilesClient.handleData(
+          remotePeerId: session.remotePeerId,
+          sessionId: frame.transferId,
+          requestId: frame.sequence,
+          data: Uint8List.fromList(frame.payload),
+        );
         break;
     }
   }
@@ -5378,6 +5389,14 @@ class WsSvrManager {
           ),
         );
         if (profile.protocolVersion >= 12 &&
+            profile.capabilities.remoteFilesV1 &&
+            _manageSharedCoordinators) {
+          // "挂载到本机" on for it: its files show in the file manager again.
+          unawaited(
+            RemoteMounts.shared.peerConnected(peerId, profile.device.name),
+          );
+        }
+        if (profile.protocolVersion >= 12 &&
             profile.capabilities.windowStreamSourceV1 &&
             supportsWindowStreamSink()) {
           WindowStreamViewer.shared.peerAvailable(
@@ -5741,6 +5760,29 @@ class WsSvrManager {
         sessionId: control.sessionId,
       ),
     );
+  }
+
+  /// The bytes a mounted folder on [peerId] asked for, on the same
+  /// connection as the session's other replies.
+  Future<bool> _sendFileBrowseData(
+    String peerId,
+    String sessionId,
+    int requestId,
+    int offset,
+    Uint8List data,
+  ) {
+    final binding = _peerConnections.currentBinding(peerId);
+    if (binding == null || !canBrowseFilesOf(peerId)) {
+      return Future<bool>.value(false);
+    }
+    final frame = WhisperFrameV3(
+      type: WhisperFrameType.browseData,
+      transferId: sessionId,
+      offset: offset,
+      sequence: requestId,
+      payload: data,
+    );
+    return _peerConnections.sendToAwaitedIfCurrent(binding, frame.encode());
   }
 
   Future<bool> _sendCopiedFile(String peerId, String path, String id) {

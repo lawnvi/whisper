@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -21,6 +22,16 @@ typedef FileBrowseSender =
 /// Starts an ordinary transfer of [path] to [peerId] with [transferId].
 typedef FileBrowseSendPath =
     Future<bool> Function(String peerId, String path, String transferId);
+
+/// Sends the bytes a `read` asked for, as a `browseData` frame.
+typedef FileBrowseSendData =
+    Future<bool> Function(
+      String peerId,
+      String sessionId,
+      int requestId,
+      int offset,
+      Uint8List data,
+    );
 
 enum FileBrowseDecision {
   deny,
@@ -124,6 +135,7 @@ class FileBrowseHost {
   FileBrowseSender? sender;
   FileBrowseSendPath? sendFile;
   FileBrowseSendPath? sendFolder;
+  FileBrowseSendData? sendData;
 
   final _sessions = <String, String>{};
 
@@ -135,6 +147,9 @@ class FileBrowseHost {
   final _asking = <String, FileBrowseRequest>{};
 
   int _thumbnailsRunning = 0;
+  int _readsRunning = 0;
+  final _readTurns = Queue<Completer<void>>();
+  static const _maxReadsRunning = 8;
   static const _uuid = Uuid();
 
   @visibleForTesting
@@ -230,6 +245,15 @@ class FileBrowseHost {
           await _remove(message, text('root'), text('path'));
         case FileBrowseAction.fetch:
           await _fetch(message, remotePeerId);
+        case FileBrowseAction.read:
+          await _read(
+            message,
+            remotePeerId,
+            text('root'),
+            text('path'),
+            (payload['offset'] as num?)?.toInt() ?? -1,
+            (payload['length'] as num?)?.toInt() ?? 0,
+          );
         case FileBrowseAction.incoming:
           // The client sends this file or folder next; once it completes,
           // it goes into this folder instead of Downloads.
@@ -321,6 +345,7 @@ class FileBrowseHost {
         'roots': roots,
         'platform': Platform.operatingSystem,
         'trash': FsPlatform.hasTrash,
+        if (sendData != null) 'read': FileBrowseRead.version,
       }),
     );
   }
@@ -385,6 +410,64 @@ class FileBrowseHost {
         FilesLog.write('host: ${FilesLog.id(id)} could not be sent');
       }
     }
+  }
+
+  /// A mounted folder on the other device reads part of a file: the bytes
+  /// go back as one frame, fewer than asked at the end of the file.
+  Future<void> _read(
+    FileBrowseMessage message,
+    String peerId,
+    String root,
+    String path,
+    int offset,
+    int length,
+  ) async {
+    final send = sendData;
+    if (send == null) {
+      await _fail(message, FileBrowseError.notAllowed);
+      return;
+    }
+    if (offset < 0 || length <= 0 || length > FileBrowseRead.maxLength) {
+      throw const FormatException('bad range');
+    }
+    final real = await files.resolver.resolveExisting(root, path);
+    if (_readsRunning >= _maxReadsRunning) {
+      final turn = Completer<void>();
+      _readTurns.add(turn);
+      await turn.future;
+    }
+    _readsRunning++;
+    Uint8List data;
+    try {
+      final file = await File(real).open();
+      try {
+        // One read() may return early (a phone's shared storage does):
+        // keep on until the range is in or the file ends.
+        final size = await file.length();
+        final buffer = Uint8List((size - offset).clamp(0, length));
+        await file.setPosition(offset);
+        var got = 0;
+        while (got < buffer.length) {
+          final n = await file.readInto(buffer, got);
+          if (n == 0) {
+            break;
+          }
+          got += n;
+        }
+        data = Uint8List.sublistView(buffer, 0, got);
+      } finally {
+        await file.close();
+      }
+    } finally {
+      _readsRunning--;
+      if (_readTurns.isNotEmpty) {
+        _readTurns.removeFirst().complete();
+      }
+    }
+    if (_sessions[message.sessionId] != peerId) {
+      return;
+    }
+    await send(peerId, message.sessionId, message.requestId, offset, data);
   }
 
   Future<void> _ok(

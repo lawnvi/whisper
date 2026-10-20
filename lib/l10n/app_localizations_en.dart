@@ -2713,6 +2713,34 @@ class AppLocalizationsEn extends AppLocalizations {
   String get remoteFilesFileManager => 'Files';
 
   @override
+  String remoteFilesShowInApp(String app) {
+    return 'Open in $app';
+  }
+
+  @override
+  String get remoteFilesEject => 'Eject';
+
+  @override
+  String remoteFilesMountTooOld(String device, String app) {
+    return 'Whisper on $device needs updating to open its files in $app';
+  }
+
+  @override
+  String remoteFilesMountDenied(String device) {
+    return '$device didn\'t allow access to its files';
+  }
+
+  @override
+  String remoteFilesMountFailed(String app, String device) {
+    return '$app couldn\'t open the files on $device';
+  }
+
+  @override
+  String remoteFilesMountNeedsFuse(String app) {
+    return 'Install fuse3 to open other devices\' files in $app';
+  }
+
+  @override
   String remoteFilesCopyFromDevice(String device, String folder) {
     return 'From $device to “$folder”';
   }
@@ -3402,6 +3430,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get deviceFilesAlwaysAllowed => 'Always Allow Browsing My Files';
+
+  @override
+  String get deviceMountHere => 'Mount on this computer';
 
   @override
   String windowStreamCloseStillOpen(String app) {

@@ -10,7 +10,9 @@ import '../../helper/notification.dart';
 import '../../helper/notification_l10n.dart';
 import '../../l10n/app_localizations.dart';
 import '../../remote_files/fs_host.dart';
+import '../../remote_files/mount/remote_mounts.dart';
 import '../window_stream/flow_space_theme.dart';
+import 'files_icons.dart';
 
 /// Asks "‹device› wants to browse your files" over the whole app whenever
 /// [FileBrowseHost] has a request. Allow once, always allow (remembered for
@@ -37,6 +39,17 @@ class _FileBrowsePromptHostState extends State<FileBrowsePromptHost> {
   void initState() {
     super.initState();
     _gate.addListener(_onGate);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // A device mounted in the file manager names its roots in the app's
+    // own language, also when mounted on connect with no window open.
+    final l10n = AppLocalizations.of(context);
+    if (l10n != null) {
+      RemoteMounts.shared.rootNamer = (root) => fsRootLabel(l10n, root);
+    }
   }
 
   @override

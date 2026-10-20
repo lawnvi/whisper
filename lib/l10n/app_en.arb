@@ -1333,6 +1333,57 @@
   "@remoteFilesFileManager": {
     "description": "A Linux desktop's file manager, where a copy dragged or pasted out of Whisper goes"
   },
+  "remoteFilesShowInApp": "Open in {app}",
+  "@remoteFilesShowInApp": {
+    "description": "Opens another device's files in the system's file manager, mounting them there first",
+    "placeholders": {
+      "app": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteFilesEject": "Eject",
+  "@remoteFilesEject": {
+    "description": "Takes another device's mounted files out of the system's file manager"
+  },
+  "remoteFilesMountTooOld": "Whisper on {device} needs updating to open its files in {app}",
+  "@remoteFilesMountTooOld": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      },
+      "app": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteFilesMountDenied": "{device} didn't allow access to its files",
+  "@remoteFilesMountDenied": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteFilesMountFailed": "{app} couldn't open the files on {device}",
+  "@remoteFilesMountFailed": {
+    "placeholders": {
+      "app": {
+        "type": "String"
+      },
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteFilesMountNeedsFuse": "Install fuse3 to open other devices' files in {app}",
+  "@remoteFilesMountNeedsFuse": {
+    "placeholders": {
+      "app": {
+        "type": "String"
+      }
+    }
+  },
   "remoteFilesCopyFromDevice": "From {device} to “{folder}”",
   "@remoteFilesCopyFromDevice": {
     "placeholders": {
@@ -2185,6 +2236,10 @@
   "deviceFilesAlwaysAllowed": "Always Allow Browsing My Files",
   "@deviceFilesAlwaysAllowed": {
     "description": "Device page switch: this device may browse my files without asking each time. Turning it off takes back an earlier \"Always allow\"."
+  },
+  "deviceMountHere": "Mount on this computer",
+  "@deviceMountHere": {
+    "description": "Keeps the device's files in this computer's file manager whenever it is connected"
   },
   "windowStreamCloseStillOpen": "“{app}” is still open — it may be asking whether to save.",
   "@windowStreamCloseStillOpen": {

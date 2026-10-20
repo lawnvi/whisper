@@ -28,7 +28,10 @@ import 'package:whisper/page/appList.dart';
 import 'package:whisper/page/window_stream/android_service/android_service_page.dart';
 import 'package:whisper/helper/macos_permissions.dart';
 import 'package:whisper/widget/macos_permission_setting.dart';
+import 'package:whisper/page/remote_files/files_copy_island.dart';
+import 'package:whisper/page/remote_files/files_icons.dart';
 import 'package:whisper/remote_files/fs_host.dart';
+import 'package:whisper/remote_files/mount/remote_mounts.dart';
 import 'package:whisper/remote_input/remote_input_coordinator.dart';
 import 'package:whisper/socket/svrmanager.dart';
 import 'package:whisper/state/connection_coordinator.dart';
@@ -2217,6 +2220,30 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
     }
   }
 
+  /// "挂载到本机": on mounts it now (opening it in the file manager) when it
+  /// is connected, else once it connects.
+  Future<void> _setMountHere(bool wanted) async {
+    final l10n = AppLocalizations.of(context)!;
+    final app = systemFileManagerName(l10n);
+    try {
+      final mount = await RemoteMounts.shared.setWanted(
+        device.uid,
+        device.name,
+        wanted,
+      );
+      if (mount != null) {
+        await openDir(mount.path);
+      }
+    } on MountFailed catch (failed) {
+      if (failed.failure != MountFailure.offline) {
+        showAppToast(
+          mountFailureText(l10n, failed.failure, device.name, app),
+          tone: AppToastTone.error,
+        );
+      }
+    }
+  }
+
   Future<void> _refreshDevice() async {
     final loader = widget.deviceLoader;
     final temp = loader == null
@@ -2333,6 +2360,24 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
                           value: allowed,
                           onChanged: (value) =>
                               unawaited(_setFilesAlwaysAllowed(value)),
+                        ),
+                      ),
+                    if (RemoteMounts.supported)
+                      ListenableBuilder(
+                        listenable: RemoteMounts.shared,
+                        builder: (context, _) => _DeviceSettingTile(
+                          title: l10n.deviceMountHere,
+                          icon: Icon(
+                            Icons.drive_file_move_outline,
+                            color: palette.textMuted,
+                          ),
+                          trailing: RemoteMounts.shared.isMounting(device.uid)
+                              ? const CupertinoActivityIndicator(radius: 9)
+                              : CupertinoSwitch(
+                                  value: RemoteMounts.shared.wants(device.uid),
+                                  onChanged: (value) =>
+                                      unawaited(_setMountHere(value)),
+                                ),
                         ),
                       ),
                   ],

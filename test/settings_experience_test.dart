@@ -13,6 +13,7 @@ import 'package:whisper/helper/macos_permissions.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/page/settings.dart';
+import 'package:whisper/remote_files/mount/remote_mounts.dart';
 import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/widget/glass_bottom_sheet.dart';
 import 'package:whisper/widget/glass_dialog.dart';
@@ -1420,7 +1421,13 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Always Allow Browsing My Files'), findsOneWidget);
-    final filesSwitch = find.byType(CupertinoSwitch).last;
+    final filesSwitch = find.descendant(
+      of: find.ancestor(
+        of: find.text('Always Allow Browsing My Files'),
+        matching: find.byType(Row),
+      ),
+      matching: find.byType(CupertinoSwitch),
+    );
     expect(tester.widget<CupertinoSwitch>(filesSwitch).value, isTrue);
 
     await tester.tap(filesSwitch);
@@ -1431,5 +1438,62 @@ void main() {
     expect(prefs.getStringList('remote_files.always_allowed'), <String>[
       'other-peer',
     ]);
+  });
+
+  testWidgets('a computer can keep another device mounted from its page', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    const peer = DeviceData(
+      id: 10,
+      uid: 'mount-peer',
+      name: 'Pixel',
+      host: '192.168.1.9',
+      port: 10002,
+      platform: 'android',
+      isServer: false,
+      online: true,
+      clipboard: false,
+      auth: true,
+      lastTime: 0,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.lightTheme,
+        locale: const Locale('en'),
+        localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: ClientSettingsScreen(
+          device: peer,
+          deviceLoader: (_) async => peer,
+          isConnected: true,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Only where this system mounts (the tests run on a desktop).
+    expect(
+      find.text('Mount on this computer'),
+      RemoteMounts.supported ? findsOneWidget : findsNothing,
+    );
+    if (RemoteMounts.supported) {
+      final mountSwitch = find.descendant(
+        of: find.ancestor(
+          of: find.text('Mount on this computer'),
+          matching: find.byType(Row),
+        ),
+        matching: find.byType(CupertinoSwitch),
+      );
+      expect(tester.widget<CupertinoSwitch>(mountSwitch).value, isFalse);
+    }
+    final source = File('lib/page/settings.dart').readAsStringSync();
+    expect(source, contains('RemoteMounts.shared.setWanted('));
+    expect(source, contains('listenable: RemoteMounts.shared'));
   });
 }

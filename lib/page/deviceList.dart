@@ -74,6 +74,7 @@ import 'package:whisper/widget/desktop_quick_send_dialog.dart';
 import 'package:whisper/widget/device_connection_widgets.dart';
 import 'package:whisper/widget/device_sidebar_toolbar.dart';
 import 'package:whisper/remote_files/fs_placement.dart';
+import 'package:whisper/remote_files/mount/remote_mounts.dart';
 import 'package:whisper/widget/device_workspace_layout.dart';
 import 'package:whisper/widget/server_start_failure_dialog.dart';
 import 'package:whisper/widget/glass_bottom_sheet.dart';
@@ -1342,6 +1343,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
       ShareLinkStore.shared.shutdown,
       PlaybackWindowBridge.videos.close,
       WindowStreamCoordinator.shared.shutdown,
+      RemoteMounts.shared.unmountAll,
       // Left running on Windows: the process ends right after the rest,
       // and with older versions of the plugin the stop itself crashed. See
       // [_endWindowsProcess].

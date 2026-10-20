@@ -43,11 +43,16 @@ class RemoteFsInfo {
     required this.roots,
     required this.platform,
     required this.hasTrash,
+    this.canRead = false,
   });
 
   final List<RemoteFsRoot> roots;
   final String platform;
   final bool hasTrash;
+
+  /// Answers [RemoteFilesClient.read] (newer hosts), so that its files can
+  /// be mounted here.
+  final bool canRead;
 }
 
 /// A request the other device refused or could not do.
@@ -84,10 +89,16 @@ class RemoteFilesClient {
   final String sessionId;
   int _nextRequest = 1;
   final _pending = <int, Completer<Map<String, Object?>>>{};
+  final _reads = <int, Completer<Uint8List>>{};
   Completer<RemoteFsInfo>? _opening;
   RemoteFsInfo? info;
   int _thumbsRunning = 0;
   final _thumbQueue = <Completer<void>>[];
+  final _gone = Completer<RemoteFsException>();
+
+  /// Completes when the session ends over there: the device went offline,
+  /// or it stopped letting this one browse.
+  Future<RemoteFsException> get gone => _gone.future;
 
   /// Routes a host's reply to the client that asked.
   static void handle(
@@ -99,6 +110,20 @@ class RemoteFilesClient {
       return;
     }
     client._onMessage(message);
+  }
+
+  /// Bytes a [read] asked for, from a `browseData` frame.
+  static void handleData({
+    required String remotePeerId,
+    required String sessionId,
+    required int requestId,
+    required Uint8List data,
+  }) {
+    final client = _clients[sessionId];
+    if (client == null || client.peerId != remotePeerId) {
+      return;
+    }
+    client._reads.remove(requestId)?.complete(data);
   }
 
   /// The browsed device disconnected.
@@ -227,6 +252,9 @@ class RemoteFilesClient {
               ? payload['platform'] as String
               : '',
           hasTrash: payload['trash'] == true,
+          canRead:
+              payload['read'] is int &&
+              (payload['read'] as int) >= FileBrowseRead.version,
         );
         info = opened;
         final completer = _opening;
@@ -245,11 +273,11 @@ class RemoteFilesClient {
         _pending.remove(message.requestId)?.complete(message.payload);
       case FileBrowseAction.failed:
         final reason = message.payload['reason'];
-        _pending
-            .remove(message.requestId)
-            ?.completeError(
-              RemoteFsException(reason is String ? reason : FileBrowseError.io),
-            );
+        final error = RemoteFsException(
+          reason is String ? reason : FileBrowseError.io,
+        );
+        _pending.remove(message.requestId)?.completeError(error);
+        _reads.remove(message.requestId)?.completeError(error);
       default:
         break;
     }
@@ -261,14 +289,18 @@ class RemoteFilesClient {
     if (opening != null && !opening.isCompleted) {
       opening.completeError(error);
     }
-    for (final completer in _pending.values) {
+    for (final completer in [..._pending.values, ..._reads.values]) {
       if (!completer.isCompleted) {
         completer.completeError(error);
       }
     }
     _pending.clear();
+    _reads.clear();
     info = null;
     _clients.remove(sessionId);
+    if (!_gone.isCompleted) {
+      _gone.complete(error);
+    }
   }
 
   Future<FsPage> list(
@@ -290,6 +322,45 @@ class RemoteFilesClient {
       ],
       total: (result['total'] as num?)?.toInt() ?? 0,
       offset: (result['offset'] as num?)?.toInt() ?? offset,
+    );
+  }
+
+  /// [length] bytes of a file from [offset] (fewer at its end), for hosts
+  /// whose [RemoteFsInfo.canRead].
+  Future<Uint8List> read(
+    String root,
+    String path,
+    int offset,
+    int length, {
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
+    final id = _nextRequest++;
+    final completer = Completer<Uint8List>();
+    _reads[id] = completer;
+    _clients[sessionId] = this;
+    final sent = await sender?.call(
+      peerId,
+      _message(
+        FileBrowseAction.read,
+        requestId: id,
+        payload: {
+          'root': root,
+          'path': path,
+          'offset': offset,
+          'length': length,
+        },
+      ),
+    );
+    if (sent != true) {
+      _reads.remove(id);
+      throw const RemoteFsException('offline');
+    }
+    return completer.future.timeout(
+      timeout,
+      onTimeout: () {
+        _reads.remove(id);
+        throw const RemoteFsException('timeout');
+      },
     );
   }
 

@@ -6,7 +6,10 @@
 /// asks its user and answers `opened` or `denied`. Within the session every
 /// request carries a `requestId` and gets one `result` or `failed`.
 /// File contents never travel here: copies are ordinary resumable
-/// transfers, placed into the chosen folder once they complete.
+/// transfers, placed into the chosen folder once they complete. Only a
+/// [FileBrowseAction.read] (for a host whose `opened` says `read: 1`) is
+/// answered by a `browseData` frame holding the bytes, so that a folder
+/// mounted on this device reads just the parts it needs.
 enum FileBrowseAction {
   open,
   opened,
@@ -18,6 +21,7 @@ enum FileBrowseAction {
   remove,
   fetch,
   incoming,
+  read,
   result,
   failed,
   close,
@@ -105,6 +109,15 @@ class FileBrowseMessage {
   static final Set<String> allActions = {
     for (final action in FileBrowseAction.values) action.name,
   };
+}
+
+/// Ranged reads ([FileBrowseAction.read]).
+abstract final class FileBrowseRead {
+  /// What `opened` carries when the host answers reads.
+  static const version = 1;
+
+  /// The most one read may ask for: one frame.
+  static const maxLength = 4 * 1024 * 1024;
 }
 
 /// Why a request failed, as sent on the wire (never paths or messages).

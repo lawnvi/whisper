@@ -2553,6 +2553,34 @@ class AppLocalizationsZh extends AppLocalizations {
   String get remoteFilesFileManager => '文件管理器';
 
   @override
+  String remoteFilesShowInApp(String app) {
+    return '在$app中打开';
+  }
+
+  @override
+  String get remoteFilesEject => '推出';
+
+  @override
+  String remoteFilesMountTooOld(String device, String app) {
+    return '$device 上的 Whisper 需要更新，才能在$app中打开它的文件';
+  }
+
+  @override
+  String remoteFilesMountDenied(String device) {
+    return '$device 没有允许访问它的文件';
+  }
+
+  @override
+  String remoteFilesMountFailed(String app, String device) {
+    return '$app没能打开 $device 的文件';
+  }
+
+  @override
+  String remoteFilesMountNeedsFuse(String app) {
+    return '要在$app中打开其他设备的文件，需要先安装 fuse3';
+  }
+
+  @override
   String remoteFilesCopyFromDevice(String device, String folder) {
     return '从 $device 拷贝到“$folder”';
   }
@@ -3199,6 +3227,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get deviceFilesAlwaysAllowed => '始终允许浏览我的文件';
+
+  @override
+  String get deviceMountHere => '挂载到本机';
 
   @override
   String windowStreamCloseStillOpen(String app) {

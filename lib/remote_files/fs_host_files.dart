@@ -202,6 +202,10 @@ class FsHostFiles {
 
   static const int pageSize = 500;
 
+  /// Folders never listed: other devices' files mounted here, which this
+  /// device would otherwise serve back to them and browse round in.
+  static Set<String> Function() excluded = () => const {};
+
   Future<FsPage> list(
     String rootId,
     String relative, {
@@ -243,7 +247,17 @@ class FsHostFiles {
       throw const FsPathException('not a folder');
     }
     final entries = <FsEntry>[];
+    final skip = {
+      for (final path in excluded())
+        Platform.isWindows ? path.toLowerCase() : path,
+    };
     await for (final entity in dir.list(followLinks: false)) {
+      if (skip.isNotEmpty &&
+          skip.contains(
+            Platform.isWindows ? entity.path.toLowerCase() : entity.path,
+          )) {
+        continue;
+      }
       final name = p.basename(entity.path);
       final hidden =
           name.startsWith('.') ||

@@ -1432,6 +1432,53 @@
   "remoteFilesFinder": "访达",
   "remoteFilesExplorer": "文件资源管理器",
   "remoteFilesFileManager": "文件管理器",
+  "remoteFilesShowInApp": "在{app}中打开",
+  "@remoteFilesShowInApp": {
+    "placeholders": {
+      "app": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteFilesEject": "推出",
+  "remoteFilesMountTooOld": "{device} 上的 Whisper 需要更新，才能在{app}中打开它的文件",
+  "@remoteFilesMountTooOld": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      },
+      "app": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteFilesMountDenied": "{device} 没有允许访问它的文件",
+  "@remoteFilesMountDenied": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteFilesMountFailed": "{app}没能打开 {device} 的文件",
+  "@remoteFilesMountFailed": {
+    "placeholders": {
+      "app": {
+        "type": "String"
+      },
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteFilesMountNeedsFuse": "要在{app}中打开其他设备的文件，需要先安装 fuse3",
+  "@remoteFilesMountNeedsFuse": {
+    "placeholders": {
+      "app": {
+        "type": "String"
+      }
+    }
+  },
   "remoteFilesCopyFromDevice": "从 {device} 拷贝到“{folder}”",
   "@remoteFilesCopyFromDevice": {
     "placeholders": {
@@ -2305,6 +2352,7 @@
   "@deviceFilesAlwaysAllowed": {
     "description": "Device page switch: this device may browse my files without asking each time. Turning it off takes back an earlier \"Always allow\"."
   },
+  "deviceMountHere": "挂载到本机",
   "windowStreamCloseStillOpen": "“{app}”还没有关闭，可能在问你是否保存",
   "@windowStreamCloseStillOpen": {
     "description": "Toast after closing a window from the recents: the window stayed open on its device (for example a save prompt).",

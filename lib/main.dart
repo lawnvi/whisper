@@ -7,6 +7,7 @@ import 'package:whisper/audio/audio_platform.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:sodium/sodium.dart';
 import 'package:whisper/debug/automation_hooks.dart';
+import 'package:whisper/remote_files/mount/remote_mounts.dart';
 import 'package:whisper/share_links/share_debug_hooks.dart';
 import 'package:whisper/share_links/share_link_store.dart';
 import 'package:whisper/helper/device_form_factor.dart';
@@ -167,6 +168,9 @@ Future<void> main(List<String> arguments) async {
     // Streamed windows' sound is decoded in the stream isolate, which opens
     // the copy of libopus this unpacks.
     unawaited(OpusAudioCodec.warmUp().catchError((Object _) {}));
+    // Another device's files left mounted by a run that quit abruptly.
+    unawaited(RemoteMounts.shared.cleanUpStale());
+    unawaited(RemoteMounts.shared.load());
   }
   // Share links outlive restarts: the file server comes back with them.
   if (shareLinksSupported()) {

@@ -15,7 +15,11 @@ enum WhisperFrameType {
   clipboardData(11),
   clipboardComplete(12),
   clipboardClear(13),
-  clipboardError(14);
+  clipboardError(14),
+
+  /// The bytes a file-browse `read` asked for: transferId is the session,
+  /// sequence the request, offset where in the file they start.
+  browseData(15);
 
   const WhisperFrameType(this.code);
 

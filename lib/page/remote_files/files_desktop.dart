@@ -16,6 +16,7 @@ import '../../widget/device_glyph.dart';
 import '../../model/file_transfer.dart';
 import '../../remote_files/fs_browser.dart';
 import '../../remote_files/fs_host_files.dart';
+import '../../remote_files/mount/remote_mounts.dart';
 import '../../share_links/share_link_store.dart';
 import '../../widget/island/sources/copy_source.dart' show IslandCopyHooks;
 import '../window_stream/flow_space_theme.dart';
@@ -1211,7 +1212,43 @@ class _Sidebar extends StatelessWidget {
   final FilesActions actions;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ListenableBuilder(
+    // A device mounted in the system's file manager shows an eject button.
+    listenable: RemoteMounts.shared,
+    builder: (context, _) => _build(context),
+  );
+
+  Future<void> _deviceMenu(
+    BuildContext context,
+    FilesDevice device,
+    Offset position,
+  ) async {
+    final l10n = AppLocalizations.of(context)!;
+    final mounted = RemoteMounts.shared.of(device.id) != null;
+    await showFilesMenu(
+      context,
+      position: position,
+      items: [
+        FilesMenuItem(
+          label: l10n.remoteFilesShowInApp(systemFileManagerName(l10n)),
+          icon: CupertinoIcons.folder,
+          enabled:
+              mounted ||
+              (device.state != FilesDeviceState.offline &&
+                  device.state != FilesDeviceState.unsupported),
+          onSelected: () => unawaited(actions.showInFileManager(device)),
+        ),
+        if (mounted)
+          FilesMenuItem(
+            label: l10n.remoteFilesEject,
+            icon: CupertinoIcons.eject,
+            onSelected: () => unawaited(actions.eject(device)),
+          ),
+      ],
+    );
+  }
+
+  Widget _build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final colors = FinderColors.of(context);
     final local = controller.deviceById(FilesDevice.localId)!;
@@ -1279,7 +1316,19 @@ class _Sidebar extends StatelessWidget {
           dimmed:
               device.state == FilesDeviceState.offline ||
               device.state == FilesDeviceState.unsupported,
-          trailing: device.isLocal ? null : _DeviceBadge(state: device.state),
+          trailing: device.isLocal
+              ? null
+              : RemoteMounts.shared.of(device.id) != null
+              ? _EjectButton(
+                  tooltip: l10n.remoteFilesEject,
+                  onTap: () => unawaited(actions.eject(device)),
+                )
+              : RemoteMounts.shared.isMounting(device.id)
+              ? const CupertinoActivityIndicator(radius: 6)
+              : _DeviceBadge(state: device.state),
+          onSecondaryTap: device.isLocal || !RemoteMounts.supported
+              ? null
+              : (position) => unawaited(_deviceMenu(context, device, position)),
           expanded: unfoldable ? expanded : null,
           onExpand: () => controller.toggleSidebarDevice(device.id),
           dropTarget: home,
@@ -1499,12 +1548,16 @@ class _SidebarItem extends StatefulWidget {
     this.dimmed = false,
     this.expanded,
     this.onExpand,
+    this.onSecondaryTap,
   });
 
   final IconData icon;
   final String label;
   final bool selected;
   final VoidCallback onTap;
+
+  /// A right-click, at its global position.
+  final void Function(Offset position)? onSecondaryTap;
   final FilesController controller;
   final FilesActions actions;
   final FilesLocation? dropTarget;
@@ -1543,6 +1596,9 @@ class _SidebarItemState extends State<_SidebarItem> {
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: widget.onTap,
+            onSecondaryTapUp: widget.onSecondaryTap == null
+                ? null
+                : (details) => widget.onSecondaryTap!(details.globalPosition),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 120),
               height: 30,
@@ -1609,6 +1665,47 @@ class _SidebarItemState extends State<_SidebarItem> {
           ),
         );
       },
+    );
+  }
+}
+
+/// Finder's ⏏ after a mounted server in its sidebar.
+class _EjectButton extends StatefulWidget {
+  const _EjectButton({required this.tooltip, required this.onTap});
+
+  final String tooltip;
+  final VoidCallback onTap;
+
+  @override
+  State<_EjectButton> createState() => _EjectButtonState();
+}
+
+class _EjectButtonState extends State<_EjectButton> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = FinderColors.of(context);
+    return Tooltip(
+      message: widget.tooltip,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _hover = true),
+        onExit: (_) => setState(() => _hover = false),
+        child: GestureDetector(
+          key: const ValueKey('files-sidebar-eject'),
+          behavior: HitTestBehavior.opaque,
+          onTap: widget.onTap,
+          child: Padding(
+            padding: const EdgeInsets.only(left: 6),
+            child: Icon(
+              CupertinoIcons.eject,
+              size: 13,
+              color: _hover ? colors.label : colors.secondaryLabel,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
