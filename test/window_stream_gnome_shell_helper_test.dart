@@ -148,6 +148,24 @@ void main() {
     );
     expect(GnomeShellHelperController.protocolOf('nothing'), isNull);
   });
+
+  test('the extension runs on GNOME 45 and later', () {
+    const folder = 'assets/window_stream/gnome-shell/$_uuid';
+    final metadata =
+        jsonDecode(File('$folder/metadata.json').readAsStringSync())
+            as Map<String, dynamic>;
+    final source = File('$folder/extension.js').readAsStringSync();
+
+    expect(
+      metadata['shell-version'],
+      containsAll(['45', '46', '47', '48', '49', '50']),
+    );
+    // 45 and 46 have no stage context, and before 49 monitors cannot be
+    // asked whether they are virtual.
+    expect(source, contains('Clutter.get_default_backend()'));
+    expect(source, contains('get_monitor_for_connector(`Meta-'));
+    expect(source, isNot(contains('global.stage.context.get_backend()')));
+  });
 }
 
 const _uuid = GnomeShellHelperController.uuid;

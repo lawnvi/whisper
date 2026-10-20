@@ -230,6 +230,33 @@ function maximize(win, flags) {
     }
 }
 
+// GNOME 47 and later reach the seat through the stage's context; 45 and 46
+// through Clutter's default backend.
+function defaultSeat() {
+    const backend = global.stage.context?.get_backend?.() ?? Clutter.get_default_backend();
+    return backend.get_default_seat();
+}
+
+// Monitors Mutter made for a screen cast (RecordVirtual). Before GNOME 49
+// monitors are not introspectable; virtual ones are the "Meta-<n>" connectors.
+function virtualMonitors() {
+    const manager = global.backend.get_monitor_manager();
+    const virtual = new Set();
+    if (typeof manager.get_logical_monitors === 'function') {
+        for (const logical of manager.get_logical_monitors()) {
+            if (logical.get_monitors().every(m => m.is_virtual()))
+                virtual.add(logical.get_number());
+        }
+        return virtual;
+    }
+    for (let id = 0; id < 16; id++) {
+        const index = manager.get_monitor_for_connector(`Meta-${id}`);
+        if (index >= 0)
+            virtual.add(index);
+    }
+    return virtual;
+}
+
 function isListed(win) {
     if (!win || win.is_override_redirect() || win.is_skip_taskbar())
         return false;
@@ -312,7 +339,7 @@ class Caller {
 
     pointerDevice() {
         if (!this.pointer) {
-            const seat = global.stage.context.get_backend().get_default_seat();
+            const seat = defaultSeat();
             this.pointer = seat.create_virtual_device(Clutter.InputDeviceType.POINTER_DEVICE);
         }
         return this.pointer;
@@ -320,7 +347,7 @@ class Caller {
 
     keyboardDevice() {
         if (!this.keyboard) {
-            const seat = global.stage.context.get_backend().get_default_seat();
+            const seat = defaultSeat();
             this.keyboard = seat.create_virtual_device(Clutter.InputDeviceType.KEYBOARD_DEVICE);
         }
         return this.keyboard;
@@ -631,12 +658,7 @@ class WindowStreamService {
     }
 
     _monitorIsVirtual(index) {
-        const manager = global.backend.get_monitor_manager();
-        for (const logical of manager.get_logical_monitors()) {
-            if (logical.get_number() === index)
-                return logical.get_monitors().every(m => m.is_virtual());
-        }
-        return false;
+        return virtualMonitors().has(index);
     }
 
     /** The work area of a real monitor that [rect] overlaps, or the primary one. */
@@ -1172,7 +1194,7 @@ class WindowStreamService {
         if (home) {
             const [px, py] = global.get_pointer();
             if (this._insideFence(caller, px, py)) {
-                const seat = global.stage.context.get_backend().get_default_seat();
+                const seat = defaultSeat();
                 seat.warp_pointer(home[0], home[1]);
             }
         }

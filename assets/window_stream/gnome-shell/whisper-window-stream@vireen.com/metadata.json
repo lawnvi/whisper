@@ -2,7 +2,7 @@
   "uuid": "whisper-window-stream@vireen.com",
   "name": "Whisper Window Stream",
   "description": "Lets Whisper show this computer's windows on your other devices while they keep running here in the background. Installed and managed by the Whisper app.",
-  "shell-version": ["48", "49", "50"],
+  "shell-version": ["45", "46", "47", "48", "49", "50"],
   "session-modes": ["user", "unlock-dialog"],
   "url": "https://github.com/lawnvi/whisper",
   "version": 1
