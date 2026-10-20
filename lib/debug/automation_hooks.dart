@@ -24,6 +24,9 @@ import '../remote_files/fs_host_files.dart';
 import '../remote_files/fs_paths.dart';
 import '../remote_files/fs_platform.dart';
 import '../remote_files/mount/remote_mounts.dart';
+import '../remote_input/remote_input_coordinator.dart';
+import '../remote_input/remote_input_platform.dart';
+import '../remote_input/remote_input_protocol.dart';
 import '../socket/svrmanager.dart';
 import '../state/connection_attempt.dart';
 import '../state/pairing_request.dart';
@@ -142,6 +145,14 @@ final Map<String, AutomationHook> automationHooks = {
   'peers.pending': _peersPending,
   'peers.accept': (params) => _peersAnswer(params, true),
   'peers.reject': (params) => _peersAnswer(params, false),
+  // Keyboard and mouse, straight on the native channel (no peer).
+  'input.topology': _inputTopology,
+  'input.startInjection': _inputStartInjection,
+  'input.inject': _inputInject,
+  'input.stopInjection': _inputStopInjection,
+  'input.startCapture': _inputStartCapture,
+  'input.stopCapture': _inputStopCapture,
+  'input.events': _inputEvents,
   // Settings.
   'settings.get': _settingsGet,
   'settings.set': _settingsSet,
@@ -1315,6 +1326,143 @@ abstract final class DebugPairingRequests {
 // ------------------------------------------------------------------ settings
 
 /// The settings automation may read and change, by name.
+// ---------------------------------------------------------------- input
+
+/// What the native side reported since the first input hook ran.
+class _InputLog {
+  _InputLog(RemoteInputPlatform platform) {
+    platform.inputEvents.listen((event) {
+      events[event.eventType.name] = (events[event.eventType.name] ?? 0) + 1;
+      if (recent.length >= 20) recent.removeAt(0);
+      recent.add({
+        'type': event.eventType.name,
+        'payload': utf8.decode(event.payload, allowMalformed: true),
+      });
+    });
+    platform.releases.listen(
+      (release) => releases.add({
+        'sessionId': release.sessionId,
+        'reason': release.reason,
+      }),
+    );
+    platform.errors.listen((error) => errors.add(error.message));
+    platform.diagnostics.listen((diagnostic) {
+      if (diagnostics.length >= 40) diagnostics.removeAt(0);
+      diagnostics.add(diagnostic.message);
+    });
+  }
+
+  final events = <String, int>{};
+  final recent = <Map<String, Object?>>[];
+  final releases = <Map<String, Object?>>[];
+  final errors = <String>[];
+  final diagnostics = <String>[];
+}
+
+_InputLog? _inputLog;
+int _inputSequence = 0;
+
+RemoteInputPlatform get _inputPlatform {
+  final platform = RemoteInputCoordinator.shared.platform;
+  _inputLog ??= _InputLog(platform);
+  return platform;
+}
+
+Future<Map<String, Object?>> _inputTopology(HookParams params) async {
+  final topology = await _inputPlatform.displayTopology();
+  return {
+    'platform': topology.platform,
+    'displays': [
+      for (final display in topology.displays)
+        {
+          'displayId': display.displayId,
+          'name': display.name,
+          'x': display.x,
+          'y': display.y,
+          'width': display.width,
+          'height': display.height,
+          'scale': display.scale,
+          'primary': display.isPrimary,
+        },
+    ],
+  };
+}
+
+Future<Map<String, Object?>> _inputStartInjection(HookParams params) async {
+  await _inputPlatform.startInjection(
+    sessionId: params.string('sessionId'),
+    mode: params.flag('manual')
+        ? RemoteInputMode.manual
+        : RemoteInputMode.edgeTraversal,
+    displayId: params.optString('displayId') ?? '',
+    edge: RemoteInputEdge.values.asNameMap()[params.optString('edge')],
+  );
+  return {};
+}
+
+/// `type` is a [RemoteInputEventType] name, `payload` its JSON object.
+Future<Map<String, Object?>> _inputInject(HookParams params) async {
+  final type = RemoteInputEventType.values.asNameMap()[params.string('type')];
+  if (type == null) throw HookError('unknown type ${params.string('type')}');
+  final payload = params.values['payload'] ?? const <String, Object?>{};
+  await _inputPlatform.injectEvent(
+    RemoteInputPacketFrame(
+      sessionId: params.string('sessionId'),
+      sequence: ++_inputSequence,
+      timestampMicros: DateTime.now().microsecondsSinceEpoch,
+      eventType: type,
+      payload: Uint8List.fromList(
+        utf8.encode(payload is String ? payload : jsonEncode(payload)),
+      ),
+    ),
+  );
+  return {'sequence': _inputSequence};
+}
+
+Future<Map<String, Object?>> _inputStopInjection(HookParams params) async {
+  await _inputPlatform.stopInjection(sessionId: params.string('sessionId'));
+  return {};
+}
+
+Future<Map<String, Object?>> _inputStartCapture(HookParams params) async {
+  final edge = RemoteInputEdge.values.asNameMap()[params.string('edge')];
+  if (edge == null) throw HookError('unknown edge ${params.string('edge')}');
+  await _inputPlatform.startCapture(
+    sessionId: params.string('sessionId'),
+    edge: edge,
+    releaseHotkey: params.optString('releaseHotkey') ?? 'ctrl+alt+esc',
+    displayId: params.optString('displayId') ?? '',
+    segmentStart: params.optInt('segmentStart') ?? 0,
+    segmentEnd: params.optInt('segmentEnd') ?? 0,
+  );
+  return {};
+}
+
+Future<Map<String, Object?>> _inputStopCapture(HookParams params) async {
+  await _inputPlatform.stopCapture(sessionId: params.string('sessionId'));
+  return {};
+}
+
+Future<Map<String, Object?>> _inputEvents(HookParams params) async {
+  _inputPlatform;
+  final log = _inputLog!;
+  final result = {
+    'events': {...log.events},
+    'recent': [...log.recent],
+    'releases': [...log.releases],
+    'errors': [...log.errors],
+    'diagnostics': [...log.diagnostics],
+  };
+  if (params.flag('clear')) {
+    log.events.clear();
+    log.recent.clear();
+    log.releases.clear();
+    log.errors.clear();
+    log.diagnostics.clear();
+  }
+  return result;
+}
+
 const _settingKeys = {
   'port': '_port',
   'name': '_name',
