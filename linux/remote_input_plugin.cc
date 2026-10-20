@@ -3991,7 +3991,7 @@ class RemoteInputPlugin {
         // GNOME: Mutter directly, so it never asks for permission.
         PortalSession session;
         if (StartMutterRemoteDesktopSession(&session, error, false)) {
-          UseManualRemoteDesktopSession(session_id, session);
+          UseManualRemoteDesktopSession(session_id, session, true);
           return true;
         }
         error->clear();
@@ -3999,7 +3999,9 @@ class RemoteInputPlugin {
       if (manual && RemoteDesktopPortalAvailable()) {
         PortalSession session;
         if (!StartRemoteDesktopPortalSession(&session, error, false)) return false;
-        UseManualRemoteDesktopSession(session_id, session);
+        // GNOME's portal hands keysyms to Mutter as well.
+        UseManualRemoteDesktopSession(session_id, session,
+                                      MutterRemoteDesktopAvailable());
         return true;
       }
 #endif
@@ -4100,7 +4102,8 @@ class RemoteInputPlugin {
 
 #if HAVE_LIBEI_REMOTE_INPUT
   void UseManualRemoteDesktopSession(const std::string& session_id,
-                                     const PortalSession& session) {
+                                     const PortalSession& session,
+                                     bool keysyms_need_keymap) {
     std::lock_guard<std::mutex> lock(injection_mutex_);
     injection_backend_ = InjectionBackend::kPortal;
     injection_session_id_ = session_id;
@@ -4108,6 +4111,7 @@ class RemoteInputPlugin {
     portal_session_handle_ = session.session_handle;
     portal_mutter_ = session.mutter;
     portal_x_display_ = XOpenDisplay(nullptr);
+    manual_keysyms_need_keymap_ = keysyms_need_keymap;
     manual_portal_ = true;
   }
 
@@ -4558,9 +4562,11 @@ class RemoteInputPlugin {
       // the active map before sending anything, so a draft can never lose just
       // its unsupported characters while receiving a successful text result.
       // Text the layout cannot type (Chinese, say) goes whole through the
-      // GNOME Shell helper when it is installed.
-      bool mapped = portal_x_display_ != nullptr;
-      for (const char* p = text->c_str(); mapped && *p; p = g_utf8_next_char(p)) {
+      // GNOME Shell helper when it is installed. KDE types any keysym.
+      bool mapped = !manual_keysyms_need_keymap_ || portal_x_display_ != nullptr;
+      for (const char* p = text->c_str();
+           manual_keysyms_need_keymap_ && mapped && *p;
+           p = g_utf8_next_char(p)) {
         const gunichar scalar = g_utf8_get_char(p);
         const KeySym symbol = scalar == '\n' || scalar == '\r' ? 0xff0d :
             scalar == '\t' ? 0xff09 : scalar <= 0xff ? scalar : 0x01000000 | scalar;
@@ -6592,6 +6598,8 @@ class RemoteInputPlugin {
   // portal_connection_ talks to Mutter's remote desktop session (GNOME)
   // rather than to the portal.
   bool portal_mutter_ = false;
+  // Manual text must stay within the active keymap (Mutter drops the rest).
+  bool manual_keysyms_need_keymap_ = true;
   struct ei* portal_ei_ = nullptr;
   Display* portal_x_display_ = nullptr;
   std::thread portal_thread_;

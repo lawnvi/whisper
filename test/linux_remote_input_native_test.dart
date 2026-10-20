@@ -28,6 +28,12 @@ void main() {
         lessThan(text.indexOf('ManualPortalKeyLocked(')),
       );
       expect(text, isNot(contains('XChangeKeyboardMapping')));
+      // Only Mutter needs the keymap check; KDE types any keysym.
+      expect(text, contains('!manual_keysyms_need_keymap_'));
+      expect(
+        start,
+        contains('UseManualRemoteDesktopSession(session_id, session, true)'),
+      );
       expect(text, isNot(contains('gtk_clipboard_set')));
       // Text the layout cannot type goes whole through the GNOME helper,
       // and only into a text field.
