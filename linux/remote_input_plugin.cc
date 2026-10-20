@@ -456,6 +456,13 @@ void TraceRemoteInput(RemoteInputTraceEvent event, uint64_t count = 0) {
 }
 
 #if HAVE_X11_REMOTE_INPUT
+// Wayland even when GTK itself runs on Xwayland: XTest and grabs there only
+// reach other Xwayland windows.
+bool IsWaylandSession() {
+  return g_getenv("WAYLAND_DISPLAY") != nullptr ||
+         g_strcmp0(g_getenv("XDG_SESSION_TYPE"), "wayland") == 0;
+}
+
 bool IsLinuxDesktopLocked() {
   GError* error = nullptr;
   GDBusConnection* connection =
@@ -508,6 +515,11 @@ constexpr char kMutterInputCaptureInterface[] = "org.gnome.Mutter.InputCapture";
 constexpr char kMutterInputCaptureSessionInterface[] =
     "org.gnome.Mutter.InputCapture.Session";
 constexpr uint32_t kMutterAxisFinish = 1;
+// Whisper's GNOME Shell helper (installed for window flow). Its Text method
+// commits through the input method, so any script reaches a text field.
+constexpr char kShellHelperBusName[] = "com.vireen.Whisper.Shell";
+constexpr char kShellHelperObjectPath[] = "/com/vireen/Whisper/Shell";
+constexpr char kShellHelperInterface[] = "com.vireen.Whisper.Shell1";
 // Other desktops: the portal, on a connection that first tells it who we
 // are. The app id is the installed desktop file's name (whisper.desktop), so
 // a remembered permission matches however Whisper was started (menu,
@@ -636,6 +648,42 @@ bool PropertyUint32(GDBusConnection* connection,
   return ok;
 }
 
+// Commits `text` into the focused text field through the GNOME Shell helper.
+// False when the helper is missing or nothing takes text input, so a key
+// path never ends up pasting over the user's clipboard.
+bool CommitTextThroughShellHelper(GDBusConnection* connection,
+                                  const std::string& text) {
+  GError* error = nullptr;
+  GVariant* info = g_dbus_connection_call_sync(
+      connection, kShellHelperBusName, kShellHelperObjectPath,
+      kShellHelperInterface, "GetInfo", nullptr, G_VARIANT_TYPE("(a{sv})"),
+      G_DBUS_CALL_FLAGS_NO_AUTO_START, 500, nullptr, &error);
+  if (info == nullptr) {
+    g_clear_error(&error);
+    return false;
+  }
+  GVariant* fields = g_variant_get_child_value(info, 0);
+  gboolean text_input = FALSE;
+  const bool known =
+      g_variant_lookup(fields, "textInput", "b", &text_input) != FALSE;
+  g_variant_unref(fields);
+  g_variant_unref(info);
+  if (!known || !text_input) {
+    return false;
+  }
+  GVariant* reply = g_dbus_connection_call_sync(
+      connection, kShellHelperBusName, kShellHelperObjectPath,
+      kShellHelperInterface, "Text", g_variant_new("(s)", text.c_str()),
+      G_VARIANT_TYPE("(s)"), G_DBUS_CALL_FLAGS_NO_AUTO_START, 1000, nullptr,
+      &error);
+  if (reply == nullptr) {
+    g_clear_error(&error);
+    return false;
+  }
+  g_variant_unref(reply);
+  return true;
+}
+
 // Whether Mutter's service `bus_name` runs here and offers keyboard and
 // pointer (`property` is its capability mask: keyboard 1, pointer 2).
 bool MutterServiceAvailable(const char* bus_name,
@@ -658,22 +706,16 @@ bool MutterServiceAvailable(const char* bus_name,
   return available;
 }
 
-// Mutter's services are used on Wayland only; GNOME on Xorg keeps the
-// portal or XTest paths it always had.
-bool WaylandSession() {
-  return g_getenv("WAYLAND_DISPLAY") != nullptr ||
-         g_strcmp0(g_getenv("XDG_SESSION_TYPE"), "wayland") == 0;
-}
-
+// Mutter's services are used on Wayland only; GNOME on Xorg uses XTest.
 bool MutterRemoteDesktopAvailable() {
-  return WaylandSession() && MutterServiceAvailable(kMutterRemoteDesktopBusName,
+  return IsWaylandSession() && MutterServiceAvailable(kMutterRemoteDesktopBusName,
                                 kMutterRemoteDesktopObjectPath,
                                 kMutterRemoteDesktopInterface,
                                 "SupportedDeviceTypes");
 }
 
 bool MutterInputCaptureAvailable() {
-  return WaylandSession() && MutterServiceAvailable(kMutterInputCaptureBusName,
+  return IsWaylandSession() && MutterServiceAvailable(kMutterInputCaptureBusName,
                                 kMutterInputCaptureObjectPath,
                                 kMutterInputCaptureInterface,
                                 "SupportedCapabilities");
@@ -2472,17 +2514,17 @@ class RemoteInputPlugin {
                     std::string* error) {
 #if HAVE_X11_REMOTE_INPUT
     StopCapture("");
-    bool portal_attempted = false;
-    if (TryStartPortalCapture(session_id, edge, display_id, segment, routes,
-                              release_hotkey, &portal_attempted, error)) {
-      return true;
-    }
-    if (portal_attempted) {
-      return false;
-    }
-    if (g_getenv("WAYLAND_DISPLAY") != nullptr ||
-        g_strcmp0(g_getenv("XDG_SESSION_TYPE"), "wayland") == 0) {
-      *error = "Wayland remote input requires libei and desktop portal support";
+    // X11 sessions keep the X11 grab, which never asks for permission; the
+    // portal (and Mutter) are only for Wayland, where nothing else works.
+    if (IsWaylandSession()) {
+      bool portal_attempted = false;
+      if (TryStartPortalCapture(session_id, edge, display_id, segment, routes,
+                                release_hotkey, &portal_attempted, error)) {
+        return true;
+      }
+      if (!portal_attempted) {
+        *error = "Wayland remote input requires libei and desktop portal support";
+      }
       return false;
     }
     return StartX11Capture(session_id, edge, display_id, segment,
@@ -2639,14 +2681,13 @@ class RemoteInputPlugin {
                              bool* attempted,
                              std::string* error) {
 #if HAVE_LIBEI_REMOTE_INPUT
-    (void)release_hotkey;
     *attempted = false;
     if (!MutterInputCaptureAvailable() && !InputCapturePortalAvailable()) {
       return false;
     }
     *attempted = true;
     return StartPortalCapture(session_id, edge, display_id, segment,
-                              std::move(routes), error);
+                              std::move(routes), release_hotkey, error);
 #else
     (void)session_id;
     (void)edge;
@@ -2666,6 +2707,7 @@ class RemoteInputPlugin {
                           const std::string& display_id,
                           EdgeSegment segment,
                           std::vector<CaptureRoute> routes,
+                          const std::string& release_hotkey,
                           std::string* error) {
     PortalSession session;
     std::vector<PortalZone> zones;
@@ -2808,6 +2850,7 @@ class RemoteInputPlugin {
       input_capture_deactivated_signal_id_ = deactivated_signal_id;
       input_capture_disabled_signal_id_ = disabled_signal_id;
       input_capture_zones_changed_signal_id_ = zones_changed_signal_id;
+      input_capture_release_hotkey_ = release_hotkey;
       ResetInputCaptureStateLocked();
       capture_running_.store(true);
       input_capture_running_.store(true);
@@ -2875,6 +2918,8 @@ class RemoteInputPlugin {
     input_capture_x_ = 0;
     input_capture_y_ = 0;
     input_capture_activation_edge_unit_ = -1;
+    input_capture_held_modifiers_ = 0;
+    input_capture_hotkey_fired_ = false;
     input_capture_active_route_id_.clear();
     input_capture_active_display_id_ = capture_display_id_;
     input_capture_active_edge_ = capture_edge_;
@@ -3531,8 +3576,19 @@ class RemoteInputPlugin {
         input_capture_active_ = false;
         input_capture_pending_active_start_ = false;
         input_capture_buttons_ = 0;
+        input_capture_held_modifiers_ = 0;
+        input_capture_hotkey_fired_ = false;
         ClearHeldInputCaptureMotionLocked();
         return;
+      default:
+        break;
+    }
+    // After the release hotkey nothing more goes to the other computer until
+    // the compositor stops the capture.
+    if (input_capture_hotkey_fired_) {
+      return;
+    }
+    switch (ei_event_get_type(event)) {
       case EI_EVENT_POINTER_MOTION:
         EmitInputCaptureMouseMoveLocked(
             static_cast<int>(std::lround(ei_event_pointer_get_dx(event))),
@@ -3566,15 +3622,71 @@ class RemoteInputPlugin {
                            static_cast<int>(std::lround(
                                ei_event_scroll_get_dy(event))))));
         return;
-      case EI_EVENT_KEYBOARD_KEY:
+      case EI_EVENT_KEYBOARD_KEY: {
+        const uint32_t key = ei_event_keyboard_get_key(event);
+        const bool press = ei_event_keyboard_get_key_is_press(event);
+        TrackInputCaptureModifierLocked(key, press);
+        if (press && IsInputCaptureReleaseHotkeyLocked(key)) {
+          ReleaseInputCaptureForHotkeyLocked();
+          return;
+        }
         EmitInputEvent(capture_session_id_, "key", ++input_capture_sequence_,
-                       JsonBytes(LinuxKeyPayload(
-                           static_cast<int>(ei_event_keyboard_get_key(event)),
-                           ei_event_keyboard_get_key_is_press(event))));
+                       JsonBytes(LinuxKeyPayload(static_cast<int>(key), press)));
         return;
+      }
       default:
         return;
     }
+  }
+
+  static constexpr int kHeldCtrl = 1;
+  static constexpr int kHeldAlt = 2;
+
+  static int InputCaptureModifierBit(uint32_t key) {
+    switch (key) {
+      case KEY_LEFTCTRL:
+      case KEY_RIGHTCTRL:
+        return kHeldCtrl;
+      case KEY_LEFTALT:
+      case KEY_RIGHTALT:
+        return kHeldAlt;
+      default:
+        return 0;
+    }
+  }
+
+  // Only key presses seen during this activation count, like the X11 grab.
+  void TrackInputCaptureModifierLocked(uint32_t key, bool press) {
+    const int bit = InputCaptureModifierBit(key);
+    if (bit == 0) {
+      return;
+    }
+    if (press) {
+      input_capture_held_modifiers_ |= bit;
+    } else {
+      input_capture_held_modifiers_ &= ~bit;
+    }
+  }
+
+  bool IsInputCaptureReleaseHotkeyLocked(uint32_t key) const {
+    return input_capture_release_hotkey_ == "ctrl+alt+esc" && key == KEY_ESC &&
+           (input_capture_held_modifiers_ & (kHeldCtrl | kHeldAlt)) ==
+               (kHeldCtrl | kHeldAlt);
+  }
+
+  // The pointer comes back where it crossed (no cursor_position), and Dart
+  // ends the session on the release, as it does for the X11 grab.
+  void ReleaseInputCaptureForHotkeyLocked() {
+    input_capture_hotkey_fired_ = true;
+    EmitReleaseForSession(capture_session_id_, "hotkey",
+                          static_cast<int64_t>(input_capture_sequence_),
+                          static_cast<int64_t>(input_capture_activation_sequence_));
+    SendInputCaptureReleaseLocked(nullptr);
+    input_capture_active_ = false;
+    input_capture_pending_active_start_ = false;
+    input_capture_activation_id_ = 0;
+    input_capture_buttons_ = 0;
+    ForgetInputCapturePositionLocked();
   }
 
   void EmitInputCaptureMouseMoveLocked(int delta_x, int delta_y) {
@@ -3702,14 +3814,32 @@ class RemoteInputPlugin {
     }
     const DoublePoint cursor = ReleaseCursorPositionForInputCapture(
         release_edge_unit, release_display_id, release_edge, release_segment);
+    SendInputCaptureReleaseLocked(&cursor);
+    input_capture_active_ = false;
+    input_capture_pending_active_start_ = false;
+    input_capture_activation_id_ = 0;
+    input_capture_buttons_ = 0;
+    ForgetInputCapturePositionLocked();
+    input_capture_x_ = static_cast<int>(std::lround(cursor.x));
+    input_capture_y_ = static_cast<int>(std::lround(cursor.y));
+    input_capture_active_route_id_ = release_route_id;
+  }
+
+  void SendInputCaptureReleaseLocked(const DoublePoint* cursor) {
+    if (input_capture_connection_ == nullptr ||
+        input_capture_session_handle_.empty()) {
+      return;
+    }
     GVariantBuilder options;
     g_variant_builder_init(&options, G_VARIANT_TYPE_VARDICT);
     if (input_capture_activation_id_ != 0) {
       g_variant_builder_add(&options, "{sv}", "activation_id",
                             g_variant_new_uint32(input_capture_activation_id_));
     }
-    g_variant_builder_add(&options, "{sv}", "cursor_position",
-                          g_variant_new("(dd)", cursor.x, cursor.y));
+    if (cursor != nullptr) {
+      g_variant_builder_add(&options, "{sv}", "cursor_position",
+                            g_variant_new("(dd)", cursor->x, cursor->y));
+    }
     GError* call_error = nullptr;
     GVariant* result =
         input_capture_mutter_
@@ -3731,14 +3861,6 @@ class RemoteInputPlugin {
       TraceRemoteInput(RemoteInputTraceEvent::kPortalReleaseFailed);
       g_error_free(call_error);
     }
-    input_capture_active_ = false;
-    input_capture_pending_active_start_ = false;
-    input_capture_activation_id_ = 0;
-    input_capture_buttons_ = 0;
-    ForgetInputCapturePositionLocked();
-    input_capture_x_ = static_cast<int>(std::lround(cursor.x));
-    input_capture_y_ = static_cast<int>(std::lround(cursor.y));
-    input_capture_active_route_id_ = release_route_id;
   }
 
   void ClearInputCapturePortalLocked() {
@@ -3803,36 +3925,36 @@ class RemoteInputPlugin {
       TraceRemoteInput(RemoteInputTraceEvent::kInjectionBlocked);
       return false;
     }
+    // XTest on X11 sessions, so they are never asked for permission; the
+    // portal (and Mutter) only on Wayland.
+    if (IsWaylandSession()) {
 #if HAVE_LIBEI_REMOTE_INPUT
-    // Manual control needs keysyms for Unicode text, which ConnectToEIS
-    // disables. Keep the existing EIS path for desktop edge traversal.
-    if (manual && MutterRemoteDesktopAvailable()) {
-      // GNOME: Mutter directly, so it never asks for permission.
-      PortalSession session;
-      if (StartMutterRemoteDesktopSession(&session, error, false)) {
+      // Manual control needs keysyms for Unicode text, which ConnectToEIS
+      // disables. Keep the existing EIS path for desktop edge traversal.
+      if (manual && MutterRemoteDesktopAvailable()) {
+        // GNOME: Mutter directly, so it never asks for permission.
+        PortalSession session;
+        if (StartMutterRemoteDesktopSession(&session, error, false)) {
+          UseManualRemoteDesktopSession(session_id, session);
+          return true;
+        }
+        error->clear();
+      }
+      if (manual && RemoteDesktopPortalAvailable()) {
+        PortalSession session;
+        if (!StartRemoteDesktopPortalSession(&session, error, false)) return false;
         UseManualRemoteDesktopSession(session_id, session);
         return true;
       }
-      error->clear();
-    }
-    if (manual && RemoteDesktopPortalAvailable()) {
-      PortalSession session;
-      if (!StartRemoteDesktopPortalSession(&session, error, false)) return false;
-      UseManualRemoteDesktopSession(session_id, session);
-      return true;
-    }
 #endif
-    bool portal_attempted = false;
-    if (TryStartPortalInjection(session_id, display_id, edge, segment, routes,
-                                &portal_attempted, error)) {
-      return true;
-    }
-    if (portal_attempted) {
-      return false;
-    }
-    if (g_getenv("WAYLAND_DISPLAY") != nullptr ||
-        g_strcmp0(g_getenv("XDG_SESSION_TYPE"), "wayland") == 0) {
-      *error = "Wayland remote input requires libei and desktop portal support";
+      bool portal_attempted = false;
+      if (TryStartPortalInjection(session_id, display_id, edge, segment, routes,
+                                  &portal_attempted, error)) {
+        return true;
+      }
+      if (!portal_attempted) {
+        *error = "Wayland remote input requires libei and desktop portal support";
+      }
       return false;
     }
     return StartX11Injection(session_id, display_id, edge, segment,
@@ -4379,12 +4501,18 @@ class RemoteInputPlugin {
       // Mutter acknowledges unmapped keysyms without delivering input. Check
       // the active map before sending anything, so a draft can never lose just
       // its unsupported characters while receiving a successful text result.
-      if (portal_x_display_ == nullptr) return false;
-      for (const char* p = text->c_str(); *p; p = g_utf8_next_char(p)) {
+      // Text the layout cannot type (Chinese, say) goes whole through the
+      // GNOME Shell helper when it is installed.
+      bool mapped = portal_x_display_ != nullptr;
+      for (const char* p = text->c_str(); mapped && *p; p = g_utf8_next_char(p)) {
         const gunichar scalar = g_utf8_get_char(p);
         const KeySym symbol = scalar == '\n' || scalar == '\r' ? 0xff0d :
             scalar == '\t' ? 0xff09 : scalar <= 0xff ? scalar : 0x01000000 | scalar;
-        if (XKeysymToKeycode(portal_x_display_, symbol) == 0) return false;
+        mapped = XKeysymToKeycode(portal_x_display_, symbol) != 0;
+      }
+      if (!mapped) {
+        return portal_mutter_ &&
+               CommitTextThroughShellHelper(portal_connection_, text.value());
       }
       for (const char* p = text->c_str(); *p; p = g_utf8_next_char(p)) {
         gunichar scalar = g_utf8_get_char(p);
@@ -6393,6 +6521,10 @@ class RemoteInputPlugin {
   int input_capture_x_ = 0;
   int input_capture_y_ = 0;
   double input_capture_activation_edge_unit_ = -1;
+  std::string input_capture_release_hotkey_;
+  // Ctrl and Alt held during this activation (kHeldCtrl | kHeldAlt).
+  int input_capture_held_modifiers_ = 0;
+  bool input_capture_hotkey_fired_ = false;
   std::string input_capture_active_route_id_;
   std::string input_capture_active_display_id_;
   std::string input_capture_active_edge_;

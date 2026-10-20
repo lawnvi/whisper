@@ -29,6 +29,15 @@ void main() {
       );
       expect(text, isNot(contains('XChangeKeyboardMapping')));
       expect(text, isNot(contains('gtk_clipboard_set')));
+      // Text the layout cannot type goes whole through the GNOME helper,
+      // and only into a text field.
+      expect(text, contains('CommitTextThroughShellHelper(portal_connection_'));
+      final helper = plugin.substring(
+        plugin.indexOf('bool CommitTextThroughShellHelper('),
+        plugin.indexOf('bool MutterServiceAvailable('),
+      );
+      expect(helper.indexOf('"textInput"'), lessThan(helper.indexOf('"Text"')));
+      expect(helper, contains('G_DBUS_CALL_FLAGS_NO_AUTO_START'));
     });
 
     test('manual movement skips edge release and preserves pixel scroll', () {
@@ -128,48 +137,90 @@ void main() {
       },
     );
 
-    test(
-      'prefers portal injection and falls back to XTest when unavailable',
-      () {
-        final plugin = File('linux/remote_input_plugin.cc').readAsStringSync();
+    test('injects through the portal on Wayland and XTest on X11', () {
+      final plugin = File('linux/remote_input_plugin.cc').readAsStringSync();
 
-        expect(plugin, contains('enum class InjectionBackend'));
-        expect(plugin, contains('InjectionBackend::kPortal'));
-        expect(plugin, contains('InjectionBackend::kX11'));
-        expect(plugin, contains('TryStartPortalInjection'));
-        expect(plugin, contains('StartX11Injection'));
-        expect(
-          plugin.indexOf('TryStartPortalInjection'),
-          lessThan(plugin.indexOf('StartX11Injection(')),
-        );
-        expect(
-          plugin,
-          contains('RemoteInputTraceEvent::kPortalInjectionStarted'),
-        );
-        expect(plugin, contains('RemoteInputTraceEvent::kX11InjectionStarted'));
-      },
-    );
+      expect(plugin, contains('enum class InjectionBackend'));
+      expect(plugin, contains('InjectionBackend::kPortal'));
+      expect(plugin, contains('InjectionBackend::kX11'));
+      final start = _method(plugin, '  bool StartInjection(');
+      final wayland = start.indexOf('if (IsWaylandSession())');
+      expect(wayland, isNonNegative);
+      expect(
+        start.indexOf('manual && RemoteDesktopPortalAvailable()'),
+        greaterThan(wayland),
+      );
+      expect(start.indexOf('TryStartPortalInjection('), greaterThan(wayland));
+      expect(
+        start.indexOf('StartX11Injection('),
+        greaterThan(start.indexOf('TryStartPortalInjection(')),
+      );
+      expect(
+        plugin,
+        contains('RemoteInputTraceEvent::kPortalInjectionStarted'),
+      );
+      expect(plugin, contains('RemoteInputTraceEvent::kX11InjectionStarted'));
+    });
 
-    test(
-      'prefers InputCapture portal capture and falls back to X11 capture',
-      () {
-        final plugin = File('linux/remote_input_plugin.cc').readAsStringSync();
+    test('captures through the portal on Wayland and the X11 grab on X11', () {
+      final plugin = File('linux/remote_input_plugin.cc').readAsStringSync();
 
-        expect(plugin, contains('CaptureBackend::kPortal'));
-        expect(plugin, contains('TryStartPortalCapture'));
-        expect(plugin, contains('StartX11Capture'));
-        expect(plugin, contains('StartInputCapturePortalSession'));
-        expect(plugin, contains('org.freedesktop.portal.InputCapture'));
-        expect(plugin, contains('SetPointerBarriers'));
-        expect(plugin, contains('InputCaptureActivatedCallback'));
-        expect(plugin, contains('ei_new_receiver'));
-        expect(plugin, contains('EI_EVENT_POINTER_MOTION'));
-        expect(
-          plugin.indexOf('TryStartPortalCapture'),
-          lessThan(plugin.indexOf('StartX11Capture(')),
-        );
-      },
-    );
+      expect(plugin, contains('CaptureBackend::kPortal'));
+      expect(plugin, contains('StartInputCapturePortalSession'));
+      expect(plugin, contains('org.freedesktop.portal.InputCapture'));
+      expect(plugin, contains('SetPointerBarriers'));
+      expect(plugin, contains('InputCaptureActivatedCallback'));
+      expect(plugin, contains('ei_new_receiver'));
+      expect(plugin, contains('EI_EVENT_POINTER_MOTION'));
+      // An X11 session never reaches the portal, which would ask every time.
+      final start = _method(plugin, '  bool StartCapture(');
+      final wayland = start.indexOf('if (IsWaylandSession())');
+      expect(wayland, isNonNegative);
+      expect(start.indexOf('TryStartPortalCapture('), greaterThan(wayland));
+      expect(
+        start.indexOf('StartX11Capture('),
+        greaterThan(start.indexOf('TryStartPortalCapture(')),
+      );
+    });
+
+    test('releases Wayland input capture on the release hotkey', () {
+      final plugin = File('linux/remote_input_plugin.cc').readAsStringSync();
+
+      expect(
+        _method(plugin, '  bool TryStartPortalCapture(').split('#else').first,
+        isNot(contains('(void)release_hotkey;')),
+      );
+      expect(
+        plugin,
+        contains('input_capture_release_hotkey_ = release_hotkey;'),
+      );
+      final events = _method(plugin, '  void HandleInputCaptureEiEventLocked(');
+      expect(events, contains('TrackInputCaptureModifierLocked(key, press)'));
+      expect(
+        events.indexOf('IsInputCaptureReleaseHotkeyLocked(key)'),
+        lessThan(events.indexOf('"key", ++input_capture_sequence_')),
+      );
+      // Later events stay here until the compositor stops the capture.
+      expect(
+        events.indexOf('if (input_capture_hotkey_fired_)'),
+        lessThan(events.indexOf('case EI_EVENT_POINTER_MOTION:')),
+      );
+      final release = _method(
+        plugin,
+        '  void ReleaseInputCaptureForHotkeyLocked(',
+      );
+      expect(
+        release,
+        contains('EmitReleaseForSession(capture_session_id_, "hotkey"'),
+      );
+      expect(release, contains('SendInputCaptureReleaseLocked(nullptr)'));
+      final hotkey = _method(
+        plugin,
+        '  bool IsInputCaptureReleaseHotkeyLocked(',
+      );
+      expect(hotkey, contains('"ctrl+alt+esc"'));
+      expect(hotkey, contains('KEY_ESC'));
+    });
 
     test(
       'uses persistent InputCapture portal sessions when version 2 is available',
@@ -405,4 +456,12 @@ void main() {
       },
     );
   });
+}
+
+/// The body of the class method that starts with [signature] (two-space
+/// indented, so it ends at the first closing brace at that indent).
+String _method(String source, String signature) {
+  final start = source.indexOf(signature);
+  expect(start, isNonNegative, reason: signature);
+  return source.substring(start, source.indexOf('\n  }\n', start));
 }
