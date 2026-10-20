@@ -26,6 +26,10 @@ Whisper is a LAN collaboration app. Paired devices connect to each other directl
 | --- | --- |
 | **Text and files** | Send them like chat messages; file transfers resume after a disconnect and are verified on arrival |
 | **Folders** | Send a whole folder from a desktop without archiving it first; it arrives with the same structure |
+| **File browsing** | Browse the other device's files as if in your own file manager, and copy, create, rename, or delete them; the other device approves each time, or always |
+| **Mount on this computer** | Show the other device's files as a location in Finder, File Explorer, or your Linux file manager, and open them the usual way (read-only) |
+| **Share links** | Give a device without Whisper a link to download files or folders from this one in a browser, optionally with a password |
+| **Window flow** | Open this computer's windows, or an Android phone's apps, on a phone, tablet, or another computer and use them there; or send a window to another device |
 | **Quick send** | Use the Android share sheet, a desktop context menu, or a global hotkey without opening a conversation |
 | **Clipboard sync** | Copy on one device, paste on another (off by default) |
 | **Keyboard and mouse sharing** | Use one keyboard and mouse across several computers; move the pointer past a screen edge to switch |
@@ -50,7 +54,7 @@ Get the installer for your platform from the [Releases](https://github.com/lawnv
 | Windows | 10 / 11, 64-bit | `windows-x86_64.exe` |
 | Linux | x86_64 | `.deb`, `.rpm`, or `.AppImage` |
 
-iOS / iPadOS: the project has no paid Apple Developer account and no iOS device to test on, so the app is not on the App Store. Every release includes an unsigned `ios-unsigned.ipa` that you can sign with your own Apple ID using a tool such as AltStore or Sideloadly (apps signed with a free Apple ID must be re-signed every 7 days). It has not been tested on a real device, so please report any problems.
+iOS / iPadOS: the project has no paid Apple Developer account, so the app is not on the App Store. Every release includes an unsigned `ios-unsigned.ipa` that you can sign with your own Apple ID using a tool such as AltStore or Sideloadly (apps signed with a free Apple ID must be re-signed every 7 days). Only window flow and file browsing have been tested, on one iPad; the rest has not been tested on a real device, so please report any problems.
 
 ## Quick start
 
@@ -67,6 +71,10 @@ iOS / iPadOS: the project has no paid Apple Developer account and no iOS device 
 | Send what is on the clipboard | Press `Cmd+Option+V` on macOS, `Ctrl+Alt+V` on Windows / Linux |
 | Send from another app | Use the Android share sheet, or the file context menu on desktop |
 | Send a folder | On desktop, drop the folder into the conversation, or choose "Folder" from the attachment button |
+| Browse the other device's files | Open Device Details at the top right of the conversation and select "Files"; on desktop you can drag files straight into Finder or File Explorer |
+| Open the other device's files in the system file manager | Turn on "Mount on this computer" in Device Details; it mounts whenever the device connects, and ejecting it in the system turns the switch off |
+| Send files to a device without Whisper | In "Files", right-click a file or folder on this device (long-press on a phone) and choose "Create Share Link…" |
+| Use the other device's windows or apps | Select "Flow" in Device Details, then choose a window or app |
 | Start keyboard/mouse sharing | Open the workspace, drag the other screen next to this one, and select "Start" |
 | Leave keyboard/mouse sharing | Press `Ctrl+Alt+Esc` on the controlling device (`Control+Option+Esc` on macOS) |
 | Control a computer from a phone | In the Android conversation, select "Control computer", then the start button at the top |
@@ -80,6 +88,11 @@ The [user guide](docs/user-guide_en.md) covers every feature in full.
 | --- | :---: | :---: | :---: | :---: |
 | Text and files | ✅ | ✅ | ✅ | ✅ |
 | Folders | Receive only | ✅ | ✅ | ✅ |
+| File browsing | ✅ | ✅ | ✅ | ✅ |
+| Mount on this computer | Can be mounted only | ✅ | ✅ | Needs fuse3 |
+| Share links | ✅ | ✅ | ✅ | ✅ |
+| Window flow: view | ✅ | ✅ | ✅ | ✅ |
+| Window flow: share | Android 10 or later, with USB or wireless debugging on | ✅ | ✅ | GNOME (Wayland) only |
 | Clipboard sync | Text only, in the foreground | ✅ | ✅ | ✅ |
 | Keyboard and mouse sharing | — | ✅ | ✅ | X11 only |
 | Phone controller | Controls | Controlled | Controlled | Controlled, X11 only |
@@ -88,7 +101,9 @@ The [user guide](docs/user-guide_en.md) covers every feature in full.
 | Desktop screenshots | — | ✅ | ✅ | Depends on the desktop environment |
 | TV casting receiver | — | ✅ | ✅ | ✅ |
 
-On Linux, discovery depends on Avahi. Video previews and TV casting need libmpv installed; everything else works without it.
+The iOS / iPadOS app can view windows flowed from other devices and browse their files.
+
+On Linux, discovery depends on Avahi. Video previews and TV casting need libmpv, and window flow needs FFmpeg's libavcodec; everything else works without them. Before other devices can show this computer's windows, install the GNOME component from Settings, then log out and back in once.
 
 ## Troubleshooting
 
@@ -118,7 +133,7 @@ flutter run
 flutter analyze && flutter test
 ```
 
-On macOS, use `./script/build_and_run.sh`, which builds, signs, and launches the app. Linux also needs the development packages for Avahi, PulseAudio or PipeWire Pulse, GStreamer, libsecret, keybinder, jsoncpp, libmpv, and libepoxy. See [AGENTS.md](AGENTS.md) for project conventions.
+On macOS, use `./script/build_and_run.sh`, which builds, signs, and launches the app. Linux also needs the development packages for Avahi, PulseAudio or PipeWire Pulse, GStreamer, libsecret, keybinder, jsoncpp, libmpv, libepoxy, and libpipewire-0.3. See [AGENTS.md](AGENTS.md) for project conventions.
 
 ## License
 
