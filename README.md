@@ -4,7 +4,9 @@
 
 # Whisper
 
-在自己的电脑和手机之间，直接传文本、文件、剪贴板、声音和键鼠。
+在自己的电脑和手机之间，直接传文本、文件、剪贴板、声音、键鼠和窗口。
+
+LAN file transfer, software KVM, clipboard sync, audio and window streaming between your computers and phones. Free, open source and end-to-end encrypted.
 
 [![Release](https://img.shields.io/github/v/release/lawnvi/whisper?include_prereleases&label=release)](https://github.com/lawnvi/whisper/releases)
 ![Platform](https://img.shields.io/badge/platform-Android%20%7C%20macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)
@@ -32,7 +34,7 @@ Whisper 是一个局域网协作工具。设备配对后通过加密通道直接
 | **窗口流转** | 在手机、平板或另一台电脑上打开这台电脑的窗口或安卓手机上的应用，直接操作；也可以把窗口送到另一台设备 |
 | **快捷发送** | Android 分享菜单、桌面右键菜单或全局快捷键，不用先打开会话 |
 | **剪贴板同步** | 在一台设备上复制，到另一台粘贴（默认关闭） |
-| **键鼠共享** | 多台电脑共用一套键盘鼠标，指针移到屏幕边缘就切换过去 |
+| **键鼠共享** | 软件 KVM：多台电脑共用一套键盘鼠标，指针移到屏幕边缘就切换过去 |
 | **手机控制电脑** | Android 手机充当体感鼠标、触控板和键盘 |
 | **系统音频共享** | 把电脑的声音送到一台或多台设备播放 |
 | **通知转发** | 把 Android 上选定 App 的通知（比如验证码）发到电脑 |

@@ -4,7 +4,7 @@
 
 # Whisper
 
-Move text, files, clipboard, audio, and keyboard/mouse input directly between your own computers and phones.
+Move text, files, clipboard, audio, keyboard/mouse input, and app windows directly between your own computers and phones.
 
 [![Release](https://img.shields.io/github/v/release/lawnvi/whisper?include_prereleases&label=release)](https://github.com/lawnvi/whisper/releases)
 ![Platform](https://img.shields.io/badge/platform-Android%20%7C%20macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)
@@ -32,7 +32,7 @@ Whisper is a LAN collaboration app. Paired devices connect to each other directl
 | **Window flow** | Open this computer's windows, or an Android phone's apps, on a phone, tablet, or another computer and use them there; or send a window to another device |
 | **Quick send** | Use the Android share sheet, a desktop context menu, or a global hotkey without opening a conversation |
 | **Clipboard sync** | Copy on one device, paste on another (off by default) |
-| **Keyboard and mouse sharing** | Use one keyboard and mouse across several computers; move the pointer past a screen edge to switch |
+| **Keyboard and mouse sharing** | A software KVM: use one keyboard and mouse across several computers; move the pointer past a screen edge to switch |
 | **Phone controller** | Turn an Android phone into an air mouse, touchpad, and keyboard |
 | **System audio sharing** | Play a computer's sound on one or more other devices |
 | **Notification forwarding** | Send notifications from chosen Android apps, such as verification codes, to your computer |
