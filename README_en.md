@@ -92,16 +92,16 @@ The [user guide](docs/user-guide_en.md) covers every feature in full.
 | Mounting | Can be mounted only | ✅ | ✅ | Needs fuse3 |
 | Share links | ✅ | ✅ | ✅ | ✅ |
 | Window flow: view | ✅ | ✅ | ✅ | ✅ |
-| Window flow: share | Android 10+, via adb | ✅ | ✅ | GNOME 45+ or KDE Plasma 6 on Wayland |
+| Window flow: share | Android 10+, via adb | ✅ | ✅ | GNOME 45+ or KDE Plasma 6 |
 | Clipboard sync | Text, foreground only | ✅ | ✅ | ✅ |
-| Keyboard & mouse | — | ✅ | ✅ | X11, or GNOME or KDE Plasma on Wayland |
-| Phone controller | Controls | Controlled | Controlled | Controlled, X11, GNOME or KDE Plasma |
+| Keyboard & mouse | — | ✅ | ✅ | X11, GNOME or KDE Plasma |
+| Phone controller | Controls | Controlled | Controlled | Controlled, as above |
 | System audio | Playback only | ✅ | ✅ | ✅ |
 | Notifications | Sends | Receives | Receives | Receives |
 | Screenshots | — | ✅ | ✅ | Depends on desktop |
 | TV casting receiver | — | ✅ | ✅ | ✅ |
 
-On Linux, discovery depends on Avahi. Video previews and TV casting need libmpv, and window flow needs FFmpeg 4 or later; everything else works without them. Before other devices can show this computer's windows, FFmpeg also needs an H.264 encoder (x264 or openh264; Fedora ships without one), and on GNOME you install the GNOME component from Settings, then log out and back in once; KDE Plasma needs nothing installed and asks for no permission.
+On Linux, discovery depends on Avahi. Video previews and TV casting need libmpv, and window flow needs FFmpeg 4 or later; everything else works without them. Showing this computer's windows on other devices needs a Wayland session (X11 can only view for now) and an H.264 encoder in FFmpeg (x264 or openh264; Fedora ships without one). On GNOME, also install the GNOME component from Settings, then log out and back in once; KDE Plasma needs nothing installed and asks for no permission.
 
 On Wayland, keyboard and mouse sharing supports GNOME and KDE Plasma. GNOME asks for no permission. GNOME before 46 (Ubuntu 22.04, for example) can only be controlled; to control other computers from one, choose "Ubuntu on Xorg" on the login screen. Typing text the current keyboard layout cannot produce, such as Chinese from a phone, needs the GNOME component above. KDE Plasma asks for permission the first time it is controlled, and not again once you tick "remember"; controlling other computers from it asks every time it starts (a current KDE limit). Other Wayland desktops have not been verified.
 
