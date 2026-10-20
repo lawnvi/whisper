@@ -4,12 +4,13 @@ import 'package:flutter/material.dart';
 import '../../../helper/toast.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_theme.dart';
+import '../../settings.dart' show SettingsSectionSurface;
 import 'android_service_controller.dart';
 
 /// The phone's "window flow service" page: status, a guided one-time setup
 /// that pairs with the phone's own Wireless debugging, and start/stop. Lets
 /// this phone's apps flow to trusted computers even when none of them has
-/// adb. Styled like the rest of Whisper's iOS-flavoured settings.
+/// adb. Built from the settings page's own grouped rows.
 class AndroidWindowServicePage extends StatefulWidget {
   const AndroidWindowServicePage({super.key, this.controller});
 
@@ -75,14 +76,12 @@ class _AndroidWindowServicePageState extends State<AndroidWindowServicePage> {
         child: Align(
           alignment: Alignment.topCenter,
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 560),
+            constraints: const BoxConstraints(
+              maxWidth: WhisperUi.settingsMaxWidth,
+            ),
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-              children: [
-                _statusCard(palette, colors),
-                const SizedBox(height: 20),
-                ..._actions(palette, colors),
-              ],
+              padding: const EdgeInsets.fromLTRB(10, 12, 10, 16),
+              children: _sections(palette, colors),
             ),
           ),
         ),
@@ -90,183 +89,222 @@ class _AndroidWindowServicePageState extends State<AndroidWindowServicePage> {
     );
   }
 
-  // ------------------------------------------------------------- status card
+  // The same pieces as the settings page: grouped rows with a muted icon,
+  // the state as a dot at the end, actions as rows rather than buttons.
+  List<Widget> _sections(WhisperPalette palette, ColorScheme colors) {
+    final state = _controller.state;
+    final busy = _controller.busy;
+    final self = _controller.canSelfStart;
+    final running = state == AndroidWindowServiceState.running;
+    return [
+      _section(null, [
+        _statusRow(palette, colors),
+        if (self && running)
+          _actionRow(
+            _s.androidWindowServiceStop,
+            CupertinoIcons.stop_circle,
+            palette.danger,
+            busy ? null : _stop,
+          ),
+        if (self && state == AndroidWindowServiceState.stopped)
+          _actionRow(
+            _s.androidWindowServiceStart,
+            CupertinoIcons.play_circle,
+            palette.connected,
+            busy ? null : _start,
+          ),
+        if (self && state != AndroidWindowServiceState.needsSetup)
+          _row(
+            palette,
+            colors,
+            icon: CupertinoIcons.arrow_clockwise,
+            title: _s.androidWindowServiceAutoStart,
+            desc: _s.androidWindowServiceAutoStartHint,
+            lines: 4,
+            onTap: busy
+                ? null
+                : () => _controller.setAutoStart(!_controller.autoStart),
+            trailing: CupertinoSwitch(
+              value: _controller.autoStart,
+              onChanged: busy ? null : _controller.setAutoStart,
+            ),
+          ),
+      ], footer: self ? null : _s.androidWindowServiceComputerHint),
+      if (self && !running) _setupSection(palette, colors),
+    ];
+  }
 
-  Widget _statusCard(WhisperPalette palette, ColorScheme colors) {
-    final running = _controller.state == AndroidWindowServiceState.running;
-    final working = _controller.state == AndroidWindowServiceState.working;
-    final (title, hint) = switch (_controller.state) {
-      AndroidWindowServiceState.running => (
-        _s.androidWindowServiceRunning,
-        _s.androidWindowServiceRunningHint,
-      ),
-      AndroidWindowServiceState.stopped => (
-        _s.androidWindowServiceStopped,
-        _s.androidWindowServiceStoppedHint,
-      ),
-      AndroidWindowServiceState.needsSetup => (
-        _s.androidWindowServiceNeedsSetup,
-        _s.androidWindowServiceNeedsSetupHint,
-      ),
-      AndroidWindowServiceState.working => (
-        _s.androidWindowServiceStarting,
-        _s.androidWindowServiceNeedsSetupHint,
-      ),
-    };
-    final dot = running
-        ? palette.trusted
-        : working
-        ? palette.connected
-        : palette.textMuted;
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: palette.surfaceElevated,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: palette.borderSubtle),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _section(String? title, List<Widget> rows, {String? footer}) {
+    final palette = context.whisperPalette;
+    final caption = Theme.of(context).textTheme.labelMedium?.copyWith(
+      fontSize: 13,
+      height: 1.4,
+      letterSpacing: 0,
+      color: palette.textMuted,
+    );
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: dot.withValues(alpha: 0.16),
-              borderRadius: BorderRadius.circular(14),
+          if (title != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+              child: Text(
+                title,
+                style: caption?.copyWith(fontWeight: FontWeight.w600),
+              ),
             ),
-            child: working
-                ? const Padding(
-                    padding: EdgeInsets.all(12),
-                    child: CupertinoActivityIndicator(),
-                  )
-                : Icon(
-                    running
-                        ? CupertinoIcons.rectangle_on_rectangle_angled
-                        : CupertinoIcons.rectangle_dock,
-                    color: dot,
-                    size: 24,
-                  ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    color: colors.onSurface,
-                    fontSize: 19,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  hint,
-                  style: TextStyle(
-                    color: palette.textMuted,
-                    fontSize: 13.5,
-                    height: 1.35,
-                  ),
-                ),
-              ],
+          SettingsSectionSurface(children: rows),
+          if (footer != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+              child: Text(footer, style: caption),
             ),
-          ),
         ],
       ),
     );
   }
 
-  // ---------------------------------------------------------------- actions
+  Widget _statusRow(WhisperPalette palette, ColorScheme colors) {
+    final (title, hint, tone) = switch (_controller.state) {
+      AndroidWindowServiceState.running => (
+        _s.androidWindowServiceRunning,
+        _s.androidWindowServiceRunningHint,
+        palette.trusted,
+      ),
+      AndroidWindowServiceState.stopped => (
+        _s.androidWindowServiceStopped,
+        _s.androidWindowServiceStoppedHint,
+        palette.textMuted,
+      ),
+      AndroidWindowServiceState.needsSetup => (
+        _s.androidWindowServiceNeedsSetup,
+        _s.androidWindowServiceNeedsSetupHint,
+        palette.warning,
+      ),
+      AndroidWindowServiceState.working => (
+        _s.androidWindowServiceStarting,
+        _s.androidWindowServiceNeedsSetupHint,
+        palette.connected,
+      ),
+    };
+    return _row(
+      palette,
+      colors,
+      icon: CupertinoIcons.rectangle_on_rectangle_angled,
+      title: title,
+      desc: hint,
+      lines: 3,
+      trailing: _controller.state == AndroidWindowServiceState.working
+          ? const CupertinoActivityIndicator(radius: 8)
+          : Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(color: tone, shape: BoxShape.circle),
+            ),
+    );
+  }
 
-  List<Widget> _actions(WhisperPalette palette, ColorScheme colors) {
-    switch (_controller.state) {
-      case AndroidWindowServiceState.running:
-        return [
-          _primaryButton(
-            _s.androidWindowServiceStop,
-            onPressed: _controller.busy ? null : _stop,
-            tone: palette.danger,
+  Widget _actionRow(
+    String label,
+    IconData icon,
+    Color tone,
+    VoidCallback? onTap,
+  ) {
+    final enabled = onTap != null;
+    final color = enabled ? tone : tone.withValues(alpha: 0.4);
+    return Semantics(
+      button: true,
+      enabled: enabled,
+      label: label,
+      excludeSemantics: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+          child: Row(
+            children: [
+              Icon(icon, color: color),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 16,
+                  height: 1.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
           ),
-          if (_controller.canSelfStart) ...[
-            const SizedBox(height: 16),
-            _autoStartRow(palette, colors),
-          ],
-        ];
-      case AndroidWindowServiceState.stopped:
-        if (!_controller.canSelfStart) {
-          return [
-            _hintCard(palette, colors, _s.androidWindowServiceComputerHint),
-          ];
-        }
-        return [
-          _primaryButton(
-            _s.androidWindowServiceStart,
-            onPressed: _controller.busy ? null : _start,
-            tone: palette.connected,
-          ),
-          const SizedBox(height: 16),
-          _setupSection(palette, colors),
-          const SizedBox(height: 16),
-          _autoStartRow(palette, colors),
-        ];
-      case AndroidWindowServiceState.needsSetup:
-      case AndroidWindowServiceState.working:
-        if (!_controller.canSelfStart) {
-          return [
-            _hintCard(palette, colors, _s.androidWindowServiceComputerHint),
-          ];
-        }
-        return [_setupSection(palette, colors)];
-    }
+        ),
+      ),
+    );
   }
 
   Widget _setupSection(WhisperPalette palette, ColorScheme colors) {
-    return Container(
-      decoration: BoxDecoration(
-        color: palette.surfaceElevated,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: palette.borderSubtle),
+    final chevron = Icon(Icons.chevron_right_rounded, color: palette.textMuted);
+    return _section(_s.androidWindowServiceHowTitle, [
+      _row(
+        palette,
+        colors,
+        leading: _stepNumber(palette, 1),
+        title: _s.androidWindowServiceStep1,
+        desc: _s.androidWindowServiceStep1Hint,
+        semanticsHint: _s.androidWindowServiceStep1Action,
+        onTap: _controller.openDeviceInfo,
+        trailing: chevron,
       ),
-      child: Column(
-        children: [
-          _stepTile(
-            palette,
-            colors,
-            number: 1,
-            title: _s.androidWindowServiceStep1,
-            hint: _s.androidWindowServiceStep1Hint,
-            actionLabel: _s.androidWindowServiceStep1Action,
-            onAction: _controller.openDeviceInfo,
-          ),
-          _divider(palette),
-          _stepTile(
-            palette,
-            colors,
-            number: 2,
-            title: _s.androidWindowServiceStep2,
-            hint: _s.androidWindowServiceStep2Hint,
-            actionLabel: _s.androidWindowServiceStep2Action,
-            onAction: _controller.openDeveloperOptions,
-          ),
-          _divider(palette),
-          _stepTile(
-            palette,
-            colors,
-            number: 3,
-            title: _s.androidWindowServiceStep3,
-            hint: _s.androidWindowServiceStep3Hint,
-            child: _pairingField(palette, colors),
-          ),
-        ],
+      _row(
+        palette,
+        colors,
+        leading: _stepNumber(palette, 2),
+        title: _s.androidWindowServiceStep2,
+        desc: _s.androidWindowServiceStep2Hint,
+        semanticsHint: _s.androidWindowServiceStep2Action,
+        onTap: _controller.openDeveloperOptions,
+        trailing: chevron,
+        lines: 3,
+      ),
+      _row(
+        palette,
+        colors,
+        leading: _stepNumber(palette, 3),
+        title: _s.androidWindowServiceStep3,
+        desc: _s.androidWindowServiceStep3Hint,
+        lines: 3,
+        below: _pairingField(palette, colors),
+      ),
+    ]);
+  }
+
+  Widget _stepNumber(WhisperPalette palette, int number) {
+    return Container(
+      width: 22,
+      height: 22,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: palette.textMuted, width: 1.5),
+      ),
+      child: Text(
+        '$number',
+        style: TextStyle(
+          color: palette.textMuted,
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }
 
   Widget _pairingField(WhisperPalette palette, ColorScheme colors) {
+    final enabled = _controller.canSelfStart && !_controller.busy;
+    final ready = enabled && _code.text.trim().length >= 6;
     return Padding(
-      padding: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.only(top: 10),
       child: Row(
         children: [
           Expanded(
@@ -274,32 +312,31 @@ class _AndroidWindowServicePageState extends State<AndroidWindowServicePage> {
               controller: _code,
               keyboardType: TextInputType.number,
               maxLength: 6,
-              enabled: _controller.canSelfStart && !_controller.busy,
+              enabled: enabled,
+              onChanged: (_) => setState(() {}),
               placeholder: _s.androidWindowServicePairingCode,
               style: TextStyle(color: colors.onSurface, letterSpacing: 4),
               decoration: BoxDecoration(
                 color: palette.surfaceMuted,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(10),
               ),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             ),
           ),
-          const SizedBox(width: 10),
-          FilledButton(
-            onPressed:
-                _controller.canSelfStart &&
-                    !_controller.busy &&
-                    _code.text.trim().length >= 6
-                ? _pair
-                : null,
-            style: FilledButton.styleFrom(
-              backgroundColor: palette.connected,
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-            ),
+          const SizedBox(width: 6),
+          CupertinoButton(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            minimumSize: const Size(0, 40),
+            onPressed: ready ? _pair : null,
             child: Text(
               _controller.busy
                   ? _s.androidWindowServicePairing
                   : _s.androidWindowServicePair,
+              style: TextStyle(
+                color: ready ? palette.connected : palette.textMuted,
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
         ],
@@ -307,191 +344,99 @@ class _AndroidWindowServicePageState extends State<AndroidWindowServicePage> {
     );
   }
 
-  Widget _stepTile(
+  /// One settings row: icon, title and description, an accessory at the
+  /// end (a switch beside the title, anything else centred on the row).
+  Widget _row(
     WhisperPalette palette,
     ColorScheme colors, {
-    required int number,
+    IconData? icon,
+    Widget? leading,
     required String title,
-    required String hint,
-    String? actionLabel,
-    VoidCallback? onAction,
-    Widget? child,
+    required String desc,
+    String? semanticsHint,
+    VoidCallback? onTap,
+    Widget? trailing,
+    Widget? below,
+    int lines = 2,
   }) {
-    return Padding(
-      padding: const EdgeInsets.all(14),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 26,
-            height: 26,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: palette.connected.withValues(alpha: 0.14),
-              shape: BoxShape.circle,
-            ),
-            child: Text(
-              '$number',
-              style: TextStyle(
-                color: palette.connected,
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    color: colors.onSurface,
-                    fontSize: 15.5,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  hint,
-                  style: TextStyle(
-                    color: palette.textMuted,
-                    fontSize: 13,
-                    height: 1.35,
-                  ),
-                ),
-                if (actionLabel != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: CupertinoButton(
-                      padding: EdgeInsets.zero,
-                      minimumSize: const Size(0, 30),
-                      onPressed: onAction,
-                      child: Text(
-                        actionLabel,
-                        style: TextStyle(
-                          color: palette.connected,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
+    final toggle = trailing is CupertinoSwitch;
+    final textTheme = Theme.of(context).textTheme;
+    return Semantics(
+      container: true,
+      button: onTap != null,
+      hint: semanticsHint,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          child: Row(
+            crossAxisAlignment: toggle || below != null
+                ? CrossAxisAlignment.start
+                : CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: Center(
+                          child:
+                              leading ?? Icon(icon, color: palette.textMuted),
                         ),
                       ),
                     ),
-                  ),
-                if (child != null) child,
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _autoStartRow(WhisperPalette palette, ColorScheme colors) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 10, 10, 10),
-      decoration: BoxDecoration(
-        color: palette.surfaceElevated,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: palette.borderSubtle),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _s.androidWindowServiceAutoStart,
-                  style: TextStyle(
-                    color: colors.onSurface,
-                    fontSize: 15.5,
-                    fontWeight: FontWeight.w600,
-                  ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            style: textTheme.titleMedium?.copyWith(
+                              fontSize: 16,
+                              height: 1.5,
+                              letterSpacing: 0,
+                              color: colors.onSurface,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            desc,
+                            maxLines: lines,
+                            overflow: TextOverflow.ellipsis,
+                            style: textTheme.bodySmall?.copyWith(
+                              fontSize: 13,
+                              height: 1.5,
+                              letterSpacing: 0,
+                              color: palette.textMuted,
+                            ),
+                          ),
+                          ?below,
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 3),
-                Text(
-                  _s.androidWindowServiceAutoStartHint,
-                  style: TextStyle(
-                    color: palette.textMuted,
-                    fontSize: 12.5,
-                    height: 1.35,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          CupertinoSwitch(
-            value: _controller.autoStart,
-            activeTrackColor: palette.trusted,
-            onChanged: _controller.busy
-                ? null
-                : (value) => _controller.setAutoStart(value),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _hintCard(WhisperPalette palette, ColorScheme colors, String text) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: palette.surfaceElevated,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: palette.borderSubtle),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            CupertinoIcons.desktopcomputer,
-            color: palette.connected,
-            size: 20,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              text,
-              style: TextStyle(
-                color: colors.onSurface,
-                fontSize: 13.5,
-                height: 1.4,
               ),
-            ),
+              if (trailing != null) ...[
+                const SizedBox(width: 6),
+                Padding(
+                  padding: EdgeInsets.only(top: toggle ? 2 : 0),
+                  child: trailing,
+                ),
+              ],
+            ],
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _primaryButton(
-    String label, {
-    required VoidCallback? onPressed,
-    required Color tone,
-  }) {
-    return SizedBox(
-      width: double.infinity,
-      child: FilledButton(
-        onPressed: onPressed,
-        style: FilledButton.styleFrom(
-          backgroundColor: tone,
-          padding: const EdgeInsets.symmetric(vertical: 15),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-        ),
-        child: Text(
-          label,
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
       ),
     );
   }
-
-  Widget _divider(WhisperPalette palette) =>
-      Divider(height: 1, thickness: 1, indent: 52, color: palette.borderSubtle);
 
   Future<void> _pair() async {
     final ok = await _controller.pairAndStart(_code.text);
