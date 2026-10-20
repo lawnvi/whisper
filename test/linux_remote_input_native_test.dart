@@ -40,6 +40,20 @@ void main() {
       expect(helper, contains('G_DBUS_CALL_FLAGS_NO_AUTO_START'));
     });
 
+    test('listens for a portal response before starting the request', () {
+      final plugin = File('linux/remote_input_plugin.cc').readAsStringSync();
+      final request = plugin.substring(
+        plugin.indexOf('bool PortalRequestForInterface('),
+        plugin.indexOf('bool PortalRequest(GDBusConnection*'),
+      );
+      expect(
+        request.indexOf('SubscribePortalResponse(connection, expected_path'),
+        lessThan(request.indexOf('g_dbus_connection_call_sync(')),
+      );
+      expect(request, contains('if (path != expected_path)'));
+      expect(plugin, contains('"/org/freedesktop/portal/desktop/request/"'));
+    });
+
     test('manual movement skips edge release and preserves pixel scroll', () {
       final plugin = File('linux/remote_input_plugin.cc').readAsStringSync();
       expect(plugin, contains('!manual_injection_ && !active_start'));

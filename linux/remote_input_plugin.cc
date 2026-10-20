@@ -569,17 +569,52 @@ void PortalResponseCallback(GDBusConnection*,
   }
 }
 
+guint SubscribePortalResponse(GDBusConnection* connection,
+                              const std::string& request_path,
+                              PortalResponseWaiter* waiter) {
+  return g_dbus_connection_signal_subscribe(
+      connection, kPortalBusName, "org.freedesktop.portal.Request", "Response",
+      request_path.c_str(), nullptr, G_DBUS_SIGNAL_FLAGS_NONE,
+      PortalResponseCallback, waiter, nullptr);
+}
+
+// The request path the portal will use for `parameters`' handle_token. The
+// portal can answer before the call that starts a request returns (KDE does
+// within a millisecond), and a signal nobody subscribed to yet is lost, so
+// the subscription has to come first.
+std::string ExpectedPortalRequestPath(GDBusConnection* connection,
+                                      GVariant* parameters) {
+  const gchar* unique_name = g_dbus_connection_get_unique_name(connection);
+  if (unique_name == nullptr || unique_name[0] != ':' ||
+      !g_variant_is_of_type(parameters, G_VARIANT_TYPE_TUPLE)) {
+    return "";
+  }
+  std::string token;
+  for (gsize i = 0; i < g_variant_n_children(parameters) && token.empty(); ++i) {
+    GVariant* child = g_variant_get_child_value(parameters, i);
+    const gchar* value = nullptr;
+    if (g_variant_is_of_type(child, G_VARIANT_TYPE_VARDICT) &&
+        g_variant_lookup(child, "handle_token", "&s", &value) &&
+        value != nullptr) {
+      token = value;
+    }
+    g_variant_unref(child);
+  }
+  if (token.empty()) {
+    return "";
+  }
+  std::string sender = unique_name + 1;
+  std::replace(sender.begin(), sender.end(), '.', '_');
+  return "/org/freedesktop/portal/desktop/request/" + sender + "/" + token;
+}
+
+// Waits on `waiter`, subscribed as `signal_id`, and ends the subscription.
 bool WaitPortalResponse(GDBusConnection* connection,
-                        const std::string& request_path,
+                        guint signal_id,
+                        PortalResponseWaiter& waiter,
                         int timeout_ms,
                         PortalResponse* response,
                         std::string* error) {
-  PortalResponseWaiter waiter;
-  waiter.loop = g_main_loop_new(nullptr, FALSE);
-  const guint signal_id = g_dbus_connection_signal_subscribe(
-      connection, kPortalBusName, "org.freedesktop.portal.Request", "Response",
-      request_path.c_str(), nullptr, G_DBUS_SIGNAL_FLAGS_NONE,
-      PortalResponseCallback, &waiter, nullptr);
   const guint timeout_id =
       g_timeout_add(timeout_ms, PortalResponseTimeout, &waiter);
   g_main_loop_run(waiter.loop);
@@ -967,12 +1002,25 @@ bool PortalRequestForInterface(GDBusConnection* connection,
   // Non-zero only once the portal itself answered with a refusal.
   response->response = 0;
   response->results = nullptr;
+  PortalResponseWaiter waiter;
+  waiter.loop = g_main_loop_new(nullptr, FALSE);
+  g_variant_ref_sink(parameters);
+  const std::string expected_path =
+      ExpectedPortalRequestPath(connection, parameters);
+  guint signal_id = expected_path.empty()
+      ? 0
+      : SubscribePortalResponse(connection, expected_path, &waiter);
   GError* call_error = nullptr;
   GVariant* result = g_dbus_connection_call_sync(
       connection, kPortalBusName, kPortalObjectPath, interface, method,
       parameters, G_VARIANT_TYPE("(o)"),
       G_DBUS_CALL_FLAGS_NONE, timeout_ms, nullptr, &call_error);
+  g_variant_unref(parameters);
   if (result == nullptr) {
+    if (signal_id != 0) {
+      g_dbus_connection_signal_unsubscribe(connection, signal_id);
+    }
+    g_main_loop_unref(waiter.loop);
     if (call_error != nullptr) {
       *error = call_error->message == nullptr ? "" : call_error->message;
       g_error_free(call_error);
@@ -985,7 +1033,15 @@ bool PortalRequestForInterface(GDBusConnection* connection,
   g_variant_get(result, "(&o)", &request_path);
   std::string path = request_path == nullptr ? "" : request_path;
   g_variant_unref(result);
-  return WaitPortalResponse(connection, path, timeout_ms, response, error);
+  if (path != expected_path) {
+    // Portals older than 0.9 choose their own request path.
+    if (signal_id != 0) {
+      g_dbus_connection_signal_unsubscribe(connection, signal_id);
+    }
+    signal_id = SubscribePortalResponse(connection, path, &waiter);
+  }
+  return WaitPortalResponse(connection, signal_id, waiter, timeout_ms, response,
+                            error);
 }
 
 bool PortalRequest(GDBusConnection* connection,
