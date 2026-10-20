@@ -242,4 +242,34 @@ void main() {
       expect(backend.captures, 1);
     },
   );
+
+  testWidgets('the button names the shortcut once it is registered', (
+    tester,
+  ) async {
+    Future<String?> tooltip() async {
+      await tester.pump();
+      return tester.widget<IconButton>(find.byType(IconButton)).tooltip;
+    }
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('en'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(body: ScreenshotButton(controller: controller)),
+      ),
+    );
+    expect(await tooltip(), 'Capture region');
+
+    await tester.runAsync(() => controller.initialize('Whisper'));
+    expect(
+      await tooltip(),
+      'Capture region (${ScreenshotShortcut.defaultFor(macOS: true).label(macOS: true)})',
+    );
+
+    await tester.runAsync(
+      () => controller.configure(controller.shortcut, enabled: false),
+    );
+    expect(await tooltip(), 'Capture region');
+  });
 }

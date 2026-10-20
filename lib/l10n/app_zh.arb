@@ -55,6 +55,15 @@
     }
   },
   "screenshotCapture": "区域截图",
+  "screenshotCaptureWithShortcut": "区域截图（{shortcut}）",
+  "@screenshotCaptureWithShortcut": {
+    "description": "Tooltip of the screenshot button when a global shortcut is set; {shortcut} is its label, such as ⌘⇧A or Ctrl+Alt+A.",
+    "placeholders": {
+      "shortcut": {
+        "type": "String"
+      }
+    }
+  },
   "screenshotSelectionHint": "单击选择窗口 · 拖动框选区域 · Esc 取消",
   "screenshotAdjustHint": "拖动移动 · 拖边调整 · Enter 复制 · Esc 取消",
   "screenshotConfirm": "复制",

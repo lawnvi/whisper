@@ -394,6 +394,12 @@ abstract class AppLocalizations {
   /// **'区域截图'**
   String get screenshotCapture;
 
+  /// Tooltip of the screenshot button when a global shortcut is set; {shortcut} is its label, such as ⌘⇧A or Ctrl+Alt+A.
+  ///
+  /// In zh, this message translates to:
+  /// **'区域截图（{shortcut}）'**
+  String screenshotCaptureWithShortcut(String shortcut);
+
   /// No description provided for @screenshotSelectionHint.
   ///
   /// In zh, this message translates to:

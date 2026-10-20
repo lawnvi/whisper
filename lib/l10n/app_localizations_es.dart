@@ -170,6 +170,11 @@ class AppLocalizationsEs extends AppLocalizations {
   String get screenshotCapture => 'Capturar región';
 
   @override
+  String screenshotCaptureWithShortcut(String shortcut) {
+    return 'Capturar región ($shortcut)';
+  }
+
+  @override
   String get screenshotSelectionHint =>
       'Clic en una ventana · Arrastra un área · Esc para cancelar';
 

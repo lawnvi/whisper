@@ -159,6 +159,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get screenshotCapture => '区域截图';
 
   @override
+  String screenshotCaptureWithShortcut(String shortcut) {
+    return '区域截图（$shortcut）';
+  }
+
+  @override
   String get screenshotSelectionHint => '单击选择窗口 · 拖动框选区域 · Esc 取消';
 
   @override

@@ -55,6 +55,15 @@
     }
   },
   "screenshotCapture": "Capture region",
+  "screenshotCaptureWithShortcut": "Capture region ({shortcut})",
+  "@screenshotCaptureWithShortcut": {
+    "description": "Tooltip of the screenshot button when a global shortcut is set; {shortcut} is its label, such as ⌘⇧A or Ctrl+Alt+A.",
+    "placeholders": {
+      "shortcut": {
+        "type": "String"
+      }
+    }
+  },
   "screenshotSelectionHint": "Click a window · Drag a region · Esc to cancel",
   "screenshotAdjustHint": "Drag to move · Drag edges to resize · Enter to copy · Esc to cancel",
   "screenshotConfirm": "Copy",

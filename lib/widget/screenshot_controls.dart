@@ -10,15 +10,17 @@ import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/widget/glass_dialog.dart';
 
 class ScreenshotButton extends StatelessWidget {
-  const ScreenshotButton({super.key});
+  const ScreenshotButton({super.key, this.controller});
+
+  final DesktopScreenshotController? controller;
 
   @override
   Widget build(BuildContext context) {
-    final controller = DesktopScreenshotController.shared;
+    final controller = this.controller ?? DesktopScreenshotController.shared;
     return AnimatedBuilder(
       animation: controller,
       builder: (context, _) => IconButton(
-        tooltip: AppLocalizations.of(context)?.screenshotCapture,
+        tooltip: _tooltip(context, controller),
         onPressed: controller.capturing || controller.configuring
             ? null
             : () => unawaited(controller.capture()),
@@ -30,6 +32,18 @@ class ScreenshotButton extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// Names the shortcut too, so it is there to look up when forgotten.
+  static String? _tooltip(
+    BuildContext context,
+    DesktopScreenshotController controller,
+  ) {
+    final l10n = AppLocalizations.of(context);
+    if (l10n == null) return null;
+    return controller.enabled && controller.registered
+        ? l10n.screenshotCaptureWithShortcut(controller.shortcutLabel)
+        : l10n.screenshotCapture;
   }
 }
 

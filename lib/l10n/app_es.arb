@@ -55,6 +55,7 @@
     }
   },
   "screenshotCapture": "Capturar región",
+  "screenshotCaptureWithShortcut": "Capturar región ({shortcut})",
   "screenshotSelectionHint": "Clic en una ventana · Arrastra un área · Esc para cancelar",
   "screenshotAdjustHint": "Arrastra para mover · Ajusta los bordes · Enter para copiar · Esc para cancelar",
   "screenshotConfirm": "Copiar",
