@@ -4,6 +4,7 @@
 #include <pthread.h>
 
 #include <chrono>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 
@@ -22,17 +23,33 @@ constexpr int kPictureTypeNone = 0;
 constexpr int kPictureTypeI = 1;
 constexpr int kSwsCsItu709 = 1;
 
-// AVFrame members past the stable prefix, by libavutil major. 60 dropped
-// key_frame, which moved pict_type up; pts stayed where it was.
+// AVFrame members past the stable prefix: pict_type, sample_aspect_ratio
+// and pts, in that order. libavutil 60 dropped key_frame, which sat before
+// pict_type; 61 (FFmpeg 9) kept 60's layout, which later majors are assumed
+// to keep too.
 struct FrameLayout {
   int pict_type = -1;
   int pts = -1;
 };
 
-FrameLayout LayoutFor(int avutil_major) {
-  if (avutil_major >= 56 && avutil_major <= 59) return {124, 136};
-  if (avutil_major == 60) return {120, 136};
-  return {};
+constexpr int64_t kNoPts = INT64_MIN;  // AV_NOPTS_VALUE
+
+template <typename T>
+T FieldAt(const void* object, int offset) {
+  T value;
+  std::memcpy(&value, static_cast<const uint8_t*>(object) + offset, sizeof(T));
+  return value;
+}
+
+// The layout for `avutil_major`, checked against a new frame (`fresh`, from
+// av_frame_alloc): pict_type none, sample_aspect_ratio 0/1 right after it,
+// pts unset. A release that moved them is refused rather than written into.
+FrameLayout LayoutFor(int avutil_major, const void* fresh) {
+  if (avutil_major < 56 || fresh == nullptr) return {};
+  FrameLayout layout = avutil_major <= 59 ? FrameLayout{124, 136} : FrameLayout{120, 136};
+  bool fits = FieldAt<int>(fresh, layout.pict_type) == 0 && FieldAt<int>(fresh, layout.pict_type + 4) == 0 &&
+              FieldAt<int>(fresh, layout.pict_type + 8) == 1 && FieldAt<int64_t>(fresh, layout.pts) == kNoPts;
+  return fits ? layout : FrameLayout{};
 }
 
 struct EncoderApi {
@@ -57,6 +74,20 @@ struct EncoderApi {
   std::string codec_name;
   bool ok = false;
 };
+
+// Whether `codec` opens at all. Fedora's stand-in libopenh264 (noopenh264,
+// installed until the user adds Cisco's) is registered with FFmpeg but fails
+// every open.
+bool Opens(const EncoderApi& a, const void* codec) {
+  void* context = a.alloc_context(codec);
+  if (context == nullptr) return false;
+  a.opt_set(context, "video_size", "64x64", 0);
+  a.opt_set(context, "pixel_format", "yuv420p", 0);
+  a.opt_set(context, "time_base", "1/30", 0);
+  bool opens = a.open(context, codec, nullptr) >= 0;
+  a.free_context(&context);
+  return opens;
+}
 
 const EncoderApi& Api() {
   static EncoderApi api = [] {
@@ -83,17 +114,23 @@ const EncoderApi& Api() {
     if (!ok) return a;
     // The loaded libavutil, not the one this was built against, decides.
     int major = static_cast<int>(a.avutil_version() >> 16);
-    a.layout = LayoutFor(major);
+    void* fresh = a.frame_alloc();
+    a.layout = LayoutFor(major, fresh);
+    if (fresh != nullptr) a.frame_free(&fresh);
     if (a.layout.pts < 0) {
-      WSN_LOG("capture: libavutil %d is newer than this build knows; no encoder", major);
+      WSN_LOG("capture: libavutil %d lays AVFrame out differently; no encoder", major);
       return a;
     }
     for (const char* name : {"libx264", "libopenh264"}) {
-      a.codec = a.find_encoder_by_name(name);
-      if (a.codec != nullptr) {
-        a.codec_name = name;
-        break;
+      const void* codec = a.find_encoder_by_name(name);
+      if (codec == nullptr) continue;
+      if (!Opens(a, codec)) {
+        WSN_LOG("capture: FFmpeg lists %s, but it does not open", name);
+        continue;
       }
+      a.codec = codec;
+      a.codec_name = name;
+      break;
     }
     a.ok = a.codec != nullptr;
     if (!a.ok) WSN_LOG("capture: FFmpeg has no H.264 encoder (libx264, libopenh264)");

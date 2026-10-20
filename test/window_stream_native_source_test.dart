@@ -541,4 +541,20 @@ void main() {
     final plist = File('macos/Runner/Info.plist').readAsStringSync();
     expect(plist, contains('NSAudioCaptureUsageDescription'));
   });
+
+  test('Linux finds any FFmpeg from 4 on, without a release table', () {
+    const linux = 'packages/window_stream_native/linux';
+    final loader = File('$linux/common/ffmpeg.cc').readAsStringSync();
+    final encoder = File('$linux/capture/encoder.cc').readAsStringSync();
+
+    // FFmpeg 9 (libavcodec 63) failed with "unknown libavcodec major".
+    expect(loader, isNot(contains('kReleases')));
+    expect(loader, contains('kOldestAvcodec = 58'));
+    // libavutil and libswscale come from libavcodec's own release.
+    expect(loader, contains('FileOf(f.avcodec, "avutil_version")'));
+    expect(loader, contains('FileOf(handle, "avutil_version") == avutil_file'));
+    // The encoder writes AVFrame fields only where a new frame shows them.
+    expect(encoder, contains('LayoutFor(major, fresh)'));
+    expect(encoder, contains('FieldAt<int64_t>(fresh, layout.pts) == kNoPts'));
+  });
 }

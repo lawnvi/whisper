@@ -1,9 +1,9 @@
 // The system FFmpeg (libavcodec, libavutil, libswscale), opened at run time.
 //
-// libavcodec decides the release: libavutil and libswscale are opened at the
-// majors that ship with it (avcodec 62 ↔ avutil 60 ↔ swscale 9, 61 ↔ 59 ↔ 8,
-// 60 ↔ 58 ↔ 7, 59 ↔ 57 ↔ 6, 58 ↔ 56 ↔ 5), so a machine with two FFmpeg
-// releases installed never mixes them.
+// The newest libavcodec decides the release: libavutil is the one it was
+// linked against, and libswscale one linked against that same libavutil, so
+// a machine with two FFmpeg releases installed never mixes them. No table of
+// releases: a new FFmpeg works as long as the functions below are in it.
 //
 // Only the decode/scale entry points the receiver needs are resolved here.
 // Other code (the capture side) resolves what it needs itself from the

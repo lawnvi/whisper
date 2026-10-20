@@ -1,5 +1,9 @@
 #include "common/ffmpeg.h"
 
+#include <dlfcn.h>
+
+#include <vector>
+
 #include "common/dl.h"
 #include "common/log.h"
 
@@ -7,36 +11,47 @@ namespace wsn {
 
 namespace {
 
-// libavcodec major → the libavutil and libswscale majors of that release.
-struct Release {
-  int avcodec;
-  int avutil;
-  int swscale;
-};
+// libavcodec majors, newest first. FFmpeg 4 (58) is the oldest with the
+// send/receive API used here; majors past the newest release are tried too,
+// so a new FFmpeg works as long as these functions are still in it.
+constexpr int kNewestAvcodec = 75;
+constexpr int kOldestAvcodec = 58;
 
-constexpr Release kReleases[] = {
-    {62, 60, 9},  // FFmpeg 8
-    {61, 59, 8},  // FFmpeg 7
-    {60, 58, 7},  // FFmpeg 6
-    {59, 57, 6},  // FFmpeg 5
-    {58, 56, 5},  // FFmpeg 4
-};
+// The file `symbol` (looked up through `handle` and its dependencies) lives
+// in, or empty.
+std::string FileOf(void* handle, const char* symbol) {
+  void* address = dlsym(handle, symbol);
+  Dl_info info{};
+  if (address == nullptr || dladdr(address, &info) == 0 || info.dli_fname == nullptr) return {};
+  return info.dli_fname;
+}
 
-const Release* ReleaseFor(int avcodec_major) {
-  for (const Release& release : kReleases) {
-    if (release.avcodec == avcodec_major) return &release;
+// libswscale built against the libavutil at `avutil_file`: a libswscale of
+// another release would pull in its own libavutil, and the two must never
+// mix in one process. Tries the major that ships with this libavcodec first
+// (61 ↔ 8, 62 ↔ 9, 63 ↔ 10, …), then the others.
+void* OpenSwscale(int avcodec_major, const std::string& avutil_file, int* major) {
+  std::vector<int> majors = {avcodec_major - 53};
+  for (int m = avcodec_major - 50; m >= 5; m--) {
+    if (m != avcodec_major - 53) majors.push_back(m);
+  }
+  for (int m : majors) {
+    void* handle = Open("libswscale.so." + std::to_string(m));
+    if (handle == nullptr) continue;
+    if (FileOf(handle, "avutil_version") == avutil_file) {
+      *major = m;
+      return handle;
+    }
+    dlclose(handle);
   }
   return nullptr;
 }
 
 FFmpeg Load() {
   FFmpeg f;
-  for (const Release& release : kReleases) {
-    std::string name = "libavcodec.so." + std::to_string(release.avcodec);
-    if ((f.avcodec = Open(name)) != nullptr) {
-      f.avcodec_name = name;
-      break;
-    }
+  for (int major = kNewestAvcodec; major >= kOldestAvcodec && f.avcodec == nullptr; major--) {
+    std::string name = "libavcodec.so." + std::to_string(major);
+    if ((f.avcodec = Open(name)) != nullptr) f.avcodec_name = name;
   }
   if (f.avcodec == nullptr && (f.avcodec = Open("libavcodec.so")) != nullptr) f.avcodec_name = "libavcodec.so";
   if (f.avcodec == nullptr) {
@@ -49,20 +64,25 @@ FFmpeg Load() {
     return f;
   }
   f.avcodec_major = static_cast<int>(codec_version() >> 16);
-  const Release* release = ReleaseFor(f.avcodec_major);
-  if (release == nullptr) {
-    WSN_LOG("ffmpeg: unknown libavcodec major %d", f.avcodec_major);
+  if (f.avcodec_major < kOldestAvcodec) {
+    WSN_LOG("ffmpeg: libavcodec %d is too old", f.avcodec_major);
     return f;
   }
-  f.avutil = Open("libavutil.so." + std::to_string(release->avutil));
-  f.swscale = Open("libswscale.so." + std::to_string(release->swscale));
-  if (f.avutil == nullptr || f.swscale == nullptr) {
-    WSN_LOG("ffmpeg: %s without libavutil.so.%d / libswscale.so.%d", f.avcodec_name.c_str(), release->avutil,
-            release->swscale);
+  // The libavutil libavcodec itself was linked against (a dependency, so
+  // already loaded), rather than a table of which majors go together.
+  std::string avutil_file = FileOf(f.avcodec, "avutil_version");
+  unsigned (*util_version)() = nullptr;
+  if (!avutil_file.empty()) f.avutil = Open(avutil_file);
+  if (f.avutil == nullptr || !Sym(f.avutil, "avutil_version", &util_version)) {
+    WSN_LOG("ffmpeg: no libavutil for %s", f.avcodec_name.c_str());
     return f;
   }
-  f.avutil_major = release->avutil;
-  f.swscale_major = release->swscale;
+  f.avutil_major = static_cast<int>(util_version() >> 16);
+  f.swscale = OpenSwscale(f.avcodec_major, avutil_file, &f.swscale_major);
+  if (f.swscale == nullptr) {
+    WSN_LOG("ffmpeg: no libswscale built with %s", avutil_file.c_str());
+    return f;
+  }
 
   bool ok = true;
   Sym(f.avcodec, "avcodec_find_decoder_by_name", &f.find_decoder_by_name, &ok);
