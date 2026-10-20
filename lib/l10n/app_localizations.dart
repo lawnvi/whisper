@@ -4906,6 +4906,12 @@ abstract class AppLocalizations {
   /// **'{device} 没能开始编码画面，请稍后再试'**
   String windowStreamHostEncoder(String device);
 
+  /// Window stream: a Linux source's FFmpeg has no usable H.264 encoder (or FFmpeg is missing).
+  ///
+  /// In zh, this message translates to:
+  /// **'{device} 缺少 H.264 视频编码器，无法流转窗口。请在那台电脑上安装 FFmpeg，以及 x264 或 openh264 编码器'**
+  String windowStreamHostEncoderLinux(String device);
+
   /// Window stream: the source has no usable capture backend (generic).
   ///
   /// In zh, this message translates to:

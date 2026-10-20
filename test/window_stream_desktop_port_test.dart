@@ -119,6 +119,23 @@ void main() {
         ),
         contains('On loop-pc,'),
       );
+      // A Linux source names what it is missing.
+      expect(
+        text(
+          zh,
+          WindowStreamFailureReason.encoderFailed,
+          WindowStreamPlatform.linux,
+        ),
+        allOf(contains('FFmpeg'), contains('x264'), contains('openh264')),
+      );
+      expect(
+        text(
+          en,
+          WindowStreamFailureReason.encoderFailed,
+          WindowStreamPlatform.windows,
+        ),
+        isNot(contains('FFmpeg')),
+      );
       // Without a name the sentence still reads well.
       expect(
         windowStreamFailureText(en, WindowStreamFailureReason.encoderFailed),

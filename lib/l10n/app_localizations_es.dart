@@ -2926,6 +2926,11 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String windowStreamHostEncoderLinux(String device) {
+    return '$device no tiene un codificador de vídeo H.264, así que no puede compartir sus ventanas. Instala FFmpeg en ese ordenador, junto con el codificador x264 u openh264.';
+  }
+
+  @override
   String windowStreamHostUnsupported(String device) {
     return '$device aún no puede compartir sus ventanas. Actualiza Whisper a la última versión en ese dispositivo.';
   }

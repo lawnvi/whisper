@@ -1574,6 +1574,15 @@
       }
     }
   },
+  "windowStreamHostEncoderLinux": "{device} has no H.264 video encoder, so its windows can't be shared. Install FFmpeg on that computer, plus the x264 or openh264 encoder.",
+  "@windowStreamHostEncoderLinux": {
+    "description": "Window stream: a Linux source's FFmpeg has no usable H.264 encoder (or FFmpeg is missing).",
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
   "windowStreamHostUnsupported": "{device} can't share its windows yet. Update Whisper on that device to the latest version.",
   "@windowStreamHostUnsupported": {
     "description": "Window stream: the source has no usable capture backend (generic).",

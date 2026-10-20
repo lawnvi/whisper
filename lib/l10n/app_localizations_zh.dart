@@ -2733,6 +2733,11 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String windowStreamHostEncoderLinux(String device) {
+    return '$device 缺少 H.264 视频编码器，无法流转窗口。请在那台电脑上安装 FFmpeg，以及 x264 或 openh264 编码器';
+  }
+
+  @override
   String windowStreamHostUnsupported(String device) {
     return '$device 暂时还不能流转窗口。请把那台设备上的 Whisper 更新到最新版';
   }

@@ -2895,6 +2895,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String windowStreamHostEncoderLinux(String device) {
+    return '$device has no H.264 video encoder, so its windows can\'t be shared. Install FFmpeg on that computer, plus the x264 or openh264 encoder.';
+  }
+
+  @override
   String windowStreamHostUnsupported(String device) {
     return '$device can\'t share its windows yet. Update Whisper on that device to the latest version.';
   }

@@ -1119,6 +1119,7 @@
   "windowStreamHostElevated": "Esta ventana se ejecuta como administrador y Whisper no puede mostrarla. En {device}, vuelve a abrir la app sin permisos de administrador.",
   "windowStreamHostProtected": "Esta ventana bloquea la grabación de pantalla, así que no se puede mostrar aquí.",
   "windowStreamHostEncoder": "{device} no pudo empezar a codificar el vídeo. Vuelve a intentarlo en un momento.",
+  "windowStreamHostEncoderLinux": "{device} no tiene un codificador de vídeo H.264, así que no puede compartir sus ventanas. Instala FFmpeg en ese ordenador, junto con el codificador x264 u openh264.",
   "windowStreamHostUnsupported": "{device} aún no puede compartir sus ventanas. Actualiza Whisper a la última versión en ese dispositivo.",
   "windowStreamHostUnsupportedWindows": "{device} necesita Windows 10 versión 1903 o posterior para compartir sus ventanas.",
   "windowStreamHostUnsupportedMac": "{device} necesita macOS 12.3 o posterior para compartir sus ventanas.",

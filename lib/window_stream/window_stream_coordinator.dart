@@ -1331,9 +1331,11 @@ String windowStreamFailureText(
       l10n.windowStreamHostElevated,
     ),
     WindowStreamFailureReason.windowProtected => l10n.windowStreamHostProtected,
-    WindowStreamFailureReason.encoderFailed => text(
-      l10n.windowStreamHostEncoder,
-    ),
+    WindowStreamFailureReason.encoderFailed => switch (platform) {
+      // Linux encodes with the system FFmpeg, which may lack H.264.
+      WindowStreamPlatform.linux => text(l10n.windowStreamHostEncoderLinux),
+      _ => text(l10n.windowStreamHostEncoder),
+    },
     WindowStreamFailureReason.hostUnsupported => switch (platform) {
       WindowStreamPlatform.windows => text(
         l10n.windowStreamHostUnsupportedWindows,
