@@ -24,18 +24,18 @@ Whisper is a LAN collaboration app. Paired devices connect to each other directl
 
 | Feature | What it does |
 | --- | --- |
-| **Text and files** | Send them like chat messages; file transfers resume after a disconnect and are verified on arrival |
-| **Folders** | Send a whole folder from a desktop without archiving it first; it arrives with the same structure |
-| **File browsing** | Browse the other device's files as if in your own file manager, and copy, create, rename, or delete them; the other device approves each time, or always |
-| **Mount on this computer** | Show the other device's files as a location in Finder, File Explorer, or your Linux file manager, and open them the usual way (read-only) |
-| **Share links** | Give a device without Whisper a link to download files or folders from this one in a browser, optionally with a password |
-| **Window flow** | Open this computer's windows, or an Android phone's apps, on a phone, tablet, or another computer and use them there; or send a window to another device |
-| **Quick send** | Use the Android share sheet, a desktop context menu, or a global hotkey without opening a conversation |
+| **Text and files** | Send them like chat messages; transfers resume and are verified on arrival |
+| **Folders** | Send a whole folder from a desktop, structure and all, without archiving |
+| **File browsing** | Browse, copy, rename or delete the other device's files, with its approval |
+| **Mount on this computer** | Open the other device's files in Finder, File Explorer or Linux (read-only) |
+| **Share links** | Let a browser on a device without Whisper download your files |
+| **Window flow** | Use a computer's windows or an Android phone's apps on another device |
+| **Quick send** | Send from the Android share sheet, a context menu, or a global hotkey |
 | **Clipboard sync** | Copy on one device, paste on another (off by default) |
-| **Keyboard and mouse sharing** | A software KVM: use one keyboard and mouse across several computers; move the pointer past a screen edge to switch |
+| **Keyboard and mouse sharing** | A software KVM: one keyboard and mouse across several computers |
 | **Phone controller** | Turn an Android phone into an air mouse, touchpad, and keyboard |
 | **System audio sharing** | Play a computer's sound on one or more other devices |
-| **Notification forwarding** | Send notifications from chosen Android apps, such as verification codes, to your computer |
+| **Notification forwarding** | Show chosen Android apps' notifications, like codes, on your computer |
 | **Desktop screenshots** | Click a window or drag a region and the capture lands on the clipboard |
 | **TV casting** | Receive DLNA casts from video apps on your computer (experimental) |
 
@@ -49,7 +49,7 @@ Get the installer for your platform from the [Releases](https://github.com/lawnv
 
 | Platform | Requirement | Which file |
 | --- | --- | --- |
-| Android | 7.0 or later | `android-arm64-v8a.apk` for most phones, or `android-universal.apk` if unsure |
+| Android | 7.0 or later | `android-arm64-v8a.apk` for most phones, `android-universal.apk` if unsure |
 | macOS | 10.15 or later | `macos-arm64.dmg` for Apple silicon, `macos-x86_64.dmg` for Intel |
 | Windows | 10 / 11, 64-bit | `windows-x86_64.exe` |
 | Linux | x86_64 | `.deb`, `.rpm`, or `.AppImage` |
@@ -70,14 +70,14 @@ iOS / iPadOS: the project has no paid Apple Developer account, so the app is not
 | --- | --- |
 | Send what is on the clipboard | Press `Cmd+Option+V` on macOS, `Ctrl+Alt+V` on Windows / Linux |
 | Send from another app | Use the Android share sheet, or the file context menu on desktop |
-| Send a folder | On desktop, drop the folder into the conversation, or choose "Folder" from the attachment button |
-| Browse the other device's files | Open Device Details at the top right of the conversation and select "Files"; on desktop you can drag files straight into Finder or File Explorer |
-| Open the other device's files in the system file manager | Turn on "Mount on this computer" in Device Details; it mounts whenever the device connects, and ejecting it in the system turns the switch off |
-| Send files to a device without Whisper | In "Files", right-click a file or folder on this device (long-press on a phone) and choose "Create Share Link…" |
-| Use the other device's windows or apps | Select "Flow" in Device Details, then choose a window or app |
-| Start keyboard/mouse sharing | Open the workspace, drag the other screen next to this one, and select "Start" |
-| Leave keyboard/mouse sharing | Press `Ctrl+Alt+Esc` on the controlling device (`Control+Option+Esc` on macOS) |
-| Control a computer from a phone | In the Android conversation, select "Control computer", then the start button at the top |
+| Send a folder | Drop it into a conversation, or choose "Folder" when attaching |
+| Browse the other device's files | Select "Files" in Device Details (top right); drag files out to copy |
+| Mount the other device's files | Turn on "Mount on this computer" in Device Details; eject to turn off |
+| Send to a device without Whisper | Right-click or long-press it in "Files", then "Create Share Link…" |
+| Use the other device's windows | Select "Flow" in Device Details, then choose a window or app |
+| Start keyboard/mouse sharing | In the workspace, place the other screen beside yours, then "Start" |
+| Leave keyboard/mouse sharing | Press `Ctrl+Alt+Esc` (`Control+Option+Esc` on macOS) |
+| Control a computer from a phone | Select "Control computer" in the Android conversation, then start |
 | Take a screenshot | Use the screenshot button or your shortcut on desktop; `Esc` cancels |
 
 The [user guide](docs/user-guide_en.md) covers every feature in full.
@@ -89,16 +89,16 @@ The [user guide](docs/user-guide_en.md) covers every feature in full.
 | Text and files | ✅ | ✅ | ✅ | ✅ |
 | Folders | Receive only | ✅ | ✅ | ✅ |
 | File browsing | ✅ | ✅ | ✅ | ✅ |
-| Mount on this computer | Can be mounted only | ✅ | ✅ | Needs fuse3 |
+| Mounting | Can be mounted only | ✅ | ✅ | Needs fuse3 |
 | Share links | ✅ | ✅ | ✅ | ✅ |
 | Window flow: view | ✅ | ✅ | ✅ | ✅ |
-| Window flow: share | Android 10 or later, USB debugging, adb on the computer | ✅ | ✅ | GNOME 45 or later (Wayland) only |
-| Clipboard sync | Text only, in the foreground | ✅ | ✅ | ✅ |
-| Keyboard and mouse sharing | — | ✅ | ✅ | X11 or GNOME on Wayland |
-| Phone controller | Controls | Controlled | Controlled | Controlled, X11 or GNOME on Wayland |
-| System audio sharing | Playback only | ✅ | ✅ | ✅ |
-| Notification forwarding | Sends | Receives | Receives | Receives |
-| Desktop screenshots | — | ✅ | ✅ | Depends on the desktop environment |
+| Window flow: share | Android 10+, via adb | ✅ | ✅ | GNOME 45+ on Wayland |
+| Clipboard sync | Text, foreground only | ✅ | ✅ | ✅ |
+| Keyboard & mouse | — | ✅ | ✅ | X11 or GNOME on Wayland |
+| Phone controller | Controls | Controlled | Controlled | Controlled, X11 or GNOME |
+| System audio | Playback only | ✅ | ✅ | ✅ |
+| Notifications | Sends | Receives | Receives | Receives |
+| Screenshots | — | ✅ | ✅ | Depends on desktop |
 | TV casting receiver | — | ✅ | ✅ | ✅ |
 
 On Linux, discovery depends on Avahi. Video previews and TV casting need libmpv, and window flow needs FFmpeg 4 or later; everything else works without them. Before other devices can show this computer's windows, FFmpeg also needs an H.264 encoder (x264 or openh264; Fedora ships without one), and you install the GNOME component from Settings, then log out and back in once.
@@ -109,12 +109,12 @@ On Wayland, keyboard and mouse sharing supports GNOME only, with no permission p
 
 | Problem | What to do |
 | --- | --- |
-| The other device is not in the list | Make sure both devices are on the same network with Whisper open. Discovery does not work on networks that block mDNS / Bonjour; connect with the QR code or by IP instead |
-| Text copied on Android did not sync | Android 10 and later do not let background apps read the clipboard. Whisper sends the change once you return to it |
-| The pointer is stuck on the other device | Press `Ctrl+Alt+Esc` on the controlling device (`Control+Option+Esc` on macOS); keyboard and mouse return to it immediately |
-| The pointer moves in small jumps on Windows, or transfers swing between fast and slow | Check Settings → System → Projecting to this PC, and set it to "Always Off" if you do not use wireless projection |
-| Keyboard and mouse sharing does nothing on macOS | Grant the Accessibility permission in System Settings when prompted, then reopen Whisper |
-| Nothing can be typed on the Windows lock screen or a UAC prompt | That needs the system service that comes with the installer; see the [user guide](docs/user-guide_en.md#windows-lock-screen-and-uac) |
+| Device not in the list | Use the same network; if mDNS is blocked, connect by QR code or IP |
+| Android copy didn't sync | Android 10+ blocks this in the background; reopen Whisper to send it |
+| Pointer stuck on another device | Press `Ctrl+Alt+Esc` (`Control+Option+Esc` on macOS) |
+| Stutter on Windows | Set Settings → System → Projecting to this PC to "Always Off" |
+| No keyboard/mouse on macOS | Grant Accessibility in System Settings, then reopen Whisper |
+| Windows lock screen or UAC | Needs the system service from the installer; see the [user guide](docs/user-guide_en.md#windows-lock-screen-and-uac) |
 
 ## Security
 
