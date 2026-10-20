@@ -61,6 +61,7 @@ class DesktopScreenshotController extends ChangeNotifier {
   DesktopScreenshotController({
     required ScreenshotBackend backend,
     required this.macOS,
+    this.windows = false,
     required Future<String?> Function() load,
     required Future<void> Function(String) save,
   }) : _backend = backend,
@@ -75,6 +76,7 @@ class DesktopScreenshotController extends ChangeNotifier {
   static final shared = DesktopScreenshotController(
     backend: NativeScreenshotBackend(),
     macOS: Platform.isMacOS,
+    windows: Platform.isWindows,
     load: () async => (await SharedPreferences.getInstance()).getString(
       'screenshot_shortcut_v1',
     ),
@@ -90,6 +92,7 @@ class DesktopScreenshotController extends ChangeNotifier {
 
   final ScreenshotBackend _backend;
   final bool macOS;
+  final bool windows;
   final Future<String?> Function() _load;
   final Future<void> Function(String) _save;
   ScreenshotShortcut shortcut;
@@ -104,7 +107,7 @@ class DesktopScreenshotController extends ChangeNotifier {
   void Function(ScreenshotNotice)? onNotice;
 
   String get shortcutLabel =>
-      systemShortcutLabel ?? shortcut.label(macOS: macOS);
+      systemShortcutLabel ?? shortcut.label(macOS: macOS, windows: windows);
 
   Future<void> initialize(
     String description, {

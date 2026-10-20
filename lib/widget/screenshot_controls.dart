@@ -34,7 +34,7 @@ class ScreenshotButton extends StatelessWidget {
     );
   }
 
-  /// Names the shortcut too, so it is there to look up when forgotten.
+  /// The shortcut currently set, there to look up when forgotten.
   static String? _tooltip(
     BuildContext context,
     DesktopScreenshotController controller,
@@ -42,8 +42,8 @@ class ScreenshotButton extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     if (l10n == null) return null;
     return controller.enabled && controller.registered
-        ? l10n.screenshotCaptureWithShortcut(controller.shortcutLabel)
-        : l10n.screenshotCapture;
+        ? l10n.screenshotButtonTooltip(controller.shortcutLabel)
+        : l10n.screenshotButtonTooltipPlain;
   }
 }
 
@@ -196,7 +196,10 @@ class _ScreenshotShortcutDialogState extends State<_ScreenshotShortcutDialog> {
                       child: Column(
                         children: [
                           Text(
-                            _shortcut.label(macOS: _controller.macOS),
+                            _shortcut.label(
+                              macOS: _controller.macOS,
+                              windows: _controller.windows,
+                            ),
                             style: Theme.of(context).textTheme.titleMedium
                                 ?.copyWith(
                                   color: _enabled ? null : palette.textMuted,

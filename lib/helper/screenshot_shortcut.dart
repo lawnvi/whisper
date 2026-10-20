@@ -68,11 +68,12 @@ class ScreenshotShortcut {
       !shift &&
       (macOS ? meta && !control : control && !meta);
 
-  String label({required bool macOS}) => [
+  /// In the platform's own notation: ⌥⌘S, Ctrl+Alt+S, Win+Shift+S.
+  String label({required bool macOS, bool windows = false}) => [
     if (control) macOS ? '⌃' : 'Ctrl',
     if (alt) macOS ? '⌥' : 'Alt',
     if (shift) macOS ? '⇧' : 'Shift',
-    if (meta) macOS ? '⌘' : 'Super',
+    if (meta) macOS ? '⌘' : (windows ? 'Win' : 'Super'),
     key,
   ].join(macOS ? '' : '+');
 

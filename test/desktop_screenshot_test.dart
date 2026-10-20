@@ -243,9 +243,7 @@ void main() {
     },
   );
 
-  testWidgets('the button names the shortcut once it is registered', (
-    tester,
-  ) async {
+  testWidgets('the button names the shortcut currently set', (tester) async {
     Future<String?> tooltip() async {
       await tester.pump();
       return tester.widget<IconButton>(find.byType(IconButton)).tooltip;
@@ -259,17 +257,26 @@ void main() {
         home: Scaffold(body: ScreenshotButton(controller: controller)),
       ),
     );
-    expect(await tooltip(), 'Capture region');
+    final label = ScreenshotShortcut.defaultFor(macOS: true).label(macOS: true);
+    expect(await tooltip(), 'Screenshot');
 
     await tester.runAsync(() => controller.initialize('Whisper'));
-    expect(
-      await tooltip(),
-      'Capture region (${ScreenshotShortcut.defaultFor(macOS: true).label(macOS: true)})',
-    );
+    expect(await tooltip(), 'Screenshot ($label)');
 
     await tester.runAsync(
       () => controller.configure(controller.shortcut, enabled: false),
     );
-    expect(await tooltip(), 'Capture region');
+    expect(await tooltip(), 'Screenshot');
+  });
+
+  test('shortcut labels follow each platform', () {
+    const shortcut = ScreenshotShortcut(key: 'S', alt: true, meta: true);
+    expect(shortcut.label(macOS: true), '⌥⌘S');
+    expect(shortcut.label(macOS: false), 'Alt+Super+S');
+    expect(shortcut.label(macOS: false, windows: true), 'Alt+Win+S');
+    expect(
+      ScreenshotShortcut.defaultFor(macOS: false).label(macOS: false),
+      'Ctrl+Alt+S',
+    );
   });
 }
