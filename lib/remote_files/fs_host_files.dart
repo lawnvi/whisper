@@ -237,6 +237,19 @@ class FsHostFiles {
     );
   }
 
+  /// Where [link] leads, as [excluded] spells it (a link someone made to a
+  /// mount); read, not followed.
+  static Future<String?> _linkTarget(Link link) async {
+    try {
+      final target = p.normalize(
+        p.join(p.dirname(link.path), await link.target()),
+      );
+      return Platform.isWindows ? target.toLowerCase() : target;
+    } on FileSystemException {
+      return null;
+    }
+  }
+
   Future<List<FsEntry>> _read(
     String rootId,
     String relative, {
@@ -254,9 +267,10 @@ class FsHostFiles {
     };
     await for (final entity in dir.list(followLinks: false)) {
       if (skip.isNotEmpty &&
-          skip.contains(
-            Platform.isWindows ? entity.path.toLowerCase() : entity.path,
-          )) {
+          (skip.contains(
+                Platform.isWindows ? entity.path.toLowerCase() : entity.path,
+              ) ||
+              (entity is Link && skip.contains(await _linkTarget(entity))))) {
         continue;
       }
       final name = p.basename(entity.path);

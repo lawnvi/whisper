@@ -38,6 +38,28 @@ void main() {
 
   tearDown(() => sandbox.delete(recursive: true));
 
+  test('what is mounted here is never served, nor a link to it', () async {
+    final mounted = await Directory(
+      p.join(home.path, 'Whisper', 'Phone'),
+    ).create(recursive: true);
+    await File(p.join(mounted.path, 'inside.txt')).writeAsString('x');
+    final real = await mounted.resolveSymbolicLinks();
+    // A link someone made to a mount.
+    await Link(p.join(home.path, 'Phone link')).create(real);
+    final before = FsHostFiles.excluded;
+    FsHostFiles.excluded = () => {real};
+    addTearDown(() => FsHostFiles.excluded = before);
+    final top = await files.list('home', '');
+    expect(top.entries.map((e) => e.name), isNot(contains('Phone link')));
+    final whisper = await files.list('home', 'Whisper');
+    expect(whisper.entries, isEmpty);
+    // The app's mounts are the ones left out.
+    expect(
+      File('lib/remote_files/mount/remote_mounts.dart').readAsStringSync(),
+      contains('RemoteMounts().._hideFromHost()'),
+    );
+  });
+
   test('wire paths never leave the root', () async {
     for (final bad in [
       '../secret',

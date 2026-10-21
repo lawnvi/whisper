@@ -179,7 +179,7 @@ class RemoteMounts extends ChangeNotifier {
     mountLog = FilesLog.write;
   }
 
-  static final RemoteMounts shared = RemoteMounts();
+  static final RemoteMounts shared = RemoteMounts().._hideFromHost();
 
   static const _key = 'remote_files.mounted_peers';
 
@@ -203,6 +203,12 @@ class RemoteMounts extends ChangeNotifier {
   bool isMounting(String peerId) => _starting.containsKey(peerId);
 
   Iterable<RemoteMount> get all => _mounts.values.map((active) => active.mount);
+
+  /// What is mounted here is never served to a device browsing this one:
+  /// it would find itself, or another device, and could go round in it.
+  void _hideFromHost() {
+    FsHostFiles.excluded = () => {for (final mount in all) mount.path};
+  }
 
   /// Why mounting [peerId] last failed, until it is tried again.
   MountFailure? failureOf(String peerId) => _failures[peerId];
