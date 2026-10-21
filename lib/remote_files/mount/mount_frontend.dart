@@ -49,9 +49,7 @@ abstract class MountFrontend {
       // Only folders Whisper made sync roots of: they hold nothing but
       // what was read from the device.
       for (final folder in await recordedFolders()) {
-        try {
-          await Directory(folder).delete(recursive: true);
-        } on FileSystemException {
+        if (!await CloudFilesMount.clearLeftover(folder)) {
           // In use; next start.
           continue;
         }

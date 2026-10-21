@@ -44,6 +44,7 @@ class CloudFilesMount {
 
   /// Answers of [_state] and [_mark], which run off this isolate's thread.
   NativeCallable<Void Function(Int64, Int32)>? _answers;
+
   final _asked = <int, Completer<int>>{};
   int _nextAsk = 1;
   final _listed = <int, _Listed>{};
@@ -89,6 +90,54 @@ class CloudFilesMount {
       _bridge.unregisterStale();
     } on ArgumentError {
       // No library next to the executable: nothing was ever mounted.
+    }
+  }
+
+  /// Deletes [folder], left by a run before this one. Unprovided, Cloud
+  /// Files will not let go of a folder that was never listed, so it is
+  /// provided again (nothing reaches a device) just long enough to empty
+  /// it. False when something stayed.
+  static Future<bool> clearLeftover(String folder) async {
+    final dir = Directory(folder);
+    try {
+      if (await dir.exists()) {
+        await dir.delete(recursive: true);
+      }
+      return true;
+    } on FileSystemException {
+      // Placeholders that need a provider.
+    }
+    final _Bridge bridge;
+    try {
+      bridge = _bridge;
+    } on ArgumentError {
+      return false;
+    }
+    final stayed = Completer<int>();
+    final done = NativeCallable<Void Function(Int64, Int32)>.listener((
+      int token,
+      int result,
+    ) {
+      stayed.complete(result);
+    });
+    final path = folder.toNativeUtf16();
+    final icon = '${Platform.resolvedExecutable},0'.toNativeUtf16();
+    try {
+      bridge.clearStaleAsync(path, icon, done.nativeFunction, 0);
+    } finally {
+      calloc.free(path);
+      calloc.free(icon);
+    }
+    final left = await stayed.future;
+    done.close();
+    if (left != 0) {
+      mountLog('mount: $left item(s) stayed in $folder');
+    }
+    try {
+      await dir.delete(recursive: true);
+      return true;
+    } on FileSystemException {
+      return false;
     }
   }
 
@@ -155,7 +204,29 @@ class CloudFilesMount {
       timer.cancel();
     }
     _changed.clear();
-    _bridge.stop(session);
+    // Emptied while still connected: unprovided, a folder never listed
+    // could not be deleted, and the sync root would stay in Explorer.
+    // Nothing of it reaches the device.
+    final answers = _answers;
+    if (answers != null) {
+      final token = _nextAsk++;
+      final cleared = _asked[token] = Completer<int>();
+      _bridge.clearAsync(session, answers.nativeFunction, token);
+      final stayed = await cleared.future.timeout(
+        const Duration(seconds: 30),
+        onTimeout: () => -1,
+      );
+      if (stayed != 0) {
+        mountLog('mount: $stayed item(s) stayed in the folder');
+      }
+    }
+    final unregistered = _bridge.stop(session);
+    if (unregistered != 0) {
+      mountLog(
+        'mount: still in Explorer '
+        '(0x${(unregistered & 0xffffffff).toRadixString(16)})',
+      );
+    }
     _listener?.close();
     _listener = null;
     _answers?.close();
@@ -892,9 +963,29 @@ class _Bridge {
               Pointer<Int32>,
             )
           >('wcf_start'),
-      stop = library.lookupFunction<Void Function(Int64), void Function(int)>(
+      stop = library.lookupFunction<Int32 Function(Int64), int Function(int)>(
         'wcf_stop',
       ),
+      clearAsync = library
+          .lookupFunction<
+            Void Function(Int64, Pointer<NativeFunction<_Done>>, Int64),
+            void Function(int, Pointer<NativeFunction<_Done>>, int)
+          >('wcf_clear_async'),
+      clearStaleAsync = library
+          .lookupFunction<
+            Void Function(
+              Pointer<Utf16>,
+              Pointer<Utf16>,
+              Pointer<NativeFunction<_Done>>,
+              Int64,
+            ),
+            void Function(
+              Pointer<Utf16>,
+              Pointer<Utf16>,
+              Pointer<NativeFunction<_Done>>,
+              int,
+            )
+          >('wcf_clear_stale_async'),
       unregisterStale = library
           .lookupFunction<Int32 Function(), int Function()>(
             'wcf_unregister_stale',
@@ -977,7 +1068,15 @@ class _Bridge {
     Pointer<Int32>,
   )
   start;
-  final void Function(int) stop;
+  final int Function(int) stop;
+  final void Function(int, Pointer<NativeFunction<_Done>>, int) clearAsync;
+  final void Function(
+    Pointer<Utf16>,
+    Pointer<Utf16>,
+    Pointer<NativeFunction<_Done>>,
+    int,
+  )
+  clearStaleAsync;
   final int Function() unregisterStale;
   final int Function(Pointer<_Request>, Pointer<_Entry>, int, int) list;
   final int Function(Pointer<_Request>, Pointer<Uint8>, int, int, int) data;

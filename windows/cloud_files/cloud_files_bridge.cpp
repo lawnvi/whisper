@@ -23,6 +23,7 @@
 #include <winrt/Windows.Storage.Provider.h>
 #include <winrt/Windows.Storage.h>
 
+#include <atomic>
 #include <cstdint>
 #include <cstring>
 #include <string>
@@ -94,6 +95,9 @@ struct Session {
   std::wstring id;
   WcfNotify notify = nullptr;
   CF_CONNECTION_KEY key = {};
+  // Being let go (wcf_clear_async): what the system asks is answered here,
+  // and nothing reaches Dart or the device.
+  std::atomic<bool> leaving{false};
 };
 
 // The identity Cloud Files keeps for each placeholder: its number and
@@ -131,8 +135,31 @@ Session* SessionOf(const CF_CALLBACK_INFO* info) {
   return static_cast<Session*>(info->CallbackContext);
 }
 
+bool Leaving(const CF_CALLBACK_INFO* info) {
+  return SessionOf(info)->leaving.load();
+}
+
+}  // namespace
+
+extern "C" {
+__declspec(dllexport) int32_t wcf_list(WcfRequest*, const WcfEntry*, int32_t,
+                                       int32_t);
+__declspec(dllexport) int32_t wcf_data(WcfRequest*, const uint8_t*, int64_t,
+                                       int64_t, int32_t);
+__declspec(dllexport) int32_t wcf_ack(WcfRequest*, int32_t);
+}
+
+namespace {
+
 void CALLBACK OnFetchPlaceholders(const CF_CALLBACK_INFO* info,
                                   const CF_CALLBACK_PARAMETERS*) {
+  if (Leaving(info)) {
+    // Nothing in it: a folder never listed can then be deleted.
+    WcfRequest request{};
+    Describe(info, &request);
+    wcf_list(&request, nullptr, 0, 0);
+    return;
+  }
   auto* request = new WcfRequest{};
   request->kind = 1;
   request->is_dir = 1;
@@ -150,6 +177,11 @@ void CALLBACK OnFetchData(const CF_CALLBACK_INFO* info,
   request->optional_offset = params->FetchData.OptionalFileOffset.QuadPart;
   request->optional_length = params->FetchData.OptionalLength.QuadPart;
   request->file_size = info->FileSize.QuadPart;
+  if (Leaving(info)) {
+    wcf_data(request, nullptr, request->offset, request->length, 1);
+    delete request;
+    return;
+  }
   SessionOf(info)->notify(request);
 }
 
@@ -160,6 +192,12 @@ void CALLBACK OnNotifyDelete(const CF_CALLBACK_INFO* info,
   Describe(info, request);
   request->is_dir =
       (params->Delete.Flags & CF_CALLBACK_DELETE_FLAG_IS_DIRECTORY) != 0;
+  if (Leaving(info)) {
+    // Deleted here only: the device keeps it.
+    wcf_ack(request, 1);
+    delete request;
+    return;
+  }
   SessionOf(info)->notify(request);
 }
 
@@ -179,6 +217,11 @@ void CALLBACK OnNotifyRename(const CF_CALLBACK_INFO* info,
     target += params->Rename.TargetPath;
     wcsncpy_s(request->target, target.c_str(), _TRUNCATE);
   }
+  if (Leaving(info)) {
+    wcf_ack(request, 0);
+    delete request;
+    return;
+  }
   SessionOf(info)->notify(request);
 }
 
@@ -187,6 +230,9 @@ void CALLBACK OnNotifyRename(const CF_CALLBACK_INFO* info,
 // needs) and kept up to date from then on.
 void CALLBACK OnOpenCompletion(const CF_CALLBACK_INFO* info,
                                const CF_CALLBACK_PARAMETERS*) {
+  if (Leaving(info)) {
+    return;
+  }
   WcfRequest probe{};
   Describe(info, &probe);
   if (!probe.is_dir) {
@@ -199,6 +245,9 @@ void CALLBACK OnOpenCompletion(const CF_CALLBACK_INFO* info,
 
 void CALLBACK OnCancelFetchData(const CF_CALLBACK_INFO* info,
                                 const CF_CALLBACK_PARAMETERS* params) {
+  if (Leaving(info)) {
+    return;
+  }
   auto* request = new WcfRequest{};
   request->kind = 3;
   Describe(info, request);
@@ -337,25 +386,61 @@ HANDLE OpenForSyncState(const wchar_t* path) {
                      nullptr);
 }
 
-}  // namespace
+// One of Cloud Files' own reparse tags (a placeholder), not a link.
+bool CloudTag(DWORD tag) {
+  return (tag & ~IO_REPARSE_TAG_CLOUD_MASK) == IO_REPARSE_TAG_CLOUD;
+}
 
-extern "C" {
+// Deletes what is in [folder], not the folder; returns how many items
+// stayed. A link that is not one of Cloud Files' own goes without what it
+// leads to.
+int32_t ClearFolder(const std::wstring& folder) {
+  WIN32_FIND_DATAW data;
+  HANDLE find = FindFirstFileExW((folder + L"\\*").c_str(), FindExInfoBasic,
+                                 &data, FindExSearchNameMatch, nullptr, 0);
+  if (find == INVALID_HANDLE_VALUE) {
+    return GetLastError() == ERROR_FILE_NOT_FOUND ? 0 : 1;
+  }
+  int32_t stayed = 0;
+  do {
+    std::wstring name(data.cFileName);
+    if (name == L"." || name == L"..") {
+      continue;
+    }
+    std::wstring item = folder + L"\\" + name;
+    const DWORD attributes = data.dwFileAttributes;
+    const bool dir = (attributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+    const bool link = (attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0 &&
+                      !CloudTag(data.dwReserved0);
+    if (dir && !link) {
+      stayed += ClearFolder(item);
+    }
+    if ((attributes & FILE_ATTRIBUTE_READONLY) != 0) {
+      SetFileAttributesW(item.c_str(), attributes & ~FILE_ATTRIBUTE_READONLY);
+    }
+    if (!(dir ? RemoveDirectoryW(item.c_str()) : DeleteFileW(item.c_str()))) {
+      stayed++;
+    }
+  } while (FindNextFileW(find, &data));
+  FindClose(find);
+  return stayed;
+}
 
-// Registers [path] as a sync root named [name] (its icon from [icon]) for
-// [device] and connects to it; [writable]: asked before deletes and
-// renames. Returns the session, or 0 with [error] set.
-__declspec(dllexport) int64_t wcf_start(const wchar_t* path,
-                                        const wchar_t* device,
-                                        const wchar_t* name,
-                                        const wchar_t* icon,
-                                        int32_t writable,
-                                        WcfNotify notify,
-                                        int32_t* error) {
+// wcf_start; [leaving]: from the start, as for wcf_clear_stale_async.
+Session* StartSession(const wchar_t* path,
+                      const wchar_t* device,
+                      const wchar_t* name,
+                      const wchar_t* icon,
+                      int32_t writable,
+                      WcfNotify notify,
+                      int32_t* error,
+                      bool leaving) {
   CreateDirectoryW(path, nullptr);
   auto* session = new Session();
   session->path = path;
   session->id = std::wstring(L"Whisper!") + UserSid() + L"!" + device;
   session->notify = notify;
+  session->leaving = leaving;
   HRESULT hr = OnMtaThread([&] {
     StorageProviderSyncRootInfo info;
     info.Id(session->id);
@@ -376,7 +461,7 @@ __declspec(dllexport) int64_t wcf_start(const wchar_t* path,
   if (FAILED(hr)) {
     *error = hr;
     delete session;
-    return 0;
+    return nullptr;
   }
   static const CF_CALLBACK_REGISTRATION read_only[] = {
       {CF_CALLBACK_TYPE_FETCH_PLACEHOLDERS, OnFetchPlaceholders},
@@ -400,22 +485,83 @@ __declspec(dllexport) int64_t wcf_start(const wchar_t* path,
     std::wstring id = session->id;
     OnMtaThread([&] { StorageProviderSyncRootManager::Unregister(id); });
     delete session;
-    return 0;
+    return nullptr;
   }
-  return reinterpret_cast<int64_t>(session);
+  return session;
 }
 
-// Disconnects and takes the folder out of Explorer; Dart deletes what was
-// in it.
-__declspec(dllexport) void wcf_stop(int64_t handle) {
+}  // namespace
+
+extern "C" {
+
+// Registers [path] as a sync root named [name] (its icon from [icon]) for
+// [device] and connects to it; [writable]: asked before deletes and
+// renames. Returns the session, or 0 with [error] set.
+__declspec(dllexport) int64_t wcf_start(const wchar_t* path,
+                                        const wchar_t* device,
+                                        const wchar_t* name,
+                                        const wchar_t* icon,
+                                        int32_t writable,
+                                        WcfNotify notify,
+                                        int32_t* error) {
+  return reinterpret_cast<int64_t>(StartSession(
+      path, device, name, icon, writable, notify, error, false));
+}
+
+// Empties the folder before it is let go, still connected: once nobody
+// provides it, Cloud Files keeps a folder never listed (deleting one asks
+// for its listing) and the sync root with it, in Explorer's navigation
+// pane. Every request on the way is answered here, none goes to Dart or
+// the device. On a thread of its own (deleting calls back into this
+// provider); [done] gets how many items stayed.
+__declspec(dllexport) void wcf_clear_async(int64_t handle,
+                                           WcfDone done,
+                                           int64_t token) {
+  auto* session = reinterpret_cast<Session*>(handle);
+  session->leaving = true;
+  std::wstring folder = session->path;
+  std::thread([folder, done, token]() {
+    done(token, ClearFolder(folder));
+  }).detach();
+}
+
+// Disconnects and takes the folder out of Explorer; Dart deletes the
+// folder, emptied by wcf_clear_async. Returns how unregistering went.
+__declspec(dllexport) int32_t wcf_stop(int64_t handle) {
   auto* session = reinterpret_cast<Session*>(handle);
   if (session == nullptr) {
-    return;
+    return S_OK;
   }
   CfDisconnectSyncRoot(session->key);
   std::wstring id = session->id;
-  OnMtaThread([&] { StorageProviderSyncRootManager::Unregister(id); });
+  HRESULT hr =
+      OnMtaThread([&] { StorageProviderSyncRootManager::Unregister(id); });
   delete session;
+  return hr;
+}
+
+// A folder a run before this one left (it could not be emptied, or the
+// run quit abruptly), which Cloud Files will not let go of unprovided:
+// provided again, answering everything itself, just long enough to empty
+// it. [done] gets how many items stayed, or -1 when it could not be.
+__declspec(dllexport) void wcf_clear_stale_async(const wchar_t* path,
+                                                 const wchar_t* icon,
+                                                 WcfDone done,
+                                                 int64_t token) {
+  std::wstring folder(path);
+  std::wstring image(icon);
+  std::thread([folder, image, done, token]() {
+    int32_t error = 0;
+    Session* session = StartSession(folder.c_str(), L"leftover", L"Whisper",
+                                    image.c_str(), 1, nullptr, &error, true);
+    if (session == nullptr) {
+      done(token, -1);
+      return;
+    }
+    int32_t stayed = ClearFolder(folder);
+    wcf_stop(reinterpret_cast<int64_t>(session));
+    done(token, stayed);
+  }).detach();
 }
 
 // Takes away Whisper's sync roots left by a run that quit abruptly.

@@ -944,6 +944,46 @@ void main() {
     });
   });
 
+  test('a Windows mount is emptied before it is let go, answering '
+      'everything itself', () {
+    final native = File(
+      'windows/cloud_files/cloud_files_bridge.cpp',
+    ).readAsStringSync();
+    final dart = File(
+      'lib/remote_files/mount/cloud_files_windows.dart',
+    ).readAsStringSync();
+    // Unprovided, a folder never listed cannot be deleted (deleting asks
+    // for its listing): it is emptied still connected, every request
+    // answered in the bridge, none reaching Dart or the device.
+    for (final callback in [
+      'OnFetchPlaceholders',
+      'OnFetchData',
+      'OnNotifyDelete',
+      'OnNotifyRename',
+      'OnOpenCompletion',
+      'OnCancelFetchData',
+    ]) {
+      final body = native.substring(native.indexOf('void CALLBACK $callback('));
+      expect(
+        body.substring(0, body.indexOf('\n}\n')),
+        contains('if (Leaving(info))'),
+        reason: callback,
+      );
+    }
+    final stop = dart.substring(dart.indexOf('Future<void> stop() async {'));
+    expect(
+      stop.indexOf('_bridge.clearAsync('),
+      lessThan(stop.indexOf('_bridge.stop(session)')),
+    );
+    expect(stop, contains("mountLog(\n        'mount: still in Explorer '"));
+    // Left by a run before: provided again just long enough to empty it.
+    expect(
+      File('lib/remote_files/mount/mount_frontend.dart').readAsStringSync(),
+      contains('CloudFilesMount.clearLeftover(folder)'),
+    );
+    expect(native, contains('StartSession(folder.c_str(), L"leftover"'));
+  });
+
   test('the Windows bridge and its Dart side agree', () {
     final native = File(
       'windows/cloud_files/cloud_files_bridge.cpp',
