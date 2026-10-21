@@ -228,3 +228,27 @@ if(NOT CMAKE_BUILD_TYPE MATCHES "Debug")
   install(FILES "${AOT_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
     COMPONENT Runtime)
 endif()
+
+# Flutter 3.41.7's Linux engine comes with its debug information (43 MB, 16
+# without it), as do the plugins; release bundles leave it out. The Dart code
+# (libapp.so) has none, and is left as Flutter built it.
+if(CMAKE_BUILD_TYPE STREQUAL "Release" AND CMAKE_STRIP)
+  install(CODE "set(WHISPER_STRIP \"${CMAKE_STRIP}\")
+    set(WHISPER_BINARY \"${BINARY_NAME}\")" COMPONENT Runtime)
+  install(CODE [[
+    file(GLOB whisper_stripped
+      "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/${WHISPER_BINARY}"
+      "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/lib/*.so*")
+    list(FILTER whisper_stripped EXCLUDE REGEX "/libapp\\.so$")
+    foreach(file IN LISTS whisper_stripped)
+      if(IS_SYMLINK "${file}")
+        continue()
+      endif()
+      execute_process(COMMAND "${WHISPER_STRIP}" --strip-unneeded "${file}"
+        RESULT_VARIABLE result)
+      if(NOT result EQUAL 0)
+        message(FATAL_ERROR "Could not strip ${file}")
+      endif()
+    endforeach()
+  ]] COMPONENT Runtime)
+endif()

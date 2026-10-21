@@ -118,4 +118,23 @@ void main() {
     );
     expect(filter, lessThan(cmake.indexOf('foreach(bundled_library')));
   });
+
+  test('release bundles leave out the engine\'s debug information', () {
+    // Flutter 3.41.7's libflutter_linux_gtk.so is 43 MB with it, 16 without:
+    // about 7 MB off each package.
+    final cmake = File('linux/CMakeLists.txt').readAsStringSync();
+    final strip = cmake.substring(cmake.indexOf('set(WHISPER_STRIP'));
+
+    expect(
+      cmake,
+      contains('if(CMAKE_BUILD_TYPE STREQUAL "Release" AND CMAKE_STRIP)'),
+    );
+    expect(strip, contains('--strip-unneeded'));
+    expect(strip, contains(r'EXCLUDE REGEX "/libapp\\.so$"'));
+    // After everything is installed, the AOT library included.
+    expect(
+      cmake.indexOf('set(WHISPER_STRIP'),
+      greaterThan(cmake.indexOf('install(FILES "\${AOT_LIBRARY}"')),
+    );
+  });
 }
