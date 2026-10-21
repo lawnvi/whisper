@@ -14,9 +14,6 @@ enum IslandKind {
   /// A copy made in the file manager.
   copy,
 
-  /// Files sent or received in a conversation.
-  transfer,
-
   /// This device plays another device's sound.
   audio,
 }
@@ -158,8 +155,8 @@ class IslandActivity {
   String toString() => 'IslandActivity($id, $kind, $status)';
 }
 
-/// Something the island shows activities of: file copies, transfers, the
-/// speaker, the phone being streamed, windows sent here.
+/// Something the island shows activities of: file copies, the speaker, the
+/// phone being streamed, windows sent here.
 abstract class IslandSource implements Listenable {
   /// What is going on now. A finished activity stays here until the island
   /// says it is [retired], so its tick (or cross) can be seen.

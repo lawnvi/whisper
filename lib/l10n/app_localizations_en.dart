@@ -1092,6 +1092,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get notificationChannelGeneralDesc => 'Incoming messages and alerts';
 
   @override
+  String get notificationChannelRequests => 'Requests to answer';
+
+  @override
   String get emptyAppsTitle => 'No apps available';
 
   @override
@@ -2944,42 +2947,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get remoteFilesPlaceAppFolder => 'Whisper Folder';
 
   @override
-  String islandTransferTo(String device) {
-    return 'To $device';
-  }
-
-  @override
-  String islandTransferFrom(String device) {
-    return 'From $device';
-  }
-
-  @override
-  String get islandTransferMixed => 'Sending and receiving';
-
-  @override
-  String islandTransferFiles(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count files',
-      one: '1 file',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get islandTransferSent => 'Sent';
-
-  @override
-  String get islandTransferReceived => 'Received';
-
-  @override
-  String get islandTransferFailed => 'Didn\'t finish';
-
-  @override
-  String get islandTransferStop => 'Stop transfer';
-
-  @override
   String get islandAudioPaused => 'Playback paused';
 
   @override
@@ -3648,4 +3615,33 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get remoteFilesPromptBodyReadOnlyPhone =>
       'If you allow it, it can see this phone\'s internal storage and open and copy files from it, but not change them.';
+
+  @override
+  String get islandOverlay => 'Island in the background';
+
+  @override
+  String get islandOverlayDesc =>
+      'Shows transfer progress at the top of the screen while Whisper is in the background. Needs permission to appear on top of other apps.';
+
+  @override
+  String get islandOverlayOn => 'On';
+
+  @override
+  String get islandOverlayOff => 'Off';
+
+  @override
+  String get islandOverlayStop => 'Stop';
+
+  @override
+  String get islandOverlayOpen => 'Open Whisper';
+
+  @override
+  String islandOverlayFrom(String device) {
+    return 'From $device';
+  }
+
+  @override
+  String islandOverlayTo(String device) {
+    return 'To $device';
+  }
 }

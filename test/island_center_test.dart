@@ -56,7 +56,7 @@ void main() {
       source.put(
         islandActivity(
           't',
-          kind: IslandKind.transfer,
+          kind: IslandKind.copy,
           arrival: IslandArrival.quiet,
           showAfter: const Duration(milliseconds: 600),
         ),
@@ -64,11 +64,7 @@ void main() {
       expect(center.stage, IslandStage.hidden);
       clock.advance(const Duration(milliseconds: 300));
       source.put(
-        islandActivity(
-          't',
-          kind: IslandKind.transfer,
-          status: IslandStatus.done,
-        ),
+        islandActivity('t', kind: IslandKind.copy, status: IslandStatus.done),
       );
       clock.advance(const Duration(seconds: 3));
       expect(center.stage, IslandStage.hidden);
@@ -80,7 +76,7 @@ void main() {
       source.put(
         islandActivity(
           't',
-          kind: IslandKind.transfer,
+          kind: IslandKind.copy,
           arrival: IslandArrival.quiet,
           showAfter: const Duration(milliseconds: 600),
         ),

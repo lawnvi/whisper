@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../helper/device_form_factor.dart';
+import '../../helper/island_asks.dart';
 import '../../helper/notification.dart';
 import '../../helper/notification_l10n.dart';
 import '../../helper/toast.dart';
@@ -52,10 +54,14 @@ class OfferIslandSource extends ChangeNotifier implements IslandSource {
     bool Function()? inForeground,
     Future<void> Function(String title, String body)? notify,
     Future<void> Function()? cancelNotification,
+    IslandAsks? asks,
   }) : _viewer = viewer ?? WindowStreamViewer.shared,
        _inForeground = inForeground ?? _appInForeground,
        _notify = notify ?? _postNotification,
-       _cancelNotification = cancelNotification ?? _removeNotification {
+       _cancelNotification = cancelNotification ?? _removeNotification,
+       _asks =
+           asks ??
+           (notify == null && Platform.isAndroid ? IslandAsks.shared : null) {
     _viewer.offers.addListener(_onOffers);
     _known.addAll(_viewer.offers.value);
   }
@@ -71,6 +77,10 @@ class OfferIslandSource extends ChangeNotifier implements IslandSource {
   final bool Function() _inForeground;
   final Future<void> Function(String title, String body) _notify;
   final Future<void> Function() _cancelNotification;
+
+  /// On Android the window goes on the island over other apps, "忽略" and
+  /// "查看" right there (and on the system's island, as a live update).
+  final IslandAsks? _asks;
 
   /// Where "查看" opens the window.
   GlobalKey<NavigatorState>? navigatorKey;
@@ -127,7 +137,12 @@ class OfferIslandSource extends ChangeNotifier implements IslandSource {
     if (notified != null && !offers.contains(notified)) {
       // Opened, dismissed or gone with its device: the notification too.
       _notified = null;
-      unawaited(_cancelNotification().catchError((Object _) {}));
+      final asks = _asks;
+      if (asks != null) {
+        unawaited(asks.settle(_idOf(notified)));
+      } else {
+        unawaited(_cancelNotification().catchError((Object _) {}));
+      }
     }
     final fresh = offers.where((offer) => !_known.contains(offer)).toList();
     _known
@@ -136,13 +151,50 @@ class OfferIslandSource extends ChangeNotifier implements IslandSource {
     if (fresh.isNotEmpty && !_inForeground()) {
       final newest = fresh.first;
       final l10n = resolveNotificationL10n();
+      final previous = _notified;
       _notified = newest;
-      unawaited(
-        _notify(
-          l10n.windowStreamOfferTitle(newest.source.info.name),
-          titleOf(newest),
-        ).catchError((Object _) {}),
-      );
+      final asks = _asks;
+      if (asks != null) {
+        if (previous != null) {
+          unawaited(asks.settle(_idOf(previous)));
+        }
+        unawaited(
+          asks.ask(
+            id: _idOf(newest),
+            glyph: 'window',
+            title: l10n.windowStreamOfferTitle(newest.source.info.name),
+            text: titleOf(newest),
+            figure: newest.window.appName,
+            platform: newest.source.info.platform.name,
+            buttons: [
+              IslandAskButton('ignore', l10n.windowStreamOfferIgnore),
+              IslandAskButton(
+                IslandAsks.open,
+                l10n.windowStreamOfferView,
+                role: 'primary',
+              ),
+            ],
+            channelName: l10n.notificationChannelRequests,
+            onAnswer: (button) {
+              if (!_viewer.offers.value.contains(newest)) {
+                return;
+              }
+              if (button == 'ignore') {
+                settle(newest);
+              } else {
+                unawaited(open(newest));
+              }
+            },
+          ),
+        );
+      } else {
+        unawaited(
+          _notify(
+            l10n.windowStreamOfferTitle(newest.source.info.name),
+            titleOf(newest),
+          ).catchError((Object _) {}),
+        );
+      }
     }
     notifyListeners();
   }

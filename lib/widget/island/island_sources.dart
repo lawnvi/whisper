@@ -6,7 +6,6 @@ import 'island_center.dart';
 import 'sources/audio_source.dart';
 import 'sources/copy_source.dart';
 import 'sources/streamed_source.dart';
-import 'sources/transfer_source.dart';
 
 /// Puts every kind of activity on the app's island, once.
 abstract final class IslandSetup {
@@ -26,7 +25,6 @@ abstract final class IslandSetup {
       ..addSource(_offers!)
       ..addSource(StreamedIslandSource())
       ..addSource(CopyIslandSource(FileCopies.shared))
-      ..addSource(TransferIslandSource())
       ..addSource(AudioIslandSource());
     return center;
   }

@@ -87,7 +87,13 @@ void main() {
     // Android 16 rejects unbound CallStyle notifications. Whisper uses a
     // standard high-priority event card instead of entering phone call state.
     expect(native, contains('NotificationCompat.BigTextStyle()'));
-    expect(native, contains('.setLargeIcon(deviceAvatar(platform))'));
+    expect(native, contains('.setLargeIcon(NotificationArt.device(platform))'));
+    // On the system's island the card has its icon on the left already.
+    final promoted = native.indexOf('builder.setRequestPromotedOngoing(true)');
+    expect(
+      native.indexOf('builder.setLargeIcon(NotificationArt.device(platform))'),
+      greaterThan(native.indexOf('} else {', promoted)),
+    );
     expect(native, contains('connection_alert_accept_action'));
     expect(native, contains('connection_alert_reject_action'));
     expect(native, contains('NotificationCompat.CATEGORY_EVENT'));

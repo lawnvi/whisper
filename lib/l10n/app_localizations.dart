@@ -1966,6 +1966,12 @@ abstract class AppLocalizations {
   /// **'新消息与提醒'**
   String get notificationChannelGeneralDesc;
 
+  /// Android notification channel for questions asked while Whisper is in the background (a device wants to browse files, a window sent here)
+  ///
+  /// In zh, this message translates to:
+  /// **'需要你回答的请求'**
+  String get notificationChannelRequests;
+
   /// No description provided for @emptyAppsTitle.
   ///
   /// In zh, this message translates to:
@@ -4972,54 +4978,6 @@ abstract class AppLocalizations {
   /// **'Whisper 文件夹'**
   String get remoteFilesPlaceAppFolder;
 
-  /// Island: files being sent from a conversation, under the file name
-  ///
-  /// In zh, this message translates to:
-  /// **'发送给 {device}'**
-  String islandTransferTo(String device);
-
-  /// Island: files being received in a conversation, under the file name
-  ///
-  /// In zh, this message translates to:
-  /// **'来自 {device}'**
-  String islandTransferFrom(String device);
-
-  /// Island: files going both ways at once
-  ///
-  /// In zh, this message translates to:
-  /// **'正在收发'**
-  String get islandTransferMixed;
-
-  /// Island: title when several files are under way
-  ///
-  /// In zh, this message translates to:
-  /// **'{count} 个文件'**
-  String islandTransferFiles(int count);
-
-  /// Island: conversation files all sent
-  ///
-  /// In zh, this message translates to:
-  /// **'已发送'**
-  String get islandTransferSent;
-
-  /// Island: conversation files all received
-  ///
-  /// In zh, this message translates to:
-  /// **'已收到'**
-  String get islandTransferReceived;
-
-  /// Island: some conversation files failed
-  ///
-  /// In zh, this message translates to:
-  /// **'没有传完'**
-  String get islandTransferFailed;
-
-  /// Island button (screen-reader label): cancel the conversation transfers under way
-  ///
-  /// In zh, this message translates to:
-  /// **'停止传输'**
-  String get islandTransferStop;
-
   /// Island: this phone, acting as a speaker for another device, is paused
   ///
   /// In zh, this message translates to:
@@ -6099,6 +6057,54 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'允许后，它能看到这台手机的内部存储，打开和拷出里面的文件，但不能改动。'**
   String get remoteFilesPromptBodyReadOnlyPhone;
+
+  /// Android settings row: the island drawn over other apps while Whisper is in the background
+  ///
+  /// In zh, this message translates to:
+  /// **'后台灵动岛'**
+  String get islandOverlay;
+
+  /// Explains the background island and the "display over other apps" permission it needs
+  ///
+  /// In zh, this message translates to:
+  /// **'Whisper 在后台时，在屏幕顶部显示传输进度。需要允许显示在其他应用上层。'**
+  String get islandOverlayDesc;
+
+  /// Status of the background island: the permission is given
+  ///
+  /// In zh, this message translates to:
+  /// **'已开启'**
+  String get islandOverlayOn;
+
+  /// Status of the background island: the permission is not given
+  ///
+  /// In zh, this message translates to:
+  /// **'未开启'**
+  String get islandOverlayOff;
+
+  /// Button on the card of the island over other apps: stops the transfers under way
+  ///
+  /// In zh, this message translates to:
+  /// **'停止'**
+  String get islandOverlayStop;
+
+  /// Button on the card of the island over other apps: brings Whisper to the front
+  ///
+  /// In zh, this message translates to:
+  /// **'打开 Whisper'**
+  String get islandOverlayOpen;
+
+  /// Card of the island over other apps: files coming from this device
+  ///
+  /// In zh, this message translates to:
+  /// **'来自 {device}'**
+  String islandOverlayFrom(String device);
+
+  /// Card of the island over other apps: files going to this device
+  ///
+  /// In zh, this message translates to:
+  /// **'发送到 {device}'**
+  String islandOverlayTo(String device);
 }
 
 class _AppLocalizationsDelegate

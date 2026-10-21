@@ -44,19 +44,63 @@ class TransferNotificationBridge implements ISocketEvent {
       return;
     }
     WsSvrManager().registerEvent(this);
+    _channel.setMethodCallHandler(onNative);
   }
+
+  /// The island drawn over other apps (its card's "停止"): stops every
+  /// transfer still under way in this round.
+  Future<void> onNative(MethodCall call) async {
+    if (call.method != 'stop') {
+      return;
+    }
+    for (final snapshot in _snapshots.values.toList()) {
+      if (!isTerminalFileTransferState(snapshot.state)) {
+        await cancel(snapshot.transferId);
+      }
+    }
+  }
+
+  /// How a transfer is stopped (replaced in tests).
+  Future<void> Function(String transferId) cancel = (id) =>
+      WsSvrManager().cancelTransfer(id);
+
+  /// What the other device is and is called, when there is just one: the
+  /// icon at that end of the progress bar, the "from" on the island's card.
+  ({String? kind, String? name}) Function(String peerId) peer = (peerId) {
+    final device = WsSvrManager().remoteProfileFor(peerId)?.device;
+    final platform = device?.platform ?? '';
+    final name = device?.name.trim() ?? '';
+    return (
+      kind: platform.isEmpty
+          ? null
+          : platform == 'android' || platform == 'ios'
+              ? 'phone'
+              : 'computer',
+      name: name.isEmpty ? null : name,
+    );
+  };
+
+  /// The speed in the latest progress text.
+  String _speed = '';
 
   TransferNotificationAggregator _ensureAggregator() {
     final l10n = _l10n;
     return _aggregator ??= TransferNotificationAggregator(
       strings: TransferNotificationStrings(
         title: (count) => l10n.transferNotificationTitle(count),
-        bodySending: (percent, speed, remaining) =>
-            l10n.transferNotificationBodySending(percent, speed, remaining),
-        bodyReceiving: (percent, speed, remaining) =>
-            l10n.transferNotificationBodyReceiving(percent, speed, remaining),
-        bodyMixed: (percent, speed, remaining) =>
-            l10n.transferNotificationBodyMixed(percent, speed, remaining),
+        bodySending: (percent, speed, remaining) {
+          _speed = speed;
+          return l10n.transferNotificationBodySending(percent, speed, remaining);
+        },
+        bodyReceiving: (percent, speed, remaining) {
+          _speed = speed;
+          return l10n.transferNotificationBodyReceiving(
+              percent, speed, remaining);
+        },
+        bodyMixed: (percent, speed, remaining) {
+          _speed = speed;
+          return l10n.transferNotificationBodyMixed(percent, speed, remaining);
+        },
         completed: (count) => l10n.transferNotificationCompleted(count),
         interrupted: () => l10n.transferNotificationInterrupted,
       ),
@@ -84,6 +128,12 @@ class TransferNotificationBridge implements ISocketEvent {
           'title': command.title,
           'text': command.text,
           'progress': command.progress,
+          'permille': command.permille,
+          'direction': _direction(),
+          'peer': _peer()?.kind,
+          'detail': _detail(l10n),
+          'stopLabel': l10n.islandOverlayStop,
+          'openLabel': l10n.islandOverlayOpen,
           'channelName': l10n.notificationChannelTransfer,
           'channelDescription': l10n.notificationChannelTransferDesc,
         });
@@ -107,6 +157,47 @@ class TransferNotificationBridge implements ISocketEvent {
         _aggregator = null;
         break;
     }
+  }
+
+  /// Which way the files under way go: the arrow on the island drawn over
+  /// other apps while Whisper is in the background.
+  String _direction() {
+    var sending = false;
+    var receiving = false;
+    for (final snapshot in _snapshots.values) {
+      if (isTerminalFileTransferState(snapshot.state)) {
+        continue;
+      }
+      if (snapshot.direction == FileTransferDirection.outgoing) {
+        sending = true;
+      } else {
+        receiving = true;
+      }
+    }
+    if (sending && receiving) {
+      return 'both';
+    }
+    return receiving ? 'in' : 'out';
+  }
+
+  ({String? kind, String? name})? _peer() {
+    final peers = {
+      for (final snapshot in _snapshots.values)
+        if (!isTerminalFileTransferState(snapshot.state)) snapshot.peerUid,
+    };
+    return peers.length == 1 ? peer(peers.single) : null;
+  }
+
+  /// The card's line under the name: where the files go and how fast (the
+  /// percent is beside it already).
+  String _detail(AppLocalizations l10n) {
+    final name = _peer()?.name;
+    final route = switch ((_direction(), name)) {
+      (_, null) || ('both', _) => null,
+      ('in', final String device) => l10n.islandOverlayFrom(device),
+      (_, final String device) => l10n.islandOverlayTo(device),
+    };
+    return [?route, if (_speed.isNotEmpty) _speed].join(' · ');
   }
 
   /// One paste in the file manager is named by its files and says where

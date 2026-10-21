@@ -71,6 +71,11 @@ class TransferForegroundService : Service() {
                     intent.getStringExtra(EXTRA_TITLE) ?: "",
                     intent.getStringExtra(EXTRA_TEXT) ?: "",
                     intent.getIntExtra(EXTRA_PROGRESS, 0),
+                    intent.getIntExtra(EXTRA_PERMILLE, intent.getIntExtra(EXTRA_PROGRESS, 0) * 10),
+                    intent.getStringExtra(EXTRA_DIRECTION) ?: "out",
+                    intent.getStringExtra(EXTRA_PEER),
+                    intent.getStringExtra(EXTRA_STOP_LABEL).orEmpty(),
+                    intent.getStringExtra(EXTRA_DETAIL).orEmpty(),
                     channelName,
                     channelDescription,
                 )
@@ -186,6 +191,11 @@ class TransferForegroundService : Service() {
         const val EXTRA_TITLE = "title"
         const val EXTRA_TEXT = "text"
         const val EXTRA_PROGRESS = "progress"
+        const val EXTRA_PERMILLE = "permille"
+        const val EXTRA_DIRECTION = "direction"
+        const val EXTRA_PEER = "peer"
+        const val EXTRA_STOP_LABEL = "stopLabel"
+        const val EXTRA_DETAIL = "detail"
         const val EXTRA_CHANNEL_NAME = "channelName"
         const val EXTRA_CHANNEL_DESCRIPTION = "channelDescription"
         private const val DEFAULT_CHANNEL_NAME = "Whisper Transfer"

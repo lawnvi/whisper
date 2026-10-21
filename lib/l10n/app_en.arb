@@ -445,6 +445,7 @@
   "notificationChannelTransferDesc": "File transfer progress",
   "notificationChannelGeneral": "Messages",
   "notificationChannelGeneralDesc": "Incoming messages and alerts",
+  "notificationChannelRequests": "Requests to answer",
   "emptyAppsTitle": "No apps available",
   "emptyAppsSearchTitle": "No apps found",
   "fileDropRejected": "These files cannot be sent",
@@ -1661,53 +1662,6 @@
   "@remoteFilesPlaceAppFolder": {
     "description": "File browser: an iPhone's or iPad's root, the app's own Documents folder (Files › On My iPhone › Whisper)."
   },
-  "islandTransferTo": "To {device}",
-  "@islandTransferTo": {
-    "description": "Island: files being sent from a conversation, under the file name",
-    "placeholders": {
-      "device": {
-        "type": "String"
-      }
-    }
-  },
-  "islandTransferFrom": "From {device}",
-  "@islandTransferFrom": {
-    "description": "Island: files being received in a conversation, under the file name",
-    "placeholders": {
-      "device": {
-        "type": "String"
-      }
-    }
-  },
-  "islandTransferMixed": "Sending and receiving",
-  "@islandTransferMixed": {
-    "description": "Island: files going both ways at once"
-  },
-  "islandTransferFiles": "{count, plural, =1{1 file} other{{count} files}}",
-  "@islandTransferFiles": {
-    "description": "Island: title when several files are under way",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
-  "islandTransferSent": "Sent",
-  "@islandTransferSent": {
-    "description": "Island: conversation files all sent"
-  },
-  "islandTransferReceived": "Received",
-  "@islandTransferReceived": {
-    "description": "Island: conversation files all received"
-  },
-  "islandTransferFailed": "Didn't finish",
-  "@islandTransferFailed": {
-    "description": "Island: some conversation files failed"
-  },
-  "islandTransferStop": "Stop transfer",
-  "@islandTransferStop": {
-    "description": "Island button (screen-reader label): cancel the conversation transfers under way"
-  },
   "islandAudioPaused": "Playback paused",
   "@islandAudioPaused": {
     "description": "Island: this phone, acting as a speaker for another device, is paused"
@@ -2525,5 +2479,47 @@
   "remoteFilesPromptBodyReadOnlyPhone": "If you allow it, it can see this phone's internal storage and open and copy files from it, but not change them.",
   "@remoteFilesPromptBodyReadOnlyPhone": {
     "description": "Prompt body on a phone when 'Allow changes' is off."
+  },
+  "islandOverlay": "Island in the background",
+  "@islandOverlay": {
+    "description": "Android settings row: the island drawn over other apps while Whisper is in the background"
+  },
+  "islandOverlayDesc": "Shows transfer progress at the top of the screen while Whisper is in the background. Needs permission to appear on top of other apps.",
+  "@islandOverlayDesc": {
+    "description": "Explains the background island and the \"display over other apps\" permission it needs"
+  },
+  "islandOverlayOn": "On",
+  "@islandOverlayOn": {
+    "description": "Status of the background island: the permission is given"
+  },
+  "islandOverlayOff": "Off",
+  "@islandOverlayOff": {
+    "description": "Status of the background island: the permission is not given"
+  },
+  "islandOverlayStop": "Stop",
+  "@islandOverlayStop": {
+    "description": "Button on the card of the island over other apps: stops the transfers under way"
+  },
+  "islandOverlayOpen": "Open Whisper",
+  "@islandOverlayOpen": {
+    "description": "Button on the card of the island over other apps: brings Whisper to the front"
+  },
+  "islandOverlayFrom": "From {device}",
+  "@islandOverlayFrom": {
+    "description": "Card of the island over other apps: files coming from this device",
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "islandOverlayTo": "To {device}",
+  "@islandOverlayTo": {
+    "description": "Card of the island over other apps: files going to this device",
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
   }
 }

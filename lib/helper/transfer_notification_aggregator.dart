@@ -20,6 +20,7 @@ class TransferNotificationCommand {
     this.title = '',
     this.text = '',
     this.progress = 0,
+    this.permille = 0,
     this.success = false,
   });
 
@@ -27,6 +28,10 @@ class TransferNotificationCommand {
   final String title;
   final String text;
   final int progress;
+
+  /// The same in thousandths: the bar moves in small steps, so it looks
+  /// continuous instead of jumping a percent at a time.
+  final int permille;
   final bool success;
 }
 
@@ -74,14 +79,16 @@ class TransferNotificationAggregator {
   }) : _nowMillis = nowMillis ?? _wallClock;
 
   static int _wallClock() => DateTime.now().millisecondsSinceEpoch;
-  static const int _throttleMillis = 300;
+  /// Android drops a package's notification updates beyond about five a
+  /// second; this leaves room for the others.
+  static const int _throttleMillis = 250;
 
   final TransferNotificationStrings strings;
   final int Function() _nowMillis;
   final Map<String, TransferSnapshot> _active = <String, TransferSnapshot>{};
   final Map<String, TransferSnapshot> _terminal = <String, TransferSnapshot>{};
   int _lastEmitMillis = -_throttleMillis;
-  int _displayedPercent = 0;
+  int _displayedPermille = 0;
   int _lastBytes = 0;
   int _lastBytesMillis = 0;
   bool _stalledNotified = false;
@@ -160,11 +167,12 @@ class TransferNotificationAggregator {
         all.fold<int>(0, (sum, s) => sum + (s.size > 0 ? s.size : 0));
     final doneBytes =
         all.fold<int>(0, (sum, s) => sum + s.committedBytes.clamp(0, s.size));
-    final rawPercent =
-        totalBytes <= 0 ? 0 : (doneBytes * 100 ~/ totalBytes).clamp(0, 100);
-    if (rawPercent > _displayedPercent) {
-      _displayedPercent = rawPercent;
+    final rawPermille =
+        totalBytes <= 0 ? 0 : (doneBytes * 1000 ~/ totalBytes).clamp(0, 1000);
+    if (rawPermille > _displayedPermille) {
+      _displayedPermille = rawPermille;
     }
+    final percent = _displayedPermille ~/ 10;
 
     final speed = _speedText(doneBytes, now);
     final remaining = formatBytesForNotification(
@@ -175,17 +183,18 @@ class TransferNotificationAggregator {
         .any((s) => s.direction == FileTransferDirection.incoming);
     final String text;
     if (hasOutgoing && hasIncoming) {
-      text = strings.bodyMixed(_displayedPercent, speed, remaining);
+      text = strings.bodyMixed(percent, speed, remaining);
     } else if (hasIncoming) {
-      text = strings.bodyReceiving(_displayedPercent, speed, remaining);
+      text = strings.bodyReceiving(percent, speed, remaining);
     } else {
-      text = strings.bodySending(_displayedPercent, speed, remaining);
+      text = strings.bodySending(percent, speed, remaining);
     }
     return TransferNotificationCommand(
       kind: TransferNotificationKind.progress,
       title: strings.title(all.length),
       text: text,
-      progress: _displayedPercent,
+      progress: percent,
+      permille: _displayedPermille,
     );
   }
 
@@ -220,7 +229,7 @@ class TransferNotificationAggregator {
   TransferNotificationCommand? _finishPartialGeneration() {
     final results = _terminal.values.toList(growable: false);
     _terminal.clear();
-    _displayedPercent = 0;
+    _displayedPermille = 0;
     _lastBytes = 0;
     _lastBytesMillis = 0;
     _lastEmitMillis = -_throttleMillis;
@@ -252,6 +261,7 @@ class TransferNotificationAggregator {
       title: strings.title(results.length),
       text: strings.completed(results.length),
       progress: 100,
+      permille: 1000,
       success: true,
     );
   }
@@ -259,7 +269,7 @@ class TransferNotificationAggregator {
   void _reset() {
     _active.clear();
     _terminal.clear();
-    _displayedPercent = 0;
+    _displayedPermille = 0;
     _lastBytes = 0;
     _lastBytesMillis = 0;
     _lastEmitMillis = -_throttleMillis;

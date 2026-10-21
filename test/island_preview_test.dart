@@ -26,7 +26,6 @@ import 'package:whisper/widget/island/island_host.dart';
 import 'package:whisper/widget/island/sources/audio_source.dart';
 import 'package:whisper/widget/island/sources/copy_source.dart';
 import 'package:whisper/widget/island/sources/streamed_source.dart';
-import 'package:whisper/widget/island/sources/transfer_source.dart';
 import 'package:whisper/window_stream/core/window_stream_models.dart';
 import 'package:whisper/window_stream/remote/remote_peer_source.dart';
 import 'package:whisper/window_stream/remote/window_stream_control.dart';
@@ -124,39 +123,6 @@ void main() {
         viewer: 'MacBook Pro',
         stopping: false,
         ended: false,
-        stop: () async {},
-      ),
-    );
-
-    IslandActivity transfer({
-      IslandStatus status = IslandStatus.live,
-      String? name = 'IMG_2041.HEIC',
-      int count = 1,
-    }) => IslandActivity(
-      id: 'transfer',
-      kind: IslandKind.transfer,
-      status: status,
-      since: DateTime(2026, 10, 17, 11, 30),
-      arrival: IslandArrival.quiet,
-      presenter: TransferPresenter(
-        id: 'transfer',
-        stats: TransferStats(
-          status: status,
-          count: count,
-          completed: status == IslandStatus.done ? count : 0,
-          outgoing: 0,
-          incoming: count,
-          totalBytes: 48200000,
-          doneBytes: status == IslandStatus.done ? 48200000 : 31500000,
-          speed: status == IslandStatus.live ? 11800000 : 0,
-          remaining: status == IslandStatus.live
-              ? const Duration(seconds: 2)
-              : null,
-          starting: false,
-          name: name,
-          device: 'MacBook Pro',
-          canRetry: false,
-        ),
         stop: () async {},
       ),
     );
@@ -259,22 +225,19 @@ void main() {
     await scene('02_compact_split', [copy(), audio()]);
     await scene('03_card_copy', [copy()], open: true);
     await scene('04_card_three', [streamed(), copy(), audio()], open: true);
-    await scene('05_card_offer', [offered(), transfer()], open: true);
+    await scene('05_card_offer', [offered(), copy()], open: true);
     await scene(
       '06_card_audio_dark',
-      [audio(), transfer(name: null, count: 3)],
+      [audio(), copy()],
       open: true,
       feature: 'audio',
       dark: true,
     );
-    await scene('07_compact_done_dark', [
-      transfer(status: IslandStatus.done),
-    ], dark: true);
     await scene(
       '08_card_large_text',
-      [transfer(), copy()],
+      [copy(), audio()],
       open: true,
-      feature: 'transfer',
+      feature: CopyIslandSource.idOf(batch),
       textScale: 1.5,
     );
     await scene('09_compact_streamed', [streamed(), audio()]);
@@ -287,12 +250,10 @@ void main() {
     await scene('11_compact_offer', [offered()]);
     // Pages make room for the small island (the band under the status bar).
     await scene('13_band_device_list_dark', [copy(), audio()], dark: true);
-    await scene('14_band_conversation', [
-      transfer(),
-    ], page: const _Conversation());
+    await scene('14_band_conversation', [audio()], page: const _Conversation());
     await scene(
       '15_band_conversation_dark',
-      [transfer()],
+      [audio()],
       page: const _Conversation(),
       dark: true,
     );

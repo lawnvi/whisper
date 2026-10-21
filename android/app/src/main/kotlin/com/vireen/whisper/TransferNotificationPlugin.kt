@@ -15,20 +15,44 @@ class TransferNotificationPlugin : FlutterPlugin, MethodChannel.MethodCallHandle
         context = binding.applicationContext
         channel = MethodChannel(binding.binaryMessenger, "com.vireen.whisper/transfer_notifications")
         channel.setMethodCallHandler(this)
+        IslandOverlay.onStop = { channel.invokeMethod("stop", null) }
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         channel.setMethodCallHandler(null)
+        IslandOverlay.onStop = null
     }
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
             "showProgress" -> {
+                val percent = call.argument<Int>("progress") ?: 0
+                val permille = call.argument<Int>("permille") ?: (percent * 10)
+                IslandOverlay.progress(
+                    context,
+                    call.argument<String>("title") ?: "",
+                    call.argument<String>("detail")?.takeIf { it.isNotBlank() }
+                        ?: call.argument<String>("text") ?: "",
+                    percent,
+                    permille,
+                    when (call.argument<String>("direction")) {
+                        "in" -> IslandOverlay.Direction.IN
+                        "both" -> IslandOverlay.Direction.BOTH
+                        else -> IslandOverlay.Direction.OUT
+                    },
+                    call.argument<String>("stopLabel") ?: "",
+                    call.argument<String>("openLabel") ?: "",
+                )
                 val intent = TransferForegroundService
                     .buildIntent(context, TransferForegroundService.COMMAND_PROGRESS)
                     .putExtra(TransferForegroundService.EXTRA_TITLE, call.argument<String>("title") ?: "")
                     .putExtra(TransferForegroundService.EXTRA_TEXT, call.argument<String>("text") ?: "")
-                    .putExtra(TransferForegroundService.EXTRA_PROGRESS, call.argument<Int>("progress") ?: 0)
+                    .putExtra(TransferForegroundService.EXTRA_PROGRESS, percent)
+                    .putExtra(TransferForegroundService.EXTRA_PERMILLE, permille)
+                    .putExtra(TransferForegroundService.EXTRA_DIRECTION, call.argument<String>("direction") ?: "out")
+                    .putExtra(TransferForegroundService.EXTRA_PEER, call.argument<String>("peer"))
+                    .putExtra(TransferForegroundService.EXTRA_STOP_LABEL, call.argument<String>("stopLabel") ?: "")
+                    .putExtra(TransferForegroundService.EXTRA_DETAIL, call.argument<String>("detail") ?: "")
                     .putExtra(TransferForegroundService.EXTRA_CHANNEL_NAME, call.argument<String>("channelName") ?: "")
                     .putExtra(TransferForegroundService.EXTRA_CHANNEL_DESCRIPTION, call.argument<String>("channelDescription") ?: "")
                 startServiceSafely(intent)
@@ -36,6 +60,11 @@ class TransferNotificationPlugin : FlutterPlugin, MethodChannel.MethodCallHandle
             }
 
             "showStatus" -> {
+                IslandOverlay.waiting(
+                    context,
+                    call.argument<String>("title") ?: "",
+                    call.argument<String>("text") ?: "",
+                )
                 val intent = TransferForegroundService
                     .buildIntent(context, TransferForegroundService.COMMAND_STATUS)
                     .putExtra(TransferForegroundService.EXTRA_TITLE, call.argument<String>("title") ?: "")
@@ -47,6 +76,12 @@ class TransferNotificationPlugin : FlutterPlugin, MethodChannel.MethodCallHandle
             }
 
             "showTerminal" -> {
+                IslandOverlay.finish(
+                    context,
+                    call.argument<String>("title") ?: "",
+                    call.argument<String>("text") ?: "",
+                    call.argument<Boolean>("success") ?: false,
+                )
                 val intent = TransferForegroundService
                     .buildIntent(context, TransferForegroundService.COMMAND_TERMINAL)
                     .putExtra(TransferForegroundService.EXTRA_TITLE, call.argument<String>("title") ?: "")
@@ -58,6 +93,7 @@ class TransferNotificationPlugin : FlutterPlugin, MethodChannel.MethodCallHandle
             }
 
             "cancel" -> {
+                IslandOverlay.clear()
                 startServiceSafely(
                     TransferForegroundService.buildIntent(context, TransferForegroundService.COMMAND_CANCEL)
                 )

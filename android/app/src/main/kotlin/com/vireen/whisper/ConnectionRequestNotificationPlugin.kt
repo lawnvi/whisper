@@ -7,12 +7,6 @@ import android.app.PendingIntent
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.graphics.Color
-import android.graphics.Paint
-import android.graphics.RectF
-import android.graphics.Typeface
 import android.media.AudioAttributes
 import android.net.Uri
 import android.os.Build
@@ -63,6 +57,7 @@ class ConnectionRequestNotificationPlugin :
                     result.success(false)
                 } else {
                     NotificationManagerCompat.from(context).cancel(notificationId)
+                    IslandOverlay.remove(islandId(notificationId))
                     result.success(true)
                 }
             }
@@ -79,6 +74,7 @@ class ConnectionRequestNotificationPlugin :
         val verificationText = call.argument<String>("verificationText")
             ?.takeIf { it.isNotBlank() } ?: return false
         val title = call.argument<String>("title") ?: deviceName
+        val code = call.argument<String>("code").orEmpty()
         val payload = call.argument<String>("payload") ?: return false
         val rejectActionId = call.argument<String>("rejectActionId") ?: return false
         val answerActionId = call.argument<String>("answerActionId") ?: return false
@@ -124,7 +120,6 @@ class ConnectionRequestNotificationPlugin :
         val openIntent = contentPendingIntent(notificationId, payload)
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_whisper)
-            .setLargeIcon(deviceAvatar(platform))
             .setContentTitle(deviceName)
             .setContentText(verificationText)
             .setSubText(title)
@@ -141,6 +136,23 @@ class ConnectionRequestNotificationPlugin :
             .setTimeoutAfter(TIMEOUT_MILLIS)
             .addAction(rejectAction)
             .addAction(answerAction)
+        // 岛上看得见时,通知只留在通知栏和锁屏,不再弹横幅、不响。
+        val island = IslandOverlay.presents(context)
+        if (island) {
+            builder.setSilent(true)
+        }
+        // Android 16:系统的岛(超级岛、流体云)把它显示出来,胶囊上是配对码。
+        if (Build.VERSION.SDK_INT >= 36 &&
+            NotificationManagerCompat.from(context).canPostPromotedNotifications()
+        ) {
+            builder.setRequestPromotedOngoing(true)
+            if (code.isNotBlank() && NotificationArt.islandShowsShortText()) {
+                builder.setShortCriticalText(code)
+            }
+        } else {
+            // 岛展开后右边不放头像:左边已经有图标,两个并排是重复的。
+            builder.setLargeIcon(NotificationArt.device(platform))
+        }
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
             builder
                 .setSound(Settings.System.DEFAULT_NOTIFICATION_URI)
@@ -148,14 +160,55 @@ class ConnectionRequestNotificationPlugin :
         }
         val notification = builder.build()
 
+        val id = islandId(notificationId)
+        IslandOverlay.put(
+            context,
+            IslandOverlay.Item(
+                id = id,
+                glyph = if (platform.lowercase() == "android" || platform.lowercase() == "ios") {
+                    IslandOverlay.Glyph.PHONE
+                } else {
+                    IslandOverlay.Glyph.COMPUTER
+                },
+                title = deviceName,
+                text = "$title · $verificationText",
+                figure = code,
+                buttons = listOf(
+                    IslandOverlay.Button(
+                        context.getString(R.string.connection_alert_reject_action),
+                        IslandOverlay.Role.DECLINE,
+                    ) {
+                        IslandOverlay.fire(context, rejectIntent)
+                        IslandOverlay.remove(id)
+                    },
+                    IslandOverlay.Button(
+                        context.getString(R.string.connection_alert_accept_action),
+                        IslandOverlay.Role.ACCEPT,
+                    ) {
+                        IslandOverlay.fire(context, answerIntent)
+                        IslandOverlay.remove(id)
+                    },
+                ),
+                urgent = true,
+                rank = 100,
+                onOpen = { IslandOverlay.fire(context, openIntent) },
+            ),
+            TIMEOUT_MILLIS,
+        )
+
         return try {
             NotificationManagerCompat.from(context).notify(notificationId, notification)
-            wakeScreenForAlert()
+            if (!island) {
+                wakeScreenForAlert()
+            }
             true
         } catch (_: RuntimeException) {
+            IslandOverlay.remove(id)
             false
         }
     }
+
+    private fun islandId(notificationId: Int) = "connect:$notificationId"
 
     @Suppress("DEPRECATION")
     private fun wakeScreenForAlert() {
@@ -215,44 +268,6 @@ class ConnectionRequestNotificationPlugin :
                 // Upgrade cleanup is best-effort and never blocks notifications.
             }
         }
-    }
-
-    private fun deviceAvatar(platform: String): Bitmap {
-        val bitmap = Bitmap.createBitmap(128, 128, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bitmap)
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = BRAND_BLUE
-            style = Paint.Style.FILL
-        }
-        canvas.drawCircle(64f, 64f, 60f, paint)
-        paint.apply {
-            color = Color.WHITE
-            style = Paint.Style.STROKE
-            strokeWidth = 8f
-            strokeCap = Paint.Cap.ROUND
-            strokeJoin = Paint.Join.ROUND
-        }
-
-        when (platform.lowercase()) {
-            "android", "ios" -> {
-                canvas.drawRoundRect(RectF(43f, 25f, 85f, 103f), 8f, 8f, paint)
-                canvas.drawCircle(64f, 91f, 2f, paint)
-            }
-            "macos", "windows", "linux" -> {
-                canvas.drawRoundRect(RectF(27f, 31f, 101f, 82f), 7f, 7f, paint)
-                canvas.drawLine(22f, 96f, 106f, 96f, paint)
-            }
-            else -> {
-                paint.apply {
-                    style = Paint.Style.FILL
-                    textAlign = Paint.Align.CENTER
-                    textSize = 54f
-                    typeface = Typeface.DEFAULT_BOLD
-                }
-                canvas.drawText("W", 64f, 83f, paint)
-            }
-        }
-        return bitmap
     }
 
     private fun actionPendingIntent(

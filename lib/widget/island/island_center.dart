@@ -10,7 +10,10 @@ enum IslandStage { hidden, compact, expanded }
 enum IslandHaptic { selection, light, medium }
 
 /// Every live activity of the app on one island (phones): file copies,
-/// transfers, the speaker, this phone being streamed, windows sent here.
+/// the speaker, this phone being streamed, windows sent here. Files sent
+/// in a conversation are not on it: the conversation shows them, and in
+/// the background so does the island over other apps (Android's
+/// IslandOverlay, fed by the transfer notification).
 ///
 /// The center decides what shows and when; the host only draws it and
 /// springs between [stage]s:
@@ -23,8 +26,9 @@ enum IslandHaptic { selection, light, medium }
 ///   circle beside it; the card lists all of them;
 /// - swiped away, what is under way waits out of sight until something
 ///   about it changes; a window sent here is dismissed.
-/// In the background nothing shows (the system notifications take over);
-/// what should have opened the card opens it when the app comes back.
+/// In the background nothing of it shows (the system notifications take
+/// over); what should have opened the card opens it when the app comes
+/// back.
 class IslandCenter extends ChangeNotifier implements IslandControls {
   IslandCenter({
     Iterable<IslandSource> sources = const [],
@@ -119,8 +123,8 @@ class IslandCenter extends ChangeNotifier implements IslandControls {
   }
 
   /// How much an activity matters right now: a window sent here, then
-  /// trouble, the phone being streamed, copies and transfers, a tick that
-  /// is about to go, the speaker, anything paused.
+  /// trouble, the phone being streamed, copies, a tick that is about to
+  /// go, the speaker, anything paused.
   static int rank(IslandActivity activity) {
     if (activity.kind == IslandKind.offer) {
       return 100;
@@ -132,7 +136,7 @@ class IslandCenter extends ChangeNotifier implements IslandControls {
       IslandStatus.paused => 20,
       IslandStatus.live => switch (activity.kind) {
         IslandKind.streamed => 70,
-        IslandKind.copy || IslandKind.transfer => 60,
+        IslandKind.copy => 60,
         IslandKind.audio => 50,
         IslandKind.offer => 100,
       },

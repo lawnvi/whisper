@@ -4,12 +4,14 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.support.v4.media.session.MediaSessionCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.graphics.drawable.IconCompat
 
 /**
  * Keeps every Whisper foreground workload on one app-level notification.
@@ -30,6 +32,10 @@ object UnifiedForegroundNotification {
     private const val PREF_CHANNEL_NAME = "channelName"
     private const val PREF_CHANNEL_DESCRIPTION = "channelDescription"
 
+    /** 和岛一样的蓝:进度条、图标着色。 */
+    private const val TRANSFER_BLUE = 0xFF0A84FF.toInt()
+    private const val PERMILLE = 1000
+
     private data class KeepAliveState(
         val title: String,
         val text: String,
@@ -37,10 +43,20 @@ object UnifiedForegroundNotification {
         val indeterminate: Boolean,
     )
 
+    /**
+     * [direction] 是 "out"、"in" 或 "both";[peer] 是对方的样子
+     * ("phone"、"computer"),不止一台时为空。
+     */
     private data class TransferState(
         val title: String,
         val text: String,
         val progress: Int?,
+        /** 千分比:进度条按它画,一次只挪一点点,看起来是连续的。 */
+        val permille: Int = 0,
+        val direction: String = "out",
+        val peer: String? = null,
+        val stopLabel: String = "",
+        val detail: String = "",
     )
 
     private data class MediaState(
@@ -99,11 +115,25 @@ object UnifiedForegroundNotification {
         title: String,
         text: String,
         progress: Int,
+        permille: Int,
+        direction: String,
+        peer: String?,
+        stopLabel: String,
+        detail: String,
         channelName: String,
         channelDescription: String,
     ): Notification {
         persistChannelText(context, channelName, channelDescription)
-        transfer = TransferState(title, text, progress.coerceIn(0, 100))
+        transfer = TransferState(
+            title,
+            text,
+            progress.coerceIn(0, 100),
+            permille.coerceIn(0, PERMILLE),
+            direction,
+            peer,
+            stopLabel,
+            detail,
+        )
         return buildCurrent(context)!!
     }
 
@@ -202,18 +232,33 @@ object UnifiedForegroundNotification {
         transfer?.let { state ->
             val builder = baseBuilder(context, state.title, state.text)
                 .setOngoing(true)
+            if (media == null) {
+                // 状态栏和系统的岛(超级岛、流体云、原子岛)左边放的就是这个
+                // 图标:看得出是发还是收。
+                builder.setSmallIcon(transferIcon(state.direction))
+                    .setColor(TRANSFER_BLUE)
+            }
             val progress = state.progress
             if (progress != null) {
                 // ProgressStyle and MediaStyle are mutually exclusive. While
                 // audio is active, keep the transfer text/progress but retain
                 // the media session and its controls in the unified card.
                 if (media == null && supportsLiveUpdates(context)) {
-                    builder.setStyle(
-                        NotificationCompat.ProgressStyle().setProgress(progress),
-                    )
+                    builder.setStyle(transferProgressStyle(context, state))
+                    // 超级岛右边那一格:优先显示它,没有才显示标题(文件名太长)。
+                    if (NotificationArt.islandShowsShortText()) {
+                        builder.setShortCriticalText("$progress%")
+                    }
                     builder.setRequestPromotedOngoing(true)
+                    // 百分比在胶囊上,展开后文字换成从哪来、多快。
+                    if (state.detail.isNotBlank()) {
+                        builder.setContentText(state.detail)
+                    }
+                    if (state.stopLabel.isNotBlank()) {
+                        builder.addAction(0, state.stopLabel, stopIntent(context))
+                    }
                 } else {
-                    builder.setProgress(100, progress, false)
+                    builder.setProgress(PERMILLE, state.permille, false)
                 }
             }
             media?.let { mediaState ->
@@ -237,6 +282,46 @@ object UnifiedForegroundNotification {
             return builder.build()
         }
         return null
+    }
+
+    private fun stopIntent(context: Context): PendingIntent = PendingIntent.getBroadcast(
+        context,
+        7,
+        Intent(context, TransferStopReceiver::class.java),
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+    )
+
+    private fun transferIcon(direction: String): Int = when (direction) {
+        "in" -> R.drawable.ic_stat_receive
+        "both" -> R.drawable.ic_stat_transfer
+        else -> R.drawable.ic_stat_send
+    }
+
+    /** 蓝色的进度条,两头是这台手机和对方:从哪到哪一眼看得出。 */
+    private fun transferProgressStyle(
+        context: Context,
+        state: TransferState,
+    ): NotificationCompat.ProgressStyle {
+        val style = NotificationCompat.ProgressStyle()
+            .setProgressSegments(
+                listOf(NotificationCompat.ProgressStyle.Segment(PERMILLE).setColor(TRANSFER_BLUE)),
+            )
+            .setProgress(state.permille)
+        val there = when (state.peer) {
+            "phone" -> R.drawable.ic_device_phone
+            "computer" -> R.drawable.ic_device_computer
+            else -> null
+        }
+        if (there != null && state.direction != "both") {
+            val here = IconCompat.createWithResource(context, R.drawable.ic_device_phone)
+            val other = IconCompat.createWithResource(context, there)
+            if (state.direction == "in") {
+                style.setProgressStartIcon(other).setProgressEndIcon(here)
+            } else {
+                style.setProgressStartIcon(here).setProgressEndIcon(other)
+            }
+        }
+        return style
     }
 
     private fun isActiveMedia(state: MediaState): Boolean =
@@ -331,7 +416,7 @@ object UnifiedForegroundNotification {
         )
     }
 
-    private fun supportsLiveUpdates(context: Context): Boolean {
+    fun supportsLiveUpdates(context: Context): Boolean {
         return Build.VERSION.SDK_INT >= 36 &&
             NotificationManagerCompat.from(context).canPostPromotedNotifications()
     }
@@ -386,4 +471,11 @@ object UnifiedForegroundNotification {
 
     private fun notificationManager(context: Context): NotificationManager =
         context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+}
+
+/** 实时更新上的"停止":和岛上卡片的同一件事。 */
+class TransferStopReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        IslandOverlay.onStop?.invoke()
+    }
 }

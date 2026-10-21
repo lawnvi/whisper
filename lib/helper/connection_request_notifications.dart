@@ -349,6 +349,8 @@ class ConnectionRequestNotifier {
                 'deviceName': request.device.name,
                 'platform': request.device.platform,
                 'verificationText': l10n.pairingCodeSemantics(formattedCode),
+                // The island's pill shows it, to compare at a glance.
+                'code': formattedCode,
                 'title': title,
                 'payload': payload,
                 'rejectActionId': pairingRejectNotificationAction,

@@ -30,7 +30,9 @@ void main() {
     expect(unified, contains('canPostPromotedNotifications'));
     expect(unified, contains('Build.VERSION.SDK_INT >= 36'));
     expect(unified, contains('.setProgress(100,')); // 15- 降级
-    expect(unified, isNot(contains('setShortCriticalText')));
+    // Short text only where the system's island has room for it beside the
+    // camera (HyperOS); other chips sit by the punch hole and lose it.
+    expect(unified, contains('if (NotificationArt.islandShowsShortText())'));
     expect(unified, contains('setOnlyAlertOnce(true)'));
     expect(service, contains('STOP_FOREGROUND_DETACH'));
 

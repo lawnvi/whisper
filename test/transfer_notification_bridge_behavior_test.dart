@@ -8,12 +8,13 @@ TransferSnapshot _snap(
   FileTransferState state = FileTransferState.transferring,
   int size = 100,
   int committed = 0,
+  FileTransferDirection direction = FileTransferDirection.outgoing,
 }) {
   return TransferSnapshot(
     transferId: id,
     messageUuid: 'm-$id',
     peerUid: 'peer',
-    direction: FileTransferDirection.outgoing,
+    direction: direction,
     state: state,
     finalPath: '/tmp/$id',
     tempPath: '/tmp/$id.part',
@@ -118,5 +119,73 @@ void main() {
     bridge.onTransferUpdated(
         _snap('s1', state: FileTransferState.canceled));
     expect(calls.where((c) => c.method == 'cancel'), hasLength(1));
+  });
+
+  test('progress says which way the files go, for the island over other apps',
+      () async {
+    final calls = <MethodCall>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      return null;
+    });
+    addTearDown(() => TestDefaultBinaryMessengerBinding
+        .instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, null));
+
+    final bridge = TransferNotificationBridge();
+    bridge.onTransferUpdated(
+        _snap('in1', direction: FileTransferDirection.incoming));
+    final progress = calls.where((c) => c.method == 'showProgress').toList();
+    expect(progress, isNotEmpty);
+    expect(
+      Map<Object?, Object?>.from(progress.last.arguments as Map)['direction'],
+      'in',
+    );
+
+    bridge.onTransferUpdated(_snap('in1',
+        direction: FileTransferDirection.incoming,
+        state: FileTransferState.completed,
+        committed: 100));
+    expect(calls.where((c) => c.method == 'showTerminal'), hasLength(1));
+  });
+
+  test('the island card stops what is still under way', () async {
+    final calls = <MethodCall>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      return null;
+    });
+    addTearDown(() => TestDefaultBinaryMessengerBinding
+        .instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, null));
+
+    final bridge = TransferNotificationBridge();
+    final canceled = <String>[];
+    final cancelBefore = bridge.cancel;
+    final peerBefore = bridge.peer;
+    bridge.cancel = (id) async => canceled.add(id);
+    bridge.peer = (peer) => (kind: 'computer', name: 'MacBook');
+    addTearDown(() {
+      bridge.cancel = cancelBefore;
+      bridge.peer = peerBefore;
+    });
+
+    bridge.onTransferUpdated(_snap('s1'));
+    bridge.onTransferUpdated(_snap('s2'));
+    bridge.onTransferUpdated(
+        _snap('s2', state: FileTransferState.completed, committed: 100));
+    final progress = calls.where((c) => c.method == 'showProgress').toList();
+    final args = Map<Object?, Object?>.from(progress.first.arguments as Map);
+    expect(args['peer'], 'computer');
+    expect(args['detail'], startsWith('To MacBook'));
+    expect(args['stopLabel'], isNotEmpty);
+    expect(args['openLabel'], isNotEmpty);
+
+    await bridge.onNative(const MethodCall('stop'));
+    expect(canceled, ['s1']);
+
+    bridge.onTransferUpdated(_snap('s1', state: FileTransferState.canceled));
   });
 }

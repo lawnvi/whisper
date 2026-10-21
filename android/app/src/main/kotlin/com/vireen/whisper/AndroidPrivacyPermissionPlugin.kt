@@ -74,6 +74,13 @@ class AndroidPrivacyPermissionPlugin :
             "requestNotificationListener" -> requestNotificationListener(result)
             "rebindNotificationListener" -> rebindNotificationListener(result)
             "requestInstalledApps" -> requestInstalledApps(result)
+            "islandOverlay" -> result.success(
+                mapOf(
+                    "needed" to IslandOverlay.needed(binding.applicationContext),
+                    "allowed" to IslandOverlay.allowed(binding.applicationContext),
+                ),
+            )
+            "requestIslandOverlay" -> requestIslandOverlay(result)
             else -> result.notImplemented()
         }
     }
@@ -107,6 +114,24 @@ class AndroidPrivacyPermissionPlugin :
                 notificationResult = null
                 result.success(false)
             }
+        }
+    }
+
+    /** "显示在其他应用上层"只能用户在系统设置里给:打开本应用那一页。 */
+    private fun requestIslandOverlay(result: MethodChannel.Result) {
+        val context = activity ?: binding.applicationContext
+        val page = Intent(
+            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+            android.net.Uri.parse("package:${binding.applicationContext.packageName}"),
+        )
+        if (activity == null) {
+            page.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        try {
+            context.startActivity(page)
+            result.success(true)
+        } catch (_: Exception) {
+            result.success(false)
         }
     }
 

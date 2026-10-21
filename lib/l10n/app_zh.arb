@@ -521,6 +521,10 @@
   "notificationChannelTransferDesc": "文件传输进度",
   "notificationChannelGeneral": "消息",
   "notificationChannelGeneralDesc": "新消息与提醒",
+  "notificationChannelRequests": "需要你回答的请求",
+  "@notificationChannelRequests": {
+    "description": "Android notification channel for questions asked while Whisper is in the background (a device wants to browse files, a window sent here)"
+  },
   "emptyAppsTitle": "没有可用应用",
   "emptyAppsSearchTitle": "没有找到应用",
   "fileDropRejected": "无法发送这些文件",
@@ -1756,53 +1760,6 @@
   "@remoteFilesPlaceAppFolder": {
     "description": "File browser: an iPhone's or iPad's root, the app's own Documents folder (Files › On My iPhone › Whisper)."
   },
-  "islandTransferTo": "发送给 {device}",
-  "@islandTransferTo": {
-    "description": "Island: files being sent from a conversation, under the file name",
-    "placeholders": {
-      "device": {
-        "type": "String"
-      }
-    }
-  },
-  "islandTransferFrom": "来自 {device}",
-  "@islandTransferFrom": {
-    "description": "Island: files being received in a conversation, under the file name",
-    "placeholders": {
-      "device": {
-        "type": "String"
-      }
-    }
-  },
-  "islandTransferMixed": "正在收发",
-  "@islandTransferMixed": {
-    "description": "Island: files going both ways at once"
-  },
-  "islandTransferFiles": "{count} 个文件",
-  "@islandTransferFiles": {
-    "description": "Island: title when several files are under way",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
-  "islandTransferSent": "已发送",
-  "@islandTransferSent": {
-    "description": "Island: conversation files all sent"
-  },
-  "islandTransferReceived": "已收到",
-  "@islandTransferReceived": {
-    "description": "Island: conversation files all received"
-  },
-  "islandTransferFailed": "没有传完",
-  "@islandTransferFailed": {
-    "description": "Island: some conversation files failed"
-  },
-  "islandTransferStop": "停止传输",
-  "@islandTransferStop": {
-    "description": "Island button (screen-reader label): cancel the conversation transfers under way"
-  },
   "islandAudioPaused": "已暂停播放",
   "@islandAudioPaused": {
     "description": "Island: this phone, acting as a speaker for another device, is paused"
@@ -2637,5 +2594,47 @@
   "remoteFilesPromptBodyReadOnlyPhone": "允许后，它能看到这台手机的内部存储，打开和拷出里面的文件，但不能改动。",
   "@remoteFilesPromptBodyReadOnlyPhone": {
     "description": "Prompt body on a phone when 'Allow changes' is off."
+  },
+  "islandOverlay": "后台灵动岛",
+  "@islandOverlay": {
+    "description": "Android settings row: the island drawn over other apps while Whisper is in the background"
+  },
+  "islandOverlayDesc": "Whisper 在后台时，在屏幕顶部显示传输进度。需要允许显示在其他应用上层。",
+  "@islandOverlayDesc": {
+    "description": "Explains the background island and the \"display over other apps\" permission it needs"
+  },
+  "islandOverlayOn": "已开启",
+  "@islandOverlayOn": {
+    "description": "Status of the background island: the permission is given"
+  },
+  "islandOverlayOff": "未开启",
+  "@islandOverlayOff": {
+    "description": "Status of the background island: the permission is not given"
+  },
+  "islandOverlayStop": "停止",
+  "@islandOverlayStop": {
+    "description": "Button on the card of the island over other apps: stops the transfers under way"
+  },
+  "islandOverlayOpen": "打开 Whisper",
+  "@islandOverlayOpen": {
+    "description": "Button on the card of the island over other apps: brings Whisper to the front"
+  },
+  "islandOverlayFrom": "来自 {device}",
+  "@islandOverlayFrom": {
+    "description": "Card of the island over other apps: files coming from this device",
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "islandOverlayTo": "发送到 {device}",
+  "@islandOverlayTo": {
+    "description": "Card of the island over other apps: files going to this device",
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
   }
 }

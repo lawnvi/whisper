@@ -46,7 +46,20 @@ void main() {
     expect(cmd.progress, 50); // 单调:不允许从 50 回退到 12
   });
 
-  test('throttles to 300ms updates but not terminal', () {
+  test('reports thousandths for a bar that moves smoothly', () {
+    var now = 0;
+    final agg = TransferNotificationAggregator(
+        nowMillis: () => now, strings: strings());
+    final first = agg.onSnapshot(snap('a', size: 10000, committed: 1234))!;
+    expect(first.permille, 123);
+    expect(first.progress, 12);
+    now += 300;
+    final next = agg.onSnapshot(snap('a', size: 10000, committed: 1250))!;
+    expect(next.permille, 125);
+    expect(next.progress, 12);
+  });
+
+  test('throttles to 250ms updates but not terminal', () {
     var now = 0;
     final agg = TransferNotificationAggregator(
         nowMillis: () => now, strings: strings());

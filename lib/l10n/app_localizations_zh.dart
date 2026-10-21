@@ -1026,6 +1026,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get notificationChannelGeneralDesc => '新消息与提醒';
 
   @override
+  String get notificationChannelRequests => '需要你回答的请求';
+
+  @override
   String get emptyAppsTitle => '没有可用应用';
 
   @override
@@ -2782,36 +2785,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get remoteFilesPlaceAppFolder => 'Whisper 文件夹';
 
   @override
-  String islandTransferTo(String device) {
-    return '发送给 $device';
-  }
-
-  @override
-  String islandTransferFrom(String device) {
-    return '来自 $device';
-  }
-
-  @override
-  String get islandTransferMixed => '正在收发';
-
-  @override
-  String islandTransferFiles(int count) {
-    return '$count 个文件';
-  }
-
-  @override
-  String get islandTransferSent => '已发送';
-
-  @override
-  String get islandTransferReceived => '已收到';
-
-  @override
-  String get islandTransferFailed => '没有传完';
-
-  @override
-  String get islandTransferStop => '停止传输';
-
-  @override
   String get islandAudioPaused => '已暂停播放';
 
   @override
@@ -3436,4 +3409,32 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get remoteFilesPromptBodyReadOnlyPhone =>
       '允许后，它能看到这台手机的内部存储，打开和拷出里面的文件，但不能改动。';
+
+  @override
+  String get islandOverlay => '后台灵动岛';
+
+  @override
+  String get islandOverlayDesc => 'Whisper 在后台时，在屏幕顶部显示传输进度。需要允许显示在其他应用上层。';
+
+  @override
+  String get islandOverlayOn => '已开启';
+
+  @override
+  String get islandOverlayOff => '未开启';
+
+  @override
+  String get islandOverlayStop => '停止';
+
+  @override
+  String get islandOverlayOpen => '打开 Whisper';
+
+  @override
+  String islandOverlayFrom(String device) {
+    return '来自 $device';
+  }
+
+  @override
+  String islandOverlayTo(String device) {
+    return '发送到 $device';
+  }
 }

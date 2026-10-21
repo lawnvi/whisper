@@ -7,10 +7,12 @@ import 'package:flutter/services.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../../helper/helper.dart';
+import '../../helper/island_asks.dart';
 import '../../helper/notification.dart';
 import '../../helper/notification_l10n.dart';
 import '../../l10n/app_localizations.dart';
 import '../../remote_files/fs_host.dart';
+import '../../socket/svrmanager.dart';
 import '../../remote_files/mount/remote_mounts.dart';
 import '../window_stream/flow_space_theme.dart';
 import 'files_icons.dart';
@@ -62,6 +64,11 @@ class _FileBrowsePromptHostState extends State<FileBrowsePromptHost> {
 
   void _onGate() {
     final pending = _gate.pending;
+    final asked = _announced;
+    if (asked != null && !identical(pending, asked)) {
+      // Answered in the app, or given up on: off the island too.
+      unawaited(IslandAsks.shared.settle(_askId(asked)));
+    }
     if (pending != null && !identical(pending, _announced)) {
       _announced = pending;
       HapticFeedback.mediumImpact();
@@ -72,21 +79,68 @@ class _FileBrowsePromptHostState extends State<FileBrowsePromptHost> {
     }
   }
 
-  /// The question must be seen: raise the window on desktops, notify when
-  /// the phone app is in the background.
+  /// The question must be seen: raise the window on desktops; on a phone in
+  /// the background, put it on the island with its answers (Android), or
+  /// notify.
   void _announce(FileBrowseRequest request) {
     if (isDesktop()) {
       windowManager.show();
       windowManager.focus();
       return;
     }
-    if (WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) {
-      final l10n = resolveNotificationL10n();
+    if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
+      return;
+    }
+    final l10n = resolveNotificationL10n();
+    if (!Platform.isAndroid) {
       NotificationHelper().showNotification(
         title: l10n.remoteFilesPromptTitle(request.deviceName),
         body: l10n.remoteFilesPromptBodyPhone,
       );
+      return;
     }
+    unawaited(_ask(request, l10n));
+  }
+
+  static String _askId(FileBrowseRequest request) => 'browse:${request.peerId}';
+
+  Future<void> _ask(FileBrowseRequest request, AppLocalizations l10n) async {
+    final readOnly = await FileBrowseHost.shared.permissions.isReadOnly(
+      request.peerId,
+    );
+    if (!identical(_gate.pending, request)) {
+      return;
+    }
+    await IslandAsks.shared.ask(
+      id: _askId(request),
+      glyph: 'folder',
+      title: l10n.remoteFilesPromptTitle(request.deviceName),
+      figure: request.deviceName,
+      platform: WsSvrManager()
+          .remoteProfileFor(request.peerId)
+          ?.device
+          .platform,
+      text: readOnly
+          ? l10n.remoteFilesPromptBodyReadOnlyPhone
+          : l10n.remoteFilesPromptBodyPhone,
+      buttons: [
+        IslandAskButton('deny', l10n.remoteFilesDeny, role: 'decline'),
+        IslandAskButton('once', l10n.remoteFilesAllowOnce, role: 'accept'),
+      ],
+      channelName: l10n.notificationChannelRequests,
+      // Answered as it is set for this device ("允许修改文件" stays).
+      onAnswer: (button) {
+        if (!identical(_gate.pending, request)) {
+          return;
+        }
+        switch (button) {
+          case 'deny':
+            _gate.decide(FileBrowseDecision.deny);
+          case 'once':
+            _gate.decide(FileBrowseDecision.once);
+        }
+      },
+    );
   }
 
   @override

@@ -9,6 +9,7 @@ import io.flutter.plugins.GeneratedPluginRegistrant
 class MainActivity : FlutterActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        IslandOverlay.watch(application)
         // Match the control page's fade instead of rotating a stale keyboard frame.
         window.attributes = window.attributes.apply {
             rotationAnimation = WindowManager.LayoutParams.ROTATION_ANIMATION_CROSSFADE
@@ -24,6 +25,7 @@ class MainActivity : FlutterActivity() {
         flutterEngine.plugins.add(AndroidDocumentPickerPlugin())
         flutterEngine.plugins.add(AndroidSystemSharePlugin())
         flutterEngine.plugins.add(TransferNotificationPlugin())
+        flutterEngine.plugins.add(IslandPlugin())
         flutterEngine.plugins.add(ConnectionRequestNotificationPlugin())
         flutterEngine.plugins.add(LocalNetworkPermissionPlugin())
         flutterEngine.plugins.add(AndroidPrivacyPermissionPlugin())

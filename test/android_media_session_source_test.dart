@@ -145,7 +145,7 @@ void main() {
     expect(transferBranch, contains('media == null && supportsLiveUpdates'));
     expect(
       transferBranch,
-      contains('builder.setProgress(100, progress, false)'),
+      contains('builder.setProgress(PERMILLE, state.permille, false)'),
     );
     expect(unified, contains('private fun isActiveMedia(state: MediaState)'));
     expect(unified, contains('return buildMediaNotification(context, state)'));

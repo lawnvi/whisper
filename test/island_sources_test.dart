@@ -3,160 +3,18 @@ import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:whisper/model/file_transfer.dart';
 import 'package:whisper/page/window_stream/flow_offer_banner.dart';
 import 'package:whisper/widget/island/island_activity.dart';
 import 'package:whisper/widget/island/sources/copy_source.dart';
 import 'package:whisper/widget/island/sources/streamed_source.dart';
-import 'package:whisper/widget/island/sources/transfer_source.dart';
-import 'package:whisper/widget/island/transfer_names.dart';
 import 'package:whisper/window_stream/core/window_stream_models.dart';
 import 'package:whisper/window_stream/remote/remote_peer_source.dart';
 import 'package:whisper/window_stream/remote/window_stream_control.dart';
 
 import 'island_test_support.dart';
 
-TransferSnapshot _snap(
-  String id, {
-  FileTransferState state = FileTransferState.transferring,
-  FileTransferDirection direction = FileTransferDirection.incoming,
-  int size = 1000,
-  int committed = 0,
-  String peer = 'mac',
-}) => TransferSnapshot(
-  transferId: id,
-  messageUuid: id,
-  peerUid: peer,
-  direction: direction,
-  state: state,
-  finalPath: '',
-  tempPath: '',
-  size: size,
-  committedBytes: committed,
-  lastError: '',
-  updatedAt: 0,
-);
-
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-
-  group('conversation transfers', () {
-    late StreamController<TransferSnapshot> updates;
-    late TransferIslandSource source;
-    late List<String> canceled;
-    late List<String> retried;
-
-    setUp(() {
-      updates = StreamController<TransferSnapshot>.broadcast(sync: true);
-      canceled = [];
-      retried = [];
-      source = TransferIslandSource(
-        updates: updates.stream,
-        isCopy: (id) => id.startsWith('copy'),
-        names: TransferNames(lookup: (uuid) async => 'photo-$uuid.jpg'),
-        deviceName: (peer) => peer == 'mac' ? 'MacBook' : null,
-        cancel: (id) async => canceled.add(id),
-        retry: (id) async => retried.add(id),
-        clock: FakeIslandClock(),
-      );
-    });
-
-    tearDown(() async {
-      source.dispose();
-      await updates.close();
-    });
-
-    TransferStats stats() =>
-        (source.activities.single.presenter as TransferPresenter).stats;
-
-    test('file manager copies are left to their own activities', () {
-      updates.add(_snap('copy-1'));
-      expect(source.activities, isEmpty);
-    });
-
-    test('one round of transfers is one quiet activity', () async {
-      updates.add(_snap('a', committed: 250));
-      updates.add(_snap('b', size: 3000, committed: 750));
-      final activity = source.activities.single;
-      expect(activity.kind, IslandKind.transfer);
-      expect(activity.arrival, IslandArrival.quiet);
-      expect(activity.showAfter, TransferIslandSource.showAfter);
-      expect(activity.status, IslandStatus.live);
-      expect(stats().count, 2);
-      expect(stats().fraction, 0.25);
-      expect(stats().device, 'MacBook');
-      expect(stats().receiving, isTrue);
-      expect(stats().name, isNull, reason: 'two files have no one name');
-
-      updates.add(_snap('a', state: FileTransferState.completed));
-      expect(source.activities.single.status, IslandStatus.live);
-      updates.add(_snap('b', size: 3000, state: FileTransferState.completed));
-      expect(source.activities.single.status, IslandStatus.done);
-      expect(stats().fraction, 1);
-
-      final id = source.activities.single.id;
-      source.retired(id);
-      expect(source.activities, isEmpty);
-
-      // The next one is a new round.
-      updates.add(_snap('c'));
-      expect(source.activities.single.id, isNot(id));
-    });
-
-    test('a single file goes by its name once known', () async {
-      updates.add(_snap('a'));
-      await Future<void>.delayed(Duration.zero);
-      updates.add(_snap('a', committed: 10));
-      expect(stats().name, 'photo-a.jpg');
-    });
-
-    test('trouble, failure, and what the buttons do', () async {
-      updates.add(
-        _snap('out', direction: FileTransferDirection.outgoing, peer: 'pc'),
-      );
-      updates.add(_snap('in'));
-      expect(stats().device, isNull, reason: 'two devices');
-      updates.add(
-        _snap(
-          'out',
-          direction: FileTransferDirection.outgoing,
-          peer: 'pc',
-          state: FileTransferState.waitingReconnect,
-        ),
-      );
-      updates.add(_snap('in', state: FileTransferState.waitingReconnect));
-      expect(source.activities.single.status, IslandStatus.waiting);
-      expect(stats().canRetry, isTrue);
-
-      final presenter = source.activities.single.presenter as TransferPresenter;
-      await presenter.stop();
-      expect(canceled, ['out', 'in']);
-      await presenter.retry!();
-      expect(retried, ['out']);
-
-      updates.add(_snap('in', state: FileTransferState.failed));
-      updates.add(
-        _snap(
-          'out',
-          direction: FileTransferDirection.outgoing,
-          peer: 'pc',
-          state: FileTransferState.completed,
-        ),
-      );
-      expect(source.activities.single.status, IslandStatus.failed);
-    });
-
-    test('all stopped is over without a result', () {
-      updates.add(_snap('a'));
-      updates.add(_snap('a', state: FileTransferState.canceled));
-      expect(source.activities.single.status, IslandStatus.ended);
-    });
-
-    test('an update for something long over is ignored', () {
-      updates.add(_snap('old', state: FileTransferState.completed));
-      expect(source.activities, isEmpty);
-    });
-  });
 
   group('this phone being streamed', () {
     const channel = MethodChannel('island-test/window_stream_phone');

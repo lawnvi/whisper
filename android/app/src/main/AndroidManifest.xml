@@ -27,6 +27,7 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
@@ -128,6 +129,8 @@
             android:authorities="com.vireen.whisper.window_stream"
             android:exported="true" />
         <receiver android:name=".WindowStreamStopReceiver" android:exported="false" />
+        <receiver android:name=".IslandActionReceiver" android:exported="false" />
+        <receiver android:name=".TransferStopReceiver" android:exported="false" />
 
         <service android:name="im.zoe.labs.flutter_notification_listener.NotificationsHandlerService"
             android:exported="false"

@@ -112,6 +112,8 @@ object WindowStreamPhoneState {
     private const val PREFS = "whisper_window_stream"
     private const val CHANNEL_ID = "whisper.window_stream"
     private const val NOTIFICATION_ID = 7301
+    private const val ISLAND_ID = "streamed"
+    private const val FLOW_INDIGO = 0xFF5E5CE6.toInt()
 
     /**
      * The agent asks for the stop button every second while it streams; this
@@ -211,16 +213,48 @@ object WindowStreamPhoneState {
         if (windows <= 0) {
             stopping = false
             manager.cancel(NOTIFICATION_ID)
+            IslandOverlay.remove(ISLAND_ID)
             changed()
             return
         }
         main.postDelayed(watchdog, WATCH_EVERY_MS)
+        island(context)
         try {
             manager.notify(NOTIFICATION_ID, build(context, stopping = stopping))
         } catch (_: SecurityException) {
             // Notifications not allowed: streaming still works, unannounced.
         }
         changed()
+    }
+
+    /** 后台灵动岛上也挂着:正在流转到哪,一个"停止"。 */
+    private fun island(context: Context) {
+        val viewerName = viewer.ifBlank { context.getString(R.string.window_stream_other_device) }
+        IslandOverlay.put(
+            context,
+            IslandOverlay.Item(
+                id = ISLAND_ID,
+                glyph = IslandOverlay.Glyph.FLOW,
+                title = context.getString(R.string.window_stream_active_title, viewerName),
+                text = if (stopping) {
+                    context.getString(R.string.window_stream_stopping)
+                } else {
+                    context.resources.getQuantityString(R.plurals.window_stream_window_count, windows, windows)
+                },
+                figure = context.getString(R.string.window_stream_chip),
+                buttons = if (stopping) {
+                    emptyList()
+                } else {
+                    listOf(
+                        IslandOverlay.Button(
+                            context.getString(R.string.window_stream_stop_action),
+                            IslandOverlay.Role.DECLINE,
+                        ) { requestStop(context) },
+                    )
+                },
+                rank = 50,
+            ),
+        )
     }
 
     fun requestStop(context: Context) {
@@ -268,7 +302,8 @@ object WindowStreamPhoneState {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_stat_whisper)
+            .setSmallIcon(R.drawable.ic_stat_flow)
+            .setColor(FLOW_INDIGO)
             .setContentTitle(title)
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))

@@ -10,6 +10,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:whisper/audio/audio_share_coordinator.dart';
 import 'package:whisper/helper/android_background.dart';
+import 'package:whisper/helper/android_privacy_permission.dart';
 import 'package:whisper/helper/app_update.dart';
 import 'package:whisper/helper/desktop_startup.dart';
 import 'package:whisper/helper/desktop_screenshot.dart';
@@ -42,6 +43,7 @@ import 'package:whisper/cast_receiver/cast_receiver_manager.dart';
 import 'package:whisper/widget/glass_bottom_sheet.dart';
 import 'package:whisper/widget/glass_dialog.dart';
 import 'package:whisper/widget/glass_settings_slider.dart';
+import 'package:whisper/widget/island/island_overlay_setting.dart';
 import 'package:whisper/widget/screenshot_controls.dart';
 import 'package:whisper/widget/windows_input_service_setting.dart';
 import 'package:whisper/window_stream/linux/gnome_helper_tile.dart';
@@ -850,6 +852,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             await openAndroidBatteryOptimizationSettings();
                           },
                         ),
+                        IslandOverlaySetting(
+                          builder: (context, allowed) => _buildSettingItem(
+                            l10n.islandOverlay,
+                            Icon(
+                              Icons.layers_rounded,
+                              color: isDark
+                                  ? Colors.grey[400]
+                                  : CupertinoColors.systemGrey,
+                            ),
+                            desc: l10n.islandOverlayDesc,
+                            onTap: () => unawaited(
+                              AndroidPrivacyPermission.requestIslandOverlay(),
+                            ),
+                            trailing: _buildIslandOverlayStatus(
+                              l10n,
+                              palette,
+                              allowed,
+                            ),
+                          ),
+                        ),
                         _buildSettingItem(
                           l10n.pushNotification,
                           Icon(
@@ -1040,6 +1062,40 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  /// iOS's "value" form: a dot, a quiet word, the arrow to the system page.
+  Widget _buildIslandOverlayStatus(
+    AppLocalizations l10n,
+    WhisperPalette palette,
+    bool allowed,
+  ) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(
+            color: allowed
+                ? palette.trusted
+                : palette.textMuted.withValues(alpha: 0.5),
+            shape: BoxShape.circle,
+          ),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          allowed ? l10n.islandOverlayOn : l10n.islandOverlayOff,
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            fontSize: 14,
+            letterSpacing: 0,
+            color: palette.textMuted,
+          ),
+        ),
+        const SizedBox(width: 6),
+        Icon(Icons.arrow_forward_ios, size: 14, color: palette.textMuted),
+      ],
     );
   }
 
