@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'cloud_files_windows.dart';
 import 'fuse_linux.dart';
+import 'kde_places.dart';
 import 'mount_macos.dart';
 import 'mount_tree.dart';
 import 'nfs_server.dart';
@@ -46,6 +47,7 @@ abstract class MountFrontend {
       await Isolate.run(MacSidebar.removeAll);
     } else if (Platform.isLinux) {
       await FuseMount.unmountAllUnder(_linuxBase());
+      await KdePlaces.removeAll();
     } else if (Platform.isWindows) {
       CloudFilesMount.unregisterStale();
       // Only folders Whisper made sync roots of: they hold nothing but
@@ -119,6 +121,7 @@ abstract class MountFrontend {
       case 'nfs':
         await MacNfsMount.unmount(path);
       case 'fuse':
+        await KdePlaces.remove(path);
         final helper = await FuseMount.helper();
         if (helper != null) {
           await Process.run(helper, ['-u', '-z', path]);
@@ -190,22 +193,22 @@ abstract class MountFrontend {
     return base.resolveSymbolicLinks();
   }
 
-  /// Linux file managers name a mount after its folder and list it when
-  /// it is in the home folder: ~/Whisper/<device>.
+  /// The file managers on GIO (GNOME's and most others) list a mount in
+  /// the home folder by its folder's name: ~/Whisper/<device> (Whisper).
   static String _linuxBase() =>
       '${Platform.environment['HOME'] ?? '/tmp'}/Whisper';
 
   static Future<String> _linuxPoint(String name) async {
     final base = _linuxBase();
-    var safe = name.replaceAll('/', '∕').trim();
-    if (safe.isEmpty || safe == '.' || safe == '..') {
-      safe = 'Whisper';
+    final safe = name.replaceAll('/', '∕').trim();
+    // Whose files, and that Whisper shows them.
+    String point(int n) =>
+        '$base/${[if (safe.isNotEmpty) safe, if (n > 1) '$n', '(Whisper)'].join(' ')}';
+    var n = 1;
+    while (await _taken(point(n))) {
+      n++;
     }
-    var point = '$base/$safe';
-    for (var n = 2; await _taken(point); n++) {
-      point = '$base/$safe $n';
-    }
-    return point;
+    return point(n);
   }
 
   /// A folder already there with something in it (another device of the
@@ -273,16 +276,21 @@ class _LinuxFrontend extends MountFrontend {
   @override
   Future<void> start(MountTree tree, String name) async {
     final fuse = FuseMount(tree, mountPoint: path, name: name)
-      ..onEnded = () {
+      ..onEnded = () async {
+        await KdePlaces.remove(path);
         _tidy();
         onEnded?.call();
       };
     _fuse = fuse;
     await fuse.start();
+    // KDE lists only mounts of kinds it knows; under its folder's name, as
+    // GNOME lists it.
+    await KdePlaces.add(path, title: File(path).uri.pathSegments.last);
   }
 
   @override
   Future<void> stop() async {
+    await KdePlaces.remove(path);
     await _fuse?.stop();
     _tidy();
   }

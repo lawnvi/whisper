@@ -13,6 +13,7 @@ import 'package:whisper/remote_files/fs_host_files.dart';
 import 'package:whisper/remote_files/fs_paths.dart';
 import 'package:whisper/remote_files/fs_protocol.dart';
 import 'package:whisper/remote_files/mount/fuse_linux.dart';
+import 'package:whisper/remote_files/mount/kde_places.dart';
 import 'package:whisper/remote_files/mount/mount_macos.dart';
 import 'package:whisper/remote_files/mount/mount_tree.dart';
 import 'package:whisper/remote_files/mount/nfs_server.dart';
@@ -1148,6 +1149,62 @@ void main() {
       '$base/a2',
       '$base/a3',
     ]);
+  });
+
+  test('each Linux mount has a place of its own in GNOME\'s and KDE\'s '
+      'file managers', () {
+    final frontend = File(
+      'lib/remote_files/mount/mount_frontend.dart',
+    ).readAsStringSync();
+    // GIO names a mount in the home folder after its folder.
+    expect(frontend, contains("'(Whisper)'].join(' ')"));
+    // KDE lists no mount of a kind it does not know: a place, taken away
+    // before the mount, and those a run before this one left.
+    expect(frontend, contains('await KdePlaces.add(path,'));
+    final stop = frontend.substring(
+      frontend.indexOf('class _LinuxFrontend'),
+      frontend.indexOf('class _MacFrontend'),
+    );
+    expect(
+      stop.lastIndexOf('await KdePlaces.remove(path);'),
+      lessThan(stop.lastIndexOf('await _fuse?.stop();')),
+    );
+    expect(frontend, contains('await KdePlaces.removeAll();'));
+
+    const xbel =
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<!DOCTYPE xbel>\n'
+        '<xbel xmlns:bookmark="http://www.freedesktop.org/standards/'
+        'desktop-bookmarks">\n'
+        ' <bookmark href="file:///home/me">\n'
+        '  <title>Home</title>\n'
+        ' </bookmark>\n'
+        '</xbel>\n';
+    const point = '/home/me/Whisper/我的 Mac (Whisper)';
+    final added = KdePlaces.withPlace(
+      xbel,
+      point,
+      title: '我的 Mac (Whisper)',
+      icon: 'drive-harddisk',
+    )!;
+    expect(
+      added,
+      contains(
+        ' <bookmark href="file:///home/me/Whisper/'
+        '%E6%88%91%E7%9A%84%20Mac%20(Whisper)">\n'
+        '  <title>我的 Mac (Whisper)</title>\n',
+      ),
+    );
+    expect(added, contains('<bookmark:icon name="drive-harddisk"/>'));
+    expect(added, contains('<WhisperMount>$point</WhisperMount>'));
+    expect(added, endsWith(' </bookmark>\n</xbel>\n'));
+    // Once.
+    expect(KdePlaces.withPlace(added, point, title: 'x', icon: 'x'), isNull);
+    // Taken out again leaves the file as KDE wrote it; nobody else's
+    // place is Whisper's.
+    expect(KdePlaces.without(added, (mark) => mark == point), xbel);
+    expect(KdePlaces.without(added, (mark) => mark == '/other'), isNull);
+    expect(KdePlaces.without(xbel, (_) => true), isNull);
   });
 
   test('the socket layer carries reads only for hosts that offer them', () {
