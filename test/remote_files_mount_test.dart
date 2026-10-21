@@ -982,6 +982,9 @@ void main() {
       contains('CloudFilesMount.clearLeftover(folder)'),
     );
     expect(native, contains('StartSession(folder.c_str(), L"leftover"'));
+    // An in-sync placeholder is not opened to see whether it is being
+    // written: the antivirus would read it whole, from the device.
+    expect(native, contains('if ((out & 1) == 0 && (out & 6) != 6) {'));
   });
 
   test('the Windows bridge and its Dart side agree', () {

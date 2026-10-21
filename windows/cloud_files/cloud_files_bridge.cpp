@@ -664,9 +664,13 @@ __declspec(dllexport) int32_t wcf_state(const wchar_t* path) {
       out |= 4;
     }
   }
-  if ((out & 1) == 0) {
+  // A placeholder in sync is not being written (writing takes it out of
+  // sync), and is not opened: opening it for reading lets the antivirus
+  // scan it, which reads it whole, from the device. Each one a listing
+  // makes is looked at here.
+  if ((out & 1) == 0 && (out & 6) != 6) {
     // Opened for reading, not shared for writing: refused while anyone
-    // writes it. Opening reads nothing, so hydrates nothing.
+    // writes it.
     HANDLE handle = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, nullptr,
                                 OPEN_EXISTING, 0, nullptr);
     if (handle == INVALID_HANDLE_VALUE) {
