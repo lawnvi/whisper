@@ -73,7 +73,7 @@ On macOS, Windows, and Linux you can also put the other device's files into the 
 - Turn on "Mount on this computer" in the device details, and the files are mounted whenever the device connects. For a one-off, right-click the device in the sidebar of the "Files" window and choose "Open in Finder" ("Open in File Explorer" on Windows).
 - Where the files appear:
   - **macOS**: under Locations in the Finder sidebar, one disk per device, named "device name (Whisper)".
-  - **Windows**: in the File Explorer navigation pane, with the Whisper icon.
+  - **Windows**: under "Devices and drives" in This PC, named "device name (Whisper)", and in the File Explorer navigation pane with the Whisper icon.
   - **Linux**: in `Whisper/<device name>` in your home folder, also shown in the GNOME Files sidebar. Install fuse3 first.
 - Mounted files work like local ones: open, edit, create, rename, and delete them.
   - A save is written to a hidden copy next to the file and put in its place in one go, so a dropped connection never leaves a half-written file.

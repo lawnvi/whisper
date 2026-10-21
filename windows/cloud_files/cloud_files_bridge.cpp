@@ -16,6 +16,8 @@
 #include <windows.h>
 #include <cfapi.h>
 #include <sddl.h>
+#include <objbase.h>
+#include <shlobj.h>
 
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
@@ -813,6 +815,129 @@ __declspec(dllexport) int32_t wcf_remove(const wchar_t* file) {
 
 __declspec(dllexport) void wcf_free(WcfRequest* request) {
   delete request;
+}
+
+}  // extern "C"
+
+namespace {
+
+// This PC's own items for this user (WPS云盘, OneDrive): a folder shown
+// there with its own name and icon, beside the drives.
+constexpr wchar_t kThisPc[] =
+    L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\MyComputer\\"
+    L"NameSpace";
+
+// Whisper's mark on such an item's class: the folder it shows.
+constexpr wchar_t kPcMark[] = L"WhisperMount";
+
+std::wstring ClassKey(const std::wstring& id) {
+  return L"Software\\Classes\\CLSID\\" + id;
+}
+
+void SetString(const std::wstring& key, const wchar_t* name,
+               const std::wstring& value, DWORD type = REG_SZ) {
+  RegSetKeyValueW(HKEY_CURRENT_USER, key.c_str(), name, type, value.c_str(),
+                  static_cast<DWORD>((value.size() + 1) * sizeof(wchar_t)));
+}
+
+void SetNumber(const std::wstring& key, const wchar_t* name, DWORD value) {
+  RegSetKeyValueW(HKEY_CURRENT_USER, key.c_str(), name, REG_DWORD, &value,
+                  sizeof value);
+}
+
+bool SamePath(const std::wstring& a, const std::wstring& b) {
+  return CompareStringOrdinal(a.c_str(), -1, b.c_str(), -1, TRUE) ==
+         CSTR_EQUAL;
+}
+
+std::wstring MarkOf(const std::wstring& id) {
+  wchar_t mark[1024] = {};
+  DWORD size = sizeof mark;
+  if (RegGetValueW(HKEY_CURRENT_USER, ClassKey(id).c_str(), kPcMark,
+                   RRF_RT_REG_SZ, nullptr, mark, &size) != ERROR_SUCCESS) {
+    return L"";
+  }
+  return mark;
+}
+
+// Takes away This PC's items of Whisper's for [folder] (all of them, with
+// [folder] empty); how many went.
+int32_t DropFromThisPc(const std::wstring& folder) {
+  std::vector<std::wstring> ids;
+  HKEY items = nullptr;
+  if (RegOpenKeyExW(HKEY_CURRENT_USER, kThisPc, 0, KEY_READ, &items) !=
+      ERROR_SUCCESS) {
+    return 0;
+  }
+  wchar_t name[128];
+  for (DWORD i = 0;; i++) {
+    DWORD length = 128;
+    if (RegEnumKeyExW(items, i, name, &length, nullptr, nullptr, nullptr,
+                      nullptr) != ERROR_SUCCESS) {
+      break;
+    }
+    const std::wstring mark = MarkOf(name);
+    if (!mark.empty() && (folder.empty() || SamePath(mark, folder))) {
+      ids.emplace_back(name);
+    }
+  }
+  RegCloseKey(items);
+  for (const auto& id : ids) {
+    RegDeleteTreeW(HKEY_CURRENT_USER,
+                   (std::wstring(kThisPc) + L"\\" + id).c_str());
+    RegDeleteTreeW(HKEY_CURRENT_USER, ClassKey(id).c_str());
+  }
+  if (!ids.empty()) {
+    SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
+  }
+  return static_cast<int32_t>(ids.size());
+}
+
+}  // namespace
+
+extern "C" {
+
+// The mount in This PC, beside the drives, as [label] with the [icon] of
+// Whisper (a drive letter would carry the label of the disk the folder is
+// on): an item showing [folder], for this user alone. 1 when done.
+__declspec(dllexport) int32_t wcf_pc_add(const wchar_t* folder,
+                                         const wchar_t* label,
+                                         const wchar_t* icon) {
+  GUID guid;
+  wchar_t text[64];
+  if (FAILED(CoCreateGuid(&guid)) || StringFromGUID2(guid, text, 64) == 0) {
+    return 0;
+  }
+  const std::wstring id(text);
+  const std::wstring key = ClassKey(id);
+  SetString(key, nullptr, label);
+  SetString(key, kPcMark, folder);
+  SetNumber(key, L"System.IsPinnedToNameSpaceTree", 0);
+  SetNumber(key, L"SortOrderIndex", 0x42);
+  SetString(key + L"\\DefaultIcon", nullptr, icon);
+  SetString(key + L"\\InProcServer32", nullptr,
+            L"%SystemRoot%\\system32\\shell32.dll", REG_EXPAND_SZ);
+  // The shell's own folder of files, at [folder].
+  SetString(key + L"\\Instance", L"CLSID",
+            L"{0E5AAE11-A475-4c5b-AB00-C66DE400274E}");
+  SetNumber(key + L"\\Instance\\InitPropertyBag", L"Attributes", 0x11);
+  SetString(key + L"\\Instance\\InitPropertyBag", L"TargetFolderPath", folder);
+  SetNumber(key + L"\\ShellFolder", L"FolderValueFlags", 0x28);
+  SetNumber(key + L"\\ShellFolder", L"Attributes", 0xF080004D);
+  SetString(std::wstring(kThisPc) + L"\\" + id, nullptr, label);
+  SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
+  return 1;
+}
+
+// Takes [folder]'s item out of This PC again.
+__declspec(dllexport) int32_t wcf_pc_remove(const wchar_t* folder) {
+  return DropFromThisPc(folder);
+}
+
+// Takes away every item of Whisper's there: what a run before this one
+// left.
+__declspec(dllexport) int32_t wcf_pc_clear() {
+  return DropFromThisPc(L"");
 }
 
 }  // extern "C"

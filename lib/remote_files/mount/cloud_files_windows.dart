@@ -45,6 +45,8 @@ class CloudFilesMount {
   /// Answers of [_state] and [_mark], which run off this isolate's thread.
   NativeCallable<Void Function(Int64, Int32)>? _answers;
 
+  /// Shown in This PC.
+  bool _inThisPc = false;
   final _asked = <int, Completer<int>>{};
   int _nextAsk = 1;
   final _listed = <int, _Listed>{};
@@ -84,9 +86,11 @@ class CloudFilesMount {
   static _Bridge get _bridge =>
       _loaded ??= _Bridge(DynamicLibrary.open('whisper_cloud_files.dll'));
 
-  /// Takes away sync roots a run before this one left (it quit abruptly).
+  /// Takes away sync roots a run before this one left (it quit abruptly),
+  /// and their items in This PC.
   static void unregisterStale() {
     try {
+      _bridge.pcClear();
       _bridge.unregisterStale();
     } on ArgumentError {
       // No library next to the executable: nothing was ever mounted.
@@ -181,6 +185,17 @@ class CloudFilesMount {
       if (tree.writable) {
         _watch();
       }
+      // In This PC beside the drives, like a partition: where people
+      // look for it.
+      final label = '$name (Whisper)'.toNativeUtf16();
+      try {
+        _inThisPc = _bridge.pcAdd(nativePath, label, icon) == 1;
+      } finally {
+        calloc.free(label);
+      }
+      if (!_inThisPc) {
+        mountLog('mount: not put in This PC');
+      }
     } finally {
       for (final p in [nativePath, nativeDevice, nativeName, icon]) {
         calloc.free(p);
@@ -196,6 +211,15 @@ class CloudFilesMount {
       return;
     }
     _session = 0;
+    if (_inThisPc) {
+      final folder = path.toNativeUtf16();
+      try {
+        _bridge.pcRemove(folder);
+      } finally {
+        calloc.free(folder);
+      }
+      _inThisPc = false;
+    }
     _looking?.cancel();
     _looking = null;
     await _watching?.cancel();
@@ -990,6 +1014,19 @@ class _Bridge {
           .lookupFunction<Int32 Function(), int Function()>(
             'wcf_unregister_stale',
           ),
+      pcAdd = library
+          .lookupFunction<
+            Int32 Function(Pointer<Utf16>, Pointer<Utf16>, Pointer<Utf16>),
+            int Function(Pointer<Utf16>, Pointer<Utf16>, Pointer<Utf16>)
+          >('wcf_pc_add'),
+      pcRemove = library
+          .lookupFunction<
+            Int32 Function(Pointer<Utf16>),
+            int Function(Pointer<Utf16>)
+          >('wcf_pc_remove'),
+      pcClear = library.lookupFunction<Int32 Function(), int Function()>(
+        'wcf_pc_clear',
+      ),
       list = library
           .lookupFunction<
             Int32 Function(Pointer<_Request>, Pointer<_Entry>, Int32, Int32),
@@ -1078,6 +1115,9 @@ class _Bridge {
   )
   clearStaleAsync;
   final int Function() unregisterStale;
+  final int Function(Pointer<Utf16>, Pointer<Utf16>, Pointer<Utf16>) pcAdd;
+  final int Function(Pointer<Utf16>) pcRemove;
+  final int Function() pcClear;
   final int Function(Pointer<_Request>, Pointer<_Entry>, int, int) list;
   final int Function(Pointer<_Request>, Pointer<Uint8>, int, int, int) data;
   final int Function(Pointer<Utf16>, Pointer<_Entry>) _update;

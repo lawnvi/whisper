@@ -987,6 +987,34 @@ void main() {
     expect(native, contains('if ((out & 1) == 0 && (out & 6) != 6) {'));
   });
 
+  test('a Windows mount is in This PC beside the drives', () {
+    final native = File(
+      'windows/cloud_files/cloud_files_bridge.cpp',
+    ).readAsStringSync();
+    final dart = File(
+      'lib/remote_files/mount/cloud_files_windows.dart',
+    ).readAsStringSync();
+    // An item of This PC's for this user alone, showing the folder under
+    // the device's name (a drive letter would carry the disk's label).
+    expect(native, contains(r'Explorer\\MyComputer\\'));
+    expect(native, contains('{0E5AAE11-A475-4c5b-AB00-C66DE400274E}'));
+    expect(native, contains('L"TargetFolderPath", folder'));
+    // Only Whisper's own are taken away, by the folder they show.
+    expect(native, contains('kPcMark'));
+    expect(
+      File('windows/cloud_files/CMakeLists.txt').readAsStringSync(),
+      contains('"shell32.lib" "ole32.lib"'),
+    );
+    expect(dart, contains(r"'$name (Whisper)'.toNativeUtf16()"));
+    // Gone from This PC before the folder is emptied.
+    final stop = dart.substring(dart.indexOf('Future<void> stop() async {'));
+    expect(
+      stop.indexOf('_bridge.pcRemove('),
+      lessThan(stop.indexOf('_bridge.clearAsync(')),
+    );
+    expect(dart, contains('_bridge.pcClear();'));
+  });
+
   test('the Windows bridge and its Dart side agree', () {
     final native = File(
       'windows/cloud_files/cloud_files_bridge.cpp',
