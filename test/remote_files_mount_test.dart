@@ -1084,6 +1084,44 @@ void main() {
     expect(options.any((o) => o.startsWith('deadtimeout=')), isTrue);
   });
 
+  test('each Mac mount is a disk in Finder\'s sidebar, and old ones are '
+      'found', () {
+    // Not under a server, whose item fails on a click (Finder asks it for
+    // its shares, which NFS cannot list): the volume itself is put there.
+    expect(MacNfsMount.options(4242), contains('nobrowse'));
+    final mac = File(
+      'lib/remote_files/mount/mount_macos.dart',
+    ).readAsStringSync();
+    expect(mac, contains("'kLSSharedFileListFavoriteVolumes'"));
+    // Whisper's own items are marked: found with the mount gone, nobody
+    // else's touched.
+    expect(mac, contains("_markKey = 'com.vireen.whisper.mount'"));
+    final frontend = File(
+      'lib/remote_files/mount/mount_frontend.dart',
+    ).readAsStringSync();
+    // Whose files, and that Whisper shows them.
+    expect(frontend, contains(r"volumeName: '$name (Whisper)'"));
+    // From an isolate of its own: adding it looks at the mount, which the
+    // mount's isolate serves (it waited for itself until the mount died).
+    expect(frontend, contains('static Future<bool> _sidebar('));
+    expect(frontend, contains('await _unlist();'));
+    expect(frontend, contains('await Isolate.run(MacSidebar.removeAll);'));
+    const base = '/Users/me/Library/Application Support/whisper/Mounts';
+    const listing =
+        '/dev/disk3s1 on / (apfs, local, journaled)\n'
+        'localhost:/ab12/My Phone (Whisper) on $base/a1 '
+        '(nfs, nodev, nosuid, nobrowse, mounted by me)\n'
+        'localhost:/cd34/arch on $base/a2 (nfs, nodev, nosuid)\n'
+        'old name:/cd34/x on $base/a3 (nfs, nodev, nosuid)\n'
+        'nas:/share on /Volumes/share (nfs)\n'
+        'localhost:/ef56/x on /elsewhere/x (nfs)\n';
+    expect(MacNfsMount.pointsIn(listing, base), [
+      '$base/a1',
+      '$base/a2',
+      '$base/a3',
+    ]);
+  });
+
   test('the socket layer carries reads only for hosts that offer them', () {
     expect(WhisperFrameType.browseData.code, 15);
     final svr = File('lib/socket/svrmanager.dart').readAsStringSync();

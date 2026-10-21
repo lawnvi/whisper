@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -42,6 +43,7 @@ abstract class MountFrontend {
       for (final point in await MacNfsMount.mountedUnder(base)) {
         await MacNfsMount.unmount(point);
       }
+      await Isolate.run(MacSidebar.removeAll);
     } else if (Platform.isLinux) {
       await FuseMount.unmountAllUnder(_linuxBase());
     } else if (Platform.isWindows) {
@@ -320,7 +322,9 @@ class _MacFrontend extends MountFrontend {
 
   @override
   Future<void> start(MountTree tree, String name) async {
-    final server = NfsServer(tree, volumeName: name);
+    // Its name in the sidebar, and on the window: whose files, and that
+    // Whisper shows them.
+    final server = NfsServer(tree, volumeName: '$name (Whisper)');
     _server = server;
     // An eject seldom says so (UMNT): the client hangs up, and the mount
     // is gone from the system's list.
@@ -343,6 +347,24 @@ class _MacFrontend extends MountFrontend {
     }
     _mounted = true;
     _watch = Timer.periodic(const Duration(seconds: 15), (_) => _check());
+    if (!await _sidebar(path, add: true)) {
+      mountLog('mount: not put in the sidebar');
+    }
+  }
+
+  Future<void> _unlist() => _sidebar(path, add: false);
+
+  /// In or out of the sidebar, from an isolate of its own: that looks at
+  /// the mount, which this one serves. Static, so only [point] goes along.
+  static Future<bool> _sidebar(String point, {required bool add}) async {
+    try {
+      return await Isolate.run(
+        () => add ? MacSidebar.add(point) : MacSidebar.remove(point),
+      );
+    } catch (error) {
+      mountLog('mount: sidebar failed: $error');
+      return false;
+    }
   }
 
   bool _checking = false;
@@ -365,6 +387,7 @@ class _MacFrontend extends MountFrontend {
   Future<void> _ended() async {
     _stopping = true;
     _watch?.cancel();
+    await _unlist();
     await _server?.close();
     try {
       await Directory(path).delete();
@@ -381,6 +404,7 @@ class _MacFrontend extends MountFrontend {
     }
     _stopping = true;
     _watch?.cancel();
+    await _unlist();
     // Unmount first: the system still asks the server on the way out.
     await MacNfsMount.unmount(path);
     await _server?.close();
