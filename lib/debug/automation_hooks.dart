@@ -133,6 +133,7 @@ final Map<String, AutomationHook> automationHooks = {
   'files.unmount': _filesUnmount,
   'files.mounts': _filesMounts,
   'files.mountHere': _filesMountHere,
+  'files.readOnly': _filesReadOnly,
   // Transfers.
   'transfers.get': _transfersGet,
   'transfers.cancel': _transfersCancel,
@@ -1122,6 +1123,13 @@ Future<Map<String, Object?>> _filesMountHere(HookParams params) async {
       'failure': failed.failure.name,
     };
   }
+}
+
+/// The device page's "允许修改我的文件" for `peer`, off when `on` is true.
+Future<Map<String, Object?>> _filesReadOnly(HookParams params) async {
+  final peer = params.string('peer');
+  await FileBrowseHost.shared.setReadOnly(peer, params.string('on') == 'true');
+  return {'readOnly': await FileBrowseHost.shared.permissions.isReadOnly(peer)};
 }
 
 Future<Map<String, Object?>> _filesMounts(HookParams params) async => {

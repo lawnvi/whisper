@@ -2191,6 +2191,9 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
   /// Whether this device browses my files without asking; null until read.
   bool? _filesAlwaysAllowed;
 
+  /// Whether it may also change them ("允许修改我的文件"); null until read.
+  bool? _filesChangesAllowed;
+
   @override
   void initState() {
     super.initState();
@@ -2200,12 +2203,20 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
   }
 
   Future<void> _loadFilesAlwaysAllowed() async {
-    final allowed = await FileBrowseHost.shared.permissions.isAlways(
-      device.uid,
-    );
+    final permissions = FileBrowseHost.shared.permissions;
+    final allowed = await permissions.isAlways(device.uid);
+    final readOnly = await permissions.isReadOnly(device.uid);
     if (mounted) {
-      setState(() => _filesAlwaysAllowed = allowed);
+      setState(() {
+        _filesAlwaysAllowed = allowed;
+        _filesChangesAllowed = !readOnly;
+      });
     }
+  }
+
+  Future<void> _setFilesChangesAllowed(bool allowed) async {
+    setState(() => _filesChangesAllowed = allowed);
+    await FileBrowseHost.shared.setReadOnly(device.uid, !allowed);
   }
 
   Future<void> _setFilesAlwaysAllowed(bool allowed) async {
@@ -2360,6 +2371,19 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
                           value: allowed,
                           onChanged: (value) =>
                               unawaited(_setFilesAlwaysAllowed(value)),
+                        ),
+                      ),
+                    if (_filesChangesAllowed case final allowed?)
+                      _DeviceSettingTile(
+                        title: l10n.deviceFilesAllowChanges,
+                        icon: Icon(
+                          Icons.edit_note_rounded,
+                          color: palette.textMuted,
+                        ),
+                        trailing: CupertinoSwitch(
+                          value: allowed,
+                          onChanged: (value) =>
+                              unawaited(_setFilesChangesAllowed(value)),
                         ),
                       ),
                     if (RemoteMounts.supported)

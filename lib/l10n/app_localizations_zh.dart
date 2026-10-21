@@ -2215,7 +2215,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get remoteFilesPromptBodyPhone =>
-      '允许后，它能看到这台手机的内部存储，并在里面拷贝、新建、重命名和删除文件。删除前会再问一次。';
+      '允许后，它能看到这台手机的内部存储，并在里面拷贝、新建、重命名和删除文件。删除的文件不能恢复。';
 
   @override
   String get remoteFilesDeny => '拒绝';
@@ -3417,4 +3417,23 @@ class AppLocalizationsZh extends AppLocalizations {
   String remoteFilesNotAsked(String device) {
     return '浏览 $device 的文件需要对方允许';
   }
+
+  @override
+  String get deviceFilesAllowChanges => '允许修改我的文件';
+
+  @override
+  String get remoteFilesPromptAllowChanges => '允许修改文件';
+
+  @override
+  String remoteFilesReadOnlyHost(String device) {
+    return '$device 只允许读取它的文件';
+  }
+
+  @override
+  String get remoteFilesPromptBodyReadOnlyDesktop =>
+      '允许后，它能看到你的主目录，打开和拷出里面的文件，但不能改动。';
+
+  @override
+  String get remoteFilesPromptBodyReadOnlyPhone =>
+      '允许后，它能看到这台手机的内部存储，打开和拷出里面的文件，但不能改动。';
 }

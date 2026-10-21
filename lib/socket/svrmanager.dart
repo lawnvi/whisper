@@ -1343,6 +1343,7 @@ class WsSvrManager {
       RemoteFilesClient.localPeerId = localPeerIdFor;
       RemoteFilesClient.sendFile = _sendCopiedFile;
       RemoteFilesClient.sendFolder = _sendCopiedFolder;
+      RemoteFilesClient.sendWrite = _sendFileBrowseWrite;
       TransferPlacements.shared
         ..relocateRecord = _database.relocateCompletedIncomingTransfer
         ..forgetRecord = _forgetCopiedTransfer
@@ -4460,7 +4461,8 @@ class WsSvrManager {
     }
     if ((frame.type == WhisperFrameType.fileData ||
             frame.type == WhisperFrameType.clipboardData ||
-            frame.type == WhisperFrameType.browseData) &&
+            frame.type == WhisperFrameType.browseData ||
+            frame.type == WhisperFrameType.browseWrite) &&
         frame.payload.length > _maxFileDataPayloadBytes) {
       throw const WireInputRejected(WireInputReason.transferPayloadInvalid);
     }
@@ -4535,6 +4537,22 @@ class WsSvrManager {
           sessionId: frame.transferId,
           requestId: frame.sequence,
           data: Uint8List.fromList(frame.payload),
+        );
+        break;
+      case WhisperFrameType.browseWrite:
+        // A disk write: never hold this peer's other frames for it.
+        unawaited(
+          FileBrowseHost.shared
+              .handleWrite(
+                remotePeerId: session.remotePeerId,
+                transferId: frame.transferId,
+                requestId: frame.sequence,
+                offset: frame.offset,
+                data: Uint8List.fromList(frame.payload),
+              )
+              .catchError((Object error) {
+                logger.i('挂载写入失败: ${error.runtimeType}');
+              }),
         );
         break;
     }
@@ -5778,6 +5796,29 @@ class WsSvrManager {
     final frame = WhisperFrameV3(
       type: WhisperFrameType.browseData,
       transferId: sessionId,
+      offset: offset,
+      sequence: requestId,
+      payload: data,
+    );
+    return _peerConnections.sendToAwaitedIfCurrent(binding, frame.encode());
+  }
+
+  /// Bytes a folder of [peerId]'s mounted here writes into one of its
+  /// files ([transferId] is `<session>/<upload>`).
+  Future<bool> _sendFileBrowseWrite(
+    String peerId,
+    String transferId,
+    int requestId,
+    int offset,
+    Uint8List data,
+  ) {
+    final binding = _peerConnections.currentBinding(peerId);
+    if (binding == null || !canBrowseFilesOf(peerId)) {
+      return Future<bool>.value(false);
+    }
+    final frame = WhisperFrameV3(
+      type: WhisperFrameType.browseWrite,
+      transferId: transferId,
       offset: offset,
       sequence: requestId,
       payload: data,

@@ -202,7 +202,7 @@ class _FinderViewState extends State<FinderView> {
 
   void _startRename() {
     final selected = _selectedEntries;
-    if (selected.length == 1) {
+    if (selected.length == 1 && !actions.refusedReadOnly(controller.location)) {
       setState(() => _renaming = selected.single.name);
     }
   }
@@ -439,7 +439,10 @@ class _FinderViewState extends State<FinderView> {
             onSelected: () =>
                 unawaited(shareFilesItems(context, controller, items)),
           ),
-        if (count == 1 && entry.isDir && controller.clipboard.isNotEmpty)
+        if (count == 1 &&
+            entry.isDir &&
+            controller.clipboard.isNotEmpty &&
+            controller.canChange)
           FilesMenuItem(
             label: l10n.remoteFilesPasteInto(entry.name),
             icon: CupertinoIcons.doc_on_clipboard,
@@ -450,30 +453,33 @@ class _FinderViewState extends State<FinderView> {
               ),
             ),
           ),
-        const FilesMenuItem.separator(),
-        FilesMenuItem(
-          label: l10n.remoteFilesRename,
-          icon: CupertinoIcons.pencil,
-          shortcut: Platform.isMacOS ? '↩' : 'F2',
-          enabled: count == 1,
-          onSelected: () => setState(() => _renaming = entry.name),
-        ),
-        FilesMenuItem(
-          label: controller.hasTrash
-              ? l10n.remoteFilesMoveToTrash
-              : l10n.remoteFilesDelete,
-          icon: CupertinoIcons.trash,
-          shortcut: filesShortcut('⌫'),
-          destructive: true,
-          onSelected: _delete,
-        ),
-        const FilesMenuItem.separator(),
-        FilesMenuItem(
-          label: l10n.remoteFilesNewFolder,
-          icon: CupertinoIcons.folder_badge_plus,
-          shortcut: filesShortcut('N', shift: true),
-          onSelected: () => unawaited(_newFolder()),
-        ),
+        // Its user lets this device read only: nothing to change there.
+        if (controller.canChange) ...[
+          const FilesMenuItem.separator(),
+          FilesMenuItem(
+            label: l10n.remoteFilesRename,
+            icon: CupertinoIcons.pencil,
+            shortcut: Platform.isMacOS ? '↩' : 'F2',
+            enabled: count == 1,
+            onSelected: () => setState(() => _renaming = entry.name),
+          ),
+          FilesMenuItem(
+            label: controller.hasTrash
+                ? l10n.remoteFilesMoveToTrash
+                : l10n.remoteFilesDelete,
+            icon: CupertinoIcons.trash,
+            shortcut: filesShortcut('⌫'),
+            destructive: true,
+            onSelected: _delete,
+          ),
+          const FilesMenuItem.separator(),
+          FilesMenuItem(
+            label: l10n.remoteFilesNewFolder,
+            icon: CupertinoIcons.folder_badge_plus,
+            shortcut: filesShortcut('N', shift: true),
+            onSelected: () => unawaited(_newFolder()),
+          ),
+        ],
       ],
     );
     _menuClosed();
@@ -517,21 +523,23 @@ class _FinderViewState extends State<FinderView> {
       ),
       const FilesMenuItem.separator(),
     ],
-    FilesMenuItem(
-      label: l10n.remoteFilesNewFolder,
-      icon: CupertinoIcons.folder_badge_plus,
-      shortcut: filesShortcut('N', shift: true),
-      onSelected: () => unawaited(_newFolder()),
-    ),
-    FilesMenuItem(
-      label: controller.clipboard.isEmpty
-          ? l10n.remoteFilesPastePlain
-          : l10n.remoteFilesPaste(controller.clipboard.length),
-      icon: CupertinoIcons.doc_on_clipboard,
-      shortcut: filesShortcut('V'),
-      onSelected: () => unawaited(actions.paste()),
-    ),
-    const FilesMenuItem.separator(),
+    if (controller.canChange) ...[
+      FilesMenuItem(
+        label: l10n.remoteFilesNewFolder,
+        icon: CupertinoIcons.folder_badge_plus,
+        shortcut: filesShortcut('N', shift: true),
+        onSelected: () => unawaited(_newFolder()),
+      ),
+      FilesMenuItem(
+        label: controller.clipboard.isEmpty
+            ? l10n.remoteFilesPastePlain
+            : l10n.remoteFilesPaste(controller.clipboard.length),
+        icon: CupertinoIcons.doc_on_clipboard,
+        shortcut: filesShortcut('V'),
+        onSelected: () => unawaited(actions.paste()),
+      ),
+      const FilesMenuItem.separator(),
+    ],
     FilesMenuItem(
       label: l10n.remoteFilesViewList,
       icon: CupertinoIcons.list_bullet,
@@ -713,7 +721,9 @@ class _FinderViewState extends State<FinderView> {
                 _ToolButton(
                   icon: CupertinoIcons.folder_badge_plus,
                   tooltip: l10n.remoteFilesNewFolder,
-                  onPressed: ready ? () => unawaited(_newFolder()) : null,
+                  onPressed: ready && controller.canChange
+                      ? () => unawaited(_newFolder())
+                      : null,
                 ),
                 Builder(
                   builder: (context) => _ToolButton(

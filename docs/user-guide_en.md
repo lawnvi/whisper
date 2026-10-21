@@ -75,7 +75,13 @@ On macOS, Windows, and Linux you can also put the other device's files into the 
   - **macOS**: under Locations in the Finder sidebar, named after the device.
   - **Windows**: in the File Explorer navigation pane, with the Whisper icon.
   - **Linux**: in `Whisper/<device name>` in your home folder, also shown in the GNOME Files sidebar. Install fuse3 first.
-- Mounts are read-only: you can open and copy files out, but not change, create, or delete anything there. Use the "Files" window to change the other device's files.
+- Mounted files work like local ones: open, edit, create, rename, and delete them.
+  - A save is written to a hidden copy next to the file and put in its place in one go, so a dropped connection never leaves a half-written file.
+  - If the file changes on the other device while you write it, the original is left alone and what you wrote is saved next to it as "name (this device)".
+  - Deleting a file that was already there sends it to the other device's Trash (Android has none, so it is deleted); files made in the mount are deleted right away.
+  - If the other device turns off "Allow Changes to My Files" in its device details, the mount only lets you open and copy files out.
+  - On macOS, the `._` and `.DS_Store` files Finder writes stay on this Mac and never reach the other device.
+  - On Windows, files you create or change in File Explorer are sent a few seconds after they are closed.
 - Only the parts of a file that are opened are transferred, so speed depends on the network and the other device.
 - Unless the other device chose "Always allow", it has to allow each mount.
 - A mount goes away when the device disconnects, "Mount on this computer" stays on, and the files come back when it reconnects. Ejecting the mount in Finder or a Linux file manager turns the switch off.

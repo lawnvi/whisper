@@ -39,6 +39,9 @@ class FsPlace {
 abstract interface class FsBrowser {
   bool get isLocal;
   bool get hasTrash;
+
+  /// Its user lets this device read, not change, its files.
+  bool get readOnly;
   List<FsPlace> get places;
   Future<FsPage> list(
     String root,
@@ -83,6 +86,9 @@ class LocalFsBrowser implements FsBrowser {
 
   @override
   bool get hasTrash => FsPlatform.hasTrash;
+
+  @override
+  bool get readOnly => false;
 
   @override
   List<FsPlace> get places => [
@@ -157,6 +163,9 @@ class RemoteFsBrowser implements FsBrowser {
 
   @override
   bool get hasTrash => info.hasTrash;
+
+  @override
+  bool get readOnly => info.readOnly;
 
   @override
   List<FsPlace> get places => [

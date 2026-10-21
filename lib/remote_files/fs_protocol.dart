@@ -10,6 +10,13 @@
 /// [FileBrowseAction.read] (for a host whose `opened` says `read: 1`) is
 /// answered by a `browseData` frame holding the bytes, so that a folder
 /// mounted on this device reads just the parts it needs.
+///
+/// A host whose `opened` says `write: 1` also lets a mounted folder change
+/// its files: [create], [move], [touch] and [space], and writes. A file is
+/// written through an upload ([writeOpen]): a hidden copy next to it that
+/// `browseWrite` frames write into, and that [writeClose] puts in its place
+/// in one go, so a write cut short never leaves half a file. A host that
+/// allows reading only says `readOnly: true` and refuses all of these.
 enum FileBrowseAction {
   open,
   opened,
@@ -25,6 +32,13 @@ enum FileBrowseAction {
   result,
   failed,
   close,
+  create,
+  move,
+  touch,
+  space,
+  writeOpen,
+  writeSize,
+  writeClose,
 }
 
 class FileBrowseMessage {
@@ -120,6 +134,16 @@ abstract final class FileBrowseRead {
   static const maxLength = 4 * 1024 * 1024;
 }
 
+/// Changes from a mounted folder ([FileBrowseAction.writeOpen] and the
+/// rest).
+abstract final class FileBrowseWrite {
+  /// What `opened` carries when the host takes them.
+  static const version = 1;
+
+  /// The most one `browseWrite` frame may carry.
+  static const maxLength = 4 * 1024 * 1024;
+}
+
 /// Why a request failed, as sent on the wire (never paths or messages).
 abstract final class FileBrowseError {
   static const notFound = 'notFound';
@@ -128,4 +152,13 @@ abstract final class FileBrowseError {
   static const noTrash = 'noTrash';
   static const io = 'io';
   static const busy = 'busy';
+
+  /// The host allows this device to read its files, not change them.
+  static const readOnly = 'readOnly';
+
+  /// A folder to remove still has something in it.
+  static const notEmpty = 'notEmpty';
+
+  /// Not a name the host's file system takes.
+  static const badName = 'badName';
 }

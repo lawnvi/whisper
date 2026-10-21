@@ -44,6 +44,8 @@ class RemoteFsInfo {
     required this.platform,
     required this.hasTrash,
     this.canRead = false,
+    this.canWrite = false,
+    this.readOnly = false,
   });
 
   final List<RemoteFsRoot> roots;
@@ -53,6 +55,13 @@ class RemoteFsInfo {
   /// Answers [RemoteFilesClient.read] (newer hosts), so that its files can
   /// be mounted here.
   final bool canRead;
+
+  /// Takes writes from a folder mounted here ([RemoteFilesClient.create]
+  /// and the rest; newer hosts).
+  final bool canWrite;
+
+  /// Its user lets this device read its files, not change them.
+  final bool readOnly;
 }
 
 /// A request the other device refused or could not do.
@@ -71,6 +80,19 @@ class RemoteFsException implements Exception {
 typedef RemoteFsSendPath =
     Future<bool> Function(String peerId, String path, String transferId);
 
+/// Sends bytes a mounted folder writes, as a `browseWrite` frame.
+typedef RemoteFsSendWrite =
+    Future<bool> Function(
+      String peerId,
+      String transferId,
+      int requestId,
+      int offset,
+      Uint8List data,
+    );
+
+/// An upload [RemoteFilesClient.writeOpen] started.
+typedef RemoteFsUpload = ({String id, int size});
+
 /// Browsing one other device's files: one session, request ids, paced
 /// thumbnails. Copies in both directions are ordinary transfers placed by
 /// [TransferPlacements] when they complete.
@@ -82,6 +104,7 @@ class RemoteFilesClient {
   static String Function(String peerId)? localPeerId;
   static RemoteFsSendPath? sendFile;
   static RemoteFsSendPath? sendFolder;
+  static RemoteFsSendWrite? sendWrite;
   static final _clients = <String, RemoteFilesClient>{};
   static const _uuid = Uuid();
 
@@ -255,6 +278,10 @@ class RemoteFilesClient {
           canRead:
               payload['read'] is int &&
               (payload['read'] as int) >= FileBrowseRead.version,
+          canWrite:
+              payload['write'] is int &&
+              (payload['write'] as int) >= FileBrowseWrite.version,
+          readOnly: payload['readOnly'] == true,
         );
         info = opened;
         final completer = _opening;
@@ -326,12 +353,14 @@ class RemoteFilesClient {
   }
 
   /// [length] bytes of a file from [offset] (fewer at its end), for hosts
-  /// whose [RemoteFsInfo.canRead].
+  /// whose [RemoteFsInfo.canRead]; of what [upload] wrote so far, when
+  /// given.
   Future<Uint8List> read(
     String root,
     String path,
     int offset,
     int length, {
+    String? upload,
     Duration timeout = const Duration(seconds: 30),
   }) async {
     final id = _nextRequest++;
@@ -348,6 +377,7 @@ class RemoteFilesClient {
           'path': path,
           'offset': offset,
           'length': length,
+          'upload': ?upload,
         },
       ),
     );
@@ -413,13 +443,137 @@ class RemoteFilesClient {
   }
 
   /// To the trash where there is one; [permanent] after the user agreed
-  /// to delete for good (Android).
-  Future<void> remove(String root, String path, {bool permanent = false}) =>
-      _request(FileBrowseAction.remove, {
-        'root': root,
-        'path': path,
-        if (permanent) 'permanent': true,
-      });
+  /// to delete for good (Android). An empty [folder] only, and for good.
+  Future<void> remove(
+    String root,
+    String path, {
+    bool permanent = false,
+    bool folder = false,
+  }) => _request(FileBrowseAction.remove, {
+    'root': root,
+    'path': path,
+    if (permanent) 'permanent': true,
+    if (folder) 'folder': true,
+  });
+
+  /// Changes from a folder mounted here, for hosts whose
+  /// [RemoteFsInfo.canWrite]. Each waits as long as the disk there may
+  /// take (copying a large file to write into, say).
+  static const _changePatience = Duration(minutes: 10);
+
+  /// A new empty file.
+  Future<FsEntry> create(String root, String parent, String name) async {
+    final result = await _request(FileBrowseAction.create, {
+      'root': root,
+      'parent': parent,
+      'name': name,
+    }, timeout: _changePatience);
+    return FsEntry.fromJson((result['entry'] as Map).cast<String, Object?>());
+  }
+
+  /// Moves [path] to [name] in [parent], replacing a file there (or an
+  /// empty folder) the way a rename does; returns its new path.
+  Future<String> move(
+    String root,
+    String path,
+    String parent,
+    String name,
+  ) async {
+    final result = await _request(FileBrowseAction.move, {
+      'root': root,
+      'path': path,
+      'parent': parent,
+      'name': name,
+    }, timeout: _changePatience);
+    return result['path'] as String? ?? '';
+  }
+
+  /// Sets a file's modification time.
+  Future<void> touch(String root, String path, int modifiedMs) => _request(
+    FileBrowseAction.touch,
+    {'root': root, 'path': path, 'modified': modifiedMs},
+  );
+
+  /// How big [root]'s disk is and how much is free, if the host can tell.
+  Future<({int total, int free})?> space(String root) async {
+    final result = await _request(FileBrowseAction.space, {'root': root});
+    final total = result['total'];
+    final free = result['free'];
+    return total is int && free is int ? (total: total, free: free) : null;
+  }
+
+  /// Starts writing [path] (an existing file), from what it holds or, when
+  /// [truncate], from nothing. Nothing changes there until [writeClose].
+  Future<RemoteFsUpload> writeOpen(
+    String root,
+    String path, {
+    bool truncate = false,
+  }) async {
+    final result = await _request(FileBrowseAction.writeOpen, {
+      'root': root,
+      'path': path,
+      if (truncate) 'truncate': true,
+    }, timeout: _changePatience);
+    return (
+      id: result['upload'] as String,
+      size: (result['size'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  /// Writes [data] at [offset] of [upload]; returns the file's size so far.
+  Future<int> write(String upload, int offset, Uint8List data) async {
+    final id = _nextRequest++;
+    final completer = Completer<Map<String, Object?>>();
+    _pending[id] = completer;
+    _clients[sessionId] = this;
+    final sent = await sendWrite?.call(
+      peerId,
+      '$sessionId/$upload',
+      id,
+      offset,
+      data,
+    );
+    if (sent != true) {
+      _pending.remove(id);
+      throw const RemoteFsException('offline');
+    }
+    final result = await completer.future.timeout(
+      const Duration(seconds: 60),
+      onTimeout: () {
+        _pending.remove(id);
+        throw const RemoteFsException('timeout');
+      },
+    );
+    return (result['size'] as num?)?.toInt() ?? 0;
+  }
+
+  Future<void> writeSize(String upload, int size) => _request(
+    FileBrowseAction.writeSize,
+    {'upload': upload, 'size': size},
+    timeout: _changePatience,
+  );
+
+  /// Ends [upload]: when [commit], it takes its file's place (modified at
+  /// [modifiedMs]) and the result says where it went (beside the file, if
+  /// that changed there meanwhile) and what it is now; else it is gone.
+  Future<({String path, FsEntry? entry})> writeClose(
+    String upload, {
+    required bool commit,
+    int? modifiedMs,
+  }) async {
+    final result = await _request(FileBrowseAction.writeClose, {
+      'upload': upload,
+      if (commit) 'commit': true,
+      'modified': ?modifiedMs,
+    }, timeout: _changePatience);
+    final entry = result['entry'];
+    return (
+      path: result['path'] as String? ?? '',
+      entry: entry is Map
+          ? FsEntry.fromJson(entry.cast<String, Object?>())
+          : null,
+    );
+  }
 
   /// Copies remote items into [localFolder] on this device. Returns the
   /// transfer ids; progress shows like any other transfer.

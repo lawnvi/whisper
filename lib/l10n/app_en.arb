@@ -1077,7 +1077,7 @@
     }
   },
   "remoteFilesPromptBodyDesktop": "If you allow it, it can see your home folder and copy, create, rename and delete files there. Deleted files go to the Trash.",
-  "remoteFilesPromptBodyPhone": "If you allow it, it can see this phone's internal storage and copy, create, rename and delete files there. Deleting asks again first.",
+  "remoteFilesPromptBodyPhone": "If you allow it, it can see this phone's internal storage and copy, create, rename and delete files there. Deleted files can't be recovered.",
   "remoteFilesDeny": "Don't allow",
   "remoteFilesAllowOnce": "Allow this time",
   "remoteFilesAllowAlways": "Always allow",
@@ -2500,5 +2500,30 @@
         "type": "String"
       }
     }
+  },
+  "deviceFilesAllowChanges": "Allow Changes to My Files",
+  "@deviceFilesAllowChanges": {
+    "description": "Device page switch under 'Always allow browsing my files'. Off, this device may open and copy my files but not create, rename, delete or change them, in its file browser or where it mounts them."
+  },
+  "remoteFilesPromptAllowChanges": "Allow changes",
+  "@remoteFilesPromptAllowChanges": {
+    "description": "Switch in the 'wants to browse your files' prompt: whether the other device may also create, rename, delete and change files. Remembered for that device."
+  },
+  "remoteFilesReadOnlyHost": "{device} only allows reading its files",
+  "@remoteFilesReadOnlyHost": {
+    "description": "Toast when trying to change files on a device whose user allows reading only.",
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteFilesPromptBodyReadOnlyDesktop": "If you allow it, it can see your home folder and open and copy files from it, but not change them.",
+  "@remoteFilesPromptBodyReadOnlyDesktop": {
+    "description": "Prompt body on a computer when 'Allow changes' is off."
+  },
+  "remoteFilesPromptBodyReadOnlyPhone": "If you allow it, it can see this phone's internal storage and open and copy files from it, but not change them.",
+  "@remoteFilesPromptBodyReadOnlyPhone": {
+    "description": "Prompt body on a phone when 'Allow changes' is off."
   }
 }

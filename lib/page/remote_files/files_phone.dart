@@ -375,11 +375,12 @@ class _FilesPhoneViewState extends State<FilesPhoneView> {
           icon: CupertinoIcons.doc_on_doc,
           onSelected: () => _startCopy([item]),
         ),
-        FilesMenuItem(
-          label: l10n.remoteFilesRename,
-          icon: CupertinoIcons.pencil,
-          onSelected: () => unawaited(_rename(entry)),
-        ),
+        if (controller.canChange)
+          FilesMenuItem(
+            label: l10n.remoteFilesRename,
+            icon: CupertinoIcons.pencil,
+            onSelected: () => unawaited(_rename(entry)),
+          ),
         if (here.deviceId == FilesDevice.localId && shareLinksSupported())
           FilesMenuItem(
             label: l10n.shareLinkMenuCreate,
@@ -387,15 +388,17 @@ class _FilesPhoneViewState extends State<FilesPhoneView> {
             onSelected: () =>
                 unawaited(shareFilesItems(context, controller, [item])),
           ),
-        const FilesMenuItem.separator(),
-        FilesMenuItem(
-          label: controller.hasTrash
-              ? l10n.remoteFilesMoveToTrash
-              : l10n.remoteFilesDelete,
-          icon: CupertinoIcons.trash,
-          destructive: true,
-          onSelected: () => unawaited(_delete([item])),
-        ),
+        if (controller.canChange) ...[
+          const FilesMenuItem.separator(),
+          FilesMenuItem(
+            label: controller.hasTrash
+                ? l10n.remoteFilesMoveToTrash
+                : l10n.remoteFilesDelete,
+            icon: CupertinoIcons.trash,
+            destructive: true,
+            onSelected: () => unawaited(_delete([item])),
+          ),
+        ],
       ],
     );
   }
@@ -410,12 +413,15 @@ class _FilesPhoneViewState extends State<FilesPhoneView> {
       touch: true,
       position: at,
       items: [
-        FilesMenuItem(
-          label: l10n.remoteFilesNewFolder,
-          icon: CupertinoIcons.folder_badge_plus,
-          onSelected: () => unawaited(_newFolder()),
-        ),
-        if (here != null && controller.clipboard.isNotEmpty)
+        if (controller.canChange)
+          FilesMenuItem(
+            label: l10n.remoteFilesNewFolder,
+            icon: CupertinoIcons.folder_badge_plus,
+            onSelected: () => unawaited(_newFolder()),
+          ),
+        if (here != null &&
+            controller.clipboard.isNotEmpty &&
+            controller.canChange)
           FilesMenuItem(
             label: l10n.remoteFilesPastePlain,
             icon: CupertinoIcons.doc_on_clipboard,
@@ -447,11 +453,12 @@ class _FilesPhoneViewState extends State<FilesPhoneView> {
           enabled: controller.entries.isNotEmpty,
           onSelected: () => setState(() => _selecting = true),
         ),
-        FilesMenuItem(
-          label: l10n.remoteFilesNewFolder,
-          icon: CupertinoIcons.folder_badge_plus,
-          onSelected: () => unawaited(_newFolder()),
-        ),
+        if (controller.canChange)
+          FilesMenuItem(
+            label: l10n.remoteFilesNewFolder,
+            icon: CupertinoIcons.folder_badge_plus,
+            onSelected: () => unawaited(_newFolder()),
+          ),
         const FilesMenuItem.separator(),
         for (final (sort, label) in [
           (FilesSort.name, l10n.remoteFilesColumnName),
@@ -954,7 +961,7 @@ class _FilesPhoneViewState extends State<FilesPhoneView> {
         _BarAction(
           icon: CupertinoIcons.pencil,
           label: l10n.remoteFilesRename,
-          onPressed: count == 1
+          onPressed: count == 1 && controller.canChange
               ? () => unawaited(_rename(_selectedEntries.single))
               : null,
         ),
@@ -964,7 +971,7 @@ class _FilesPhoneViewState extends State<FilesPhoneView> {
               ? l10n.remoteFilesMoveToTrash
               : l10n.remoteFilesDelete,
           destructive: true,
-          onPressed: any
+          onPressed: any && controller.canChange
               ? () => unawaited(_delete(controller.selectedItems))
               : null,
         ),
@@ -989,6 +996,9 @@ class _FilesPhoneViewState extends State<FilesPhoneView> {
         : switch (problem) {
             FilesCopyProblem.sameDevice => l10n.remoteFilesSameDevice,
             FilesCopyProblem.betweenOthers => l10n.remoteFilesBetweenOthers,
+            FilesCopyProblem.readOnly => l10n.remoteFilesReadOnlyHost(
+              filesDeviceName(l10n, controller.device!),
+            ),
             _ => l10n.remoteFilesCopyStarted(items.length),
           };
     return _BottomBar(

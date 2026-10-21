@@ -26,7 +26,7 @@ class _AllowGate extends FileBrowseGate {
 }
 
 /// A folder tree in memory, counting what is asked of it.
-class _FakeSource implements MountSource {
+class _FakeSource extends MountSource {
   final folders = <String, List<FsEntry>>{};
   final files = <String, Uint8List>{};
   final reads = <(String, int)>[];
@@ -929,7 +929,14 @@ void main() {
       }
       expect(names, ['.', '..', 'Docs', 'big.bin']);
 
-      expect((await ask(9, 1, name('new')))!.$1, -30, reason: 'MKDIR');
+      expect(
+        (await ask(9, 1, [
+          ...le([(4, 0x1ed), (4, 0)]),
+          ...name('new'),
+        ]))!.$1,
+        -30,
+        reason: 'MKDIR',
+      );
       expect((await ask(10, 1, name('big.bin')))!.$1, -30, reason: 'UNLINK');
       expect((await ask(22, 1, name('user.x')))!.$1, -38, reason: 'xattr');
       expect((await ask(17, 1, const []))!.$2.lengthInBytes, 80);
@@ -965,15 +972,36 @@ void main() {
       (m) => m.group(1)!.toUpperCase(),
     );
     expect(request.map(camel).toList(), dartRequest);
-    expect(request.last, 'path');
-    // Calls that can call back into the worker never run on its thread.
-    for (final call in ['wcf_update', 'wcf_remove']) {
-      final body = native.substring(native.indexOf('int32_t $call('));
-      expect(
-        body.substring(0, body.indexOf('return S_OK;')),
-        contains('std::thread'),
+    expect(request.last, 'target');
+    // Calls that can call back into the worker never run on its thread:
+    // it answers those callbacks, and Windows would wait a minute for it.
+    for (final call in [
+      'wcf_update',
+      'wcf_remove',
+      'wcf_create',
+      'wcf_state_async',
+      'wcf_mark_async',
+    ]) {
+      final body = native.substring(
+        native.indexOf(RegExp('(int32_t|void) $call\\(')),
       );
+      expect(body.substring(0, body.indexOf('\n}\n')), contains('std::thread'));
     }
+    expect(dart, isNot(contains("'wcf_state'")));
+    expect(dart, isNot(contains("'wcf_mark'")));
+    // In sync is the placeholder's own say; its directory entry never has it.
+    expect(
+      native,
+      contains('CfGetPlaceholderInfo(handle, CF_PLACEHOLDER_INFO_BASIC'),
+    );
+    // A folder is fully populated once listed: creating a file in one that
+    // is not fails (ERROR_CANT_RESOLVE_FILENAME).
+    expect(
+      native,
+      contains(
+        'CF_OPERATION_TRANSFER_PLACEHOLDERS_FLAG_DISABLE_ON_DEMAND_POPULATION',
+      ),
+    );
     // Explorer asks for a folder only when showing it: folders in use are
     // looked at again, and placeholders are checked as they are on disk, so
     // an update that failed (file open) is made the next time.

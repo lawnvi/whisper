@@ -113,7 +113,7 @@ enum FilesSort { name, modified, size, kind }
 enum FilesView { list, icons }
 
 /// Why a copy could not even start.
-enum FilesCopyProblem { sameDevice, betweenOthers, notConnected }
+enum FilesCopyProblem { sameDevice, betweenOthers, notConnected, readOnly }
 
 /// What the file manager needs to know about the other devices.
 class FilesPeers {
@@ -1017,8 +1017,18 @@ class FilesController extends ChangeNotifier {
     if (remote?.browser == null) {
       return FilesCopyProblem.notConnected;
     }
+    if (readOnlyAt(target)) {
+      return FilesCopyProblem.readOnly;
+    }
     return null;
   }
+
+  /// [at]'s device lets this one read its files, not change them.
+  bool readOnlyAt(FilesLocation? at) =>
+      at != null && (deviceById(at.deviceId)?.browser?.readOnly ?? false);
+
+  /// What is shown now may be changed from here.
+  bool get canChange => !readOnlyAt(location);
 
   /// What identifies a copy of [items] into [target], to notice the same
   /// one made twice.

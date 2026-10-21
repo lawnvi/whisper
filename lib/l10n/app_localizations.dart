@@ -4045,7 +4045,7 @@ abstract class AppLocalizations {
   /// No description provided for @remoteFilesPromptBodyPhone.
   ///
   /// In zh, this message translates to:
-  /// **'允许后，它能看到这台手机的内部存储，并在里面拷贝、新建、重命名和删除文件。删除前会再问一次。'**
+  /// **'允许后，它能看到这台手机的内部存储，并在里面拷贝、新建、重命名和删除文件。删除的文件不能恢复。'**
   String get remoteFilesPromptBodyPhone;
 
   /// No description provided for @remoteFilesDeny.
@@ -6069,6 +6069,36 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'浏览 {device} 的文件需要对方允许'**
   String remoteFilesNotAsked(String device);
+
+  /// Device page switch under 'Always allow browsing my files'. Off, this device may open and copy my files but not create, rename, delete or change them, in its file browser or where it mounts them.
+  ///
+  /// In zh, this message translates to:
+  /// **'允许修改我的文件'**
+  String get deviceFilesAllowChanges;
+
+  /// Switch in the 'wants to browse your files' prompt: whether the other device may also create, rename, delete and change files. Remembered for that device.
+  ///
+  /// In zh, this message translates to:
+  /// **'允许修改文件'**
+  String get remoteFilesPromptAllowChanges;
+
+  /// Toast when trying to change files on a device whose user allows reading only.
+  ///
+  /// In zh, this message translates to:
+  /// **'{device} 只允许读取它的文件'**
+  String remoteFilesReadOnlyHost(String device);
+
+  /// Prompt body on a computer when 'Allow changes' is off.
+  ///
+  /// In zh, this message translates to:
+  /// **'允许后，它能看到你的主目录，打开和拷出里面的文件，但不能改动。'**
+  String get remoteFilesPromptBodyReadOnlyDesktop;
+
+  /// Prompt body on a phone when 'Allow changes' is off.
+  ///
+  /// In zh, this message translates to:
+  /// **'允许后，它能看到这台手机的内部存储，打开和拷出里面的文件，但不能改动。'**
+  String get remoteFilesPromptBodyReadOnlyPhone;
 }
 
 class _AppLocalizationsDelegate

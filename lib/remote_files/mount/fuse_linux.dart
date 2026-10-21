@@ -18,6 +18,10 @@ import 'mount_tree.dart';
 ///
 /// One isolate blocks reading requests; this one answers them, each as it
 /// can, so a slow read never holds up a listing.
+///
+/// A device that takes changes is mounted read-write: writes go to it as
+/// they come ([MountTree.write]) and closing a file (FLUSH) waits until it
+/// is in place there, so that close() tells whether saving worked.
 class FuseMount {
   FuseMount(this.tree, {required this.mountPoint, required this.name});
 
@@ -136,7 +140,7 @@ class FuseMount {
     final mounted = _libc.mount(helper, mountPoint, [
       'nosuid',
       'nodev',
-      'ro',
+      if (!tree.writable) 'ro',
       'default_permissions',
       'auto_unmount',
       'fsname=${name.replaceAll(RegExp(r'[,\\]'), ' ')}',
@@ -244,7 +248,7 @@ class FuseMount {
             _error(unique, _enoent);
           } else if (node.isDir) {
             _error(unique, _eisdir);
-          } else if (flags & 3 != 0) {
+          } else if (flags & 3 != 0 && !tree.writable) {
             _error(unique, _erofs);
           } else {
             // Keep what was read while it is unchanged (AUTO_INVAL_DATA
@@ -286,46 +290,135 @@ class FuseMount {
             unique,
             await _listing(nodeid, offset, size, plus: opcode == _readdirplus),
           );
-        case _release:
-        case _releasedir:
         case _flush:
         case _fsync:
+          // close() and fsync() hear whether it reached the device.
+          await tree.commit(nodeid);
+          _reply(unique, Uint8List(0));
+        case _release:
+          try {
+            await tree.commit(nodeid);
+          } on MountException {
+            // Nobody to tell any more; FLUSH already did.
+          }
+          _reply(unique, Uint8List(0));
+        case _releasedir:
         case _fsyncdir:
           _reply(unique, Uint8List(0));
         case _statfs:
+          // File managers check the free space before copying in.
+          final space = tree.writable
+              ? await tree.space()
+              : (total: 1 << 40, free: 0);
           final out = _Out(80)
-            ..u64(1 << 28) // blocks
-            ..u64(0) // free
-            ..u64(0) // available
+            ..u64(space.total ~/ 4096) // blocks
+            ..u64(space.free ~/ 4096) // free
+            ..u64(space.free ~/ 4096) // available
             ..u64(1 << 24) // files
-            ..u64(0)
+            ..u64(tree.writable ? 1 << 23 : 0)
             ..u32(4096) // bsize
             ..u32(255) // namelen
             ..u32(4096); // frsize
           _reply(unique, out.bytes);
         case _access:
           final mask = args.getUint32(0, Endian.little);
-          if (mask & 2 != 0) {
+          if (mask & 2 != 0 && !tree.writable) {
             _error(unique, _erofs);
           } else {
             _reply(unique, Uint8List(0));
           }
         case _setattr:
+          await _setAttributes(nodeid, args);
+          final out = _Out(104)
+            ..u64(1)
+            ..u32(0)
+            ..u32(0);
+          _attr(out, await tree.stat(nodeid));
+          _reply(unique, out.bytes);
         case _mknod:
+          // fuse_mknod_in: mode, rdev, umask, padding; then the name.
+          final mode = args.getUint32(0, Endian.little);
+          if (mode & 0xf000 != 0x8000) {
+            _error(unique, _eperm); // only plain files
+          } else {
+            final node = await tree.create(
+              nodeid,
+              _cString(Uint8List.sublistView(body, 16)),
+            );
+            _reply(unique, _entry(node));
+          }
+        case _create:
+          // fuse_create_in: flags, mode, umask, open_flags; then the name.
+          final node = await tree.create(
+            nodeid,
+            _cString(Uint8List.sublistView(body, 16)),
+          );
+          _reply(
+            unique,
+            Uint8List.fromList([..._entry(node), ...Uint8List(16)]),
+          );
         case _mkdir:
+          // fuse_mkdir_in: mode, umask; then the name.
+          final node = await tree.mkdir(
+            nodeid,
+            _cString(Uint8List.sublistView(body, 8)),
+          );
+          _reply(unique, _entry(node));
         case _unlink:
+          await tree.unlink(nodeid, _cString(body));
+          _reply(unique, Uint8List(0));
         case _rmdir:
+          await tree.rmdir(nodeid, _cString(body));
+          _reply(unique, Uint8List(0));
         case _rename:
         case _rename2:
+          // fuse_rename_in: newdir; fuse_rename2_in adds flags, padding.
+          final newDir = args.getUint64(0, Endian.little);
+          final flags = opcode == _rename2
+              ? args.getUint32(8, Endian.little)
+              : 0;
+          final names = Uint8List.sublistView(
+            body,
+            opcode == _rename2 ? 16 : 8,
+          );
+          final from = _cString(names);
+          final to = _cString(
+            Uint8List.sublistView(names, names.indexOf(0) + 1),
+          );
+          if (flags & ~_renameNoReplace != 0) {
+            _error(unique, _einval); // exchange, whiteout
+          } else {
+            await tree.rename(
+              nodeid,
+              from,
+              newDir,
+              to,
+              noReplace: flags & _renameNoReplace != 0,
+            );
+            _reply(unique, Uint8List(0));
+          }
+        case _write:
+          // fuse_write_in (40 bytes), then the data.
+          final offset = args.getUint64(8, Endian.little);
+          final size = args.getUint32(16, Endian.little);
+          await tree.write(
+            nodeid,
+            offset,
+            Uint8List.sublistView(body, 40, 40 + size),
+          );
+          _reply(
+            unique,
+            (_Out(8)
+                  ..u32(size)
+                  ..u32(0))
+                .bytes,
+          );
         case _link:
         case _symlink:
-        case _write:
-        case _create:
-        case _setxattr:
-        case _removexattr:
+          _error(unique, tree.writable ? _eperm : _erofs);
         case _fallocate:
         case _tmpfile:
-          _error(unique, _erofs);
+          _error(unique, tree.writable ? _eopnotsupp : _erofs);
         default:
           // xattrs, locks, ioctl, lseek: not here.
           _error(unique, _enosys);
@@ -336,9 +429,33 @@ class FuseMount {
         MountError.notDir => _enotdir,
         MountError.isDir => _eisdir,
         MountError.io || MountError.offline => _eio,
+        MountError.exists => _eexist,
+        MountError.notEmpty => _enotempty,
+        MountError.readOnly => _erofs,
+        MountError.denied => _eacces,
+        MountError.invalid => _einval,
+        MountError.crossDevice => _exdev,
       });
     } catch (_) {
       _error(unique, _eio);
+    }
+  }
+
+  /// SETATTR: a new size (truncate) or modification time; who owns it and
+  /// its mode are the device's.
+  Future<void> _setAttributes(int ino, ByteData args) async {
+    // fuse_setattr_in: valid, padding, fh, size, lock_owner, atime, mtime,
+    // ctime, atimensec, mtimensec, ...
+    final valid = args.getUint32(0, Endian.little);
+    if (valid & _fattrSize != 0) {
+      await tree.resize(ino, args.getUint64(16, Endian.little));
+    }
+    if (valid & (_fattrMtime | _fattrMtimeNow) != 0) {
+      final ms = valid & _fattrMtimeNow != 0
+          ? DateTime.now().millisecondsSinceEpoch
+          : args.getUint64(40, Endian.little) * 1000 +
+                args.getUint32(60, Endian.little) ~/ 1000000;
+      await tree.setModified(ino, ms);
     }
   }
 
@@ -436,7 +553,8 @@ class FuseMount {
   void _attr(_Out out, MountNode node) {
     final size = node.isDir ? 4096 : node.size;
     final seconds = node.modifiedMs ~/ 1000;
-    final nanos = (node.modifiedMs % 1000) * 1000000;
+    // Changes made from here move a folder's time on (MountNode.ticks).
+    final nanos = (node.modifiedMs % 1000) * 1000000 + node.ticks % 1000000;
     out
       ..u64(node.ino)
       ..u64(size)
@@ -447,7 +565,11 @@ class FuseMount {
       ..u32(nanos)
       ..u32(nanos)
       ..u32(nanos)
-      ..u32(node.isDir ? 0x416d : 0x8124) // dir 0555, file 0444
+      ..u32(
+        tree.writable
+            ? (node.isDir ? 0x41ed : 0x81a4) // dir 0755, file 0644
+            : (node.isDir ? 0x416d : 0x8124), // dir 0555, file 0444
+      )
       ..u32(node.isDir ? 2 : 1)
       ..u32(_libc.uid)
       ..u32(_libc.gid)
@@ -556,13 +678,24 @@ class FuseMount {
   static const _parallelDirops = 1 << 18;
   static const _maxPages = 1 << 22;
   static const _keepCache = 1 << 1;
+  static const _renameNoReplace = 1;
+  static const _fattrSize = 1 << 3;
+  static const _fattrMtime = 1 << 5;
+  static const _fattrMtimeNow = 1 << 8;
 
+  static const _eperm = 1;
   static const _enoent = 2;
   static const _eio = 5;
+  static const _eacces = 13;
+  static const _eexist = 17;
+  static const _exdev = 18;
   static const _enotdir = 20;
   static const _eisdir = 21;
+  static const _einval = 22;
   static const _erofs = 30;
   static const _enosys = 38;
+  static const _enotempty = 39;
+  static const _eopnotsupp = 95;
 }
 
 /// Little-endian struct writer of a fixed size (zero-filled tail).

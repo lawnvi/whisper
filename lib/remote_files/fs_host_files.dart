@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import 'fs_host_uploads.dart';
 import 'fs_paths.dart';
 import 'fs_platform.dart';
 
@@ -259,6 +260,10 @@ class FsHostFiles {
         continue;
       }
       final name = p.basename(entity.path);
+      if (FsUploads.isTemp(name)) {
+        // A file being written from another device, not done yet.
+        continue;
+      }
       final hidden =
           name.startsWith('.') ||
           (Platform.isWindows && FsPlatform.isHiddenWindows(entity.path));
@@ -372,8 +377,98 @@ class FsHostFiles {
       throw const FsPathException('exists');
     }
     await Directory(target).create();
-    _invalidate(rootId);
+    invalidate(rootId);
     return resolver.relativeOf(rootId, target);
+  }
+
+  /// A new empty file [name] in [parent].
+  Future<FsEntry> create(String rootId, String parent, String name) async {
+    final target = await resolver.resolveNewChild(rootId, parent, name);
+    try {
+      await File(target).create(exclusive: true);
+    } on FileSystemException {
+      if (await FileSystemEntity.type(target, followLinks: false) !=
+          FileSystemEntityType.notFound) {
+        throw const FsPathException('exists');
+      }
+      rethrow;
+    }
+    invalidate(rootId);
+    return stat(rootId, await resolver.relativeOf(rootId, target));
+  }
+
+  /// Moves [relative] to [name] in [parent], within its root, replacing
+  /// what is there the way a rename does: a file replaces a file, a
+  /// folder an empty folder. Returns its new path.
+  Future<String> move(
+    String rootId,
+    String relative,
+    String parent,
+    String name,
+  ) async {
+    final real = await resolver.resolveEntry(rootId, relative);
+    final target = await resolver.resolveNewChild(rootId, parent, name);
+    final type = await FileSystemEntity.type(real, followLinks: false);
+    if (type == FileSystemEntityType.directory &&
+        FsPathResolver.isInside(real, target)) {
+      throw const FsPathException('into itself');
+    }
+    final there = await FileSystemEntity.type(target, followLinks: false);
+    // The same entry under another case of its name ("a.txt" → "A.txt")
+    // on a system that does not tell them apart.
+    final same =
+        there != FileSystemEntityType.notFound &&
+        await FileSystemEntity.identical(real, target);
+    if (!same && there == FileSystemEntityType.directory) {
+      if (type != FileSystemEntityType.directory) {
+        throw const FsPathException('exists');
+      }
+      if (!await Directory(target).list().isEmpty) {
+        throw const FsPathException('not empty');
+      }
+      await Directory(target).delete();
+    } else if (!same &&
+        there != FileSystemEntityType.notFound &&
+        type == FileSystemEntityType.directory) {
+      throw const FsPathException('exists');
+    }
+    switch (type) {
+      case FileSystemEntityType.directory:
+        await Directory(real).rename(target);
+      case FileSystemEntityType.link:
+        await Link(real).rename(target);
+      default:
+        await File(real).rename(target);
+    }
+    invalidate(rootId);
+    // Galleries follow a picture moved on a phone.
+    await FsPlatform.mediaScan([real, target]);
+    return resolver.relativeOf(rootId, target);
+  }
+
+  /// Sets a file's modification time (folders keep theirs).
+  Future<void> touch(String rootId, String relative, int modifiedMs) async {
+    final real = await resolver.resolveExisting(rootId, relative);
+    if (await FileSystemEntity.type(real) == FileSystemEntityType.file) {
+      await File(
+        real,
+      ).setLastModified(DateTime.fromMillisecondsSinceEpoch(modifiedMs));
+      invalidate(rootId);
+    }
+  }
+
+  /// Removes an empty folder; one with something in it stays.
+  Future<void> removeFolder(String rootId, String relative) async {
+    final real = await resolver.resolveEntry(rootId, relative);
+    if (await FileSystemEntity.type(real, followLinks: false) !=
+        FileSystemEntityType.directory) {
+      throw const FsPathException('not a folder');
+    }
+    if (!await Directory(real).list().isEmpty) {
+      throw const FsPathException('not empty');
+    }
+    await Directory(real).delete();
+    invalidate(rootId);
   }
 
   Future<String> rename(String rootId, String relative, String newName) async {
@@ -393,7 +488,7 @@ class FsHostFiles {
       default:
         await File(real).rename(target);
     }
-    _invalidate(rootId);
+    invalidate(rootId);
     return '${p.posix.dirname(relative) == '.' ? '' : '${p.posix.dirname(relative)}/'}$newName';
   }
 
@@ -410,10 +505,12 @@ class FsHostFiles {
       default:
         await File(real).delete();
     }
-    _invalidate(rootId);
+    invalidate(rootId);
+    await FsPlatform.mediaScan([real]);
   }
 
-  void _invalidate(String rootId) {
+  /// Something in [rootId] changed: listings of it are read again.
+  void invalidate(String rootId) {
     _listings.removeWhere((key, _) => key.startsWith('$rootId\u0000'));
   }
 }

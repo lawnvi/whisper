@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
@@ -16,7 +17,8 @@ import 'files_icons.dart';
 
 /// Asks "‹device› wants to browse your files" over the whole app whenever
 /// [FileBrowseHost] has a request. Allow once, always allow (remembered for
-/// that device) or don't allow; silence for a minute is a no.
+/// that device) or don't allow; silence for a minute is a no. A switch says
+/// whether it may also change them, remembered for that device too.
 class FileBrowsePromptHost extends StatefulWidget {
   const FileBrowsePromptHost({
     super.key,
@@ -107,6 +109,7 @@ class _FileBrowsePromptHostState extends State<FileBrowsePromptHost> {
                       ? const SizedBox.expand()
                       : Center(
                           child: _PromptCard(
+                            key: ValueKey(request),
                             request: request,
                             onDecide: _gate.decide,
                           ),
@@ -121,14 +124,49 @@ class _FileBrowsePromptHostState extends State<FileBrowsePromptHost> {
   }
 }
 
-class _PromptCard extends StatelessWidget {
-  const _PromptCard({required this.request, required this.onDecide});
+class _PromptCard extends StatefulWidget {
+  const _PromptCard({super.key, required this.request, required this.onDecide});
 
   final FileBrowseRequest request;
   final ValueChanged<FileBrowseDecision> onDecide;
 
   @override
+  State<_PromptCard> createState() => _PromptCardState();
+}
+
+class _PromptCardState extends State<_PromptCard> {
+  /// "允许修改文件", as last set for this device.
+  bool _allowChanges = true;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_load());
+  }
+
+  Future<void> _load() async {
+    final readOnly = await FileBrowseHost.shared.permissions.isReadOnly(
+      widget.request.peerId,
+    );
+    if (mounted) {
+      setState(() => _allowChanges = !readOnly);
+    }
+  }
+
+  Future<void> _decide(FileBrowseDecision decision) async {
+    if (decision == FileBrowseDecision.once ||
+        decision == FileBrowseDecision.always) {
+      await FileBrowseHost.shared.setReadOnly(
+        widget.request.peerId,
+        !_allowChanges,
+      );
+    }
+    widget.onDecide(decision);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final request = widget.request;
     final l10n = AppLocalizations.of(context)!;
     final colors = FlowSpaceColors.of(context);
     final phone = Platform.isAndroid || Platform.isIOS;
@@ -143,7 +181,7 @@ class _PromptCard extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 13),
           color: primary ? colors.scheme.primary : colors.raisedSecondary,
           borderRadius: BorderRadius.circular(14),
-          onPressed: () => onDecide(decision),
+          onPressed: () => unawaited(_decide(decision)),
           child: Text(
             label,
             style: TextStyle(
@@ -163,7 +201,7 @@ class _PromptCard extends StatelessWidget {
       child: Actions(
         actions: {
           DismissIntent: CallbackAction<DismissIntent>(
-            onInvoke: (_) => onDecide(FileBrowseDecision.deny),
+            onInvoke: (_) => widget.onDecide(FileBrowseDecision.deny),
           ),
         },
         child: Focus(
@@ -206,9 +244,14 @@ class _PromptCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      phone
-                          ? l10n.remoteFilesPromptBodyPhone
-                          : l10n.remoteFilesPromptBodyDesktop,
+                      switch ((phone, _allowChanges)) {
+                        (true, true) => l10n.remoteFilesPromptBodyPhone,
+                        (true, false) =>
+                          l10n.remoteFilesPromptBodyReadOnlyPhone,
+                        (false, true) => l10n.remoteFilesPromptBodyDesktop,
+                        (false, false) =>
+                          l10n.remoteFilesPromptBodyReadOnlyDesktop,
+                      },
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: colors.secondaryLabel,
@@ -216,7 +259,23 @@ class _PromptCard extends StatelessWidget {
                         height: 1.4,
                       ),
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 14),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            l10n.remoteFilesPromptAllowChanges,
+                            style: TextStyle(color: colors.label, fontSize: 15),
+                          ),
+                        ),
+                        CupertinoSwitch(
+                          value: _allowChanges,
+                          onChanged: (value) =>
+                              setState(() => _allowChanges = value),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
                     button(
                       l10n.remoteFilesAllowOnce,
                       FileBrowseDecision.once,

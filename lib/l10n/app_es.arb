@@ -967,7 +967,7 @@
   "remoteFilesPlaceMusic": "Música",
   "remoteFilesPromptTitle": "{device} quiere explorar tus archivos",
   "remoteFilesPromptBodyDesktop": "Si lo permites, podrá ver tu carpeta de inicio y copiar, crear, renombrar y eliminar archivos allí. Lo eliminado irá a la papelera.",
-  "remoteFilesPromptBodyPhone": "Si lo permites, podrá ver el almacenamiento interno de este teléfono y copiar, crear, renombrar y eliminar archivos allí. Antes de eliminar se vuelve a preguntar.",
+  "remoteFilesPromptBodyPhone": "Si lo permites, podrá ver el almacenamiento interno de este teléfono y copiar, crear, renombrar y eliminar archivos allí. Lo eliminado no se puede recuperar.",
   "remoteFilesDeny": "No permitir",
   "remoteFilesAllowOnce": "Permitir esta vez",
   "remoteFilesAllowAlways": "Permitir siempre",
@@ -1312,5 +1312,10 @@
   "windowStreamPhoneServiceOff": "Abre Whisper en {device} y activa Ajustes → Servicio de flujo de ventanas.",
   "remoteFilesNoAnswer": "{device} no respondió",
   "remoteFilesNoAnswerDetail": "La pregunta en ese dispositivo caducó. Asegúrate de que haya alguien allí e inténtalo de nuevo.",
-  "remoteFilesNotAsked": "{device} debe permitir explorar sus archivos"
+  "remoteFilesNotAsked": "{device} debe permitir explorar sus archivos",
+  "deviceFilesAllowChanges": "Permitir cambios en mis archivos",
+  "remoteFilesPromptAllowChanges": "Permitir cambios",
+  "remoteFilesReadOnlyHost": "{device} solo permite leer sus archivos",
+  "remoteFilesPromptBodyReadOnlyDesktop": "Si lo permites, podrá ver tu carpeta de inicio y abrir y copiar sus archivos, pero no cambiarlos.",
+  "remoteFilesPromptBodyReadOnlyPhone": "Si lo permites, podrá ver el almacenamiento interno de este teléfono y abrir y copiar sus archivos, pero no cambiarlos."
 }

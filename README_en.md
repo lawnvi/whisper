@@ -27,7 +27,7 @@ Whisper is a LAN collaboration app. Paired devices connect to each other directl
 | **Text and files** | Send them like chat messages; transfers resume and are verified on arrival |
 | **Folders** | Send a whole folder from a desktop, structure and all, without archiving |
 | **File browsing** | Browse, copy, rename or delete the other device's files, with its approval |
-| **Mount on this computer** | Open the other device's files in Finder, File Explorer or Linux (read-only) |
+| **Mount on this computer** | Open, edit, create and delete the other device's files in Finder, File Explorer or a Linux file manager |
 | **Share links** | Let a browser on a device without Whisper download your files |
 | **Window flow** | Use a computer's windows or an Android phone's apps on another device |
 | **Quick send** | Send from the Android share sheet, a context menu, or a global hotkey |

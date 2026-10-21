@@ -6,7 +6,12 @@
 // to Dart (lib/remote_files/mount/cloud_files_windows.dart) and its answers
 // back: each callback copies what it needs into a WcfRequest, hands it to
 // a NativeCallable.listener and returns at once; Dart answers later with
-// wcf_list / wcf_data, from any thread, as Cloud Files allows.
+// wcf_list / wcf_data / wcf_ack, from any thread, as Cloud Files allows.
+//
+// A device that takes changes gets its placeholders writable, and is asked
+// before one is deleted or renamed (wcf_ack says whether it was done
+// there). What is written or made in the folder Dart finds by watching it
+// (wcf_state), sends, and marks in sync (wcf_mark).
 
 #include <windows.h>
 #include <cfapi.h>
@@ -33,6 +38,7 @@ using namespace winrt::Windows::Storage::Provider;
 
 constexpr NTSTATUS kSuccess = 0;
 constexpr NTSTATUS kUnsuccessful = static_cast<NTSTATUS>(0xC0000001L);
+constexpr NTSTATUS kAccessDenied = static_cast<NTSTATUS>(0xC0000022L);
 
 template <typename T>
 constexpr ULONG ParamSize() {
@@ -46,7 +52,9 @@ extern "C" {
 
 // What the system asked, for Dart. Freed with wcf_free.
 struct WcfRequest {
-  int32_t kind;  // 1 list a folder, 2 read, 3 cancel a read
+  // 1 list a folder, 2 read, 3 cancel a read, 4 delete, 5 rename or move,
+  // 6 a folder was opened
+  int32_t kind;
   int32_t is_dir;
   int64_t ino;  // the item's number in the mount (1: the top)
   int64_t offset;
@@ -58,6 +66,7 @@ struct WcfRequest {
   int64_t transfer_key;
   int64_t request_key;
   wchar_t path[1024];  // full path of the item
+  wchar_t target[1024];  // rename: where to; empty when out of the folder
 };
 
 // One file or folder to show.
@@ -68,9 +77,13 @@ struct WcfEntry {
   int64_t modified;  // FILETIME
   int32_t is_dir;
   int32_t hidden;
+  int32_t read_only;  // the device takes no changes
 };
 
 typedef void (*WcfNotify)(WcfRequest* request);
+
+// Answers wcf_state_async and wcf_mark_async: [token] as given.
+typedef void (*WcfDone)(int64_t token, int32_t result);
 
 }  // extern "C"
 
@@ -137,6 +150,50 @@ void CALLBACK OnFetchData(const CF_CALLBACK_INFO* info,
   request->optional_offset = params->FetchData.OptionalFileOffset.QuadPart;
   request->optional_length = params->FetchData.OptionalLength.QuadPart;
   request->file_size = info->FileSize.QuadPart;
+  SessionOf(info)->notify(request);
+}
+
+void CALLBACK OnNotifyDelete(const CF_CALLBACK_INFO* info,
+                             const CF_CALLBACK_PARAMETERS* params) {
+  auto* request = new WcfRequest{};
+  request->kind = 4;
+  Describe(info, request);
+  request->is_dir =
+      (params->Delete.Flags & CF_CALLBACK_DELETE_FLAG_IS_DIRECTORY) != 0;
+  SessionOf(info)->notify(request);
+}
+
+void CALLBACK OnNotifyRename(const CF_CALLBACK_INFO* info,
+                             const CF_CALLBACK_PARAMETERS* params) {
+  auto* request = new WcfRequest{};
+  request->kind = 5;
+  Describe(info, request);
+  request->is_dir =
+      (params->Rename.Flags & CF_CALLBACK_RENAME_FLAG_IS_DIRECTORY) != 0;
+  if ((params->Rename.Flags & CF_CALLBACK_RENAME_FLAG_TARGET_IN_SCOPE) != 0 &&
+      params->Rename.TargetPath != nullptr) {
+    std::wstring target;
+    if (info->VolumeDosName != nullptr) {
+      target = info->VolumeDosName;
+    }
+    target += params->Rename.TargetPath;
+    wcsncpy_s(request->target, target.c_str(), _TRUNCATE);
+  }
+  SessionOf(info)->notify(request);
+}
+
+// Explorer opening a folder: Dart looks at it again on the device. A
+// folder is listed once (fully populated, which creating files in it
+// needs) and kept up to date from then on.
+void CALLBACK OnOpenCompletion(const CF_CALLBACK_INFO* info,
+                               const CF_CALLBACK_PARAMETERS*) {
+  WcfRequest probe{};
+  Describe(info, &probe);
+  if (!probe.is_dir) {
+    return;
+  }
+  auto* request = new WcfRequest(probe);
+  request->kind = 6;
   SessionOf(info)->notify(request);
 }
 
@@ -208,9 +265,11 @@ std::vector<CF_PLACEHOLDER_CREATE_INFO> Placeholders(
     auto& basic = info.FsMetadata.BasicInfo;
     basic.CreationTime = basic.LastWriteTime = basic.LastAccessTime =
         basic.ChangeTime = time;
-    // Read-only for now: nothing written here would reach the device.
+    // Read-only when nothing written here would reach the device.
     basic.FileAttributes =
-        (entry.is_dir ? FILE_ATTRIBUTE_DIRECTORY : FILE_ATTRIBUTE_READONLY) |
+        (entry.is_dir ? FILE_ATTRIBUTE_DIRECTORY
+                      : (entry.read_only ? FILE_ATTRIBUTE_READONLY
+                                         : FILE_ATTRIBUTE_NORMAL)) |
         (entry.hidden ? FILE_ATTRIBUTE_HIDDEN : 0);
     info.FsMetadata.FileSize.QuadPart = entry.is_dir ? 0 : entry.size;
     info.FileIdentity = &identities[i];
@@ -231,16 +290,65 @@ CF_OPERATION_INFO Operation(const WcfRequest* request,
   return op;
 }
 
+// What Cloud Files says of the item at [path], from its directory entry
+// (which opens nothing, so hydrates nothing).
+bool PlaceholderState(const wchar_t* path, DWORD* attributes,
+                      CF_PLACEHOLDER_STATE* state) {
+  WIN32_FIND_DATAW data;
+  HANDLE find = FindFirstFileW(path, &data);
+  if (find == INVALID_HANDLE_VALUE) {
+    return false;
+  }
+  FindClose(find);
+  *attributes = data.dwFileAttributes;
+  *state = CfGetPlaceholderStateFromFindData(&data);
+  return true;
+}
+
+// Whether the placeholder at [path] is in sync with the device. Only the
+// placeholder itself says (its directory entry does not); opening it for
+// its attributes hydrates nothing.
+bool InSync(const wchar_t* path) {
+  HANDLE handle = CreateFileW(
+      path, FILE_READ_ATTRIBUTES,
+      FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+      OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+  if (handle == INVALID_HANDLE_VALUE) {
+    return false;
+  }
+  alignas(CF_PLACEHOLDER_BASIC_INFO) BYTE buffer
+      [sizeof(CF_PLACEHOLDER_BASIC_INFO) + sizeof(Identity) + 16];
+  DWORD returned = 0;
+  HRESULT hr = CfGetPlaceholderInfo(handle, CF_PLACEHOLDER_INFO_BASIC, buffer,
+                                    sizeof buffer, &returned);
+  CloseHandle(handle);
+  if (FAILED(hr) && hr != HRESULT_FROM_WIN32(ERROR_MORE_DATA)) {
+    return false;
+  }
+  return reinterpret_cast<CF_PLACEHOLDER_BASIC_INFO*>(buffer)->InSyncState ==
+         CF_IN_SYNC_STATE_IN_SYNC;
+}
+
+// A handle that may change an item's sync state, never its data.
+HANDLE OpenForSyncState(const wchar_t* path) {
+  return CreateFileW(path, FILE_READ_ATTRIBUTES | WRITE_DAC,
+                     FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                     nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS,
+                     nullptr);
+}
+
 }  // namespace
 
 extern "C" {
 
 // Registers [path] as a sync root named [name] (its icon from [icon]) for
-// [device] and connects to it. Returns the session, or 0 with [error] set.
+// [device] and connects to it; [writable]: asked before deletes and
+// renames. Returns the session, or 0 with [error] set.
 __declspec(dllexport) int64_t wcf_start(const wchar_t* path,
                                         const wchar_t* device,
                                         const wchar_t* name,
                                         const wchar_t* icon,
+                                        int32_t writable,
                                         WcfNotify notify,
                                         int32_t* error) {
   CreateDirectoryW(path, nullptr);
@@ -270,12 +378,21 @@ __declspec(dllexport) int64_t wcf_start(const wchar_t* path,
     delete session;
     return 0;
   }
-  static const CF_CALLBACK_REGISTRATION callbacks[] = {
+  static const CF_CALLBACK_REGISTRATION read_only[] = {
       {CF_CALLBACK_TYPE_FETCH_PLACEHOLDERS, OnFetchPlaceholders},
       {CF_CALLBACK_TYPE_FETCH_DATA, OnFetchData},
       {CF_CALLBACK_TYPE_CANCEL_FETCH_DATA, OnCancelFetchData},
+      {CF_CALLBACK_TYPE_NOTIFY_FILE_OPEN_COMPLETION, OnOpenCompletion},
       CF_CALLBACK_REGISTRATION_END};
-  hr = CfConnectSyncRoot(path, callbacks, session,
+  static const CF_CALLBACK_REGISTRATION changes[] = {
+      {CF_CALLBACK_TYPE_FETCH_PLACEHOLDERS, OnFetchPlaceholders},
+      {CF_CALLBACK_TYPE_FETCH_DATA, OnFetchData},
+      {CF_CALLBACK_TYPE_CANCEL_FETCH_DATA, OnCancelFetchData},
+      {CF_CALLBACK_TYPE_NOTIFY_FILE_OPEN_COMPLETION, OnOpenCompletion},
+      {CF_CALLBACK_TYPE_NOTIFY_DELETE, OnNotifyDelete},
+      {CF_CALLBACK_TYPE_NOTIFY_RENAME, OnNotifyRename},
+      CF_CALLBACK_REGISTRATION_END};
+  hr = CfConnectSyncRoot(path, writable ? changes : read_only, session,
                          CF_CONNECT_FLAG_REQUIRE_FULL_FILE_PATH,
                          &session->key);
   if (FAILED(hr)) {
@@ -319,8 +436,9 @@ __declspec(dllexport) int32_t wcf_unregister_stale() {
 }
 
 // Answers a folder listing with what it does not have yet (failed:
-// nothing could be listed). The folder is left asking again each time it
-// is shown, which is when what changed on the device shows up.
+// nothing could be listed, and it asks again). The folder is then fully
+// populated: a name made in it needs nothing from the device to resolve,
+// and what is new on the device comes with wcf_create.
 __declspec(dllexport) int32_t wcf_list(WcfRequest* request,
                                        const WcfEntry* entries,
                                        int32_t count,
@@ -333,7 +451,9 @@ __declspec(dllexport) int32_t wcf_list(WcfRequest* request,
   params.ParamSize = static_cast<ULONG>(
       FIELD_OFFSET(CF_OPERATION_PARAMETERS, TransferPlaceholders) +
       sizeof(params.TransferPlaceholders));
-  params.TransferPlaceholders.Flags = CF_OPERATION_TRANSFER_PLACEHOLDERS_FLAG_NONE;
+  params.TransferPlaceholders.Flags =
+      failed ? CF_OPERATION_TRANSFER_PLACEHOLDERS_FLAG_NONE
+             : CF_OPERATION_TRANSFER_PLACEHOLDERS_FLAG_DISABLE_ON_DEMAND_POPULATION;
   params.TransferPlaceholders.CompletionStatus =
       failed ? kUnsuccessful : kSuccess;
   params.TransferPlaceholders.PlaceholderTotalCount.QuadPart =
@@ -362,9 +482,141 @@ __declspec(dllexport) int32_t wcf_data(WcfRequest* request,
   return CfExecute(&op, &params);
 }
 
+// Says whether a delete (kind 4) or a rename (kind 5) was done on the
+// device: if not, it is not done here either.
+__declspec(dllexport) int32_t wcf_ack(WcfRequest* request, int32_t done) {
+  CF_OPERATION_INFO op = Operation(
+      request, request->kind == 4 ? CF_OPERATION_TYPE_ACK_DELETE
+                                  : CF_OPERATION_TYPE_ACK_RENAME);
+  CF_OPERATION_PARAMETERS params = {};
+  if (request->kind == 4) {
+    params.ParamSize = ParamSize<decltype(params.AckDelete)>();
+    params.AckDelete.CompletionStatus = done ? kSuccess : kAccessDenied;
+  } else {
+    params.ParamSize = ParamSize<decltype(params.AckRename)>();
+    params.AckRename.CompletionStatus = done ? kSuccess : kAccessDenied;
+  }
+  return CfExecute(&op, &params);
+}
+
+// What the item at [path] is: -1 not there; else 1 a folder, 2 one of
+// the mount's placeholders, 4 in sync with the device, 8 something has it
+// open for writing (or would not share it for reading).
+__declspec(dllexport) int32_t wcf_state(const wchar_t* path) {
+  DWORD attributes = 0;
+  CF_PLACEHOLDER_STATE state = CF_PLACEHOLDER_STATE_NO_STATES;
+  if (!PlaceholderState(path, &attributes, &state)) {
+    return -1;
+  }
+  int32_t out = 0;
+  if ((attributes & FILE_ATTRIBUTE_DIRECTORY) != 0) {
+    out |= 1;
+  }
+  if ((state & CF_PLACEHOLDER_STATE_PLACEHOLDER) != 0) {
+    out |= 2;
+    if (InSync(path)) {
+      out |= 4;
+    }
+  }
+  if ((out & 1) == 0) {
+    // Opened for reading, not shared for writing: refused while anyone
+    // writes it. Opening reads nothing, so hydrates nothing.
+    HANDLE handle = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, nullptr,
+                                OPEN_EXISTING, 0, nullptr);
+    if (handle == INVALID_HANDLE_VALUE) {
+      if (GetLastError() == ERROR_SHARING_VIOLATION) {
+        out |= 8;
+      }
+    } else {
+      CloseHandle(handle);
+    }
+  }
+  return out;
+}
+
+// What was made or written at [path] is now on the device as item [ino]:
+// a placeholder (made one if it is new), in sync.
+__declspec(dllexport) int32_t wcf_mark(const wchar_t* path,
+                                       int64_t ino,
+                                       int32_t is_dir) {
+  DWORD attributes = 0;
+  CF_PLACEHOLDER_STATE state = CF_PLACEHOLDER_STATE_NO_STATES;
+  if (!PlaceholderState(path, &attributes, &state)) {
+    return HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND);
+  }
+  HANDLE handle = OpenForSyncState(path);
+  if (handle == INVALID_HANDLE_VALUE) {
+    return HRESULT_FROM_WIN32(GetLastError());
+  }
+  Identity identity{ino, is_dir};
+  HRESULT hr;
+  if ((state & CF_PLACEHOLDER_STATE_PLACEHOLDER) == 0) {
+    hr = CfConvertToPlaceholder(handle, &identity, sizeof identity,
+                                CF_CONVERT_FLAG_MARK_IN_SYNC, nullptr,
+                                nullptr);
+  } else {
+    hr = CfUpdatePlaceholder(handle, nullptr, &identity, sizeof identity,
+                             nullptr, 0, CF_UPDATE_FLAG_MARK_IN_SYNC, nullptr,
+                             nullptr);
+  }
+  CloseHandle(handle);
+  return hr;
+}
+
+// What is new on the device in folder [dir], listed already: placeholders
+// for it. On a thread of its own, like wcf_update.
+__declspec(dllexport) int32_t wcf_create(const wchar_t* dir,
+                                         const WcfEntry* entries,
+                                         int32_t count) {
+  std::wstring folder(dir);
+  std::vector<std::wstring> names;
+  std::vector<WcfEntry> copies(entries, entries + count);
+  for (int32_t i = 0; i < count; i++) {
+    names.emplace_back(entries[i].name != nullptr ? entries[i].name : L"");
+  }
+  std::thread([folder, names = std::move(names),
+               copies = std::move(copies)]() mutable {
+    for (size_t i = 0; i < copies.size(); i++) {
+      copies[i].name = names[i].c_str();
+    }
+    std::vector<Identity> identities;
+    auto placeholders = Placeholders(
+        copies.data(), static_cast<int32_t>(copies.size()), identities);
+    DWORD processed = 0;
+    CfCreatePlaceholders(folder.c_str(), placeholders.data(),
+                         static_cast<DWORD>(placeholders.size()),
+                         CF_CREATE_FLAG_NONE, &processed);
+  }).detach();
+  return S_OK;
+}
+
+// wcf_state and wcf_mark, off the caller's thread: they open items in the
+// sync root, which can call back into the provider (a folder not listed
+// yet, say), and the provider is the very isolate that asks.
+__declspec(dllexport) void wcf_state_async(const wchar_t* path,
+                                           WcfDone done,
+                                           int64_t token) {
+  std::wstring item(path);
+  std::thread([item, done, token]() {
+    done(token, wcf_state(item.c_str()));
+  }).detach();
+}
+
+__declspec(dllexport) void wcf_mark_async(const wchar_t* path,
+                                          int64_t ino,
+                                          int32_t is_dir,
+                                          WcfDone done,
+                                          int64_t token) {
+  std::wstring item(path);
+  std::thread([item, ino, is_dir, done, token]() {
+    done(token, wcf_mark(item.c_str(), ino, is_dir));
+  }).detach();
+}
+
 // A file changed on the device: its size and time here follow, and what
 // was read of it goes. On a thread of its own: updating a placeholder can
 // call back into the provider, which is the very isolate calling this.
+// One changed here and not yet sent stays as it is.
 __declspec(dllexport) int32_t wcf_update(const wchar_t* file,
                                          const WcfEntry* entry) {
   std::wstring path(file);
@@ -381,19 +633,28 @@ __declspec(dllexport) int32_t wcf_update(const wchar_t* file,
     auto placeholders = Placeholders(&copy, 1, identities);
     CfUpdatePlaceholder(
         handle, &placeholders[0].FsMetadata, &identities[0], sizeof(Identity),
-        nullptr, 0, CF_UPDATE_FLAG_DEHYDRATE | CF_UPDATE_FLAG_MARK_IN_SYNC,
+        nullptr, 0,
+        CF_UPDATE_FLAG_VERIFY_IN_SYNC | CF_UPDATE_FLAG_DEHYDRATE |
+            CF_UPDATE_FLAG_MARK_IN_SYNC,
         nullptr, nullptr);
     CfCloseHandle(handle);
   }).detach();
   return S_OK;
 }
 
-// A file that went on the device goes here too. Its placeholder is
-// read-only, which DeleteFile refuses; on a thread of its own, like
-// wcf_update.
+// A file that went on the device goes here too, unless it was changed
+// here and not yet sent. Its placeholder may be read-only, which
+// DeleteFile refuses; on a thread of its own, like wcf_update.
 __declspec(dllexport) int32_t wcf_remove(const wchar_t* file) {
   std::wstring path(file);
   std::thread([path]() {
+    DWORD attributes = 0;
+    CF_PLACEHOLDER_STATE state = CF_PLACEHOLDER_STATE_NO_STATES;
+    if (!PlaceholderState(path.c_str(), &attributes, &state) ||
+        (state & CF_PLACEHOLDER_STATE_PLACEHOLDER) == 0 ||
+        !InSync(path.c_str())) {
+      return;
+    }
     SetFileAttributesW(path.c_str(), FILE_ATTRIBUTE_NORMAL);
     DeleteFileW(path.c_str());
   }).detach();

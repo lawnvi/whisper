@@ -2367,7 +2367,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get remoteFilesPromptBodyPhone =>
-      'If you allow it, it can see this phone\'s internal storage and copy, create, rename and delete files there. Deleting asks again first.';
+      'If you allow it, it can see this phone\'s internal storage and copy, create, rename and delete files there. Deleted files can\'t be recovered.';
 
   @override
   String get remoteFilesDeny => 'Don\'t allow';
@@ -3629,4 +3629,23 @@ class AppLocalizationsEn extends AppLocalizations {
   String remoteFilesNotAsked(String device) {
     return '$device Needs to Allow Browsing';
   }
+
+  @override
+  String get deviceFilesAllowChanges => 'Allow Changes to My Files';
+
+  @override
+  String get remoteFilesPromptAllowChanges => 'Allow changes';
+
+  @override
+  String remoteFilesReadOnlyHost(String device) {
+    return '$device only allows reading its files';
+  }
+
+  @override
+  String get remoteFilesPromptBodyReadOnlyDesktop =>
+      'If you allow it, it can see your home folder and open and copy files from it, but not change them.';
+
+  @override
+  String get remoteFilesPromptBodyReadOnlyPhone =>
+      'If you allow it, it can see this phone\'s internal storage and open and copy files from it, but not change them.';
 }

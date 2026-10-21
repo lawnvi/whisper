@@ -19,7 +19,12 @@ enum WhisperFrameType {
 
   /// The bytes a file-browse `read` asked for: transferId is the session,
   /// sequence the request, offset where in the file they start.
-  browseData(15);
+  browseData(15),
+
+  /// Bytes a mounted folder writes into a file: transferId is the upload
+  /// (from `writeOpen`), sequence the request, offset where in the file
+  /// they go. Only sent to hosts that said they take writes.
+  browseWrite(16);
 
   const WhisperFrameType(this.code);
 

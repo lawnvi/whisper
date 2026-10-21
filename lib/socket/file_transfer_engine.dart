@@ -1471,6 +1471,7 @@ class FileTransferEngine {
       case WhisperFrameType.clipboardClear:
       case WhisperFrameType.clipboardError:
       case WhisperFrameType.browseData:
+      case WhisperFrameType.browseWrite:
         throw const WireInputRejected(WireInputReason.transferFrameMismatch);
       case WhisperFrameType.fileOffer:
         final message = decodeWireMessage(

@@ -10,13 +10,13 @@ abstract final class MacNfsMount {
   /// `timeo`: estimated from quick answers, its timeout shrank to a second
   /// or so, and a busy phone's reads failed (ETIMEDOUT) and got the mount
   /// declared dead, though every call is answered within the server's
-  /// patience.
-  static List<String> options(int port) => [
+  /// patience. Read-only unless the device takes changes.
+  static List<String> options(int port, {bool writable = false}) => [
     'vers=3',
     'tcp',
     'port=$port',
     'mountport=$port',
-    'rdonly',
+    if (!writable) 'rdonly' else 'wsize=1048576',
     'locallocks',
     'soft',
     'intr',
@@ -35,11 +35,12 @@ abstract final class MacNfsMount {
     required int port,
     required String export,
     required String mountPoint,
+    bool writable = false,
   }) async {
     await Directory(mountPoint).create(recursive: true);
     final result = await Process.run('/sbin/mount_nfs', [
       '-o',
-      options(port).join(','),
+      options(port, writable: writable).join(','),
       'localhost:$export',
       mountPoint,
     ]);

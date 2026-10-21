@@ -14,10 +14,17 @@ import 'mount_worker.dart';
 import 'mount_tree.dart';
 
 /// The other device's files through its browse session.
-class RemoteMountSource implements MountSource {
-  RemoteMountSource(this.client);
+class RemoteMountSource extends MountSource {
+  RemoteMountSource(this.client, {this.writable = false, this.hasTrash = true});
 
   final RemoteFilesClient client;
+
+  /// Its host takes changes and lets this device make them.
+  @override
+  final bool writable;
+
+  /// Deletions there go to a trash (not on Android).
+  final bool hasTrash;
 
   @override
   Future<List<FsEntry>> list(String root, String path) async {
@@ -39,12 +46,79 @@ class RemoteMountSource implements MountSource {
   Future<Uint8List> read(String root, String path, int offset, int length) =>
       _guard(() => client.read(root, path, offset, length));
 
+  @override
+  Future<Uint8List> readUpload(String upload, int offset, int length) =>
+      _guard(() => client.read('', '', offset, length, upload: upload));
+
+  @override
+  Future<FsEntry> create(String root, String parent, String name) =>
+      _guard(() => client.create(root, parent, name));
+
+  @override
+  Future<void> mkdir(String root, String parent, String name) =>
+      _guard(() => client.mkdir(root, parent, name));
+
+  @override
+  Future<void> remove(
+    String root,
+    String path, {
+    bool folder = false,
+    bool permanent = false,
+  }) => _guard(
+    () => client.remove(
+      root,
+      path,
+      folder: folder,
+      permanent: folder || permanent || !hasTrash,
+    ),
+  );
+
+  @override
+  Future<void> move(String root, String path, String parent, String name) =>
+      _guard(() => client.move(root, path, parent, name));
+
+  @override
+  Future<void> touch(String root, String path, int modifiedMs) =>
+      _guard(() => client.touch(root, path, modifiedMs));
+
+  @override
+  Future<({int total, int free})?> space(String root) =>
+      _guard(() => client.space(root));
+
+  @override
+  Future<({String id, int size})> writeOpen(
+    String root,
+    String path, {
+    required bool truncate,
+  }) => _guard(() => client.writeOpen(root, path, truncate: truncate));
+
+  @override
+  Future<void> write(String upload, int offset, Uint8List data) =>
+      _guard(() => client.write(upload, offset, data));
+
+  @override
+  Future<void> writeSize(String upload, int size) =>
+      _guard(() => client.writeSize(upload, size));
+
+  @override
+  Future<({String path, FsEntry? entry})> writeClose(
+    String upload, {
+    required bool commit,
+    int? modifiedMs,
+  }) => _guard(
+    () => client.writeClose(upload, commit: commit, modifiedMs: modifiedMs),
+  );
+
   Future<T> _guard<T>(Future<T> Function() request) async {
     try {
       return await request();
     } on RemoteFsException catch (error) {
       throw MountException(switch (error.reason) {
         FileBrowseError.notFound => MountError.notFound,
+        FileBrowseError.exists => MountError.exists,
+        FileBrowseError.notEmpty => MountError.notEmpty,
+        FileBrowseError.readOnly => MountError.readOnly,
+        FileBrowseError.badName => MountError.invalid,
         'offline' || FileBrowseError.notAllowed => MountError.offline,
         _ => MountError.io,
       });
@@ -266,7 +340,11 @@ class RemoteMounts extends ChangeNotifier {
     final MountWorker worker;
     try {
       worker = await MountWorker.start(
-        source: RemoteMountSource(client),
+        source: RemoteMountSource(
+          client,
+          writable: info.canWrite && !info.readOnly,
+          hasTrash: info.hasTrash,
+        ),
         roots: roots,
         kind: place.kind,
         path: place.path,

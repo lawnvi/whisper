@@ -28,6 +28,13 @@ abstract class MountFrontend {
   /// file manager).
   void Function()? onEnded;
 
+  /// See [MountTree.idleCommit]: for a system that may never say it is
+  /// done writing a file.
+  Duration? get idleCommit => null;
+
+  /// See [MountTree.keepHere]: what this system writes for itself.
+  bool Function(String name)? get keepHere => null;
+
   /// Takes away what a run before this one left behind.
   static Future<void> cleanUp() async {
     if (Platform.isMacOS) {
@@ -296,6 +303,18 @@ class _MacFrontend extends MountFrontend {
   @override
   final String path;
 
+  /// macOS commits on close what it wrote as "unstable", but what it
+  /// wrote "file sync" it never does.
+  @override
+  Duration get idleCommit => const Duration(seconds: 2);
+
+  /// Extended attributes (Finder tags, where a download came from) as
+  /// `._name` AppleDouble files, which NFSv3 leaves to the client, and
+  /// Finder's `.DS_Store`: the other device gets none of them.
+  @override
+  bool Function(String name) get keepHere =>
+      (name) => name.startsWith('._') || name == '.DS_Store';
+
   NfsServer? _server;
   bool _mounted = false;
   bool _stopping = false;
@@ -318,6 +337,7 @@ class _MacFrontend extends MountFrontend {
         port: server.port,
         export: server.exportPath,
         mountPoint: path,
+        writable: tree.writable,
       );
     } catch (_) {
       await server.close();

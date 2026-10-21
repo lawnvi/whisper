@@ -67,6 +67,90 @@ abstract final class FsPlatform {
     return _freedesktopTrash(path);
   }
 
+  /// How big the disk holding [path] is and how much of it is free, or
+  /// null when the system does not say.
+  static Future<({int total, int free})?> space(String path) async {
+    try {
+      if (Platform.isWindows) {
+        return _windowsSpace(path);
+      }
+      // POSIX df everywhere else (toybox's on Android): "Filesystem
+      // 1024-blocks Used Available Capacity Mounted on".
+      final result = await Process.run('df', ['-k', '-P', path]);
+      if (result.exitCode != 0) {
+        return null;
+      }
+      final lines = '${result.stdout}'.trim().split('\n');
+      final match = RegExp(
+        r'^.*?\s+(\d+)\s+\d+\s+(\d+)\s+\d+%\s',
+      ).firstMatch(lines.last);
+      if (match == null) {
+        return null;
+      }
+      return (
+        total: int.parse(match.group(1)!) * 1024,
+        free: int.parse(match.group(2)!) * 1024,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static ({int total, int free})? _windowsSpace(String path) {
+    final native = path.toNativeUtf16();
+    final free = calloc<Uint64>();
+    final total = calloc<Uint64>();
+    try {
+      if (GetDiskFreeSpaceEx(native, free, total, nullptr) == 0) {
+        return null;
+      }
+      return (total: total.value, free: free.value);
+    } finally {
+      calloc.free(native);
+      calloc.free(free);
+      calloc.free(total);
+    }
+  }
+
+  /// Gives a file the permission bits another had (POSIX): a file written
+  /// anew stays as executable, or as private, as the one it replaces.
+  static void copyMode(String path, int mode) {
+    if (Platform.isWindows) {
+      return;
+    }
+    final native = path.toNativeUtf8();
+    try {
+      _chmod(native, mode & 0xfff);
+    } catch (_) {
+      // Left as created.
+    } finally {
+      calloc.free(native);
+    }
+  }
+
+  static final _chmod = DynamicLibrary.process()
+      .lookupFunction<
+        Int32 Function(Pointer<Utf8>, Uint32),
+        int Function(Pointer<Utf8>, int)
+      >('chmod');
+
+  /// Hides a file in Explorer, as a dot hides it everywhere else, or
+  /// shows it again.
+  static void setHiddenWindows(String path, bool hidden) {
+    if (!Platform.isWindows) {
+      return;
+    }
+    final native = path.toNativeUtf16();
+    try {
+      SetFileAttributes(
+        native,
+        hidden ? FILE_ATTRIBUTE_HIDDEN : FILE_ATTRIBUTE_NORMAL,
+      );
+    } finally {
+      calloc.free(native);
+    }
+  }
+
   /// Tells Android's media index that files moved (galleries, pickers).
   static Future<void> mediaScan(List<String> paths) async {
     if (!Platform.isAndroid) {

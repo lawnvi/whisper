@@ -7,9 +7,10 @@ import 'dart:typed_data';
 
 import 'mount_tree.dart';
 
-/// A read-only NFSv3 server on 127.0.0.1 for one [MountTree]: what macOS
-/// mounts with its own `mount_nfs`, so the other device's files show in
-/// Finder without a kernel extension or a paid entitlement.
+/// An NFSv3 server on 127.0.0.1 for one [MountTree]: what macOS mounts
+/// with its own `mount_nfs`, so the other device's files show in Finder
+/// without a kernel extension or a paid entitlement. Read-only unless the
+/// device takes changes.
 ///
 /// Only one mount, for this user: the export path is a secret, the first
 /// MNT takes it, and calls from other users (but root) are refused.
@@ -21,6 +22,9 @@ class NfsServer {
     Random? random,
   }) : _random = random ?? Random.secure() {
     _secret = Uint8List.fromList(List.generate(8, (_) => _random.nextInt(256)));
+    _verifier = Uint8List.fromList(
+      List.generate(8, (_) => _random.nextInt(256)),
+    );
     final token = List.generate(
       16,
       (_) => _random.nextInt(256).toRadixString(16).padLeft(2, '0'),
@@ -34,6 +38,24 @@ class NfsServer {
   final Random _random;
   late final Uint8List _secret;
   late final int _fsid;
+
+  /// Told with every WRITE and COMMIT: a new one (a new server) has the
+  /// system send again what it had not had committed.
+  late final Uint8List _verifier;
+
+  /// Changes the system was told to try again (they took long), by what
+  /// was asked: the retry gets what the first one did instead of doing it
+  /// again (a second CREATE would find the file there).
+  final _told = <Object, ({Future<Object?> work, DateTime at})>{};
+
+  /// EXCLUSIVE creates, by the file: a retry with the same verifier is the
+  /// same create.
+  final _exclusive = <int, String>{};
+
+  /// How long a change may keep the system trying again (a large file
+  /// copied there to be written into takes a while).
+  static const _changeGiveUp = Duration(minutes: 10);
+  static const _keptForRetry = Duration(seconds: 30);
 
   /// What `mount_nfs` asks for: `localhost:<exportPath>`.
   late final String exportPath;
@@ -332,8 +354,10 @@ class NfsServer {
           final wanted = r.u32();
           w.u32(_ok);
           _postOp(w, node);
-          // Read, look up, execute; never change anything.
-          w.u32(wanted & (node.isDir ? 0x23 : 0x21));
+          // Read, look up, execute; modify, extend and delete when the
+          // device takes changes.
+          final changes = tree.writable && !node.isTop ? 0x1c : 0;
+          w.u32(wanted & ((node.isDir ? 0x23 : 0x21) | changes));
         case 6: // READ
           final offset = r.u64();
           final count = r.u32().clamp(0, _maxRead);
@@ -400,15 +424,19 @@ class NfsServer {
             ..boolean(false)
             ..boolean(eof);
         case 18: // FSSTAT
+          // Finder checks the free space before copying in.
+          final space = tree.writable
+              ? await _patiently(('space',), tree.space())
+              : (total: 1 << 40, free: 0);
           w.u32(_ok);
           _postOp(w, node);
           w
-            ..u64(1 << 40)
-            ..u64(0)
-            ..u64(0)
+            ..u64(space.total)
+            ..u64(space.free)
+            ..u64(space.free)
             ..u64(1 << 24)
-            ..u64(0)
-            ..u64(0)
+            ..u64(tree.writable ? 1 << 23 : 0)
+            ..u64(tree.writable ? 1 << 23 : 0)
             ..u32(0);
         case 19: // FSINFO
           w.u32(_ok);
@@ -438,10 +466,18 @@ class NfsServer {
         case 5: // READLINK
           w.u32(_errNotSupported);
           _postOp(w, node);
-        default:
-          // Everything that would change something.
-          w.u32(_errReadOnly);
+        case 10: // SYMLINK
+        case 11: // MKNOD
+        case 15: // LINK
+          w.u32(tree.writable ? _errNotSupported : _errReadOnly);
           _failureBody(procedure, w);
+        default:
+          if (!tree.writable) {
+            w.u32(_errReadOnly);
+            _failureBody(procedure, w);
+            break;
+          }
+          await _change(procedure, r, w, node);
       }
     } on _TryLater {
       final failure = _XdrOut()..u32(_errJukebox);
@@ -454,6 +490,239 @@ class NfsServer {
     }
     return w.bytes();
   }
+
+  /// SETATTR, WRITE, CREATE, MKDIR, REMOVE, RMDIR, RENAME and COMMIT, for a
+  /// device that takes changes.
+  Future<void> _change(int procedure, _Xdr r, _XdrOut w, MountNode node) async {
+    switch (procedure) {
+      case 2: // SETATTR
+        final attributes = _setAttributes(r);
+        if (r.boolean()) {
+          r.fixed(8); // guard: ctime, not kept here
+        }
+        await _changing((2, node.ino, attributes), () async {
+          await _apply(node, attributes);
+          // Done once answered, as SETATTR is: the system sends no COMMIT
+          // after it (cp -p's times, a truncate as the last change).
+          await tree.commit(node.ino);
+          return null;
+        });
+        w.u32(_ok);
+        _wcc(w, node);
+      case 7: // WRITE
+        final offset = r.u64();
+        final count = r.u32();
+        final stable = r.u32();
+        var data = r.opaque();
+        if (node.isDir) {
+          throw const MountException(MountError.isDir);
+        }
+        if (data.length > count) {
+          data = Uint8List.sublistView(data, 0, count);
+        }
+        await _changing(
+          (7, node.ino, offset, data.length, _fingerprint(data)),
+          () async {
+            await tree.write(node.ino, offset, data);
+            if (stable != 0) {
+              // Asked to be on the device's disk: it is, if not yet in place
+              // (an idle commit does that; the system sends no COMMIT).
+              await tree.settle(node.ino);
+            }
+            return null;
+          },
+        );
+        w.u32(_ok);
+        _wcc(w, node);
+        w
+          ..u32(data.length)
+          ..u32(stable == 0 ? 0 : stable) // UNSTABLE, or as asked
+          ..fixed(_verifier);
+      case 21: // COMMIT
+        await _changing((21, node.ino), () async {
+          await tree.commit(node.ino);
+          return null;
+        });
+        w.u32(_ok);
+        _wcc(w, node);
+        w.fixed(_verifier);
+      case 8: // CREATE
+        final name = r.string();
+        final how = r.u32();
+        final verifier = how == 2 ? _hex(r.fixed(8)) : null;
+        final attributes = how == 2 ? null : _setAttributes(r);
+        if (!node.isDir) {
+          throw const MountException(MountError.notDir);
+        }
+        final made = await _changing((8, node.ino, name), () async {
+          final existing = await tree.lookup(node.ino, name);
+          if (existing != null) {
+            final same = switch (how) {
+              0 => !existing.isDir, // UNCHECKED: it may be there
+              2 => _exclusive[existing.ino] == verifier,
+              _ => false,
+            };
+            if (!same) {
+              throw const MountException(MountError.exists);
+            }
+            if (how == 0 && attributes != null) {
+              await _apply(existing, attributes);
+            }
+            return existing;
+          }
+          final created = await tree.create(node.ino, name);
+          if (verifier != null) {
+            _exclusive[created.ino] = verifier;
+          }
+          if (attributes != null) {
+            await _apply(created, attributes);
+          }
+          return created;
+        });
+        _made(w, made, node);
+      case 9: // MKDIR
+        final name = r.string();
+        _setAttributes(r);
+        final made = await _changing((
+          9,
+          node.ino,
+          name,
+        ), () => tree.mkdir(node.ino, name));
+        _made(w, made, node);
+      case 12: // REMOVE
+      case 13: // RMDIR
+        final name = r.string();
+        await _changing((procedure, node.ino, name), () async {
+          procedure == 12
+              ? await tree.unlink(node.ino, name)
+              : await tree.rmdir(node.ino, name);
+          return null;
+        });
+        w.u32(_ok);
+        _wcc(w, node);
+      case 14: // RENAME
+        final name = r.string();
+        final toIno = _ino(r.opaque());
+        final toName = r.string();
+        final to = toIno == null ? null : tree.node(toIno);
+        if (to == null || to.gone) {
+          w.u32(_errStale);
+          _failureBody(procedure, w);
+          return;
+        }
+        await _changing((14, node.ino, name, to.ino, toName), () async {
+          await tree.rename(node.ino, name, to.ino, toName);
+          return null;
+        });
+        w.u32(_ok);
+        _wcc(w, node);
+        _wcc(w, to);
+      default:
+        w.u32(_errNotSupported);
+        _failureBody(procedure, w);
+    }
+  }
+
+  /// CREATE and MKDIR's answer: the new handle, its attributes, the
+  /// folder's.
+  void _made(_XdrOut w, MountNode made, MountNode folder) {
+    w
+      ..u32(_ok)
+      ..boolean(true)
+      ..opaque(_handle(made.ino));
+    _postOp(w, made);
+    _wcc(w, folder);
+  }
+
+  /// sattr3: what SETATTR (and CREATE) set. Only the size and the
+  /// modification time are the device's to change from here.
+  ({int? size, int? modifiedMs}) _setAttributes(_Xdr r) {
+    if (r.boolean()) r.u32(); // mode
+    if (r.boolean()) r.u32(); // uid
+    if (r.boolean()) r.u32(); // gid
+    final size = r.boolean() ? r.u64() : null;
+    _time(r); // atime
+    final modifiedMs = _time(r);
+    return (size: size, modifiedMs: modifiedMs);
+  }
+
+  /// set_atime / set_mtime: not, to the server's time, or to the client's.
+  static int? _time(_Xdr r) => switch (r.u32()) {
+    1 => DateTime.now().millisecondsSinceEpoch,
+    2 => r.u32() * 1000 + r.u32() ~/ 1000000,
+    _ => null,
+  };
+
+  Future<void> _apply(
+    MountNode node,
+    ({int? size, int? modifiedMs}) attributes,
+  ) async {
+    if (attributes.size case final size? when !node.isDir) {
+      await tree.resize(node.ino, size);
+    }
+    if (attributes.modifiedMs case final modifiedMs?) {
+      await tree.setModified(node.ino, modifiedMs);
+    }
+  }
+
+  /// A change done once however often the system asks: one it was told
+  /// to try again keeps going, and its retry gets the result.
+  Future<T> _changing<T>(Object key, Future<T> Function() start) async {
+    final now = DateTime.now();
+    final told = _told[key];
+    if (told != null && now.difference(told.at) > _changeGiveUp) {
+      _told.remove(key);
+      mountLog('nfs: change $key gave up');
+      throw const MountException(MountError.io);
+    }
+    // Ones the system stopped asking about.
+    _told.removeWhere(
+      (_, other) => now.difference(other.at) > _changeGiveUp * 2,
+    );
+    final work = told != null ? told.work as Future<T> : start();
+    try {
+      final result = await work.timeout(
+        readPatience,
+        onTimeout: () {
+          work.ignore();
+          _told[key] = (work: work, at: told?.at ?? now);
+          if (told == null) {
+            mountLog('nfs: change $key is slow, told to try again');
+            // Kept for the retry a while once done, not for a later change
+            // that asks the same.
+            work
+                .then((_) {}, onError: (Object _) {})
+                .whenComplete(
+                  () => Timer(_keptForRetry, () {
+                    if (identical(_told[key]?.work, work)) {
+                      _told.remove(key);
+                    }
+                  }),
+                );
+          }
+          throw const _TryLater();
+        },
+      );
+      _told.remove(key);
+      return result;
+    } on MountException {
+      _told.remove(key);
+      rethrow;
+    }
+  }
+
+  /// Tells writes of the same range apart by what they hold, cheaply.
+  static int _fingerprint(Uint8List data) {
+    if (data.length <= 64) {
+      return Object.hashAll(data);
+    }
+    final step = data.length ~/ 32;
+    return Object.hashAll([for (var i = 0; i < 32; i++) data[i * step]]) ^
+        Object.hashAll(Uint8List.sublistView(data, data.length - 16));
+  }
+
+  static String _hex(Uint8List bytes) =>
+      [for (final b in bytes) b.toRadixString(16).padLeft(2, '0')].join();
 
   /// [work] if done within [readPatience]; otherwise the system is told to
   /// try again while it goes on, for the retry to find it done.
@@ -491,6 +760,12 @@ class NfsServer {
     MountError.notDir => _errNotDir,
     MountError.isDir => _errIsDir,
     MountError.io || MountError.offline => _errIo,
+    MountError.exists => _errExists,
+    MountError.notEmpty => _errNotEmpty,
+    MountError.readOnly => _errReadOnly,
+    MountError.denied => _errAccess,
+    MountError.invalid => _errInvalid,
+    MountError.crossDevice => _errCrossDevice,
   };
 
   /// What follows a failure status, by procedure.
@@ -524,6 +799,12 @@ class NfsServer {
     ..boolean(false)
     ..boolean(false);
 
+  /// wcc_data after a change: nothing from before, [node] as it is now.
+  void _wcc(_XdrOut w, MountNode node) {
+    w.boolean(false);
+    _postOp(w, node);
+  }
+
   void _postOp(_XdrOut w, MountNode? node) {
     if (node == null) {
       w.boolean(false);
@@ -538,7 +819,11 @@ class NfsServer {
     final size = dir ? 4096 : node.size;
     w
       ..u32(dir ? 2 : 1) // NF3DIR / NF3REG
-      ..u32(dir ? 0x16d : 0x124) // 0555 / 0444
+      ..u32(
+        tree.writable
+            ? (dir ? 0x1ed : 0x1a4) // 0755 / 0644
+            : (dir ? 0x16d : 0x124), // 0555 / 0444
+      )
       ..u32(dir ? 2 : 1)
       ..u32(_owner)
       ..u32(_ownerGroup)
@@ -549,7 +834,8 @@ class NfsServer {
       ..u64(_fsid)
       ..u64(node.ino);
     final seconds = node.modifiedMs ~/ 1000;
-    final nanos = (node.modifiedMs % 1000) * 1000000;
+    // Changes made from here move a folder's time on (MountNode.ticks).
+    final nanos = (node.modifiedMs % 1000) * 1000000 + node.ticks % 1000000;
     for (var i = 0; i < 3; i++) {
       w
         ..u32(seconds)
@@ -564,9 +850,13 @@ class NfsServer {
   static const _errNoEntry = 2;
   static const _errIo = 5;
   static const _errAccess = 13;
+  static const _errExists = 17;
+  static const _errCrossDevice = 18;
   static const _errNotDir = 20;
   static const _errIsDir = 21;
+  static const _errInvalid = 22;
   static const _errReadOnly = 30;
+  static const _errNotEmpty = 66;
   static const _errStale = 70;
   static const _errNotSupported = 10004;
   static const _errJukebox = 10008;
@@ -674,6 +964,8 @@ class _Xdr {
   }
 
   String string() => utf8.decode(opaque(), allowMalformed: true);
+
+  bool boolean() => u32() != 0;
 }
 
 class _XdrOut {

@@ -2396,7 +2396,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get remoteFilesPromptBodyPhone =>
-      'Si lo permites, podrá ver el almacenamiento interno de este teléfono y copiar, crear, renombrar y eliminar archivos allí. Antes de eliminar se vuelve a preguntar.';
+      'Si lo permites, podrá ver el almacenamiento interno de este teléfono y copiar, crear, renombrar y eliminar archivos allí. Lo eliminado no se puede recuperar.';
 
   @override
   String get remoteFilesDeny => 'No permitir';
@@ -3673,4 +3673,23 @@ class AppLocalizationsEs extends AppLocalizations {
   String remoteFilesNotAsked(String device) {
     return '$device debe permitir explorar sus archivos';
   }
+
+  @override
+  String get deviceFilesAllowChanges => 'Permitir cambios en mis archivos';
+
+  @override
+  String get remoteFilesPromptAllowChanges => 'Permitir cambios';
+
+  @override
+  String remoteFilesReadOnlyHost(String device) {
+    return '$device solo permite leer sus archivos';
+  }
+
+  @override
+  String get remoteFilesPromptBodyReadOnlyDesktop =>
+      'Si lo permites, podrá ver tu carpeta de inicio y abrir y copiar sus archivos, pero no cambiarlos.';
+
+  @override
+  String get remoteFilesPromptBodyReadOnlyPhone =>
+      'Si lo permites, podrá ver el almacenamiento interno de este teléfono y abrir y copiar sus archivos, pero no cambiarlos.';
 }

@@ -62,6 +62,7 @@ class MountWorker {
     required String name,
     required bool showHiddenFiles,
   }) async {
+    final writable = source.writable;
     final events = ReceivePort();
     final requests = ReceivePort();
     final exits = ReceivePort();
@@ -111,16 +112,9 @@ class MountWorker {
       }
     });
     requests.listen((message) {
-      final (
-        int id,
-        String op,
-        String root,
-        String rel,
-        int offset,
-        int length,
-        SendPort reply,
-      ) = message as (int, String, String, String, int, int, SendPort);
-      unawaited(_serve(source, id, op, root, rel, offset, length, reply));
+      final (int id, String op, List<Object?> args, SendPort reply) =
+          message as (int, String, List<Object?>, SendPort);
+      unawaited(_serve(source, id, op, args, reply));
     });
     final isolate = await Isolate.spawn(
       _main,
@@ -133,6 +127,7 @@ class MountWorker {
         device,
         name,
         showHiddenFiles,
+        writable,
       ),
       debugName: 'mount $name',
       errorsAreFatal: false,
@@ -154,19 +149,63 @@ class MountWorker {
     MountSource source,
     int id,
     String op,
-    String root,
-    String rel,
-    int offset,
-    int length,
+    List<Object?> args,
     SendPort reply,
   ) async {
+    String text(int i) => args[i] as String;
+    int number(int i) => args[i] as int;
+    Uint8List bytes(int i) =>
+        (args[i] as TransferableTypedData).materialize().asUint8List();
+    TransferableTypedData out(Uint8List data) =>
+        TransferableTypedData.fromList([data]);
     try {
-      if (op == 'list') {
-        reply.send((id, await source.list(root, rel), null));
-      } else {
-        final data = await source.read(root, rel, offset, length);
-        reply.send((id, TransferableTypedData.fromList([data]), null));
+      Object? value;
+      switch (op) {
+        case 'list':
+          value = await source.list(text(0), text(1));
+        case 'read':
+          value = out(
+            await source.read(text(0), text(1), number(2), number(3)),
+          );
+        case 'readUpload':
+          value = out(await source.readUpload(text(0), number(1), number(2)));
+        case 'create':
+          value = await source.create(text(0), text(1), text(2));
+        case 'mkdir':
+          await source.mkdir(text(0), text(1), text(2));
+        case 'remove':
+          await source.remove(
+            text(0),
+            text(1),
+            folder: args[2] == true,
+            permanent: args[3] == true,
+          );
+        case 'move':
+          await source.move(text(0), text(1), text(2), text(3));
+        case 'touch':
+          await source.touch(text(0), text(1), number(2));
+        case 'space':
+          value = await source.space(text(0));
+        case 'writeOpen':
+          value = await source.writeOpen(
+            text(0),
+            text(1),
+            truncate: args[2] == true,
+          );
+        case 'write':
+          await source.write(text(0), number(1), bytes(2));
+        case 'writeSize':
+          await source.writeSize(text(0), number(1));
+        case 'writeClose':
+          value = await source.writeClose(
+            text(0),
+            commit: args[1] == true,
+            modifiedMs: args[2] as int?,
+          );
+        default:
+          throw ArgumentError.value(op, 'op');
       }
+      reply.send((id, value, null));
     } on MountException catch (error) {
       reply.send((id, null, error.error.index));
     } catch (_) {
@@ -187,15 +226,40 @@ class MountWorker {
   }
 
   static Future<void> _main(
-    (SendPort, SendPort, List<MountRoot>, String, String, String, String, bool)
+    (
+      SendPort,
+      SendPort,
+      List<MountRoot>,
+      String,
+      String,
+      String,
+      String,
+      bool,
+      bool,
+    )
     args,
   ) async {
-    final (events, requests, roots, kind, path, device, name, showHidden) =
-        args;
+    final (
+      events,
+      requests,
+      roots,
+      kind,
+      path,
+      device,
+      name,
+      showHidden,
+      writable,
+    ) = args;
     mountLog = (line) => events.send(('log', line));
-    final source = _PortSource(requests);
-    final tree = MountTree(source, roots, showHiddenFiles: showHidden);
+    final source = _PortSource(requests, writable: writable);
     final frontend = MountFrontend.create(kind, path, device);
+    final tree = MountTree(
+      source,
+      roots,
+      showHiddenFiles: showHidden,
+      idleCommit: frontend.idleCommit,
+      keepHere: frontend.keepHere,
+    );
     final commands = ReceivePort();
     frontend.onEnded = () => events.send(('ended', null));
     try {
@@ -223,12 +287,15 @@ class MountWorker {
 
 /// The worker's way to the other device: through the app's isolate, which
 /// holds the connection.
-class _PortSource implements MountSource {
-  _PortSource(this._requests) {
+class _PortSource extends MountSource {
+  _PortSource(this._requests, {required this.writable}) {
     _replies.listen(_onReply);
   }
 
   final SendPort _requests;
+
+  @override
+  final bool writable;
   final _replies = ReceivePort();
   final _waiting = <int, Completer<Object?>>{};
   int _next = 1;
@@ -246,19 +313,21 @@ class _PortSource implements MountSource {
     }
   }
 
+  /// Changes may wait on the device's disk for long (a large file copied
+  /// to be written into, a folder to its trash): not a hung app thread.
+  static const _changePatience = Duration(minutes: 10);
+
   Future<Object?> _ask(
     String op,
-    String root,
-    String path, [
-    int offset = 0,
-    int length = 0,
-  ]) {
+    List<Object?> args, {
+    Duration patience = MountWorker._patience,
+  }) {
     final id = _next++;
     final waiting = Completer<Object?>();
     _waiting[id] = waiting;
-    _requests.send((id, op, root, path, offset, length, _replies.sendPort));
+    _requests.send((id, op, args, _replies.sendPort));
     return waiting.future.timeout(
-      MountWorker._patience,
+      patience,
       onTimeout: () {
         _waiting.remove(id);
         throw const MountException(MountError.io);
@@ -266,9 +335,15 @@ class _PortSource implements MountSource {
     );
   }
 
+  Future<Object?> _change(String op, List<Object?> args) =>
+      _ask(op, args, patience: _changePatience);
+
+  static Uint8List _bytes(Object? value) =>
+      (value as TransferableTypedData).materialize().asUint8List();
+
   @override
   Future<List<FsEntry>> list(String root, String path) async =>
-      (await _ask('list', root, path)) as List<FsEntry>;
+      (await _ask('list', [root, path])) as List<FsEntry>;
 
   @override
   Future<Uint8List> read(
@@ -276,11 +351,69 @@ class _PortSource implements MountSource {
     String path,
     int offset,
     int length,
-  ) async =>
-      ((await _ask('read', root, path, offset, length))
-              as TransferableTypedData)
-          .materialize()
-          .asUint8List();
+  ) async => _bytes(await _ask('read', [root, path, offset, length]));
+
+  @override
+  Future<Uint8List> readUpload(String upload, int offset, int length) async =>
+      _bytes(await _ask('readUpload', [upload, offset, length]));
+
+  @override
+  Future<FsEntry> create(String root, String parent, String name) async =>
+      (await _change('create', [root, parent, name])) as FsEntry;
+
+  @override
+  Future<void> mkdir(String root, String parent, String name) =>
+      _change('mkdir', [root, parent, name]);
+
+  @override
+  Future<void> remove(
+    String root,
+    String path, {
+    bool folder = false,
+    bool permanent = false,
+  }) => _change('remove', [root, path, folder, permanent]);
+
+  @override
+  Future<void> move(String root, String path, String parent, String name) =>
+      _change('move', [root, path, parent, name]);
+
+  @override
+  Future<void> touch(String root, String path, int modifiedMs) =>
+      _ask('touch', [root, path, modifiedMs]);
+
+  @override
+  Future<({int total, int free})?> space(String root) async =>
+      (await _ask('space', [root])) as ({int total, int free})?;
+
+  @override
+  Future<({String id, int size})> writeOpen(
+    String root,
+    String path, {
+    required bool truncate,
+  }) async =>
+      (await _change('writeOpen', [root, path, truncate]))
+          as ({String id, int size});
+
+  @override
+  Future<void> write(String upload, int offset, Uint8List data) =>
+      _ask('write', [
+        upload,
+        offset,
+        TransferableTypedData.fromList([data]),
+      ], patience: const Duration(minutes: 2));
+
+  @override
+  Future<void> writeSize(String upload, int size) =>
+      _change('writeSize', [upload, size]);
+
+  @override
+  Future<({String path, FsEntry? entry})> writeClose(
+    String upload, {
+    required bool commit,
+    int? modifiedMs,
+  }) async =>
+      (await _change('writeClose', [upload, commit, modifiedMs]))
+          as ({String path, FsEntry? entry});
 
   void close() {
     _replies.close();

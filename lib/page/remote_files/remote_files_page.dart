@@ -93,6 +93,7 @@ class FilesActions {
         FilesCopyProblem.notConnected => l10n.remoteFilesOpenFirst(
           _remoteName(items.first.location.deviceId, target.deviceId),
         ),
+        FilesCopyProblem.readOnly => _readOnlyText(target),
       }, tone: AppToastTone.warning);
       return false;
     }
@@ -152,6 +153,22 @@ class FilesActions {
   Future<void> eject(FilesDevice device) =>
       RemoteMounts.shared.unmount(device.id);
 
+  /// [at] may not be changed from here: says so.
+  bool refusedReadOnly(FilesLocation? at) {
+    if (!controller.readOnlyAt(at)) {
+      return false;
+    }
+    showAppToast(_readOnlyText(at!), tone: AppToastTone.warning);
+    return true;
+  }
+
+  String _readOnlyText(FilesLocation at) {
+    final device = controller.deviceById(at.deviceId);
+    return l10n.remoteFilesReadOnlyHost(
+      device == null ? '' : filesDeviceName(l10n, device),
+    );
+  }
+
   String _remoteName(String a, String b) {
     final id = a == FilesDevice.localId ? b : a;
     return controller.deviceById(id)?.name ?? '';
@@ -161,7 +178,7 @@ class FilesActions {
   /// a file manager when those are newer.
   Future<void> paste() async {
     final target = controller.location;
-    if (target == null || target.root.isEmpty) {
+    if (target == null || target.root.isEmpty || refusedReadOnly(target)) {
       return;
     }
     final external = await controller.externalClipboardPaths();
@@ -179,7 +196,8 @@ class FilesActions {
   }
 
   Future<void> copyPaths(List<String> paths, FilesLocation target) async {
-    if (_alreadyCopying(controller.pathsSignature(paths, target))) {
+    if (refusedReadOnly(target) ||
+        _alreadyCopying(controller.pathsSignature(paths, target))) {
       return;
     }
     try {
@@ -217,6 +235,9 @@ class FilesActions {
 
   /// Creates a folder and returns its name, or null if it failed.
   Future<String?> newFolder([String? name]) async {
+    if (refusedReadOnly(controller.location)) {
+      return null;
+    }
     final folder = name ?? untitledFolder();
     try {
       await controller.newFolder(folder);
@@ -229,7 +250,9 @@ class FilesActions {
 
   Future<void> rename(FsEntry entry, String name) async {
     final trimmed = name.trim();
-    if (trimmed.isEmpty || trimmed == entry.name) {
+    if (trimmed.isEmpty ||
+        trimmed == entry.name ||
+        refusedReadOnly(controller.location)) {
       return;
     }
     try {
@@ -242,7 +265,7 @@ class FilesActions {
   /// Moves to the trash, or after a confirmation deletes for good where
   /// there is none (phones).
   Future<void> delete(List<FilesItem> items) async {
-    if (items.isEmpty) {
+    if (items.isEmpty || refusedReadOnly(items.first.location)) {
       return;
     }
     var permanent = false;
@@ -311,6 +334,8 @@ class FilesActions {
     final offline = controller.device;
     showAppToast(switch (reason) {
       FileBrowseError.exists => l10n.remoteFilesNameExists,
+      FileBrowseError.readOnly when offline != null =>
+        l10n.remoteFilesReadOnlyHost(filesDeviceName(l10n, offline)),
       'offline' when offline != null => l10n.remoteFilesOffline(
         filesDeviceName(l10n, offline),
       ),
