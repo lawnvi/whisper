@@ -48,6 +48,9 @@ SYSTEM_LIBS=(
   libpango-1.0.so.0 libpangocairo-1.0.so.0 libcairo.so.2
   libcairo-gobject.so.2 libharfbuzz.so.0 libfontconfig.so.1 libepoxy.so.0
   libX11.so.6 libXi.so.6 libXrandr.so.2 libXtst.so.6
+  # GTK 3 links it for its Wayland backend; window flow speaks KWin's
+  # protocols through it.
+  libwayland-client.so.0
   libpulse.so.0 libpulse-simple.so.0
   libgcrypt.so.20 libelf.so.1 libz.so.1 liblzma.so.5 libbz2.so.1.0
   libzstd.so.1

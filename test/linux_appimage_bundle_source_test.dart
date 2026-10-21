@@ -38,6 +38,11 @@ void main() {
     // the build instead of the app.
     expect(script, contains('which is neither bundled'));
     expect(script, contains('if (( unresolved )); then\n  exit 1'));
+    // Window flow on KDE links it; GTK 3 already does.
+    expect(
+      section(script, 'SYSTEM_LIBS=(', '\n)'),
+      contains('libwayland-client.so.0'),
+    );
   });
 
   test('the bundled GStreamer only stands in where the system has none', () {
