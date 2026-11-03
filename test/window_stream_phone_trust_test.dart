@@ -118,8 +118,7 @@ void main() {
     final page = File(
       'lib/page/window_stream/flow_space_page.dart',
     ).readAsStringSync();
-    // Desktop: the two directions are separate modes, and sending flies.
-    expect(page, contains('enum _FlowMode { open, send }'));
+    // Sending flies.
     expect(page, contains('WindowStreamHost.shared.offer(peerId, window)'));
     expect(page, contains('await flowFlyWindow('));
     final capture = File(

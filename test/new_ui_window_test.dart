@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:window_manager/window_manager.dart';
-import 'package:whisper/new_ui/probe/window_probe.dart';
 import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/theme/whisper_ui.dart';
 import 'package:whisper/theme/whisper_window.dart';
@@ -11,24 +10,7 @@ import 'package:whisper/theme/whisper_window.dart';
 import 'support/source_reading.dart';
 
 void main() {
-  group('the old UI keeps its window', () {
-    final main = File('lib/main.dart').readAsStringSync();
-
-    test('its window options and first page are only replaced by the flag', () {
-      expect(whisperNewUi, isFalse);
-      expect(main, contains('home: const DeviceListScreen()'));
-      expect(
-        memberSource(deviceListSource(), 'Widget build(BuildContext context)'),
-        contains('if (whisperNewUi)'),
-      );
-      final options = main.substring(
-        main.indexOf('WindowOptions windowOptions = whisperNewUi'),
-        main.indexOf('windowManager.waitUntilReadyToShow(windowOptions'),
-      );
-      expect(options, contains('titleBarStyle: TitleBarStyle.normal'));
-      expect(options, contains('windowButtonVisibility: true'));
-    });
-
+  group('the window material', () {
     test('macOS touches nothing until Dart asks for the material', () {
       final window = File(
         'macos/Runner/MainFlutterWindow.swift',
@@ -83,14 +65,11 @@ void main() {
       expect(apply, contains('margins = {0, 0, 0, 0}'));
     });
 
-    test('Linux keeps its title bar logic without WHISPER_NEW_UI=1', () {
+    test('Linux always has the header bar and the theme channel', () {
       final runner = File('linux/my_application.cc').readAsStringSync();
-      expect(runner, contains('g_getenv("WHISPER_NEW_UI"), "1"'));
-      expect(runner, contains('if (!new_ui && GDK_IS_X11_SCREEN(screen))'));
-      expect(
-        runner,
-        contains('if (new_ui) {\n    window_theme_channel_register'),
-      );
+      expect(runner, isNot(contains('WHISPER_NEW_UI')));
+      expect(runner, contains('gtk_window_set_titlebar(window'));
+      expect(runner, contains('  window_theme_channel_register(view);'));
     });
   });
 
@@ -117,51 +96,5 @@ void main() {
         );
       },
     );
-  });
-
-  group('the step 1 probe', () {
-    Future<void> pump(WidgetTester t, Size size, Brightness b) async {
-      t.view.physicalSize = size;
-      t.view.devicePixelRatio = 1;
-      addTearDown(t.view.reset);
-      await t.pumpWidget(
-        MaterialApp(
-          theme: AppTheme.lightTheme,
-          darkTheme: AppTheme.darkTheme,
-          themeMode: b == Brightness.dark ? ThemeMode.dark : ThemeMode.light,
-          home: const WindowProbe(autorun: false, tray: false),
-        ),
-      );
-      await t.pumpAndSettle();
-    }
-
-    for (final b in Brightness.values) {
-      testWidgets('lays out as a window, ${b.name}', (t) async {
-        await pump(t, const Size(1144, 720), b);
-        expect(find.byType(LiquidSegmented<int>), findsOneWidget);
-        expect(find.byType(WhisperGlass), findsOneWidget);
-        expect(t.takeException(), isNull);
-      });
-
-      testWidgets('lays out as a phone, ${b.name}', (t) async {
-        await pump(t, const Size(390, 780), b);
-        expect(find.byType(LiquidSegmented<int>), findsOneWidget);
-        expect(t.takeException(), isNull);
-      });
-    }
-
-    testWidgets('fits the minimum window', (t) async {
-      await pump(t, const Size(720, 480), Brightness.light);
-      expect(t.takeException(), isNull);
-    });
-
-    testWidgets('switching tabs keeps the toolbar where it is', (t) async {
-      await pump(t, const Size(1144, 720), Brightness.light);
-      final before = t.getRect(find.byType(LiquidSegmented<int>));
-      await t.tap(find.text('文件'));
-      await t.pumpAndSettle();
-      expect(find.text('项目资料 0'), findsOneWidget);
-      expect(t.getRect(find.byType(LiquidSegmented<int>)), before);
-    });
   });
 }

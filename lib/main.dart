@@ -46,7 +46,6 @@ import 'package:toastification/toastification.dart';
 import 'package:whisper/new_ui/shell/shell_window_chrome.dart';
 import 'package:whisper/new_ui/tray/tray_panel.dart';
 import 'package:whisper/theme/app_theme.dart';
-import 'package:whisper/theme/whisper_ui.dart';
 import 'package:whisper/theme/whisper_window.dart';
 import 'package:whisper/theme/app_typography.dart';
 import 'package:window_manager/window_manager.dart';
@@ -55,10 +54,6 @@ import 'helper/helper.dart';
 import 'helper/notification.dart';
 import 'helper/toast.dart';
 import 'l10n/app_localizations.dart';
-
-const MethodChannel _windowThemeChannel = MethodChannel(
-  'com.vireen.whisper/window_theme',
-);
 
 enum AppDiagnosticKind { desktopWindowTheme, windowsTypography }
 
@@ -92,8 +87,7 @@ Future<void> main(List<String> arguments) async {
     runApp(CastPlaybackWindowApp(localVideo: arguments[2] == 'video_playback'));
     return;
   }
-  if (whisperNewUi &&
-      arguments.length >= 3 &&
+  if (arguments.length >= 3 &&
       arguments[0] == 'multi_window' &&
       arguments[2] == trayPanelArgument) {
     WidgetsFlutterBinding.ensureInitialized();
@@ -124,10 +118,7 @@ Future<void> main(List<String> arguments) async {
   unawaited(_removeFolderTransferLeftovers());
 
   // iOS uses the runner's phone/tablet orientation policies; iPad can multitask.
-  // In the new UI the window decides, once there is one: WhisperOrientation.
-  if (Platform.isAndroid && !whisperNewUi) {
-    await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-  }
+  // The window decides, once there is one: WhisperOrientation.
 
   if (!isMobile()) {
     unawaited(
@@ -139,25 +130,13 @@ Future<void> main(List<String> arguments) async {
     var height = await LocalSetting().windowHeight();
     final themeMode = await LocalSetting().themeMode();
     final brightness = _brightnessForThemeMode(themeMode);
-    final windowBackground = AppTheme.fallbackPalette(brightness).surfaceCanvas;
     await _applyDesktopWindowTheme(themeMode);
 
-    WindowOptions windowOptions = whisperNewUi
-        ? WhisperWindow.options(Size(width, height))
-        : WindowOptions(
-            size: Size(width, height),
-            center: true,
-            backgroundColor: windowBackground,
-            skipTaskbar: false,
-            titleBarStyle: TitleBarStyle.normal,
-            windowButtonVisibility: true,
-          );
+    WindowOptions windowOptions = WhisperWindow.options(Size(width, height));
     windowManager.waitUntilReadyToShow(windowOptions, () async {
       // WindowOptions applies native frame values after the first theme sync.
       await _applyDesktopWindowTheme(themeMode);
-      if (whisperNewUi) {
-        await WhisperWindow.enableMaterial(brightness);
-      }
+      await WhisperWindow.enableMaterial(brightness);
       if (Platform.isWindows) {
         await windowManager.setMinimizable(true);
       }
@@ -207,26 +186,9 @@ Future<void> main(List<String> arguments) async {
     registerShareDebugHooks();
   }
   runApp(MyApp());
-  if (whisperNewUi) {
-    WidgetsBinding.instance.addPostFrameCallback(
-      (_) => WhisperOrientation.sync(),
-    );
-  } else if (Platform.isIOS) {
-    // An iPhone stays upright like the Android app; only a window being
-    // viewed turns (its viewer unlocks rotation). An iPad turns freely.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final view = WidgetsBinding.instance.platformDispatcher.implicitView;
-      if (view == null) {
-        return;
-      }
-      final size = view.physicalSize / view.devicePixelRatio;
-      if (size.shortestSide > 0 && size.shortestSide < 600) {
-        unawaited(
-          SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]),
-        );
-      }
-    });
-  }
+  WidgetsBinding.instance.addPostFrameCallback(
+    (_) => WhisperOrientation.sync(),
+  );
 }
 
 Brightness _brightnessForThemeMode(ThemeMode mode) {
@@ -246,31 +208,7 @@ Future<void> _applyDesktopWindowTheme(ThemeMode mode) async {
   }
 
   final brightness = _brightnessForThemeMode(mode);
-  final windowBackground = AppTheme.fallbackPalette(brightness).surfaceCanvas;
-  if (whisperNewUi) {
-    await WhisperWindow.applyBrightness(brightness);
-    return;
-  }
-  try {
-    // On Windows the window plugin darkens the title bar only while the
-    // system is dark as well. The channel below sets it from the app's own
-    // theme, so the plugin's answer is not asked for there.
-    if (!Platform.isWindows) {
-      await windowManager.setBrightness(brightness);
-    }
-    if (Platform.isWindows || Platform.isMacOS) {
-      await _windowThemeChannel.invokeMethod<void>('setBrightness', {
-        'brightness': brightness.name,
-        'backgroundColor': windowBackground.toARGB32(),
-      });
-    }
-  } catch (error) {
-    privacyLog.event(PrivacyEvent.localOperation, <PrivacyField, Object>{
-      PrivacyField.kind: AppDiagnosticKind.desktopWindowTheme,
-      PrivacyField.success: false,
-      PrivacyField.errorType: privacyLog.errorType(error),
-    });
-  }
+  await WhisperWindow.applyBrightness(brightness);
 }
 
 class MyApp extends StatefulWidget {
@@ -412,8 +350,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         theme: AppTheme.lightTheme,
         darkTheme: AppTheme.darkTheme,
         themeMode: _themeMode,
-        // The new UI's right edge is what is being judged, not covered up.
-        debugShowCheckedModeBanner: !whisperNewUi,
+        // The right edge is what is being judged, not covered up.
+        debugShowCheckedModeBanner: false,
         localizationsDelegates: const [
           AppLocalizations.delegate,
           GlobalMaterialLocalizations.delegate,
@@ -451,9 +389,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             final desktop = CastPlaybackHost(
               child: PhoneTouchAlertHost(child: shell),
             );
-            return whisperNewUi
-                ? ShellWindowChrome(child: desktop)
-                : desktop;
+            return ShellWindowChrome(child: desktop);
           }
           return IslandHost(navigatorKey: appNavigatorKey, child: shell);
         },

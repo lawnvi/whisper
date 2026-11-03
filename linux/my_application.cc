@@ -1,9 +1,6 @@
 #include "my_application.h"
 
 #include <flutter_linux/flutter_linux.h>
-#ifdef GDK_WINDOWING_X11
-#include <gdk/gdkx.h>
-#endif
 
 #include "audio_share_plugin.h"
 #include "desktop_clipboard_image_plugin.h"
@@ -64,13 +61,6 @@ void LogApplicationWarning(ApplicationLogReason reason) {
 }
 
 }  // namespace
-
-// The redesigned UI, off by default like the UI itself (docs/design/migration.md).
-// This runner decides before Dart starts, so it goes by the environment, not by
-// --dart-define. Run with WHISPER_NEW_UI=1 alongside the define.
-static gboolean uses_new_ui() {
-  return g_strcmp0(g_getenv("WHISPER_NEW_UI"), "1") == 0;
-}
 
 static FlValue* decoration_layout_value() {
   g_autofree gchar* layout = nullptr;
@@ -135,35 +125,13 @@ static void my_application_activate(GApplication* application) {
   g_object_add_weak_pointer(G_OBJECT(window),
                             reinterpret_cast<gpointer*>(&self->window));
 
-  // Use a header bar when running in GNOME as this is the common style used
-  // by applications and is the setup most users will be using (e.g. Ubuntu
-  // desktop).
-  // If running on X and not using GNOME then just use a traditional title bar
-  // in case the window manager does more exotic layout, e.g. tiling.
-  // If running on Wayland assume the header bar will work (may need changing
-  // if future cases occur).
-  gboolean use_header_bar = TRUE;
   // Hiding the title bar without one loses the shadow and edge resizing: with a
   // header bar, window_manager only makes it invisible and GTK keeps the frame.
-  const gboolean new_ui = uses_new_ui();
-#ifdef GDK_WINDOWING_X11
-  GdkScreen* screen = gtk_window_get_screen(window);
-  if (!new_ui && GDK_IS_X11_SCREEN(screen)) {
-    const gchar* wm_name = gdk_x11_screen_get_window_manager_name(screen);
-    if (g_strcmp0(wm_name, "GNOME Shell") != 0) {
-      use_header_bar = FALSE;
-    }
-  }
-#endif
-  if (use_header_bar) {
-    GtkHeaderBar* header_bar = GTK_HEADER_BAR(gtk_header_bar_new());
-    gtk_widget_show(GTK_WIDGET(header_bar));
-    gtk_header_bar_set_title(header_bar, "whisper");
-    gtk_header_bar_set_show_close_button(header_bar, TRUE);
-    gtk_window_set_titlebar(window, GTK_WIDGET(header_bar));
-  } else {
-    gtk_window_set_title(window, "whisper");
-  }
+  GtkHeaderBar* header_bar = GTK_HEADER_BAR(gtk_header_bar_new());
+  gtk_widget_show(GTK_WIDGET(header_bar));
+  gtk_header_bar_set_title(header_bar, "whisper");
+  gtk_header_bar_set_show_close_button(header_bar, TRUE);
+  gtk_window_set_titlebar(window, GTK_WIDGET(header_bar));
 
   gtk_window_set_default_size(window, 1280, 720);
 //  gtk_widget_show(GTK_WIDGET(window));
@@ -185,9 +153,7 @@ static void my_application_activate(GApplication* application) {
   screenshot_plugin_register(FL_PLUGIN_REGISTRY(view));
   desktop_quick_send_plugin_register(FL_PLUGIN_REGISTRY(view));
   file_manager_plugin_register(FL_PLUGIN_REGISTRY(view));
-  if (new_ui) {
-    window_theme_channel_register(view);
-  }
+  window_theme_channel_register(view);
 
   gtk_widget_grab_focus(GTK_WIDGET(view));
 }

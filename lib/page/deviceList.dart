@@ -11,7 +11,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:whisper/audio/audio_group_coordinator.dart';
-import 'package:whisper/audio/audio_group_session.dart';
 import 'package:whisper/audio/audio_protocol.dart';
 import 'package:whisper/audio/audio_share_coordinator.dart';
 import 'package:whisper/cast_receiver/cast_receiver_manager.dart';
@@ -44,10 +43,9 @@ import 'package:whisper/new_ui/tray/tray_model.dart';
 import 'package:whisper/new_ui/shell/shell_connection_check.dart';
 import 'package:whisper/page/conversation_drafts.dart';
 import 'package:whisper/new_ui/tray/tray_panel.dart';
-import 'package:whisper/theme/whisper_device_art.dart';
 import 'package:whisper/theme/whisper_icons.dart';
 import 'package:whisper/theme/whisper_ui.dart'
-    show whisperNewUi, WhisperPageRoute, WhisperTheme;
+    show WhisperPageRoute, WhisperTheme;
 import 'package:whisper/window_stream/remote/remote_peer_source.dart';
 import 'package:whisper/helper/android_background.dart';
 import 'package:whisper/helper/android_document_picker.dart';
@@ -58,13 +56,9 @@ import 'package:whisper/helper/transfer_failure_message.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_notification_listener_plus/flutter_notification_listener_plus.dart';
-import 'package:flutter_swipe_action_cell/core/cell.dart';
 import 'package:intl/intl.dart';
-import 'package:package_info_plus/package_info_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:tray_manager/tray_manager.dart';
-import 'package:url_launcher/url_launcher.dart';
-import 'package:whisper/audio/audio_failure_reason.dart';
 import 'package:whisper/helper/clipboard_sync.dart';
 import 'package:whisper/helper/desktop_clipboard_image.dart';
 import 'package:whisper/helper/desktop_quick_send_hotkey.dart';
@@ -75,14 +69,12 @@ import 'package:whisper/helper/helper.dart';
 import 'package:whisper/helper/local_network_permission.dart';
 import 'package:whisper/helper/privacy_log.dart';
 import 'package:whisper/helper/whisper_file_picker.dart';
-import 'package:whisper/main.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/file_transfer.dart';
 import 'package:whisper/remote_input/remote_clipboard_transfer.dart';
 import 'package:whisper/remote_input/remote_input_coordinator.dart';
 import 'package:whisper/remote_input/remote_input_peer_activity.dart';
 import 'package:whisper/remote_input/remote_input_workspace_coordinator.dart';
-import 'package:whisper/remote_input/remote_input_workspace_screen.dart';
 import 'package:whisper/state/app_shutdown.dart';
 import 'package:whisper/state/android_system_share_inbox.dart';
 import 'package:whisper/state/android_system_share_router.dart';
@@ -102,17 +94,12 @@ import 'package:whisper/state/pairing_invite.dart';
 import 'package:whisper/state/pairing_request.dart';
 import 'package:whisper/socket/device_identity.dart';
 import 'package:whisper/socket/peer_socket_session.dart';
-import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/widget/app_dialogs.dart' as app_dialogs;
 import 'package:whisper/widget/context_menu_region.dart';
 import 'package:whisper/widget/desktop_quick_send_dialog.dart';
-import 'package:whisper/widget/device_connection_widgets.dart';
-import 'package:whisper/widget/device_sidebar_toolbar.dart';
 import 'package:whisper/remote_files/fs_placement.dart';
 import 'package:whisper/remote_files/mount/remote_mounts.dart';
-import 'package:whisper/widget/device_workspace_layout.dart';
 import 'package:whisper/widget/server_start_failure_dialog.dart';
-import 'package:whisper/widget/glass_bottom_sheet.dart';
 import 'package:whisper/widget/quick_send_chooser.dart';
 import 'package:whisper/widget/glass_dialog.dart';
 import 'package:whisper/widget/pairing_dialog.dart';
@@ -121,7 +108,6 @@ import '../helper/local.dart';
 import '../helper/notification.dart';
 import '../l10n/app_localizations.dart';
 import '../socket/svrmanager.dart';
-import 'appList.dart';
 import 'conversation.dart';
 import 'pairing_qr.dart';
 import 'settings.dart' as app_settings;
@@ -129,9 +115,7 @@ import '../window_stream/android/phone_identity.dart';
 import '../window_stream/window_stream_coordinator.dart';
 import 'remote_files/remote_files_page.dart';
 import 'window_stream/flow_space_page.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:io' show Platform;
-import 'package:whisper/widget/subtle_motion.dart';
 
 enum DeviceListOperationKind {
   temporaryFileCleanup,
@@ -191,7 +175,6 @@ enum DiscoveryEventState {
 const String _androidNotificationPortName =
     'whisper.android.notification.forwarding';
 ReceivePort? _androidNotificationReceivePort;
-StreamSubscription<dynamic>? _androidNotificationSubscription;
 
 @pragma('vm:entry-point')
 void androidNotificationListenerCallback(NotificationEvent event) {
@@ -246,17 +229,6 @@ String buildWhisperServiceName(String baseName, String uid) {
   return "$baseName-$normalizedUid";
 }
 
-class _AudioGroupSetupResult {
-  const _AudioGroupSetupResult.apply(this.sinks) : shouldStop = false;
-
-  const _AudioGroupSetupResult.stop()
-    : shouldStop = true,
-      sinks = const <String, AudioChannelRole>{};
-
-  final bool shouldStop;
-  final Map<String, AudioChannelRole> sinks;
-}
-
 /// What a golden test shows in [DeviceListScreen] instead of starting the
 /// server, discovery, the tray and the rest of the app's services.
 @visibleForTesting
@@ -284,8 +256,6 @@ class DeviceListScreen extends StatefulWidget {
 class _DeviceListScreen extends State<DeviceListScreen>
     with WidgetsBindingObserver
     implements ISocketEvent, TrayListener, WindowListener, ClipboardListener {
-  static const double _desktopToolbarPillHeight = 38;
-
   final db = LocalDatabase();
   final socketManager = WsSvrManager();
   final AudioShareCoordinator _audioCoordinator = AudioShareCoordinator.shared;
@@ -338,12 +308,8 @@ class _DeviceListScreen extends State<DeviceListScreen>
   final ConnectionAttemptTracker _connectionAttempts =
       ConnectionAttemptTracker();
   List<ChatSessionItem> _sessionItems = const [];
-  String _desktopSearchQuery = "";
   bool _isDesktopSearchExpanded = false;
 
-  /// The toolbar beside the search shows every tool, not just the everyday
-  /// ones (and whatever is running).
-  bool _toolsExpanded = false;
   String? _selectedDesktopPeerId;
   String? _pendingAutoConnectPeerId;
   Future<void>? _desktopShutdownFuture;
@@ -361,10 +327,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
   bool _desktopQuickSendPresentationScheduled = false;
   String? _lastPresentedDesktopQuickSendDraftId;
   PairingQrDialogController? _activePairingQrController;
-
-  BorderRadius get _desktopToolbarPillRadius => BorderRadius.circular(14);
-
-  Color get _desktopToolbarPillColor => context.whisperPalette.surfaceMuted;
 
   @override
   void initState() {
@@ -391,9 +353,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     _desktopSearchFocusNode.addListener(_handleDesktopSearchFocusChanged);
     _audioCoordinator.addListener(_handleDesktopAudioChanged);
     _audioGroupCoordinator.addListener(_handleDesktopAudioChanged);
-    if (whisperNewUi) {
-      ShellSoundController.shared.onMemberStopped = _noteSoundMemberStopped;
-    }
+    ShellSoundController.shared.onMemberStopped = _noteSoundMemberStopped;
     _remoteInputCoordinator.addListener(
       _handleDesktopRemoteInputWorkspaceChanged,
     );
@@ -557,7 +517,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
         _androidNotificationPortName,
       )) {
         _androidNotificationReceivePort = receivePort;
-        _androidNotificationSubscription = receivePort.listen((event) {
+        receivePort.listen((event) {
           if (event is NotificationEvent) {
             unawaited(_forwardAndroidNotification(event));
           }
@@ -648,7 +608,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     await trayManager.setContextMenu(menu);
     trayManager.addListener(this);
     windowManager.addListener(this);
-    if (whisperNewUi && trayPanelSupported) {
+    if (trayPanelSupported) {
       _trayPanel = TrayPanelHost(onAction: _onTrayAction);
       unawaited(_trayPanel!.start().then((_) => _pushTrayState()));
     }
@@ -714,7 +674,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     _desktopSearchFocusNode.removeListener(_handleDesktopSearchFocusChanged);
     _audioCoordinator.removeListener(_handleDesktopAudioChanged);
     _audioGroupCoordinator.removeListener(_handleDesktopAudioChanged);
-    if (whisperNewUi) ShellSoundController.shared.onMemberStopped = null;
+    ShellSoundController.shared.onMemberStopped = null;
     _remoteInputCoordinator.removeListener(
       _handleDesktopRemoteInputWorkspaceChanged,
     );
@@ -1345,21 +1305,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
     }
   }
 
-  void _expandDesktopSearch() {
-    if (_isDesktopSearchExpanded) {
-      _desktopSearchFocusNode.requestFocus();
-      return;
-    }
-    setState(() {
-      _isDesktopSearchExpanded = true;
-    });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        _desktopSearchFocusNode.requestFocus();
-      }
-    });
-  }
-
   void _collapseDesktopSearchIfIdle() {
     if (!_isDesktopSearchExpanded ||
         _desktopSearchFocusNode.hasFocus ||
@@ -1821,51 +1766,18 @@ class _DeviceListScreen extends State<DeviceListScreen>
     );
   }
 
-  List<ChatSessionItem> _visibleSessions() {
-    return ChatSessionListBuilder.filter(_sessionItems, _desktopSearchQuery);
-  }
-
-  ChatSessionItem? _selectedDesktopSession() {
-    if (_selectedDesktopPeerId == null) {
-      return null;
-    }
-    for (final item in _sessionItems) {
-      if (item.device.uid == _selectedDesktopPeerId) {
-        return item;
-      }
-    }
-    return null;
-  }
-
   @override
   Widget build(BuildContext context) {
-    if (whisperNewUi) {
-      return ListenableBuilder(
-        listenable: _shellInputs,
-        builder: (context, _) {
-          _watchLan();
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            _pushTrayState();
-            unawaited(_refreshLinuxTrayMenu());
-            if (mounted) _updateStatusMoments(context);
-          });
-          return WhisperShell(data: _shellData(), actions: _shellActions);
-        },
-      );
-    }
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final split = usesSplitDeviceWorkspace(
-          width: constraints.maxWidth,
-          desktop: isDesktop(),
-          ios: Platform.isIOS,
-        );
-        if (split ||
-            (_usesTabletWorkspace && _selectedDesktopSession() != null)) {
-          return _buildDesktopScaffold(isDark, compact: !split);
-        }
-        return _buildMobileScaffold(isDark);
+    return ListenableBuilder(
+      listenable: _shellInputs,
+      builder: (context, _) {
+        _watchLan();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _pushTrayState();
+          unawaited(_refreshLinuxTrayMenu());
+          if (mounted) _updateStatusMoments(context);
+        });
+        return WhisperShell(data: _shellData(), actions: _shellActions);
       },
     );
   }
@@ -2027,7 +1939,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
   String _lastLinuxMenu = '';
 
   Future<void> _refreshLinuxTrayMenu() async {
-    if (!whisperNewUi || !Platform.isLinux || !mounted) return;
+    if (!Platform.isLinux || !mounted) return;
     final l10n = AppLocalizations.of(context)!;
     final connected = [
       for (final session in _sessionItems)
@@ -2914,729 +2826,9 @@ class _DeviceListScreen extends State<DeviceListScreen>
     return found;
   }
 
-  bool get _usesSplitWorkspace => usesSplitDeviceWorkspace(
-    width: MediaQuery.sizeOf(context).width,
-    desktop: isDesktop(),
-    ios: Platform.isIOS,
-  );
-
-  bool get _usesTabletWorkspace {
-    if (!Platform.isIOS) return false;
-    final view = View.of(context);
-    return usesRetainedTabletWorkspace(
-      ios: true,
-      displayShortestSide:
-          view.display.size.shortestSide / view.devicePixelRatio,
-    );
-  }
-
-  Widget _buildMobileScaffold(bool isDark) {
-    return Scaffold(
-      // Inputs live in separate routes; their keyboards must not move the
-      // device list or briefly expose the welcome icon behind a dialog.
-      resizeToAvoidBottomInset: false,
-      appBar: AppBar(
-        leading: IconButton(
-          tooltip: AppLocalizations.of(context)?.connectDeviceTitle ?? '连接设备',
-          onPressed: _openPairingQr,
-          icon: Icon(
-            Icons.qr_code_scanner_rounded,
-            size: 28,
-            color: isDark ? Colors.white60 : Colors.black45,
-          ),
-        ),
-        title: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              device?.name ?? 'localhost',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Flexible(
-                  child: Text(
-                    '${device?.host ?? "127.0.0.1"}:${device?.port ?? 10002}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Theme.of(context).brightness == Brightness.dark
-                          ? Colors.white54
-                          : Colors.black54,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 4),
-                Icon(
-                  Icons.wifi_rounded,
-                  size: socketManager.started ? 14 : 0,
-                  color: Colors.lightBlue,
-                ),
-              ],
-            ),
-          ],
-        ),
-        // automaticallyImplyLeading: true, // 隐藏返回按钮
-        actions: [
-          CupertinoButton(
-            // 使用CupertinoButton
-            padding: EdgeInsets.zero,
-            child: Icon(
-              Icons.settings_outlined,
-              size: 30,
-              color: isDark ? Colors.white60 : Colors.black45,
-            ),
-            onPressed: () async {
-              await Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => app_settings.SettingsScreen(
-                    exitForUpdate: _shutdownAndDestroyWindow,
-                  ),
-                ),
-              );
-              _refreshDevice();
-            },
-          ),
-        ],
-      ),
-      body: _sessionItems.isEmpty
-          ? DeviceConnectionWelcome(
-              hasDevices: false,
-              isLoading: device == null,
-              onPair: _openPairingQr,
-              onManualConnect: _showManualConnectDialog,
-            )
-          : ListView.builder(
-              itemCount: _sessionItems.length,
-              itemBuilder: (context, index) {
-                return _buildDeviceItemOld(_sessionItems[index]);
-              },
-            ),
-    );
-  }
-
-  Widget _buildDesktopScaffold(bool isDark, {bool compact = false}) {
-    final selectedSession = _selectedDesktopSession();
-    final visibleSessions = _visibleSessions();
-    final palette = context.whisperPalette;
-    return Scaffold(
-      backgroundColor: palette.surfaceCanvas,
-      body: SafeArea(
-        child: Row(
-          children: [
-            if (!compact)
-              SizedBox(
-                width: isDesktop() ? 340 : 320,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: palette.surfaceCanvas,
-                    border: Border(
-                      right: BorderSide(color: palette.borderSubtle),
-                    ),
-                  ),
-                  child: Column(
-                    children: [
-                      _buildDesktopSidebarToolbar(),
-                      Expanded(
-                        child: ScrollConfiguration(
-                          behavior: ScrollConfiguration.of(
-                            context,
-                          ).copyWith(scrollbars: false),
-                          child: ListView.separated(
-                            padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
-                            itemCount: visibleSessions.length,
-                            separatorBuilder: (_, __) =>
-                                const SizedBox(height: 6),
-                            itemBuilder: (context, index) {
-                              final session = visibleSessions[index];
-                              return _buildDesktopSessionTile(
-                                session,
-                                selected:
-                                    session.device.uid ==
-                                    _selectedDesktopPeerId,
-                              );
-                            },
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            Expanded(
-              key: const ValueKey('workspace-conversation'),
-              child: selectedSession == null
-                  ? _buildDesktopPlaceholder(isDark)
-                  : SendMessageScreen(
-                      key: ValueKey('desktop-${selectedSession.device.uid}'),
-                      device: selectedSession.device,
-                      embedded: !compact,
-                      onBack: compact
-                          ? () => setState(() => _selectedDesktopPeerId = null)
-                          : null,
-                      onDeviceDeleted: _removeDevice,
-                    ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDesktopSidebarToolbar() {
-    return DeviceSidebarToolbar(
-      searchExpanded: _isDesktopSearchExpanded,
-      search: _buildDesktopSearchPill(expanded: _isDesktopSearchExpanded),
-      tools: _buildDesktopTools(),
-    );
-  }
-
-  Widget _buildDesktopSearchPill({required bool expanded}) {
-    final palette = context.whisperPalette;
-    final label = AppLocalizations.of(context)?.searchChats ?? '搜索';
-    return Container(
-      height: _desktopToolbarPillHeight,
-      decoration: BoxDecoration(
-        color: _desktopToolbarPillColor,
-        borderRadius: _desktopToolbarPillRadius,
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          IgnorePointer(
-            ignoring: expanded,
-            child: AnimatedOpacity(
-              duration: const Duration(milliseconds: 120),
-              opacity: expanded ? 0 : 1,
-              child: Tooltip(
-                message: label,
-                child: CupertinoButton(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  borderRadius: _desktopToolbarPillRadius,
-                  onPressed: _expandDesktopSearch,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.start,
-                    children: [
-                      Icon(
-                        Icons.search_rounded,
-                        size: 19,
-                        color: palette.textMuted,
-                      ),
-                      const SizedBox(width: 7),
-                      Flexible(
-                        child: Text(
-                          label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: palette.textMuted,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-          IgnorePointer(
-            ignoring: !expanded,
-            child: AnimatedOpacity(
-              duration: const Duration(milliseconds: 150),
-              opacity: expanded ? 1 : 0,
-              child: CupertinoTextField(
-                controller: _desktopSearchController,
-                focusNode: _desktopSearchFocusNode,
-                clearButtonMode: OverlayVisibilityMode.editing,
-                cursorColor: Colors.lightBlue,
-                decoration: const BoxDecoration(color: Colors.transparent),
-                padding: const EdgeInsets.fromLTRB(0, 8, 12, 8),
-                prefix: Padding(
-                  padding: const EdgeInsets.only(left: 12, right: 7),
-                  child: Icon(
-                    Icons.search_rounded,
-                    size: 19,
-                    color: palette.textMuted,
-                  ),
-                ),
-                placeholder: label,
-                placeholderStyle: TextStyle(
-                  color: palette.textMuted,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                ),
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurface,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                ),
-                onChanged: (value) {
-                  setState(() {
-                    _desktopSearchQuery = value;
-                  });
-                  if (value.isEmpty) {
-                    _desktopSearchFocusNode.unfocus();
-                  }
-                },
-                onSubmitted: (_) {
-                  if (_desktopSearchController.text.isEmpty) {
-                    _desktopSearchFocusNode.unfocus();
-                  }
-                },
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Flow (window streaming) runs on this device.
-  /// Everyday tools stay out; the rest (and new features as they come)
-  /// slide in from the left as the search makes room. A tool that is
-  /// running stays visible either way.
-  List<Widget> _buildDesktopTools() {
-    final l10n = AppLocalizations.of(context)!;
-    final expanded = _toolsExpanded;
-    final audioRunning =
-        isDesktop() && (_isDesktopAudioShareActive || _isDesktopAudioShareBusy);
-    final inputRunning = isDesktop() && _isDesktopRemoteInputActive;
-    // 流转 and 文件 belong to a device: they are on its page (the … in its
-    // conversation), not here.
-    return [
-      if (isDesktop())
-        _buildDesktopToolButton(
-          key: const ValueKey('tool-toggle'),
-          icon: Icons.chevron_left_rounded,
-          iconTurns: expanded ? 0.5 : 0,
-          tooltip: expanded ? l10n.toolbarFewerTools : l10n.toolbarMoreTools,
-          onPressed: () => setState(() => _toolsExpanded = !expanded),
-        ),
-      if (isDesktop() && (expanded || audioRunning))
-        KeyedSubtree(
-          key: const ValueKey('tool-audio'),
-          child: _buildDesktopAudioShareAction(),
-        ),
-      if (isDesktop() && (expanded || inputRunning))
-        KeyedSubtree(
-          key: const ValueKey('tool-input'),
-          child: _buildDesktopRemoteInputWorkspaceAction(),
-        ),
-      _buildDesktopToolButton(
-        key: const ValueKey('tool-qr'),
-        icon: Icons.qr_code_scanner_rounded,
-        tooltip: AppLocalizations.of(context)?.connectDeviceTitle ?? '连接设备',
-        onPressed: _openPairingQr,
-      ),
-      _buildDesktopToolButton(
-        key: const ValueKey('tool-settings'),
-        icon: Icons.settings_outlined,
-        tooltip: AppLocalizations.of(context)?.setting ?? '设置',
-        onPressed: () async {
-          await Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => app_settings.SettingsScreen(
-                exitForUpdate: _shutdownAndDestroyWindow,
-              ),
-            ),
-          );
-          _refreshDevice();
-        },
-      ),
-    ];
-  }
-
-  Widget _buildDesktopAudioShareAction() {
-    final palette = context.whisperPalette;
-    final isActive = _isDesktopAudioShareActive;
-    final isBusy = _isDesktopAudioShareBusy;
-    return _buildDesktopToolButton(
-      icon: isBusy ? Icons.sync_rounded : Icons.volume_up_outlined,
-      tooltip: _desktopAudioShareTooltip(isActive: isActive, isBusy: isBusy),
-      iconColor: isActive || isBusy ? Colors.lightBlue : palette.textMuted,
-      onPressed: isBusy ? null : _toggleDesktopAudioShare,
-    );
-  }
-
-  bool get _isDesktopRemoteInputActive => isRemoteInputSessionLive(
-    workspace: _remoteInputWorkspaceCoordinator.snapshot,
-    legacy: _remoteInputCoordinator.state,
-    legacyIsManual: _remoteInputCoordinator.isManual,
-    isConnected: socketManager.isConnectedTo,
-  );
-
-  Widget _buildDesktopRemoteInputWorkspaceAction() {
-    final palette = context.whisperPalette;
-    final isActive = _isDesktopRemoteInputActive;
-    return _buildDesktopToolButton(
-      icon: Icons.keyboard_alt_outlined,
-      tooltip:
-          AppLocalizations.of(context)?.remoteInputWorkspaceTooltip ?? '键鼠工作区',
-      iconColor: isActive ? Colors.lightBlue : palette.textMuted,
-      onPressed: _openRemoteInputWorkspace,
-    );
-  }
-
-  Widget _buildDesktopToolButton({
-    required IconData icon,
-    required VoidCallback? onPressed,
-    Color? iconColor,
-    String? tooltip,
-    Key? key,
-    double iconTurns = 0,
-  }) {
-    return DeviceToolbarButton(
-      key: key,
-      iconTurns: iconTurns,
-      icon: icon,
-      label: tooltip ?? '',
-      iconColor: iconColor,
-      onPressed: onPressed,
-    );
-  }
-
-  bool get _isDesktopAudioShareActive {
-    final groupSession = _audioGroupCoordinator.session;
-    if (groupSession?.isLive == true) {
-      return true;
-    }
-    return _audioCoordinator.state.isActive;
-  }
-
-  bool get _isDesktopAudioShareBusy {
-    final audioState = _audioCoordinator.state;
-    return audioState.isBusy;
-  }
-
-  String _desktopAudioShareTooltip({
-    required bool isActive,
-    required bool isBusy,
-  }) {
-    final l10n = AppLocalizations.of(context)!;
-    if (isBusy) {
-      return l10n.audioShareCaptureConnecting;
-    }
-    if (isActive) {
-      return l10n.audioGroupAdjust;
-    }
-    return l10n.audioGroupShareStart;
-  }
-
-  Future<void> _toggleDesktopAudioShare() async {
-    final l10n = AppLocalizations.of(context)!;
-    try {
-      final audioGroupSession = _audioGroupCoordinator.session;
-      if (audioGroupSession?.isLive == true) {
-        await _showActiveDesktopAudioGroupSetup();
-        return;
-      }
-
-      final audioState = _audioCoordinator.state;
-      if (audioState.status != AudioShareRuntimeStatus.idle &&
-          audioState.status != AudioShareRuntimeStatus.failed) {
-        await _audioCoordinator.stopSharing(
-          sendControl: socketManager.sendAudioControl,
-        );
-        return;
-      }
-
-      if (!supportsNativeSystemAudio()) {
-        showAppToast(
-          l10n.audioShareUnsupportedCapture,
-          tone: AppToastTone.warning,
-        );
-        return;
-      }
-
-      final self = device ?? await LocalSetting().instance();
-      final groupCandidates = socketManager.connectedAudioGroupSinkDevices(
-        preferredPeerId: _selectedDesktopPeerId ?? '',
-      );
-      if (groupCandidates.isEmpty) {
-        showAppToast(l10n.audioGroupSelectAtLeastOne);
-        return;
-      }
-
-      final Map<String, AudioChannelRole> sinks;
-      if (groupCandidates.length == 1) {
-        sinks = <String, AudioChannelRole>{
-          groupCandidates.single.uid: AudioChannelRole.stereo,
-        };
-      } else {
-        final selectedResult = await _showAudioGroupSetupSheet(
-          groupCandidates,
-          preferredPeerId: _selectedDesktopPeerId ?? '',
-        );
-        if (selectedResult == null || selectedResult.shouldStop) {
-          return;
-        }
-        if (selectedResult.sinks.isEmpty) {
-          showAppToast(l10n.audioGroupSelectAtLeastOne);
-          return;
-        }
-        sinks = selectedResult.sinks;
-      }
-
-      await _applyDesktopAudioGroupSelection(
-        sourcePeerId: self.uid,
-        sinks: sinks,
-      );
-    } catch (error) {
-      final reason = audioFailureReasonFor(
-        error,
-        context: AudioFailureContext.protocol,
-      );
-      _logDeviceListFailure(DeviceListOperationKind.audioToggle, error);
-      if (mounted) {
-        final detail = reason == AudioFailureReason.unsupported
-            ? l10n.audioShareUnsupportedCapture
-            : l10n.connectFailed;
-        showAppToast(l10n.audioShareFailed(detail), tone: AppToastTone.error);
-      }
-    }
-  }
-
-  Map<String, AudioChannelRole> _activeAudioGroupSinks() {
-    final audioGroupSession = _audioGroupCoordinator.session;
-    if (audioGroupSession == null) {
-      return const <String, AudioChannelRole>{};
-    }
-    return <String, AudioChannelRole>{
-      for (final entry in audioGroupSession.sinks.entries)
-        entry.key: entry.value.channelRole,
-    };
-  }
-
-  Future<void> _showActiveDesktopAudioGroupSetup() async {
-    final l10n = AppLocalizations.of(context)!;
-    final self = device ?? await LocalSetting().instance();
-    final groupCandidates = socketManager.connectedAudioGroupSinkDevices(
-      preferredPeerId: _selectedDesktopPeerId ?? '',
-    );
-    final result = await _showAudioGroupSetupSheet(
-      groupCandidates,
-      preferredPeerId: _selectedDesktopPeerId ?? '',
-      initialSinks: _activeAudioGroupSinks(),
-      allowStop: true,
-      applyingActiveConfig: true,
-    );
-    if (result == null) {
-      return;
-    }
-    if (result.shouldStop) {
-      await _stopDesktopAudioShare();
-      return;
-    }
-    if (result.sinks.isEmpty) {
-      showAppToast(l10n.audioGroupSelectAtLeastOne);
-      return;
-    }
-    await _applyDesktopAudioGroupSelection(
-      sourcePeerId: self.uid,
-      sinks: result.sinks,
-      replaceActive: true,
-    );
-  }
-
   Future<void> _stopDesktopAudioShare() async {
     await _audioGroupCoordinator.stopGroup(
       sendControl: socketManager.sendAudioGroupControlTo,
-    );
-  }
-
-  Future<void> _applyDesktopAudioGroupSelection({
-    required String sourcePeerId,
-    required Map<String, AudioChannelRole> sinks,
-    bool replaceActive = false,
-  }) async {
-    if (replaceActive && _audioGroupCoordinator.session?.isLive == true) {
-      await _audioGroupCoordinator.updateGroup(
-        sinks: sinks,
-        sendControl: socketManager.sendAudioGroupControlTo,
-      );
-      return;
-    }
-    _audioGroupCoordinator.startGroup(
-      sourcePeerId: sourcePeerId,
-      sinks: sinks,
-      format: AudioShareCoordinator.defaultFormat,
-      sendControl: socketManager.sendAudioGroupControlTo,
-    );
-  }
-
-  Future<void> _openRemoteInputWorkspace() async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => RemoteInputWorkspaceScreen(
-          initialDevices: socketManager.connectedRemoteInputDevices(
-            preferredPeerId: _selectedDesktopPeerId ?? '',
-          ),
-          preferredPeerId: _selectedDesktopPeerId ?? '',
-        ),
-      ),
-    );
-    _refreshDevice();
-  }
-
-  Future<_AudioGroupSetupResult?> _showAudioGroupSetupSheet(
-    List<DeviceData> candidates, {
-    String preferredPeerId = '',
-    Map<String, AudioChannelRole> initialSinks =
-        const <String, AudioChannelRole>{},
-    bool allowStop = false,
-    bool applyingActiveConfig = false,
-  }) {
-    final selected = <String, bool>{
-      for (final candidate in candidates)
-        candidate.uid: initialSinks.isNotEmpty
-            ? initialSinks.containsKey(candidate.uid)
-            : candidate.uid ==
-                  (preferredPeerId.isNotEmpty
-                      ? preferredPeerId
-                      : candidates.first.uid),
-    };
-    final roles = <String, AudioChannelRole>{
-      for (var index = 0; index < candidates.length; index++)
-        candidates[index].uid:
-            initialSinks[candidates[index].uid] ??
-            (index == 0
-                ? AudioChannelRole.left
-                : (index == 1
-                      ? AudioChannelRole.right
-                      : AudioChannelRole.stereo)),
-    };
-    final l10n = AppLocalizations.of(context)!;
-    return showWhisperGlassBottomSheet<_AudioGroupSetupResult>(
-      context,
-      builder: (sheetContext) {
-        return StatefulBuilder(
-          builder: (sheetContext, setSheetState) {
-            final selectedCount = selected.values
-                .where((value) => value)
-                .length;
-            final applyLabel = applyingActiveConfig
-                ? l10n.audioGroupApply
-                : selectedCount > 1
-                ? l10n.audioGroupStart
-                : l10n.audioShareStart;
-            return WhisperGlassBottomSheet(
-              maxSheetWidth: 680,
-              maxContentWidth: 600,
-              title: Text(l10n.audioGroupSelectSinks),
-              content: AnimatedBuilder(
-                animation: _audioGroupCoordinator,
-                builder: (context, _) {
-                  return Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: <Widget>[
-                      for (var index = 0; index < candidates.length; index += 1)
-                        Padding(
-                          padding: EdgeInsets.only(
-                            bottom: index == candidates.length - 1 ? 0 : 8,
-                          ),
-                          child: WhisperGlassSurface(
-                            borderRadius: BorderRadius.circular(14),
-                            showTopHighlight: false,
-                            showShadow: false,
-                            neutral: true,
-                            child: CheckboxListTile(
-                              controlAffinity: ListTileControlAffinity.leading,
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 6,
-                              ),
-                              value: selected[candidates[index].uid] ?? false,
-                              onChanged: (value) {
-                                setSheetState(() {
-                                  selected[candidates[index].uid] =
-                                      value ?? false;
-                                });
-                              },
-                              title: _buildAudioGroupDeviceTitle(
-                                candidates[index],
-                              ),
-                              subtitle: _buildAudioGroupSinkSubtitle(
-                                candidates[index],
-                              ),
-                              secondary:
-                                  WhisperGlassMenuButton<AudioChannelRole>(
-                                    value:
-                                        roles[candidates[index].uid] ??
-                                        AudioChannelRole.stereo,
-                                    enabled:
-                                        selected[candidates[index].uid] == true,
-                                    options:
-                                        <
-                                          WhisperGlassMenuOption<
-                                            AudioChannelRole
-                                          >
-                                        >[
-                                          for (final role
-                                              in AudioChannelRole.values)
-                                            WhisperGlassMenuOption<
-                                              AudioChannelRole
-                                            >(
-                                              value: role,
-                                              label: _audioGroupRoleLabel(role),
-                                            ),
-                                        ],
-                                    onChanged: (role) {
-                                      setSheetState(() {
-                                        roles[candidates[index].uid] = role;
-                                      });
-                                    },
-                                  ),
-                            ),
-                          ),
-                        ),
-                    ],
-                  );
-                },
-              ),
-              actions: <Widget>[
-                if (allowStop)
-                  WhisperDialogButton(
-                    label: l10n.audioGroupStop,
-                    icon: Icons.stop_rounded,
-                    destructive: true,
-                    onPressed: () => Navigator.of(
-                      sheetContext,
-                    ).pop(const _AudioGroupSetupResult.stop()),
-                  ),
-                WhisperDialogButton(
-                  label: applyLabel,
-                  icon: Icons.spatial_audio_off_rounded,
-                  prominent: true,
-                  onPressed: selectedCount == 0
-                      ? null
-                      : () {
-                          Navigator.of(sheetContext).pop(
-                            _AudioGroupSetupResult.apply(
-                              <String, AudioChannelRole>{
-                                for (final candidate in candidates)
-                                  if (selected[candidate.uid] == true)
-                                    candidate.uid:
-                                        roles[candidate.uid] ??
-                                        AudioChannelRole.stereo,
-                              },
-                            ),
-                          );
-                        },
-                ),
-              ],
-            );
-          },
-        );
-      },
     );
   }
 
@@ -3652,145 +2844,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
       case AudioChannelRole.right:
         return l10n.audioGroupRoleRight;
     }
-  }
-
-  Widget _buildAudioGroupDeviceTitle(DeviceData candidate) {
-    final palette = context.whisperPalette;
-    return Row(
-      children: [
-        Tooltip(
-          message: candidate.platform,
-          child: Icon(
-            platformIcon(
-              candidate.platform,
-              tablet: DeviceFormFactors.shared.isTablet(candidate.uid),
-            ),
-            size: 18,
-            color: palette.textMuted,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            candidate.name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget? _buildAudioGroupSinkSubtitle(DeviceData candidate) {
-    final evidence = _audioGroupSyncEvidenceLabel(candidate.uid);
-    final text = evidence.isEmpty
-        ? AppLocalizations.of(context)!.audioGroupDeviceIdle
-        : evidence;
-    final palette = context.whisperPalette;
-    return Text(
-      text,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: TextStyle(color: palette.textMuted, fontSize: 12),
-    );
-  }
-
-  String _audioGroupSyncEvidenceLabel(String peerId) {
-    final sink = _audioGroupCoordinator.session?.sinks[peerId];
-    if (sink == null) {
-      return '';
-    }
-    final hasEvidence =
-        sink.rttMicros > 0 ||
-        sink.jitterMicros > 0 ||
-        sink.bufferTargetMicros > 0 ||
-        sink.latePacketCount > 0 ||
-        sink.syncErrorMicros != 0;
-    if (!hasEvidence) {
-      return AppLocalizations.of(context)!.audioGroupSyncCalibrating;
-    }
-    final l10n = AppLocalizations.of(context)!;
-    return l10n.audioGroupSyncEvidenceCompact(
-      _audioGroupSyncQualityLabel(sink),
-      l10n.audioGroupLatencyShortLabel,
-      _formatAudioMicros(sink.rttMicros),
-      l10n.audioGroupJitterShortLabel,
-      _formatAudioMicros(sink.jitterMicros),
-      l10n.audioGroupBufferShortLabel,
-      _formatAudioMicros(sink.bufferTargetMicros),
-      l10n.audioGroupRecentLatePacketShortLabel,
-      sink.latePacketCount,
-    );
-  }
-
-  String _audioGroupSyncQualityLabel(AudioGroupSink sink) {
-    final l10n = AppLocalizations.of(context)!;
-    final errorMs = sink.syncErrorMicros.abs() / 1000;
-    final jitterMs = sink.jitterMicros.abs() / 1000;
-    final hasMeasuredError = sink.syncErrorMicros != 0;
-    if (sink.latePacketCount > 0 ||
-        (hasMeasuredError && errorMs > 30) ||
-        jitterMs > 20) {
-      return l10n.audioGroupSyncUnstable;
-    }
-    if ((hasMeasuredError && errorMs > 12) || jitterMs > 8) {
-      return l10n.audioGroupSyncFair;
-    }
-    return l10n.audioGroupSyncGood;
-  }
-
-  String _formatAudioMicros(int value) {
-    final ms = value / 1000;
-    if (ms == ms.roundToDouble()) {
-      return ms.round().toString();
-    }
-    return ms.toStringAsFixed(1);
-  }
-
-  Widget _buildDesktopPlaceholder(bool isDark) => DeviceConnectionWelcome(
-    hasDevices: _sessionItems.isNotEmpty,
-    isLoading: device == null,
-    onPair: _openPairingQr,
-    onManualConnect: _showManualConnectDialog,
-  );
-
-  String _sessionStatusLabel(ChatSessionItem session) {
-    final l10n = AppLocalizations.of(context)!;
-    if (session.isConnected) return l10n.connectedNow;
-    if (session.isNearby) return l10n.nearbyAvailable;
-    return l10n.deviceOffline;
-  }
-
-  Widget _buildDesktopSessionTile(
-    ChatSessionItem session, {
-    required bool selected,
-  }) {
-    final peer = session.device;
-    final activity = _inputActivityForPeer(peer.uid);
-    final shortId = peer.uid.length > 6
-        ? peer.uid.substring(peer.uid.length - 6)
-        : peer.uid;
-    return ContextMenuRegion(
-      child: DesktopDeviceSessionTile(
-        name: peer.name,
-        identity: '${platformLabel(peer.platform)} · $shortId',
-        statusLabel: _sessionStatusLabel(session),
-        preview: session.preview,
-        time: _formatSessionTime(session.lastTimestamp),
-        avatar: _buildSessionAvatar(session),
-        statusColor: _sessionStatusColor(session),
-        selected: selected,
-        trusted: _isTrustedDevice(peer),
-        controlActivity: activity,
-        onControlAction: activity == null
-            ? null
-            : activity.isManual
-            ? () => _stopMobileControl(peer.uid, activity.sessionId)
-            : _openRemoteInputWorkspace,
-        onTap: () => setState(() => _selectedDesktopPeerId = peer.uid),
-      ),
-      items: _buildSessionContextActions(peer),
-    );
   }
 
   RemoteInputPeerActivity? _inputActivityForPeer(String peerId) =>
@@ -3863,47 +2916,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
     ];
   }
 
-  Widget _buildSessionAvatar(ChatSessionItem session) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final background = session.isConnected
-        ? Colors.lightBlue
-        : session.isNearby
-        ? Colors.green
-        : (isDark ? Colors.grey[700]! : Colors.grey[300]!);
-    return Tooltip(
-      message: platformLabel(
-        session.device.platform,
-        tablet: DeviceFormFactors.shared.isTablet(session.device.uid),
-      ),
-      child: CircleAvatar(
-        radius: 24,
-        backgroundColor: background,
-        child: Icon(
-          platformIcon(
-            session.device.platform,
-            tablet: DeviceFormFactors.shared.isTablet(session.device.uid),
-          ),
-          size: 24,
-          color: Colors.white,
-          semanticLabel: platformLabel(
-            session.device.platform,
-            tablet: DeviceFormFactors.shared.isTablet(session.device.uid),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Color _sessionStatusColor(ChatSessionItem session) {
-    if (session.isConnected) {
-      return Colors.lightBlue;
-    }
-    if (session.isNearby) {
-      return Colors.green;
-    }
-    return Colors.grey;
-  }
-
   String _formatSessionTime(int timestamp) {
     if (timestamp <= 0) {
       return '';
@@ -3925,15 +2937,12 @@ class _DeviceListScreen extends State<DeviceListScreen>
     return DateFormat('yyyy/MM/dd').format(messageTime);
   }
 
-  Future<void> _showManualConnectDialog() =>
-      _openPairingQr(startWithAddress: true);
-
   Future<void> _openPairingQr({
     bool startWithAddress = false,
     bool deeper = false,
   }) async {
     // surfaces.md「这台面板」: on a desktop the code lives there.
-    if (whisperNewUi && !ShellContent.attached && !startWithAddress) {
+    if (!ShellContent.attached && !startWithAddress) {
       await showShellSheet<void>(
         context,
         scrolls: false,
@@ -4019,33 +3028,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
     }
   }
 
-  void _openConv(DeviceData deviceItem) async {
-    if (socketManager.isConnectedTo(deviceItem.uid)) {
-      socketManager.selectPeer(deviceItem.uid);
-    }
-    if (whisperNewUi) {
-      _shellShowDevice(deviceItem.uid);
-      return;
-    }
-    if (_usesSplitWorkspace ||
-        (_usesTabletWorkspace &&
-            _sessionItems.any((s) => s.device.uid == deviceItem.uid))) {
-      setState(() {
-        _selectedDesktopPeerId = deviceItem.uid;
-      });
-      return;
-    }
-    Widget page(BuildContext context) =>
-        SendMessageScreen(device: deviceItem, onDeviceDeleted: _removeDevice);
-    await Navigator.push(
-      context,
-      whisperNewUi
-          ? WhisperPageRoute<void>(builder: page)
-          : MaterialPageRoute(builder: page),
-    );
-    _refreshDevice();
-  }
-
   /// A device on screen: selected beside a sidebar, the top of the stack on a
   /// phone, whichever way the window is now.
   void _shellShowDevice(String uid) {
@@ -4088,183 +3070,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
       }
     });
     await _refreshDevice();
-  }
-
-  void _handleDeviceConnect(DeviceData deviceItem) {
-    final isConnected = socketManager.isConnectedTo(deviceItem.uid);
-    showConfirmationDialog(
-      context,
-      title: isConnected
-          ? AppLocalizations.of(context)?.brokeConnectTitle ?? "断开连接"
-          : AppLocalizations.of(context)?.connectDeviceTitle ?? "连接设备",
-      description:
-          '${isConnected ? AppLocalizations.of(context)?.disconnect ?? "断开" : AppLocalizations.of(context)?.connectTo ?? "连接到"} ${deviceItem.name}',
-      confirmButtonText: AppLocalizations.of(context)?.confirm ?? '确定',
-      cancelButtonText: AppLocalizations.of(context)?.cancel ?? '取消',
-      onConfirm: () async {
-        if (isConnected) {
-          await socketManager.disconnectPeer(deviceItem.uid);
-        } else {
-          _connectServer(
-            deviceItem.host,
-            deviceItem.port,
-            peerId: deviceItem.uid,
-          );
-        }
-      },
-    );
-  }
-
-  @Deprecated("use context menu, just for mobile")
-  Widget _buildDeviceItemOld(ChatSessionItem session) {
-    final deviceItem = session.device;
-    bool ism = isMobile();
-    return SwipeActionCell(
-      key: ValueKey(deviceItem.uid),
-      trailingActions: [
-        if (!socketManager.isConnectedTo(deviceItem.uid))
-          SwipeAction(
-            widthSpace: ism ? 120 : 140,
-            nestedAction: SwipeNestedAction(
-              /// 自定义你nestedAction 的内容
-              content: Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(20),
-                  color: Colors.red,
-                ),
-                width: ism ? 100 : 120,
-                height: 40,
-                child: OverflowBox(
-                  maxWidth: double.infinity,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.delete, color: Colors.white),
-                      Text(
-                        AppLocalizations.of(context)?.deleteConfirm ?? '确认删除 ',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: ism ? 16 : 18,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-
-            /// 将原本的背景设置为透明，因为要用你自己的背景
-            color: Colors.transparent,
-
-            /// 设置了content就不要设置title和icon了
-            content: _getIconButton(Colors.red, Icons.delete),
-            onTap: (handler) {
-              unawaited(_removeDevice(deviceItem.uid));
-            },
-          ),
-      ],
-      child: InkWell(
-        onTap: () {
-          _openConv(deviceItem);
-        },
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          child: Row(
-            children: [
-              _buildSessionAvatar(session),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            deviceItem.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                        if (_isTrustedDevice(deviceItem)) ...[
-                          const SizedBox(width: 6),
-                          Tooltip(
-                            message: AppLocalizations.of(
-                              context,
-                            )!.e2eeTrustedConnection,
-                            child: Icon(
-                              Icons.verified_user_rounded,
-                              size: 16,
-                              color: context.whisperPalette.trusted,
-                            ),
-                          ),
-                        ],
-                        const SizedBox(width: 8),
-                        Text(
-                          _formatSessionTime(session.lastTimestamp),
-                          style: TextStyle(
-                            fontSize: 12,
-                            color:
-                                Theme.of(context).brightness == Brightness.dark
-                                ? Colors.white38
-                                : Colors.black38,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        ConnectionStatusDot(
-                          color: _sessionStatusColor(session),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: WhisperAnimatedSwitcher(
-                            value: (session.isConnected, session.isNearby),
-                            alignment: Alignment.centerLeft,
-                            child: Text(
-                              session.preview,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color:
-                                    Theme.of(context).brightness ==
-                                        Brightness.dark
-                                    ? Colors.white54
-                                    : Colors.black45,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _getIconButton(color, icon) {
-    return Container(
-      width: 40,
-      height: 40,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-
-        /// 设置你自己的背景
-        color: color,
-      ),
-      child: Icon(icon, color: Colors.white),
-    );
   }
 
   String _connectionDiagnosticDescription(ConnectionDiagnosticStage stage) {
@@ -4433,26 +3238,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
             !_connectionAttempts.isCurrent(targetKey, attemptGeneration)) {
           return;
         }
-        if (whisperNewUi) {
-          _shellShowDevice(connectedDevice.uid);
-        } else if (_usesSplitWorkspace || _usesTabletWorkspace) {
-          setState(() {
-            _selectedDesktopPeerId = connectedDevice.uid;
-          });
-        } else {
-          await Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => SendMessageScreen(
-                device: connectedDevice,
-                onDeviceDeleted: _removeDevice,
-              ),
-            ),
-          );
-          if (mounted) {
-            _refreshDevice();
-          }
-        }
+        _shellShowDevice(connectedDevice.uid);
         return;
       }
       final localizations = AppLocalizations.of(context);
@@ -4594,7 +3380,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     if (!mounted) return;
     if (recovery == ServerStartRecovery.retry) {
       await _startServer(port: port);
-    } else if (recovery == ServerStartRecovery.settings && whisperNewUi) {
+    } else if (recovery == ServerStartRecovery.settings) {
       await _shellOpenSettings();
     } else if (recovery == ServerStartRecovery.settings) {
       await Navigator.push(
@@ -4632,7 +3418,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
       resolve(false);
       return;
     }
-    if (whisperNewUi && isDesktop()) {
+    if (isDesktop()) {
       askPairing(AppLocalizations.of(context)!, request, (allow) {
         if (allow) pairingQrController?.dismiss();
         resolve(allow);
@@ -4663,26 +3449,8 @@ class _DeviceListScreen extends State<DeviceListScreen>
     if (!mounted) {
       return;
     }
-    if (whisperNewUi) {
-      _shellShowDevice(deviceData.uid);
-      return;
-    }
-    if (_usesSplitWorkspace || _usesTabletWorkspace) {
-      setState(() {
-        _selectedDesktopPeerId = deviceData.uid;
-      });
-      return;
-    }
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => SendMessageScreen(
-          device: deviceData,
-          onDeviceDeleted: _removeDevice,
-        ),
-      ),
-    );
-    _refreshDevice();
+    _shellShowDevice(deviceData.uid);
+    return;
   }
 
   @override
@@ -4765,17 +3533,15 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
   @override
   void onTransferUpdated(TransferSnapshot snapshot) {
-    if (whisperNewUi) {
-      setState(() => _shellTransfers[snapshot.peerUid] = snapshot);
-      TransferIslandSource.shared.update(snapshot);
-    }
+    setState(() => _shellTransfers[snapshot.peerUid] = snapshot);
+    TransferIslandSource.shared.update(snapshot);
     // Device list only needs to refresh high-level presence state for now.
   }
 
   @override
   void onTrayIconMouseDown() async {
     final panel = _trayPanel;
-    if (whisperNewUi && panel != null) {
+    if (panel != null) {
       _pushTrayState();
       await panel.toggle();
       return;
@@ -4814,8 +3580,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     if (_isDestroyingWindow) {
       return;
     }
-    if (whisperNewUi &&
-        await LocalSetting().isClose2Tray() &&
+    if (await LocalSetting().isClose2Tray() &&
         !await _statusNotifierAvailable()) {
       // No tray to come back from: minimized it can still be found.
       await windowManager.minimize();
@@ -4913,7 +3678,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
   @override
   void onClipboardChanged() async {
-    if (whisperNewUi) unawaited(_recordClipboard());
+    unawaited(_recordClipboard());
     final generation = ++_clipboardSyncGeneration;
     final inputState = _remoteInputCoordinator.state;
     final workspace = _remoteInputWorkspaceCoordinator.snapshot;
@@ -5150,33 +3915,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
       items: items,
     );
     traceRemoteClipboard('publish_done', success: published);
-  }
-}
-
-class DeviceDetailsScreen extends StatelessWidget {
-  final DeviceData device;
-
-  const DeviceDetailsScreen({super.key, required this.device});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(device.name.toString()), centerTitle: true),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Text('Device Name: ${device.name.toString()}'),
-            Text('IP Address: ${device.host.toString()}'),
-            device.isServer
-                ? const Icon(Icons.desktop_mac) // Server 图标
-                : const Icon(Icons.phone_android), // Client 图标
-            // 其他设备详情信息...
-          ],
-        ),
-      ),
-    );
   }
 }
 

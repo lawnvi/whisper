@@ -152,7 +152,7 @@ void main() {
   });
 
   test('settings lead to the system page that allows it', () {
-    final settings = _read('lib/page/settings.dart');
+    final settings = _read('lib/new_ui/settings/settings_layout.dart');
     expect(settings, contains('IslandOverlaySetting('));
     expect(
       settings,

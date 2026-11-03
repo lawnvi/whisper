@@ -2,8 +2,7 @@
 // fails a test on its own.
 //
 // To look at them next to docs/design/reference/:
-//   WHISPER_RENDER_DIR=/some/dir flutter test --no-pub \
-//     --dart-define=WHISPER_NEW_UI=true test/phone_files_test.dart
+//   WHISPER_RENDER_DIR=/some/dir flutter test --no-pub test/phone_files_test.dart
 
 import 'dart:io';
 import 'dart:typed_data';

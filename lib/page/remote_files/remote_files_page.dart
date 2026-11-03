@@ -2,7 +2,6 @@ import 'package:whisper/helper/helper.dart';
 import 'package:whisper/new_ui/files/phone_files.dart';
 import 'package:whisper/theme/whisper_ui.dart';
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -14,13 +13,11 @@ import '../../l10n/app_localizations.dart';
 import '../../remote_files/fs_host_files.dart';
 import '../../remote_files/fs_protocol.dart';
 import '../../remote_files/mount/remote_mounts.dart';
-import '../window_stream/flow_space_theme.dart';
 import 'files_confirm.dart';
 import 'files_copy_island.dart';
 import 'files_desktop.dart';
 import 'files_icons.dart';
 import 'files_model.dart';
-import 'files_phone.dart';
 
 /// Every connected device's files in one place, like Finder with the other
 /// devices under "位置": browse them, drag or copy and paste between this
@@ -54,34 +51,15 @@ class _RemoteFilesPageState extends State<RemoteFilesPage> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = FlowSpaceColors.of(context);
-    // Inside a tab of the new shell, which is narrower than a window: a pointer,
-    // or a touch screen with a sidebar, gets the list with columns, and the
-    // shell's own background. Same controller, so a fold keeps where it was.
-    if (whisperNewUi && (isDesktop() || !WhisperLayout.of(context).compact)) {
+    // A pointer, or a touch screen with a sidebar, gets the list with columns.
+    // Same controller, so a fold keeps where it was.
+    if (isDesktop() || !WhisperLayout.of(context).compact) {
       return Material(
         type: MaterialType.transparency,
         child: FinderView(controller: _controller, actions: _actions),
       );
     }
-    if (whisperNewUi && MediaQuery.sizeOf(context).width < 700) {
-      return PhoneFilesView(controller: _controller, actions: _actions);
-    }
-    return Scaffold(
-      backgroundColor: colors.canvas,
-      body: LayoutBuilder(
-        builder: (context, constraints) => constraints.maxWidth >= 700
-            ? FinderView(controller: _controller, actions: _actions)
-            : SafeArea(
-                bottom: false,
-                child: FilesPhoneView(
-                  controller: _controller,
-                  actions: _actions,
-                  startAtDevice: widget.peerId != null,
-                ),
-              ),
-      ),
-    );
+    return PhoneFilesView(controller: _controller, actions: _actions);
   }
 }
 

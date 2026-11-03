@@ -80,7 +80,7 @@
 
 **完成标准**：每项写明结果和决定，更新 `DESIGN.md`「平台」和 `decisions.md`。做不到透明窗口时退回实色 `sidebar-solid`，先告诉用户，让用户看效果再决定。
 
-**结果（2026-11-02，还没有完成）：** 探针在 `lib/new_ui/probe/`，开关打开时代替首页，用示例数据按 `surfaces.md` 排版，第 2 步删除。跑在 Apple M4、macOS 27 上。性能和面板是屏幕锁定时测的；窗口的画面 2026-11-02 晚上解锁后实拍过。
+**结果（2026-11-02，还没有完成）：** 探针在 lib/new_ui/probe/，开关打开时代替首页，用示例数据按 `surfaces.md` 排版，第 2 步删除。跑在 Apple M4、macOS 27 上。性能和面板是屏幕锁定时测的；窗口的画面 2026-11-02 晚上解锁后实拍过。
 
 | 项 | 结果 | 状态 |
 |---|---|---|
@@ -150,10 +150,10 @@ flutter run --profile -d <设备> -t tool/perf/new_ui_perf.dart
 |---|---|
 | macOS | 侧栏透出桌面，文字清楚；窗口四角是圆的，内容没有方角；拖动工具栏空白处能移动窗口，分页和按钮不会带着窗口走；双击空白最大化；红绿灯能点，绿灯悬停的平铺菜单和「窗口」菜单的移动项还在；上边缘能缩放；深色；左键托盘图标出现面板 |
 | Windows | 侧栏是云母，失去焦点退成纯色；上边缘能缩放；最大化没有被裁掉一圈，按钮贴到屏幕右上角；在 100% 和 150% 的显示器之间拖动不糊；Win+Z 能出贴靠布局；Windows 10 上侧栏是实色；左键托盘出面板 |
-| Linux | 隐藏标题栏后阴影还在，四边能缩放，四角是否方的（方的就用方角）；三种按钮布局实时跟着变；Breeze 下的阴影协调；输出里 `trayHost` 说有没有托盘 |
+| Linux | 隐藏标题栏后阴影还在，四边能缩放，四角是否方的（方的就用方角）；三种按钮布局实时跟着变；Breeze 下的阴影协调；输出里 trayHost 说有没有托盘 |
 | Android | 切分页不掉帧，玻璃输入框下滚动不掉帧 |
 
-**探针还留着**：`lib/new_ui/probe/`、`tool/perf/new_ui_perf.dart` 只用来量性能，App 已经不用它们。等 Android 和 Windows 的性能量完再和 `macos/Runner/WindowProbeHooks.swift` 一起删。
+探针 lib/new_ui/probe/、tool/perf/new_ui_perf.dart 当时只用来量性能，第 9 步删了。等 Android 和 Windows 的性能量完再和 `macos/Runner/WindowProbeHooks.swift` 一起删。
 
 ### 第 2 到 8 步的结果（2026-11-02，新界面仍在开关后面）
 
@@ -175,7 +175,7 @@ flutter run --profile -d <设备> -t tool/perf/new_ui_perf.dart
 
 ### 平板和折叠屏的结果（2026-11-03，同样在开关后面）
 
-代码在 `lib/new_ui/shell/shell_touch.dart`，判断用 `WhisperLayout`（`lib/theme/whisper_ui.dart`），旋转用 `WhisperOrientation`（`lib/helper/orientation_policy.dart`）。`usesSplitDeviceWorkspace` 和 `usesRetainedTabletWorkspace` 旧界面还在用，第 9 步一起删。
+代码在 `lib/new_ui/shell/shell_touch.dart`，判断用 `WhisperLayout`（`lib/theme/whisper_ui.dart`），旋转用 `WhisperOrientation`（`lib/helper/orientation_policy.dart`）。usesSplitDeviceWorkspace 和 usesRetainedTabletWorkspace 第 9 步一起删了。
 
 在安卓 35 的折叠屏模拟器（`pixel_fold`）和平板模拟器（`pixel_tablet`）上真实跑过，两台真实配对：
 
@@ -196,12 +196,12 @@ flutter run --profile -d <设备> -t tool/perf/new_ui_perf.dart
 
 拆开 `lib/page/deviceList.dart`（4119 行）。建窗口外壳、侧栏（顶部是搜索、声音、键鼠）、左下角（连接新设备、共享链接、设置）。隐藏系统标题栏，放上 `WindowButtons`，定最小尺寸（`surfaces.md`「窗口外壳」）。**这一步三个桌面平台要一起做**，不是最后再适配。设备页用 `LiquidSegmented` + `WhisperTabView`，把现有页面嵌进三个分页：`SendMessageScreen`（已有 `embedded`）、`RemoteFilesPage`、`FlowSpacePage`（已有 `focusPeerId`）。此时分页内部还是旧样子。设备卡片替换 `ClientSettingsScreen`。
 
-手机同时改成页面栈：`_buildDeviceItemOld` 换成新列表，连接设备页基于 `lib/page/pairing_qr.dart`，设备页和设置变成页面。共享链接从「文件」首页（`lib/page/remote_files/files_phone.dart`）移到设置。
+手机同时改成页面栈：_buildDeviceItemOld 换成新列表，连接设备页基于 `lib/page/pairing_qr.dart`，设备页和设置变成页面。共享链接从「文件」首页（lib/page/remote_files/files_phone.dart）移到设置。
 
 平板和折叠屏**和手机同一步做**，不然手机的页面栈写死后要再拆一次（`surfaces.md`「平板和折叠屏」）：
 
-- 所有骨架判断换成 `WhisperLayout`。删掉 `usesSplitDeviceWorkspace` 和 `usesRetainedTabletWorkspace`，安卓也要有侧栏，iPad 分屏时要变成页面栈。`isDesktop()` 只留给功能判断，不再决定骨架。
-- 放开方向：`lib/main.dart` 启动时把安卓锁成竖屏，iOS 只在启动时判断一次；`android/app/src/main/AndroidManifest.xml` 里主界面写死了 `portrait`；窗口查看页（`lib/page/window_stream/flow_switcher.dart`、`lib/page/window_stream/flow_window_viewer_page.dart`）退出时锁回竖屏。都改成按当前窗口判断，折叠状态变化时重新判断。
+- 所有骨架判断换成 `WhisperLayout`。删掉 usesSplitDeviceWorkspace 和 usesRetainedTabletWorkspace，安卓也要有侧栏，iPad 分屏时要变成页面栈。`isDesktop()` 只留给功能判断，不再决定骨架。
+- 放开方向：`lib/main.dart` 启动时把安卓锁成竖屏，iOS 只在启动时判断一次；`android/app/src/main/AndroidManifest.xml` 里主界面写死了 `portrait`；窗口查看页（lib/page/window_stream/flow_switcher.dart、`lib/page/window_stream/flow_window_viewer_page.dart`）退出时锁回竖屏。都改成按当前窗口判断，折叠状态变化时重新判断。
 - `detectLocalFormFactor`（`lib/helper/device_form_factor.dart`）按启动时的屏幕算，折叠屏打开着启动就报成平板，合上启动又是手机，别的设备上的图会变。可折叠的设备固定报手机：安卓查 `android.hardware.sensor.hinge_angle`。
 
 **完成标准**：所有功能都能到达，一个不少。切分页、推页面的动效到位，长设备名不乱。在安卓折叠屏模拟器上连续折叠和展开，设备、分页、草稿都在。
@@ -234,7 +234,22 @@ flutter run --profile -d <设备> -t tool/perf/new_ui_perf.dart
 
 ### 9 · 收尾
 
-共享元素动画。删除旧 token 和没接入的 `lib/widget/device_workspace.dart`。更新 `docs/user-guide.md`、`docs/user-guide_en.md` 和 README 截图。去掉开关。
+共享元素动画。删除旧 token 和没接入的 lib/widget/device_workspace.dart。更新 `docs/user-guide.md`、`docs/user-guide_en.md` 和 README 截图。去掉开关。
+
+### 第 9 步的结果（2026-11-03）
+
+做了：去掉 `WHISPER_NEW_UI`，构建脚本和 Linux runner 里的判断一起去掉（Linux 一律用 header bar）。删了旧设备列表、三栏键鼠页、旧设置布局、旧手机文件页、旧应用切换器和设备架、旧二维码对话框、探针和钩子，以及 250 多条没人用的文案。Windows 和 macOS 的 `flutter build` 不用再传开关，发布包就是新界面。
+
+没做，要用户决定：
+
+- **旧 token 还不能删。** 还有 23 个文件在用 `palette`，最多的是 `mobile_control_screen.dart`（22 处）和 `media_message_preview.dart`（8 处）。这些页面重做之前，`WhisperPalette`、`FinderColors`、`FlowSpaceColors` 都得留着。
+- **共享元素动画**没有做。
+- **`docs/user-guide*.md` 和 README 的截图**还是旧界面。
+- `lib/new_ui/` 现在是唯一的界面，名字没改，改名只是机械替换。
+
+之后又删了五个本来就没有入口用到的非界面文件：connection_request_registry、guarded_auth_callback、connect_prompt_registry、discovery_observation_tracker、local_discovery_runtime。
+
+测试：只测旧界面的删了，测真实逻辑的移到新界面上（通知转发的回滚和串行、设置加载只认最新一次、Windows 服务的确认流程、消息多选）。**不再有测试的：** 设置页下载更新的界面流程、设置行的读屏语义、手机旧文件页的行为（新文件页有自己的测试）。
 
 ## 数据从哪来
 

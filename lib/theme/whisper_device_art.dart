@@ -1,4 +1,4 @@
-// Realistic device pictures, the main source of texture in the new UI. The
+// Realistic device pictures, the main source of texture in the interface. The
 // geometry follows art() in docs/design/whisper-ui-language.html.
 
 import 'package:flutter/widgets.dart';

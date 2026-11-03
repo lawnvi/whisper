@@ -9,7 +9,6 @@ import 'package:whisper/new_ui/phone/panel_menu.dart';
 import 'package:whisper/new_ui/phone/phone_parts.dart';
 import 'package:whisper/new_ui/picker/device_picker.dart';
 import 'package:whisper/new_ui/shell/shell_parts.dart';
-import 'package:whisper/page/remote_files/files_copy_island.dart';
 import 'package:whisper/page/remote_files/files_icons.dart';
 import 'package:whisper/page/remote_files/files_model.dart';
 import 'package:whisper/page/remote_files/files_share_sheet.dart';

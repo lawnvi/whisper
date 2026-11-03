@@ -5,21 +5,10 @@
   },
   "lib/page/conversation.dart": {
     "fontSize": 5,
-    "duration": 5,
-    "radius": 1
+    "duration": 3
   },
   "lib/page/deviceList.dart": {
-    "fontSize": 7,
-    "duration": 3,
-    "radius": 4
-  },
-  "lib/page/pairing_qr.dart": {
-    "duration": 2,
-    "radius": 1
-  },
-  "lib/page/remote_files/file_browse_prompt.dart": {
-    "fontSize": 4,
-    "radius": 2
+    "duration": 1
   },
   "lib/page/remote_files/files_confirm.dart": {
     "color": 1,
@@ -28,16 +17,14 @@
     "radius": 2
   },
   "lib/page/remote_files/files_copy_island.dart": {
-    "color": 5,
-    "fontSize": 10,
-    "duration": 6,
-    "radius": 2
+    "color": 3,
+    "duration": 2
   },
   "lib/page/remote_files/files_desktop.dart": {
-    "color": 12,
-    "fontSize": 17,
-    "duration": 12,
-    "radius": 14
+    "color": 11,
+    "fontSize": 4,
+    "duration": 4,
+    "radius": 5
   },
   "lib/page/remote_files/files_drag.dart": {
     "duration": 3
@@ -47,24 +34,12 @@
     "radius": 2
   },
   "lib/page/remote_files/files_menu.dart": {
-    "color": 7,
+    "color": 5,
     "fontSize": 2,
     "duration": 3
   },
   "lib/page/remote_files/files_model.dart": {
     "duration": 1
-  },
-  "lib/page/remote_files/files_phone.dart": {
-    "color": 2,
-    "fontSize": 13,
-    "duration": 6,
-    "radius": 2
-  },
-  "lib/page/remote_files/files_share_sheet.dart": {
-    "color": 14,
-    "fontSize": 26,
-    "duration": 12,
-    "radius": 7
   },
   "lib/page/remote_files/files_shares.dart": {
     "color": 10,
@@ -72,14 +47,9 @@
     "duration": 2,
     "radius": 1
   },
-  "lib/page/remote_files/files_transfers.dart": {
-    "fontSize": 6,
-    "radius": 1
-  },
   "lib/page/settings.dart": {
-    "fontSize": 6,
-    "duration": 2,
-    "radius": 2
+    "fontSize": 2,
+    "radius": 1
   },
   "lib/page/transfer_assistant.dart": {
     "duration": 6,
@@ -89,46 +59,23 @@
     "fontSize": 6,
     "radius": 1
   },
-  "lib/page/window_stream/flow_animated_grid.dart": {
-    "duration": 3
-  },
-  "lib/page/window_stream/flow_desktop_switcher.dart": {
-    "color": 4,
-    "fontSize": 1,
-    "duration": 10
-  },
   "lib/page/window_stream/flow_offer_banner.dart": {
     "fontSize": 2,
     "radius": 2
   },
-  "lib/page/window_stream/flow_recents_deck.dart": {
-    "color": 3,
-    "fontSize": 2,
-    "duration": 1
-  },
   "lib/page/window_stream/flow_send_panel.dart": {
-    "fontSize": 2,
     "duration": 1
   },
   "lib/page/window_stream/flow_space_page.dart": {
-    "fontSize": 4,
-    "duration": 1,
-    "radius": 2
+    "fontSize": 2,
+    "radius": 1
   },
   "lib/page/window_stream/flow_space_theme.dart": {
     "color": 34,
     "duration": 3
   },
   "lib/page/window_stream/flow_space_widgets.dart": {
-    "color": 5,
-    "fontSize": 15,
-    "duration": 2,
-    "radius": 3
-  },
-  "lib/page/window_stream/flow_switcher.dart": {
-    "color": 4,
-    "fontSize": 1,
-    "duration": 3
+    "fontSize": 3
   },
   "lib/page/window_stream/flow_window_viewer_page.dart": {
     "fontSize": 2,
@@ -164,53 +111,22 @@
     "fontSize": 2,
     "duration": 1
   },
-  "lib/widget/cast_request_prompt.dart": {
-    "fontSize": 1,
-    "radius": 1
-  },
   "lib/widget/chat_composer.dart": {
-    "fontSize": 6,
-    "duration": 3,
-    "radius": 5
-  },
-  "lib/widget/chat_connection_banner.dart": {
-    "radius": 1
-  },
-  "lib/widget/chat_message_list.dart": {
-    "fontSize": 1,
-    "duration": 3
-  },
-  "lib/widget/context_menu_region.dart": {
-    "fontSize": 1,
-    "duration": 2,
-    "radius": 1
-  },
-  "lib/widget/device_connection_widgets.dart": {
-    "fontSize": 5,
-    "duration": 1,
-    "radius": 4
-  },
-  "lib/widget/device_sidebar_toolbar.dart": {
-    "duration": 4,
-    "radius": 1
-  },
-  "lib/widget/device_workspace.dart": {
+    "fontSize": 2,
     "radius": 3
   },
-  "lib/widget/file_message_card.dart": {
-    "fontSize": 1,
-    "radius": 2
+  "lib/widget/chat_message_list.dart": {
+    "duration": 1
   },
   "lib/widget/glass_bottom_sheet.dart": {
     "color": 2,
     "fontSize": 1,
-    "duration": 6,
-    "radius": 7
+    "duration": 5,
+    "radius": 4
   },
   "lib/widget/glass_dialog.dart": {
-    "color": 2,
-    "fontSize": 2,
-    "duration": 2
+    "color": 1,
+    "duration": 1
   },
   "lib/widget/island/island_center.dart": {
     "duration": 5
@@ -218,7 +134,7 @@
   "lib/widget/island/island_views.dart": {
     "color": 3,
     "fontSize": 8,
-    "duration": 6
+    "duration": 5
   },
   "lib/widget/island/sources/copy_source.dart": {
     "fontSize": 1,
@@ -226,13 +142,6 @@
   },
   "lib/widget/island/sources/streamed_source.dart": {
     "fontSize": 1
-  },
-  "lib/widget/macos_permission_setting.dart": {
-    "fontSize": 1
-  },
-  "lib/widget/manual_connection_dialog.dart": {
-    "fontSize": 1,
-    "radius": 2
   },
   "lib/widget/media_message_preview.dart": {
     "color": 2,
@@ -244,12 +153,8 @@
     "radius": 1
   },
   "lib/widget/quick_send_chooser.dart": {
-    "fontSize": 5,
-    "radius": 5
-  },
-  "lib/widget/screenshot_controls.dart": {
-    "fontSize": 2,
-    "radius": 2
+    "fontSize": 3,
+    "radius": 3
   },
   "lib/widget/segmented_tabs.dart": {
     "duration": 1,
@@ -261,8 +166,5 @@
   },
   "lib/widget/subtle_motion.dart": {
     "duration": 2
-  },
-  "lib/widget/windows_input_service_setting.dart": {
-    "fontSize": 1
   }
 }

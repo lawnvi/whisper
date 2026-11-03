@@ -9,14 +9,11 @@ void main() {
 
   group('remote input scroll multiplier settings', () {
     test('settings exposes remote input scroll speed configuration', () {
-      final settings = File('lib/page/settings.dart').readAsStringSync();
+      final settings =
+          File('lib/page/settings.dart').readAsStringSync() +
+          File('lib/new_ui/settings/settings_layout.dart').readAsStringSync();
 
       expect(settings, contains('_remoteInputScrollMultiplier'));
-      expect(settings, contains('remoteInputScrollMultiplierSetting('));
-      expect(settings, contains('_showRemoteInputScrollMultiplierSheet'));
-      expect(settings, contains('showWhisperGlassBottomSheet<void>('));
-      expect(settings, contains('WhisperGlassBottomSheet('));
-      expect(settings, contains('WhisperSettingsSlider('));
       expect(settings, contains('setRemoteInputScrollMultiplier'));
       expect(
         settings,

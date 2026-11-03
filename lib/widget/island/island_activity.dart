@@ -198,6 +198,9 @@ class IslandListSource extends ChangeNotifier implements IslandSource {
   final dismissedIds = <String>[];
   final expiredIds = <String>[];
 
+  /// Whether an island is showing this source.
+  bool get watched => hasListeners;
+
   @override
   List<IslandActivity> get activities => List.unmodifiable(_activities);
 

@@ -8,11 +8,11 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:whisper/new_ui/files/phone_files.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/model/file_transfer.dart';
 import 'package:whisper/page/window_stream/flow_offer_banner.dart';
 import 'package:whisper/page/remote_files/files_model.dart';
-import 'package:whisper/page/remote_files/files_phone.dart';
 import 'package:whisper/page/remote_files/remote_files_page.dart';
 import 'package:whisper/page/window_stream/flow_space_theme.dart';
 import 'package:whisper/remote_files/fs_browser.dart';
@@ -300,14 +300,13 @@ void main() {
         backgroundColor: FlowSpaceColors.of(context).canvas,
         body: SafeArea(
           bottom: false,
-          child: FilesPhoneView(
+          child: PhoneFilesView(
             key: filesKey,
             controller: files,
             actions: FilesActions(
               controller: files,
               context: () => filesKey.currentContext!,
             ),
-            startAtDevice: false,
           ),
         ),
       ),

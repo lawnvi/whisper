@@ -1,7 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/widgets.dart';
-
 import '../../helper/toast.dart';
 import '../../l10n/app_localizations.dart';
 import '../../window_stream/core/window_stream_models.dart';

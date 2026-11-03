@@ -10,7 +10,6 @@ import 'package:whisper/helper/toast.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/message.dart';
-import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/theme/whisper_ui.dart';
 import 'package:whisper/state/message_deletion.dart';
 import 'package:whisper/widget/message_deletion_dialog.dart';
@@ -240,22 +239,20 @@ class _ChatMessageListState extends State<ChatMessageList> {
       // A few messages stay at the top, under the toolbar. That takes shrink
       // wrapping, which lays out more on every scrolled frame; a long list fills
       // the window anyway and does not need it.
-      shrinkWrap: !whisperNewUi || widget.messages.length < _shrinkWrapBelow,
+      shrinkWrap: widget.messages.length < _shrinkWrapBelow,
       slivers: [
         SliverPadding(
           // Under the floating composer, which the last message must clear.
-          padding: whisperNewUi
-              ? EdgeInsets.fromLTRB(
-                  touch ? 12 : 16,
-                  8,
-                  touch ? 12 : 16,
-                  chatListBottomInset(
-                    composerHeight: widget.composerHeight,
-                    touch: touch,
-                    hasComposer: widget.hasComposer,
-                  ),
-                )
-              : const EdgeInsets.only(bottom: 12),
+          padding: EdgeInsets.fromLTRB(
+            touch ? 12 : 16,
+            8,
+            touch ? 12 : 16,
+            chatListBottomInset(
+              composerHeight: widget.composerHeight,
+              touch: touch,
+              hasComposer: widget.hasComposer,
+            ),
+          ),
           sliver: SliverAnimatedList(
             key: widget.listKey,
             initialItemCount: widget.messages.length,
@@ -272,39 +269,21 @@ class _ChatMessageListState extends State<ChatMessageList> {
       );
     }
 
-    if (whisperNewUi) {
-      return Focus(
-        focusNode: _selectionFocus,
-        onKeyEvent: (_, event) => _handleSelectionKey(event),
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: Align(alignment: Alignment.topCenter, child: messageList),
-            ),
-            if (_selectionMode)
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom:
-                    (touch ? 24 : 16) + MediaQuery.paddingOf(context).bottom,
-                child: Center(child: _buildSelectionCapsule(context)),
-              ),
-          ],
-        ),
-      );
-    }
     return Focus(
       focusNode: _selectionFocus,
       onKeyEvent: (_, event) => _handleSelectionKey(event),
-      child: Column(
+      child: Stack(
         children: [
-          Expanded(
+          Positioned.fill(
             child: Align(alignment: Alignment.topCenter, child: messageList),
           ),
-          WhisperAnimatedReveal(
-            visible: _selectionMode,
-            child: _selectionMode ? _buildSelectionToolbar(context) : null,
-          ),
+          if (_selectionMode)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: (touch ? 24 : 16) + MediaQuery.paddingOf(context).bottom,
+              child: Center(child: _buildSelectionCapsule(context)),
+            ),
         ],
       ),
     );
@@ -328,43 +307,30 @@ class _ChatMessageListState extends State<ChatMessageList> {
     final sameSender = older != null && older.sender == message.sender;
     Widget rise(Widget child) => KeyedSubtree(
       key: _keyOf(message),
-      child: whisperNewUi
-          ? _Rise(
-              // Only what arrives at the newest end: older messages loading as
-              // you scroll up do not push anything.
-              animation: index == 0
-                  ? animation
-                  : const AlwaysStoppedAnimation<double>(1),
-              child: child,
-            )
-          : FadeTransition(opacity: animation, child: child),
+      child: _Rise(
+        // Only what arrives at the newest end: older messages loading as
+        // you scroll up do not push anything.
+        animation: index == 0
+            ? animation
+            : const AlwaysStoppedAnimation<double>(1),
+        child: child,
+      ),
     );
     return rise(
       Padding(
-        padding: whisperNewUi
-            ? EdgeInsets.only(top: sameSender ? 8 : 16)
-            : const EdgeInsets.fromLTRB(14, 5, 14, 5),
+        padding: EdgeInsets.only(top: sameSender ? 8 : 16),
         child: Column(
           children: [
             if (showTimestamp)
               Padding(
-                padding: whisperNewUi
-                    ? const EdgeInsets.only(top: 14, bottom: 8)
-                    : const EdgeInsets.only(top: 5, bottom: 10),
+                padding: const EdgeInsets.only(top: 14, bottom: 8),
                 child: Text(
                   formatChatTimestamp(context, message.timestamp),
                   key: ValueKey<String>('message-time-${message.id}'),
-                  style: whisperNewUi
-                      ? TextStyle(
-                          color: context.wc.ink2,
-                          fontSize: WhisperType(touch: !isDesktop()).tiny,
-                        )
-                      : TextStyle(
-                          color: colorScheme.onSurfaceVariant.withValues(
-                            alpha: 0.72,
-                          ),
-                          fontSize: 12,
-                        ),
+                  style: TextStyle(
+                    color: context.wc.ink2,
+                    fontSize: WhisperType(touch: !isDesktop()).tiny,
+                  ),
                 ),
               ),
             Row(
@@ -409,23 +375,14 @@ class _ChatMessageListState extends State<ChatMessageList> {
                         builder: (context, constraints) => ConstrainedBox(
                           key: ValueKey('message-bubble-${message.id}'),
                           constraints: BoxConstraints(
-                            maxWidth: whisperNewUi
-                                ? newBubbleMaxWidth(
-                                    available: constraints.maxWidth,
-                                    isFile: isFile,
-                                    compact:
-                                        !isDesktop() &&
-                                        WhisperLayout.of(context).compact,
-                                    body: WhisperType(touch: !isDesktop()).body,
-                                  )
-                                : isFile
-                                ? math.min(
-                                    isDesktop() ? 300.0 : 360.0,
-                                    constraints.maxWidth *
-                                        (isDesktop() ? 0.6 : 0.618),
-                                  )
-                                : constraints.maxWidth *
-                                      (isDesktop() ? 0.6 : 0.78),
+                            maxWidth: newBubbleMaxWidth(
+                              available: constraints.maxWidth,
+                              isFile: isFile,
+                              compact:
+                                  !isDesktop() &&
+                                  WhisperLayout.of(context).compact,
+                              body: WhisperType(touch: !isDesktop()).body,
+                            ),
                           ),
                           child: GestureDetector(
                             behavior: HitTestBehavior.opaque,
@@ -443,11 +400,7 @@ class _ChatMessageListState extends State<ChatMessageList> {
                                     message,
                                     isOpponent,
                                     // Copying is in the message's menu.
-                                    whisperNewUi ||
-                                            _selectionMode ||
-                                            message.type != MessageEnum.Text
-                                        ? null
-                                        : _buildCopyButton(context, message),
+                                    null,
                                   ),
                           ),
                         ),
@@ -515,70 +468,6 @@ class _ChatMessageListState extends State<ChatMessageList> {
         onSelected: () => unawaited(_confirmDeletion([message])),
       ),
     ];
-  }
-
-  Widget _buildSelectionToolbar(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final palette = context.whisperPalette;
-    final localizations = AppLocalizations.of(context);
-    final allSelected = _selectedMessageIds.length == widget.messages.length;
-
-    return Material(
-      key: const ValueKey('message-selection-toolbar'),
-      color: palette.surfaceElevated,
-      child: SafeArea(
-        top: false,
-        child: Container(
-          height: 64,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          decoration: BoxDecoration(
-            border: Border(top: BorderSide(color: palette.borderSubtle)),
-          ),
-          child: Row(
-            children: [
-              IconButton(
-                tooltip: localizations?.cancel ?? '取消',
-                onPressed: _deleting ? null : () => _setSelectionMode(false),
-                icon: const Icon(Icons.close_rounded),
-              ),
-              const SizedBox(width: 4),
-              Expanded(
-                child: Text(
-                  localizations?.selectedMessageCount(
-                        _selectedMessageIds.length,
-                      ) ??
-                      '已选 ${_selectedMessageIds.length} 条',
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    color: colorScheme.onSurface,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              IconButton(
-                tooltip: localizations?.selectAll ?? '全选',
-                onPressed: _deleting || allSelected ? null : _selectAll,
-                icon: const Icon(Icons.done_all_rounded),
-              ),
-              IconButton(
-                key: const ValueKey('delete-selected-messages'),
-                tooltip: localizations?.delete ?? '删除',
-                onPressed: _deleting ? null : _deleteSelectedMessages,
-                color: palette.danger,
-                icon: _deleting
-                    ? SizedBox.square(
-                        dimension: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: palette.danger,
-                        ),
-                      )
-                    : const Icon(Icons.delete_outline_rounded),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 
   /// Where the composer was, in the same glass: what to do with the selection.
@@ -655,51 +544,6 @@ class _ChatMessageListState extends State<ChatMessageList> {
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildCopyButton(BuildContext context, MessageData message) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final copied = _copiedMessageId == message.id;
-    return Padding(
-      padding: EdgeInsets.only(bottom: isMobile() ? 1 : 2),
-      child: IconButton(
-        key: ValueKey<String>('message-copy-${message.id}'),
-        visualDensity: VisualDensity.compact,
-        padding: EdgeInsets.zero,
-        style: IconButton.styleFrom(
-          fixedSize: Size.square(isMobile() ? 20 : 18),
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        ),
-        constraints: BoxConstraints(
-          minWidth: isMobile() ? 20 : 18,
-          minHeight: isMobile() ? 20 : 18,
-        ),
-        splashColor: Colors.transparent,
-        highlightColor: Colors.transparent,
-        hoverColor: Colors.transparent,
-        icon: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 160),
-          reverseDuration: const Duration(milliseconds: 140),
-          transitionBuilder: (child, animation) => FadeTransition(
-            opacity: animation,
-            child: ScaleTransition(scale: animation, child: child),
-          ),
-          child: Icon(
-            copied ? Icons.check_rounded : Icons.content_copy_rounded,
-            key: ValueKey<bool>(copied),
-            size: isMobile() ? 13 : 14,
-            color: copied
-                ? colorScheme.primary
-                : colorScheme.onSurfaceVariant.withValues(alpha: 0.85),
-          ),
-        ),
-        onPressed: () {
-          if (message.content?.isNotEmpty == true) {
-            _copyMessage(message);
-          }
-        },
       ),
     );
   }

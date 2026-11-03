@@ -1487,7 +1487,6 @@ const WindowOptions(
 // 现在只有 GNOME 和 Wayland 用 header bar。其他情况 window_manager 隐藏标题栏时会
 // gtk_window_set_decorated(false)，阴影和边缘缩放都没了。改成一律用 header bar，
 // 隐藏时 window_manager 只是把它设成不可见，GTK 的客户端装饰还在。
-// 只在 WHISPER_NEW_UI=1 时，其他情况保持原来的判断。
 gboolean use_header_bar = TRUE;
 
 // 读按钮布局，通过 MethodChannel 给 Dart，再喂给 WindowButtonLayout.parse。

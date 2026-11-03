@@ -2,8 +2,7 @@
 // page, in both themes, three languages and at 200% text.
 //
 // To look at them next to docs/design/reference/:
-//   WHISPER_RENDER_DIR=/some/dir flutter test --no-pub \
-//     --dart-define=WHISPER_NEW_UI=true test/phone_connect_test.dart
+//   WHISPER_RENDER_DIR=/some/dir flutter test --no-pub test/phone_connect_test.dart
 
 import 'dart:async';
 

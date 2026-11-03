@@ -10,6 +10,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+const double _menuMinWidth = 190;
+const double _menuMaxWidth = 320;
+const double _menuEdge = 8;
+
 /// One row of a [showFilesMenu] menu, a separator, or a submenu.
 class FilesMenuItem {
   const FilesMenuItem({
@@ -165,57 +169,49 @@ class _MenuLayerState extends State<_MenuLayer> {
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
     final padding = MediaQuery.paddingOf(context);
-    final width = widget.touch ? 250.0 : 236.0;
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final left = widget.alignRight
-            ? widget.position.dx - width
-            : widget.position.dx;
-        final x = left.clamp(8.0, size.width - width - 8);
-        final submenu = _submenu;
-        final safeTop = padding.top + 8;
-        final safeBottom = size.height - padding.bottom - 8;
-        return Stack(
-          children: [
-            Positioned.fill(
-              child: CustomSingleChildLayout(
-                delegate: _MenuPlacement(
-                  anchor: Offset(x, widget.position.dy),
-                  width: width,
-                  safeTop: safeTop,
-                  safeBottom: safeBottom,
-                ),
-                child: _AnimatedMenu(
-                  animation: widget.animation,
+    // On a desktop a menu is as wide as its longest row; a touch menu is one size.
+    final width = widget.touch ? 250.0 : null;
+    final submenu = _submenu;
+    final safeTop = padding.top + 8;
+    final safeBottom = size.height - padding.bottom - 8;
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: CustomSingleChildLayout(
+            delegate: _MenuPlacement(
+              pointer: widget.position,
+              alignRight: widget.alignRight,
+              width: width,
+              safeTop: safeTop,
+              safeBottom: safeBottom,
+            ),
+            child: IntrinsicWidth(
+              child: _AnimatedMenu(
+                animation: widget.animation,
+                touch: widget.touch,
+                alignRight: widget.alignRight,
+                child: _MenuPanel(
+                  items: widget.items,
                   touch: widget.touch,
-                  alignRight: widget.alignRight,
-                  child: _MenuPanel(
-                    items: widget.items,
-                    touch: widget.touch,
-                    autofocus: true,
-                    onSelected: widget.onSelected,
-                    onSubmenu: (rect, children) =>
-                        setState(() => _submenu = (rect, children)),
-                  ),
+                  autofocus: true,
+                  onSelected: widget.onSelected,
+                  onSubmenu: (rect, children) =>
+                      setState(() => _submenu = (rect, children)),
                 ),
               ),
             ),
-            if (submenu != null)
-              Positioned(
-                left: (submenu.$1.right + width + 4 < size.width)
-                    ? submenu.$1.right + 2
-                    : submenu.$1.left - width - 2,
-                // Up as far as it takes for its last row to be in the window.
-                top: math.max(
-                  safeTop,
-                  math.min(
-                    submenu.$1.top - 5,
-                    safeBottom -
-                        submenu.$2.length * (widget.touch ? 48.0 : 30.0) -
-                        12,
-                  ),
-                ),
+          ),
+        ),
+        if (submenu != null)
+          Positioned.fill(
+            child: CustomSingleChildLayout(
+              delegate: _SubmenuPlacement(
+                row: submenu.$1,
                 width: width,
+                safeTop: safeTop,
+                safeBottom: safeBottom,
+              ),
+              child: IntrinsicWidth(
                 child: _MenuPanel(
                   key: ValueKey(submenu.$2),
                   items: submenu.$2,
@@ -225,11 +221,22 @@ class _MenuLayerState extends State<_MenuLayer> {
                   onSubmenu: (_, _) {},
                 ),
               ),
-          ],
-        );
-      },
+            ),
+          ),
+      ],
     );
   }
+}
+
+/// [width] when it is one size, otherwise the range the longest row moves in.
+BoxConstraints _menuWidth(BoxConstraints window, double? width) {
+  final most = math.max(0.0, window.maxWidth - 2 * _menuEdge);
+  return width != null
+      ? BoxConstraints.tightFor(width: math.min(width, most))
+      : BoxConstraints(
+          minWidth: math.min(_menuMinWidth, most),
+          maxWidth: math.min(_menuMaxWidth, most),
+        );
 }
 
 /// Grows from the pointer like a native menu, and keeps the panel on
@@ -239,35 +246,82 @@ class _MenuLayerState extends State<_MenuLayer> {
 /// scrolls. A menu that runs off the window is a menu you cannot read.
 class _MenuPlacement extends SingleChildLayoutDelegate {
   const _MenuPlacement({
-    required this.anchor,
+    required this.pointer,
+    required this.alignRight,
     required this.width,
     required this.safeTop,
     required this.safeBottom,
   });
 
-  final Offset anchor;
-  final double width, safeTop, safeBottom;
+  final Offset pointer;
+  final bool alignRight;
+  final double? width;
+  final double safeTop, safeBottom;
 
-  double get _below => safeBottom - anchor.dy;
-  double get _above => anchor.dy - safeTop;
+  double get _below => safeBottom - pointer.dy;
+  double get _above => pointer.dy - safeTop;
 
   @override
   BoxConstraints getConstraintsForChild(BoxConstraints constraints) =>
-      BoxConstraints(
-        minWidth: width,
-        maxWidth: width,
-        maxHeight: math.max(0, math.max(_below, _above)),
-      );
+      _menuWidth(
+        constraints,
+        width,
+      ).copyWith(maxHeight: math.max(0, math.max(_below, _above)));
 
   @override
   Offset getPositionForChild(Size size, Size child) {
+    final left = alignRight ? pointer.dx - child.width : pointer.dx;
     final under = child.height <= _below || _below >= _above;
-    return Offset(anchor.dx, under ? anchor.dy : anchor.dy - child.height);
+    return Offset(
+      left.clamp(
+        _menuEdge,
+        math.max(_menuEdge, size.width - child.width - _menuEdge),
+      ),
+      under ? pointer.dy : pointer.dy - child.height,
+    );
   }
 
   @override
   bool shouldRelayout(_MenuPlacement old) =>
-      old.anchor != anchor ||
+      old.pointer != pointer ||
+      old.alignRight != alignRight ||
+      old.width != width ||
+      old.safeTop != safeTop ||
+      old.safeBottom != safeBottom;
+}
+
+/// Beside its row, on the side it fits, and up as far as it takes for its last
+/// row to be in the window.
+class _SubmenuPlacement extends SingleChildLayoutDelegate {
+  const _SubmenuPlacement({
+    required this.row,
+    required this.width,
+    required this.safeTop,
+    required this.safeBottom,
+  });
+
+  final Rect row;
+  final double? width;
+  final double safeTop, safeBottom;
+
+  @override
+  BoxConstraints getConstraintsForChild(BoxConstraints constraints) =>
+      _menuWidth(
+        constraints,
+        width,
+      ).copyWith(maxHeight: math.max(0, safeBottom - safeTop));
+
+  @override
+  Offset getPositionForChild(Size size, Size child) => Offset(
+    row.right + child.width + 4 < size.width
+        ? row.right + 2
+        : row.left - child.width - 2,
+    math.max(safeTop, math.min(row.top - 5, safeBottom - child.height)),
+  );
+
+  @override
+  bool shouldRelayout(_SubmenuPlacement old) =>
+      old.row != row ||
       old.width != width ||
       old.safeTop != safeTop ||
       old.safeBottom != safeBottom;
@@ -405,13 +459,8 @@ class _MenuPanelState extends State<_MenuPanel> {
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final radius = whisperNewUi
-        ? WhisperRadius.m
-        : widget.touch
-        ? 16.0
-        : 11.0;
     final shape = RoundedSuperellipseBorder(
-      borderRadius: BorderRadius.circular(radius),
+      borderRadius: BorderRadius.circular(WhisperRadius.m),
       side: BorderSide(
         color: dark
             ? Colors.white.withValues(alpha: 0.12)
@@ -425,15 +474,7 @@ class _MenuPanelState extends State<_MenuPanel> {
       child: DecoratedBox(
         decoration: ShapeDecoration(
           shape: shape,
-          shadows: whisperNewUi
-              ? WhisperShadow.e2(Theme.of(context).brightness)
-              : [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: dark ? 0.5 : 0.18),
-                    blurRadius: widget.touch ? 40 : 24,
-                    offset: const Offset(0, 10),
-                  ),
-                ],
+          shadows: WhisperShadow.e2(Theme.of(context).brightness),
         ),
         child: ClipPath(
           clipper: ShapeBorderClipper(shape: shape),
@@ -442,11 +483,7 @@ class _MenuPanelState extends State<_MenuPanel> {
             child: DecoratedBox(
               decoration: ShapeDecoration(
                 shape: shape,
-                color: whisperNewUi
-                    ? context.wc.panelTint
-                    : dark
-                    ? const Color(0xFF2A2A2D).withValues(alpha: 0.86)
-                    : const Color(0xFFF7F7F9).withValues(alpha: 0.86),
+                color: context.wc.panelTint,
               ),
               child: Material(
                 type: MaterialType.transparency,
@@ -551,12 +588,6 @@ class _Row extends StatelessWidget {
     } else {
       fg = label;
     }
-    final check = SizedBox(
-      width: touch ? 0 : 16,
-      child: item.checked && !touch
-          ? Icon(CupertinoIcons.checkmark_alt, size: 13, color: fg)
-          : null,
-    );
     if (touch) {
       return _TouchRow(
         item: item,
@@ -572,19 +603,14 @@ class _Row extends StatelessWidget {
         behavior: HitTestBehavior.opaque,
         onTap: enabled ? onTap : null,
         child: Container(
-          constraints: BoxConstraints(minHeight: whisperNewUi ? 30 : 24),
-          padding: whisperNewUi
-              ? const EdgeInsets.symmetric(horizontal: 9, vertical: 4)
-              : const EdgeInsets.only(left: 4, right: 9),
+          constraints: BoxConstraints(minHeight: 30),
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
           decoration: BoxDecoration(
             color: highlighted ? accent : Colors.transparent,
-            borderRadius: BorderRadius.circular(
-              whisperNewUi ? WhisperRadius.xs : 6,
-            ),
+            borderRadius: BorderRadius.circular(WhisperRadius.xs),
           ),
           child: Row(
             children: [
-              if (!whisperNewUi) check,
               if (item.leading != null) ...[
                 IconTheme(
                   data: IconThemeData(
@@ -614,12 +640,12 @@ class _Row extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: fg,
-                    fontSize: whisperNewUi ? 14 : 13,
+                    fontSize: const WhisperType(touch: false).body,
                     height: 1.2,
                   ),
                 ),
               ),
-              if (whisperNewUi && item.checked) ...[
+              if (item.checked) ...[
                 const SizedBox(width: 9),
                 WhisperIcon(WhisperGlyph.check, size: 14, weight: 2, color: fg),
               ],

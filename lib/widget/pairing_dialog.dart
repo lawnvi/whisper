@@ -6,8 +6,7 @@ import 'package:whisper/helper/helper.dart' show isDesktop;
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/new_ui/phone/phone_pair_page.dart';
 import 'package:whisper/state/pairing_request.dart';
-import 'package:whisper/theme/whisper_ui.dart'
-    show WhisperPageRoute, whisperNewUi;
+import 'package:whisper/theme/whisper_ui.dart' show WhisperPageRoute;
 import 'package:whisper/widget/glass_dialog.dart';
 import 'package:whisper/new_ui/shell/shell_touch.dart';
 
@@ -113,7 +112,7 @@ Future<void> showPairingDialog(
           : PairingDialog(request: request, onResolved: dismiss);
     }
 
-    decision = whisperNewUi && !isDesktop()
+    decision = !isDesktop()
         ? await _pushPairPage(
             context,
             WhisperPageRoute<bool>(

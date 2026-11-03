@@ -1,6 +1,5 @@
 import 'package:whisper/helper/helper.dart';
 import 'package:whisper/new_ui/shell/shell_island_sources.dart';
-import 'package:whisper/theme/whisper_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:toastification/toastification.dart';
 import 'package:whisper/helper/privacy_log.dart';
@@ -42,8 +41,9 @@ void showAppToast(
   Duration? duration,
 }) {
   // A desktop says it on the island. One with a button still needs a place to
-  // keep the button until it is pressed.
-  if (whisperNewUi && isDesktop() && action == null) {
+  // keep the button until it is pressed, and with no island on screen (a small
+  // window of its own) a toast is what is left.
+  if (isDesktop() && action == null && NoteIslandSource.shared.watched) {
     NoteIslandSource.shared.note(
       message,
       problem: tone == AppToastTone.error || tone == AppToastTone.warning,

@@ -9,7 +9,6 @@
   "mobileControlScrollShort": "Scroll",
   "mobileControlLeftShort": "Left",
   "mobileControlRightShort": "Right",
-  "mobileControlStopShort": "Stop",
   "mobileControlPermission": "Allow Whisper in System Settings → Privacy & Security → Accessibility on the Mac, then start again.",
   "mobileControlTitle": "Control computer",
   "mobileControlStart": "Start control",
@@ -19,18 +18,14 @@
   "remoteInputPeerControlling": "Controlling this device",
   "remoteInputPeerReceiving": "Controlling this computer",
   "remoteInputPeerReady": "Ready, waiting for entry",
-  "remoteInputManualSessionTitle": "Phone control",
-  "remoteInputManualSessionHint": "Phone control is separate from the desktop workspace below.",
   "mobileControlPreparing": "Preparing control",
   "mobileControlAir": "Air mouse",
   "mobileControlTouchpad": "Touchpad",
-  "mobileControlHoldMove": "Hold here and turn your wrist to move",
   "mobileControlTouchHint": "One finger to move · Tap to click\nTwo fingers: tap to right-click, slide to scroll",
   "mobileControlHoldScroll": "Hold and tilt to scroll",
   "mobileControlScroll": "Swipe to scroll",
   "mobileControlLeft": "Left click",
   "mobileControlRight": "Right click",
-  "mobileControlKeyboard": "Virtual keyboard",
   "mobileControlText": "Text input",
   "mobileControlMainKeys": "Main keys",
   "mobileControlFunctionKeys": "Function and navigation keys",
@@ -39,12 +34,10 @@
   "mobileControlTextTooLong": "Send up to 4 KiB of text at a time.",
   "mobileControlTextUnconfirmed": "Input was not confirmed. Draft kept; check the computer before resending.",
   "mobileControlTextSent": "Text delivered to the system. Check the target app.",
-  "mobileControlSensorUnavailable": "Motion unavailable. Switched to touchpad.",
   "mobileControlSensitivity": "Motion pointer speed",
   "mobileControlCalibrate": "Calibrate",
   "mobileControlCalibrating": "Hold the phone still briefly…",
   "mobileControlCalibrationDone": "Calibration complete",
-  "mobileControlIdleHint": "Start to control the mouse and keyboard. Leaving this page stops control.",
   "mobileControlReceiving": "This computer is controlled by {name}",
   "mobileControlShortcutHint": "Select modifiers, then a key. Modifiers clear after each combination.",
   "@mobileControlReceiving": {
@@ -76,32 +69,11 @@
   "screenshotUnavailable": "Region capture is unavailable. On Linux, check that your desktop screenshot portal is installed and running.",
   "screenshotFailed": "Screenshot or clipboard copy failed. Please try again.",
   "screenshotShortcutTitle": "Screenshot shortcut",
-  "screenshotShortcutDesc": "Capture a region without hiding Whisper, then copy it to the clipboard for manual pasting.",
-  "screenshotShortcutEnabled": "Enable global shortcut",
-  "screenshotShortcutDisabled": "Disabled · the screenshot button is still available",
   "screenshotShortcutUnavailable": "Shortcut not registered · click to configure",
-  "screenshotShortcutRecord": "Click here, then press a key combination",
-  "screenshotShortcutHint": "Use Ctrl, Alt or Command/Super with a letter, number or F1–F12. Esc cancels capture. On Wayland, confirm the shortcut in the system dialog.",
-  "screenshotShortcutReset": "Restore default shortcut",
   "screenshotShortcutInvalid": "Use a valid key combination different from the quick-send shortcut.",
   "screenshotShortcutFailed": "Could not save the shortcut. It may be in use, cancelled, or unsupported by the desktop. Try another combination.",
   "connectDeviceTitle": "Connect Device",
-  "connectDeviceDesc": "Enter IP and Port",
-  "connectTo": "Connect To",
   "connectRequest": "Connection Request",
-  "connectRequestDesc": "New device: {device}?",
-  "connectRequestNotificationBody": "{name} ({host}) wants to connect",
-  "@connectRequestNotificationBody": {
-    "placeholders": {
-      "name": {
-        "type": "String"
-      },
-      "host": {
-        "type": "String"
-      }
-    }
-  },
-  "connectRequestExpired": "Connection request expired",
   "transferNotificationTitle": "Transferring {count} files",
   "@transferNotificationTitle": {
     "placeholders": {
@@ -168,22 +140,14 @@
   "cancel": "Cancel",
   "retry": "Retry",
   "setting": "Settings",
-  "sendTips": "Type something...",
-  "sendFiles": "Send files",
   "trust": "Trust Device",
   "writeClipboard": "Write to Clipboard",
   "deleteDevice": "Delete Device",
   "serverPortTitle": "Server Port",
-  "serverPort": "Server Port {port}",
-  "accessClipboard": "Access Clipboard",
   "clipboardAutoSync": "Automatically Sync Clipboard",
-  "clipboardAutoSyncDesc": "Sync to the current trusted device, or connected devices in the keyboard and mouse workspace",
-  "doubleClickRmMessage": "Delete Message on Double Click",
   "close2tray": "Hide to Tray When Closing",
   "nickname": "Nickname",
-  "nicknameDesc": "Enter your nickname",
   "port": "Port",
-  "portDesc": "Enter a port from 1001 to 65535",
   "timeoutTitle": "Connection Timeout",
   "disconnect": "Disconnect",
   "keepConnect": "Keep",
@@ -205,20 +169,15 @@
   },
   "exit": "Exit",
   "delete": "Delete",
-  "deleteConfirm": "Confirm Delete",
   "warning": "Warning",
-  "deleteWarningText": "The connection is still active, so quick delete is blocked",
   "close": "Close",
   "deleteDeviceTitle": "Delete {device}",
   "deleteDeviceDesc": "Disconnect and clear all messages for this device. This cannot be undone.",
   "brokeConnectTitle": "Disconnect",
-  "brokeConnectDesc": "Disconnect {device}",
   "connectFailed": "Connection Failed",
   "connectAlreadyInProgress": "Connection already in progress",
-  "deviceBusy": "Device Busy",
   "startServerFailed": "Failed to Start Server",
   "deleteMessageTitle": "Delete Message",
-  "deleteMessageDesc": "Are you sure you want to delete it?",
   "selectMessages": "Select messages",
   "selectedMessageCount": "{count} selected",
   "@selectedMessageCount": {
@@ -244,35 +203,24 @@
   "selectAll": "Select All",
   "clearAll": "Clear",
   "selectNotifyApp": "Notification apps",
-  "copyVerifyCode": "Copy Verification Code to Clipboard",
   "open": "Open",
   "openInFinder": "Open in Finder",
   "openInDir": "Open Directory",
-  "keepFile": "Keep File",
   "deleteFile": "Delete File",
   "copyMessage": "Copy Message Content",
   "copyFile": "Copy File",
   "fileCopied": "File copied",
   "fileCopyFailed": "Could not copy file",
-  "darkMode": "Dark Mode",
   "themeMode": "Theme Mode",
   "followSystem": "Follow System",
-  "lightMode": "Light",
-  "selectThemeMode": "Select Theme Mode",
-  "selectLanguage": "Select Language",
-  "searchChats": "Search",
-  "selectConversationPlaceholder": "Select a device to start chatting",
   "connectedNow": "Connected now",
   "nearbyAvailable": "Available nearby",
   "noMessagesYet": "No messages yet",
   "sharedFile": "Shared a file",
-  "connectToSend": "Connect to send messages",
   "localeNameZhHans": "Simplified Chinese",
   "localeNameEnglish": "English",
   "localeNameSpanish": "Spanish",
   "autoConnectTrustedDevices": "Auto-connect mutually trusted devices",
-  "mutualTrustEnabled": "Mutual trust is enabled",
-  "mutualTrustNotEstablished": "Mutual trust has not been established",
   "windowsLockScreenInput": "Keyboard and mouse on the lock screen and UAC",
   "windowsLockScreenInputHint": "Type on the lock screen. The switch adds UAC prompts",
   "windowsLockScreenInputDesc": "This installs a system service so trusted devices can type on this PC's lock screen. Administrator approval is required.",
@@ -296,11 +244,9 @@
   "launchAtStartupDesc": "Start Whisper automatically after desktop login to reconnect trusted devices",
   "launchAtStartupFailed": "Failed to update launch at startup",
   "androidBackgroundKeepAlive": "Keep connection alive in background",
-  "androidBackgroundKeepAliveDesc": "Keep LAN receiving active so connection requests can arrive while the app is in the background or the screen is locked",
   "androidBackgroundKeepAliveActiveTitle": "Whisper is listening for LAN connections",
   "androidBackgroundKeepAliveActiveDesc": "Nearby connection requests can arrive while the app is in the background",
   "androidBatteryOptimization": "Battery optimization",
-  "androidBatteryOptimizationDesc": "Recommended: allow background activity and exclude Whisper from battery optimization on Android",
   "fileTransferQueued": "Queued",
   "fileTransferPreparingResume": "Preparing resume {progress}%",
   "fileTransferNegotiating": "Negotiating",
@@ -315,33 +261,10 @@
   "audioShareCaptureActiveStop": "Capture side: sharing this device's audio, click to stop",
   "audioSharePlaybackActiveStop": "Playback side: playing shared audio, click to stop",
   "audioShareStart": "Share this device's audio to peer",
-  "audioSharePlaybackGainTitle": "Shared speaker gain",
-  "audioSharePlaybackGainSetting": "Shared speaker gain: {gain}",
-  "@audioSharePlaybackGainSetting": {
-    "placeholders": {
-      "gain": {
-        "type": "String"
-      }
-    }
-  },
-  "audioSharePlaybackGainDesc": "Only affects shared audio played on this device. Higher values may clip",
   "remoteInputScrollMultiplierTitle": "Keyboard and mouse scroll speed",
-  "remoteInputScrollMultiplierSetting": "Keyboard and mouse scroll speed: {multiplier}",
-  "@remoteInputScrollMultiplierSetting": {
-    "placeholders": {
-      "multiplier": {
-        "type": "String"
-      }
-    }
-  },
-  "remoteInputScrollMultiplierDesc": "Only affects remote wheel events received while this device is being controlled",
   "audioShareUnsupportedCapture": "This device does not support system audio capture",
-  "audioGroupShareStart": "Sync to multiple speakers",
-  "audioGroupAdjust": "Adjust audio sharing",
   "audioGroupSelectSinks": "Select playback devices",
   "audioGroupStart": "Start synced playback",
-  "audioGroupApply": "Apply configuration",
-  "audioGroupStop": "Stop sharing",
   "audioGroupRoleStereo": "Stereo",
   "audioGroupRoleLeft": "Left channel",
   "audioGroupRoleRight": "Right channel",
@@ -351,38 +274,6 @@
   "audioGroupSyncGood": "Sync good",
   "audioGroupSyncFair": "Sync fair",
   "audioGroupSyncUnstable": "Sync unstable",
-  "audioGroupDeviceIdle": "Idle",
-  "audioGroupLatencyShortLabel": "network ",
-  "audioGroupJitterShortLabel": "jitter ",
-  "audioGroupBufferShortLabel": "buffer ",
-  "audioGroupRecentLatePacketShortLabel": "late ",
-  "audioGroupClockOffsetLabel": "clock offset",
-  "audioGroupSyncEvidence": "{quality} · {clockOffsetLabel} {offset}ms · RTT {rtt}ms · jitter {jitter}ms · buffer {buffer}ms · late {latePackets}",
-  "@audioGroupSyncEvidence": {
-    "placeholders": {
-      "quality": {},
-      "clockOffsetLabel": {},
-      "offset": {},
-      "rtt": {},
-      "jitter": {},
-      "buffer": {},
-      "latePackets": {}
-    }
-  },
-  "audioGroupSyncEvidenceCompact": "{quality} · {latencyLabel}{rtt} · {jitterLabel}{jitter} · {bufferLabel}{buffer} · {latePacketLabel}{latePackets}",
-  "@audioGroupSyncEvidenceCompact": {
-    "placeholders": {
-      "quality": {},
-      "latencyLabel": {},
-      "rtt": {},
-      "jitterLabel": {},
-      "jitter": {},
-      "bufferLabel": {},
-      "buffer": {},
-      "latePacketLabel": {},
-      "latePackets": {}
-    }
-  },
   "audioShareFailed": "Audio sharing failed: {error}",
   "remoteInputSourceConnecting": "Keyboard and mouse sharing: connecting to peer",
   "remoteInputSinkConnecting": "Keyboard and mouse sharing: preparing to receive control",
@@ -398,42 +289,11 @@
   "remoteInputLayoutRequired": "Place the peer screen against this device's edge in the keyboard and mouse workspace first",
   "remoteInputEnabledMoveToEdge": "Keyboard and mouse sharing is enabled. Move to the screen edge to control peer",
   "remoteInputFailed": "Keyboard and mouse sharing failed: {error}",
-  "remoteInputLayoutTitle": "Screen layout",
-  "remoteInputLocalScreen": "This device",
-  "remoteInputEdgeLeft": "Left",
-  "remoteInputEdgeRight": "Right",
-  "remoteInputEdgeTop": "Top",
-  "remoteInputEdgeBottom": "Bottom",
-  "remoteInputEdgeNotAdjacent": "Not adjacent",
-  "remoteInputWorkspaceTitle": "Keyboard and mouse workspace",
-  "remoteInputWorkspaceTooltip": "Keyboard and mouse workspace",
-  "remoteInputWorkspaceStart": "Start",
   "remoteInputWorkspaceStop": "Stop",
   "remoteInputWorkspaceNoTargets": "No available desktop control targets",
-  "remoteInputWorkspaceNoTargetsHint": "Connected and trusted desktop targets that support keyboard and mouse control appear here",
-  "remoteInputWorkspaceSelectTargets": "Control targets",
   "remoteInputWorkspaceCanvasTitle": "Screen arrangement",
-  "remoteInputWorkspaceCanvasHint": "Drag a remote screen against an edge of this device",
   "remoteInputWorkspaceExitShortcut": "Press {shortcut} to stop sharing",
-  "remoteInputWorkspaceSelectTargetHint": "Select at least one control target from the left",
-  "remoteInputWorkspaceLocalBadge": "This device",
-  "remoteInputWorkspaceRemoteBadge": "Remote",
-  "remoteInputWorkspaceDetailsTitle": "Device details",
-  "remoteInputWorkspaceFocusTarget": "Inspect device",
-  "remoteInputWorkspaceAddTarget": "Add to workspace",
-  "remoteInputWorkspaceRemoveTarget": "Remove from workspace",
-  "remoteInputWorkspaceState": "State",
-  "remoteInputWorkspaceResolution": "Resolution",
-  "remoteInputWorkspaceConflict": "Edge overlap",
-  "remoteInputWorkspaceReachable": "Reachable",
-  "remoteInputWorkspaceDisconnected": "Not connected to the workspace",
-  "remoteInputWorkspaceUnsupported": "Workspace routing is not supported",
-  "remoteInputWorkspaceTargetIdle": "Not enabled",
-  "remoteInputWorkspaceStatusIdle": "Keyboard and mouse workspace is off",
-  "remoteInputWorkspaceStatusOffering": "Waiting for targets to accept",
-  "remoteInputWorkspaceStatusArmed": "Move to a screen edge to control a target",
   "remoteInputWorkspaceStatusActive": "Controlling {peer}",
-  "remoteInputWorkspaceStatusFailed": "Keyboard and mouse workspace failed: {error}",
   "audioPlaybackNotificationSubtitle": "Playing system audio",
   "mediaActionPause": "Pause",
   "mediaActionPlay": "Play",
@@ -449,44 +309,12 @@
   "emptyAppsTitle": "No apps available",
   "emptyAppsSearchTitle": "No apps found",
   "fileDropRejected": "These files cannot be sent",
-  "validationRequired": "This field is required",
   "validationNicknameRequired": "Enter a nickname",
   "validationNicknameTooLong": "Nickname must be 64 characters or fewer",
-  "validationHostRequired": "Enter a host or IP address",
-  "validationHostInvalid": "Enter a valid IPv4, IPv6, .local, or host name",
-  "validationPortInvalid": "Enter a port from 1001 to 65535",
-  "settingsSectionDeviceAppearance": "Device and appearance",
-  "settingsSectionDeviceAppearanceDesc": "Name, theme, and how this device appears nearby",
-  "settingsSectionConnectionTransfer": "Connection and transfer",
-  "settingsSectionConnectionTransferDesc": "Server port, saved files, and trusted device connections",
-  "settingsSectionSystemBehavior": "System behavior",
-  "settingsSectionSystemBehaviorDesc": "Startup, background, and window behavior",
   "settingsSectionPermissionsSharing": "Permissions and sharing",
   "settingsSectionPermissionsSharingDesc": "Clipboard, trust, audio, and keyboard or mouse access",
-  "settingsSectionMobileIntegration": "Mobile integration",
-  "settingsSectionMobileIntegrationDesc": "Background connection and battery behavior",
-  "settingsSectionNotificationForwarding": "Notification forwarding",
-  "settingsSectionNotificationForwardingDesc": "Android notification handling and verification code assistance",
-  "settingsSectionLanguageFiles": "Language and files",
-  "settingsSectionLanguageFilesDesc": "Language and save directory",
-  "settingsSaveDirectory": "Save directory",
-  "settingsChangeDirectory": "Change save directory",
-  "settingsOpenDirectory": "Open save directory",
-  "settingsVersion": "Version",
-  "settingsSectionAbout": "About",
-  "settingsSectionAboutDesc": "Updates and app information",
-  "checkForUpdates": "Check for updates",
   "currentVersion": "Current version {version}",
   "@currentVersion": {
-    "placeholders": {
-      "version": {
-        "type": "String"
-      }
-    }
-  },
-  "checkingForUpdates": "Checking for updates…",
-  "updateAvailableVersion": "Update available: {version}",
-  "@updateAvailableVersion": {
     "placeholders": {
       "version": {
         "type": "String"
@@ -516,49 +344,20 @@
   },
   "downloadAndInstallUpdate": "Update",
   "viewRelease": "View release",
-  "downloadingUpdate": "Downloading {progress}%",
-  "@downloadingUpdate": {
-    "placeholders": {
-      "progress": {
-        "type": "int"
-      }
-    }
-  },
   "updateInstallerOpened": "The verified update is ready in the system installer",
   "updateInstallFailed": "The update installer couldn't be opened. Try again later",
   "aboutWhisper": "About Whisper",
   "aboutWhisperDescription": "A local network collaboration app for your devices",
   "officialWebsite": "Official website",
   "sourceCode": "GitHub source code",
-  "appListSearchPlaceholder": "Search apps",
   "appListClearSearch": "Clear app search",
-  "deselectAll": "Deselect all",
   "settingsLoadFailedTitle": "Settings could not be loaded",
-  "settingsLoadFailedBody": "Check the local app services and try again.",
   "appListLoadFailedTitle": "Apps could not be loaded",
-  "appListLoadFailedBody": "Check app access and try again.",
   "appListSaveFailed": "Could not save the notification app selection",
   "notificationApps": "Notification apps",
-  "notificationAppsSelected": "{count, plural, =0{No applications selected} =1{1 application selected} other{{count} applications selected}}",
-  "@notificationAppsSelected": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
-  "notificationAppsDisabled": "Enable notification forwarding to choose applications",
   "notificationForwardingUpdateFailed": "Notification forwarding could not be updated",
   "dangerousActions": "Dangerous actions",
   "pairingNewDeviceTitle": "Pair a new device",
-  "pairingNewDeviceDescription": "{device} wants to establish a trusted connection",
-  "@pairingNewDeviceDescription": {
-    "placeholders": {
-      "device": {
-        "type": "String"
-      }
-    }
-  },
   "pairingNewDeviceCompareCode": "{device} wants to connect. Confirm the numbers match",
   "@pairingNewDeviceCompareCode": {
     "placeholders": {
@@ -657,22 +456,8 @@
   "transferAssistantCopied": "Text copied",
   "transferAssistantCopyFailed": "Couldn't copy text",
   "transferAssistantFavoriteFailed": "Couldn't update favorites. Try again",
-  "qrPairingTitle": "Connect with QR code",
   "qrMyCode": "My QR code",
-  "qrScanCode": "Scan to connect",
-  "qrShowCodeHint": "Let the other device scan this code to verify both the address and device identity",
-  "qrFingerprint": "Identity fingerprint {fingerprint}",
-  "@qrFingerprint": {
-    "placeholders": {
-      "fingerprint": {
-        "type": "String"
-      }
-    }
-  },
   "qrWifiUnavailable": "No usable LAN address was found. Connect to Wi-Fi, then refresh this code",
-  "qrCopyLink": "Copy connection details",
-  "qrLinkCopied": "Connection details copied",
-  "qrScanHint": "Scan the code shown in Whisper on the other device",
   "qrCameraUnavailable": "The camera is unavailable. Allow camera access for Whisper in system settings",
   "qrToggleTorch": "Toggle torch",
   "qrSwitchCamera": "Switch camera",
@@ -698,7 +483,6 @@
     }
   },
   "quickSendLater": "Later",
-  "quickSendSend": "Send",
   "androidSystemShareWaitingForDevice": "Waiting for {device}; sending will start when it connects",
   "@androidSystemShareWaitingForDevice": {
     "placeholders": {
@@ -731,7 +515,6 @@
   "androidSystemShareChooseAction": "Choose device",
   "desktopQuickSendSent": "Added to the encrypted transfer queue",
   "desktopQuickSendFailedRetained": "Sending did not finish; the content was retained",
-  "desktopQuickSendEmptyClipboard": "The clipboard has no supported content",
   "desktopQuickSendShortcutUnavailable": "The global send shortcut is already in use",
   "desktopQuickSendDraftLimit": "Quick send is full. Process existing content before adding more",
   "desktopQuickSendFileLimit": "Too many files were selected, so the new content was not added",
@@ -749,10 +532,6 @@
     }
   },
   "messageLinkOpenFailed": "Could not open this link",
-  "connectFirstDevice": "Connect your first device",
-  "deviceConnectionGuide": "Open Whisper on another device connected to the same Wi-Fi or LAN. Nearby devices appear automatically in the list.",
-  "manualConnectAction": "Enter address manually",
-  "deviceDiscoveryHelp": "No devices found? Try QR pairing, or allow local network access in system settings on both devices.",
   "deviceOffline": "Offline devices",
   "serverPortInUse": "Port {port} is already in use. Close other Whisper instances, or choose another port in Settings and retry.",
   "serverPermissionDenied": "The system denied network listening. Allow Whisper to access the local network, check your firewall, and retry.",
@@ -788,7 +567,6 @@
   "castControlFailed": "The control could not be applied. Please retry.",
   "castRequestTitle": "Allow this device to cast?",
   "castRequestMessage": "A device at {address} wants to play a video here.",
-  "castRequestCountdown": "Allowing in {seconds} seconds. You can decline.",
   "castRequestDeny": "Decline",
   "castRequestAllow": "Allow casting",
   "castExitFullscreen": "Exit fullscreen",
@@ -801,22 +579,11 @@
       }
     }
   },
-  "@castRequestCountdown": {
-    "placeholders": {
-      "seconds": {
-        "type": "int"
-      }
-    }
-  },
   "mobileControlPointer": "Mouse",
   "mobileControlKeysTab": "Keyboard",
-  "mobileControlTextTab": "Text",
   "mobileControlSettings": "Pointer settings",
-  "mobileControlLiftHint": "Lift your finger to pause and reposition.",
-  "mobileControlDragHint": "Hold the left button to drag.",
   "mobileControlPrecisionHint": "Small movements give finer control. Turn faster to travel farther.",
   "mobileControlCalibrationRetry": "Keep the phone still and try calibrating again.",
-  "mobileControlStartShort": "Start",
   "mobileControlMotionStart": "Enable motion",
   "mobileControlMotionPause": "Pause motion",
   "mobileControlMotionOnHint": "Turn your wrist to move. Tap here to pause.",
@@ -825,7 +592,6 @@
   "mobileControlTargetHint": "Start again after switching.",
   "mobileControlPointerSpeed": "Touchpad pointer speed",
   "mobileControlScrollSpeed": "Scroll speed",
-  "mobileControlScrollRail": "Slide to\nscroll",
   "mobileControlPermissionDesktop": "Allow remote control on the computer, then start again. On Linux, accept the system remote-control prompt.",
   "mobileControlLinuxTextHint": "Linux can commit only characters available in the computer’s current keyboard layout. For Chinese and emoji, use the virtual keyboard with the computer’s input method. Unsupported text stays in your draft.",
   "manualConnectAddressInvalid": "Enter a valid LAN IP or .local address",
@@ -838,7 +604,6 @@
   "transferRetryHelp": "Transfer incomplete. Reconnect the devices and retry.",
   "mobileControlTransportHelp": "The control connection was interrupted. Open Whisper on the computer, then start again.",
   "mobileControlInjectionHelp": "The computer could not process input. Check its control permissions, then start again.",
-  "clipboardAutoSyncAndroidDesc": "Sync newly copied text to the current trusted device when you return to Whisper",
   "historyLoadFailed": "Could not load history. Tap to retry.",
   "deleteReceivedFilesDesc": "Received local files will also be deleted. Sent originals will be kept.",
   "keepReceivedFiles": "Keep received files",
@@ -846,10 +611,6 @@
   "connectionQrTab": "QR code",
   "connectionScanTab": "Scan",
   "connectionAddressTab": "IP / port",
-  "connectionAddressLabel": "IP address or hostname",
-  "connectionDetailsTab": "This device",
-  "connectionAddressHint": "Find the IP and port on the other device’s Whisper home screen. Use the same LAN.",
-  "qrCopyFailed": "Could not copy. Try again.",
   "attachFile": "File",
   "attachFolder": "Folder",
   "folderFileCount": "{count, plural, =0{Empty folder} =1{1 file} other{{count} files}}",
@@ -873,7 +634,6 @@
   "folderSendTooManyEntries": "This folder has more than {limit} items. Send it in parts",
   "folderSendTooLarge": "This folder is larger than 1 TB and cannot be sent",
   "folderFileProgress": "{done} of {total} files",
-  "windowStreamTitle": "Phone apps",
   "windowStreamConnecting": "Connecting…",
   "windowStreamPaused": "Paused. Click to resume",
   "windowStreamReconnecting": "Reconnecting…",
@@ -881,18 +641,12 @@
   "windowStreamSecureBlocked": "This app doesn't allow screen sharing",
   "windowStreamAppExited": "The app has closed",
   "windowStreamDisconnected": "Disconnected. You can close this window",
-  "windowStreamNoDevice": "No phone found",
-  "windowStreamNoDeviceHint": "Connect your phone with a cable, or turn on Wireless debugging in the phone's Developer options.",
   "windowStreamUnauthorized": "Allow debugging from this computer on your phone",
   "windowStreamDeviceOffline": "The phone isn't responding. Reconnect the cable or turn Wireless debugging off and on",
   "windowStreamAdbMissing": "adb wasn't found. Install Android Platform Tools first",
   "windowStreamAdbFailed": "The adb server couldn't start",
   "windowStreamUnsupported": "Phone app windows aren't available on this computer yet",
-  "windowStreamRunningApps": "Running",
-  "windowStreamAllApps": "All apps",
   "windowStreamSearchApps": "Search apps",
-  "windowStreamLoadingApps": "Loading apps…",
-  "windowStreamOnDesktop": "On desktop",
   "windowStreamShowSystemApps": "Show system apps",
   "windowStreamRetry": "Retry",
   "windowStreamInjectDenied": "On Xiaomi phones, also turn on “USB debugging (Security settings)” in Developer options, then restart the phone",
@@ -900,44 +654,22 @@
   "windowStreamOpenFailed": "Couldn't open this app",
   "windowStreamNoApps": "No apps found",
   "windowStreamSpaceTitle": "Flow",
-  "windowStreamRecents": "Recents",
-  "windowStreamWindows": "Windows",
-  "windowStreamApps": "Apps",
-  "windowStreamViaUsb": "Connected by USB",
-  "windowStreamViaWifi": "Wireless debugging",
-  "windowStreamViaWhisper": "Connected",
-  "windowStreamStatusLive": "Live",
-  "windowStreamStatusPaused": "Paused",
-  "windowStreamStatusConnecting": "Connecting",
-  "windowStreamStatusEnded": "Disconnected",
   "windowStreamPause": "Pause",
   "windowStreamResume": "Resume",
   "windowStreamClose": "Close",
-  "windowStreamNoWindows": "No open windows",
-  "windowStreamNoWindowsHint": "Open an app or a recent task and it shows up here",
   "windowStreamNoDevices": "No devices yet",
   "windowStreamNoDevicesHintDesktop": "Connect an Android phone with a cable, or turn on Wireless debugging in its Developer options.",
   "windowStreamNoDevicesHintMobile": "Open Whisper on your Mac and trust each other; its windows will show up here.",
   "windowStreamLoadFailed": "Couldn't load this device's apps",
   "windowStreamBackToSpace": "Back to Flow",
   "windowStreamKeyboard": "Keyboard",
-  "windowStreamNoRecents": "Nothing is running on this device",
   "windowStreamSourceLocked": "This computer is locked. Unlock it to stream its windows.",
   "windowStreamCapturePermission": "This computer hasn't allowed Whisper to record its screen yet. Turn it on in its System Settings › Privacy & Security › Screen Recording.",
   "windowStreamUntrusted": "Whisper on this phone isn't paired with this device yet. Open Whisper on the phone, connect to this device and confirm the pairing to stream.",
   "windowStreamWhisperMissing": "This phone has no usable Whisper. Install the latest Whisper and pair it with this device to stream.",
   "windowStreamNotPaired": "Not paired",
-  "windowStreamOpenHere": "Open here",
   "windowStreamSendTo": "Send to {device}",
   "@windowStreamSendTo": {
-    "placeholders": {
-      "device": {
-        "type": "String"
-      }
-    }
-  },
-  "windowStreamSendHint": "Pick a window on this computer to send to {device}. Once opened there it moves off this screen, and comes back when it is closed on {device}.",
-  "@windowStreamSendHint": {
     "placeholders": {
       "device": {
         "type": "String"
@@ -980,31 +712,7 @@
     }
   },
   "remoteFilesTitle": "Files",
-  "remoteFilesOfDevice": "Files on {device}",
-  "@remoteFilesOfDevice": {
-    "placeholders": {
-      "device": {
-        "type": "String"
-      }
-    }
-  },
   "remoteFilesThisDevice": "This device",
-  "remoteFilesWaiting": "Waiting for {device} to allow it…",
-  "@remoteFilesWaiting": {
-    "placeholders": {
-      "device": {
-        "type": "String"
-      }
-    }
-  },
-  "remoteFilesDenied": "{device} didn't allow browsing its files",
-  "@remoteFilesDenied": {
-    "placeholders": {
-      "device": {
-        "type": "String"
-      }
-    }
-  },
   "remoteFilesOffline": "{device} isn't connected right now",
   "@remoteFilesOffline": {
     "placeholders": {
@@ -1022,14 +730,6 @@
     }
   },
   "remoteFilesEmptyFolder": "This folder is empty",
-  "remoteFilesCopyTo": "Copy to {target}",
-  "@remoteFilesCopyTo": {
-    "placeholders": {
-      "target": {
-        "type": "String"
-      }
-    }
-  },
   "remoteFilesNewFolder": "New folder",
   "remoteFilesFolderName": "Folder name",
   "remoteFilesRename": "Rename",
@@ -1043,25 +743,9 @@
       }
     }
   },
-  "remoteFilesCopyStarted": "Copying {count} items",
-  "@remoteFilesCopyStarted": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "remoteFilesFailed": "That didn't work",
   "remoteFilesNameExists": "Something with that name is already here",
   "remoteFilesShowHidden": "Show hidden files",
-  "remoteFilesItemCount": "{count} items",
-  "@remoteFilesItemCount": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "remoteFilesSelected": "{count} selected",
   "@remoteFilesSelected": {
     "placeholders": {
@@ -1072,14 +756,6 @@
   },
   "remoteFilesCreate": "Create",
   "remoteFilesDone": "Done",
-  "remoteFilesDropHint": "Drop here to copy to {device}",
-  "@remoteFilesDropHint": {
-    "placeholders": {
-      "device": {
-        "type": "String"
-      }
-    }
-  },
   "remoteFilesPlaceRoot": "Home",
   "remoteFilesPlaceStorage": "Internal storage",
   "remoteFilesPlaceDesktop": "Desktop",
@@ -1097,7 +773,6 @@
       }
     }
   },
-  "remoteFilesPromptBodyDesktop": "If you allow it, it can see your home folder and copy, create, rename and delete files there. Deleted files go to the Trash.",
   "remoteFilesPromptBodyPhone": "If you allow it, it can see this phone's internal storage and copy, create, rename and delete files there. Deleted files can't be recovered.",
   "remoteFilesDeny": "Don't allow",
   "remoteFilesAllowOnce": "Allow this time",
@@ -1121,17 +796,6 @@
   "windowStreamTouchBlockedFix": "Close that page",
   "windowStreamTouchBlockedLater": "Not now",
   "windowStreamTouchBlockedFixed": "Done. The phone responds again.",
-  "remoteFilesFavorites": "Favorites",
-  "remoteFilesLocations": "Locations",
-  "remoteFilesBrowse": "Browse",
-  "remoteFilesWaitingAllow": "Tap “Allow” on {device}",
-  "@remoteFilesWaitingAllow": {
-    "placeholders": {
-      "device": {
-        "type": "String"
-      }
-    }
-  },
   "remoteFilesWaitingDetail": "Whisper is asking there whether this device may browse its files.",
   "remoteFilesAskAgain": "Ask Again",
   "remoteFilesColumnName": "Name",
@@ -1169,7 +833,6 @@
       }
     }
   },
-  "remoteFilesForward": "Forward",
   "remoteFilesOpen": "Open",
   "remoteFilesCopy": "Copy",
   "remoteFilesPaste": "Paste {count} Items",
@@ -1181,44 +844,6 @@
     }
   },
   "remoteFilesRefresh": "Refresh",
-  "remoteFilesStatusSelected": "{selected} of {count} selected",
-  "@remoteFilesStatusSelected": {
-    "placeholders": {
-      "selected": {
-        "type": "int"
-      },
-      "count": {
-        "type": "int"
-      }
-    }
-  },
-  "remoteFilesCopyProgress": "Copying {count} items · {percent}%",
-  "@remoteFilesCopyProgress": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      },
-      "percent": {
-        "type": "int"
-      }
-    }
-  },
-  "remoteFilesCopyDone": "Copied {count} items",
-  "@remoteFilesCopyDone": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
-  "remoteFilesCopyPartly": "{failed} items weren’t copied",
-  "@remoteFilesCopyPartly": {
-    "placeholders": {
-      "failed": {
-        "type": "int"
-      }
-    }
-  },
   "remoteFilesSameDevice": "Already on this device",
   "remoteFilesBetweenOthers": "Copies go between this device and another one",
   "remoteFilesOpenFirst": "Open {device}’s files first",
@@ -1263,76 +888,24 @@
   "remoteFilesPastePlain": "Paste",
   "remoteFilesSortBy": "Sort By",
   "remoteFilesMore": "More",
-  "remoteFilesClose": "Close Files",
-  "remoteFilesClipboardReady": "Ready to paste in other apps",
-  "remoteFilesClipboardOnPaste": "Copied. It transfers when you paste it in Whisper.",
-  "remoteFilesClipboardOnPasteDrag": "Copied. Sent when you paste it in Whisper; drag it to put it in {app}",
-  "@remoteFilesClipboardOnPasteDrag": {
-    "description": "Status after copying another device's big files on macOS or Linux: the file manager pastes only files already on disk, so dragging is the way there",
-    "placeholders": {
-      "app": {
-        "type": "String"
-      }
-    }
-  },
   "windowStreamTextSize": "Text Size",
   "macPermissionAccessibility": "Accessibility",
-  "macPermissionAccessibilityDesc": "Needed to share keyboard and mouse and to work in streamed windows",
   "macPermissionScreenRecording": "Screen & System Audio Recording",
-  "macPermissionScreenRecordingDesc": "Needed to stream windows out, play this Mac's sound elsewhere and take screenshots; takes effect once Whisper is reopened",
   "macPermissionAudioCapture": "System Audio Recording Only",
-  "macPermissionAudioCaptureDesc": "Optional. Sound goes along without it; with it this Mac stays quiet and browsers' sound comes too",
   "macPermissionGranted": "Allowed",
   "macPermissionDenied": "Not allowed",
-  "macPermissionNotAsked": "Not set",
-  "macPermissionOptional": "Optional",
-  "@macPermissionOptional": {
-    "description": "Status of an optional macOS permission that is not turned on"
-  },
   "windowStreamQuality": "Quality",
   "windowStreamQualitySmooth": "Smooth",
   "windowStreamQualityStandard": "Standard",
   "windowStreamQualityHigh": "High",
   "windowStreamQualityBest": "Best",
   "windowStreamQualityHint": "Sharper as it goes up, using more network",
-  "windowStreamReceiveOnly": "Receives windows only",
-  "@windowStreamReceiveOnly": {
-    "description": "Subtitle of a Flow device card for a device (an iPad) that can only show windows sent to it"
-  },
-  "windowStreamNotConnected": "Not connected",
-  "@windowStreamNotConnected": {
-    "description": "Subtitle of a Flow device card for a USB phone whose Whisper is not connected"
-  },
-  "windowStreamConnectFirst": "Connect to this phone in Whisper first to stream its apps",
-  "@windowStreamConnectFirst": {
-    "description": "Toast when tapping a USB phone in Flow whose Whisper is not connected"
-  },
-  "windowStreamOpenHereDetail": "Use apps from {device}",
-  "@windowStreamOpenHereDetail": {
-    "placeholders": {
-      "device": {
-        "type": "String"
-      }
-    }
-  },
-  "windowStreamSendToDetail": "Move a window to {device}",
-  "@windowStreamSendToDetail": {
-    "placeholders": {
-      "device": {
-        "type": "String"
-      }
-    }
-  },
-  "toolbarMoreTools": "More Tools",
-  "toolbarFewerTools": "Show Less",
   "windowStreamStreaming": "Open here",
   "windowStreamCloseWindow": "Close Window",
   "windowStreamCloseFailed": "Couldn’t close this window",
   "windowStreamOfferIgnore": "Dismiss",
   "deviceDetailsTitle": "Device Details",
   "deviceFeaturesSection": "Features",
-  "deviceFeatureFlowDetail": "Use its apps and windows, or send windows to it",
-  "deviceFeatureFilesDetail": "Browse and copy its files",
   "deviceFeatureNeedsConnection": "Available when connected",
   "windowStreamSwitcherRotate": "Rotate",
   "remoteFilesCopyStarting": "Getting ready…",
@@ -1366,19 +939,6 @@
   "remoteFilesFileManager": "Files",
   "@remoteFilesFileManager": {
     "description": "A Linux desktop's file manager, where a copy dragged or pasted out of Whisper goes"
-  },
-  "remoteFilesShowInApp": "Open in {app}",
-  "@remoteFilesShowInApp": {
-    "description": "Opens another device's files in the system's file manager, mounting them there first",
-    "placeholders": {
-      "app": {
-        "type": "String"
-      }
-    }
-  },
-  "remoteFilesEject": "Eject",
-  "@remoteFilesEject": {
-    "description": "Takes another device's mounted files out of the system's file manager"
   },
   "remoteFilesMountTooOld": "Whisper on {device} needs updating to open its files in {app}",
   "@remoteFilesMountTooOld": {
@@ -1496,18 +1056,9 @@
   "remoteFilesCopyRetry": "Retry",
   "remoteFilesCopyStop": "Stop copying",
   "remoteFilesCopyShowAll": "Show all transfers",
-  "remoteFilesCopyMore": "{count} more copies",
-  "@remoteFilesCopyMore": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "remoteFilesCopyAlready": "These are already being copied here",
   "remoteFilesTransfers": "Transfers",
   "remoteFilesTransfersEmpty": "No copies yet",
-  "remoteFilesTransfersEmptyDetail": "Files copied here list their progress and result here",
   "remoteFilesTransfersClear": "Clear finished",
   "remoteFilesTransfersActive": "In progress",
   "remoteFilesTransfersRecent": "Finished",
@@ -1745,14 +1296,6 @@
   "@shareLinkMenuCreate": {
     "description": "File manager menu item / toolbar tooltip that opens the share-link sheet for the selected local items"
   },
-  "shareLinkCreateTitle": "Create Share Link",
-  "@shareLinkCreateTitle": {
-    "description": "Title of the sheet that creates a LAN download link"
-  },
-  "shareLinkCreateDetail": "Devices on the same network can open the link in a browser to download. They don't need Whisper.",
-  "@shareLinkCreateDetail": {
-    "description": "Explains what a share link does, under the sheet title"
-  },
   "shareLinkDefaultName": "{count, plural, =1{1 item} other{{count} items}}",
   "@shareLinkDefaultName": {
     "description": "Name of a share link made of several files and folders (shown on the web page and used for the zip)",
@@ -1766,33 +1309,13 @@
   "@shareLinkRoute": {
     "description": "Label of the field for the path part of the link, e.g. the 'k7qm' in http://host:port/k7qm"
   },
-  "shareLinkRouteHelp": "Leave blank to use the random one shown",
-  "@shareLinkRouteHelp": {
-    "description": "Helper text under the route field; the placeholder shows a generated route"
-  },
   "shareLinkShortRoute": "Short Route",
   "@shareLinkShortRoute": {
     "description": "Switch that makes the generated route 4 characters long"
   },
-  "shareLinkShortRouteDetail": "4 characters, easy to say out loud",
-  "@shareLinkShortRouteDetail": {
-    "description": "Subtitle of the short-route switch"
-  },
   "shareLinkPassword": "Password",
   "@shareLinkPassword": {
     "description": "Label of the optional password field; also the placeholder of the password box on the web page"
-  },
-  "shareLinkPasswordOptional": "Optional",
-  "@shareLinkPasswordOptional": {
-    "description": "Placeholder of the optional password field"
-  },
-  "shareLinkShowPassword": "Show Password",
-  "@shareLinkShowPassword": {
-    "description": "Tooltip of the eye button in the password field"
-  },
-  "shareLinkHidePassword": "Hide Password",
-  "@shareLinkHidePassword": {
-    "description": "Tooltip of the eye button in the password field while the password is visible"
   },
   "shareLinkCreate": "Create Link",
   "@shareLinkCreate": {
@@ -1818,33 +1341,9 @@
   "@shareLinkCreateFailed": {
     "description": "Generic error when creating a share link fails"
   },
-  "shareLinkReady": "Link Ready",
-  "@shareLinkReady": {
-    "description": "Title of the sheet after the link was created"
-  },
   "shareLinkCopy": "Copy Link",
   "@shareLinkCopy": {
     "description": "Button / tooltip that copies the link address"
-  },
-  "shareLinkCopied": "Copied",
-  "@shareLinkCopied": {
-    "description": "The copy button's label for a moment after copying"
-  },
-  "shareLinkScanHint": "Or scan it with a phone camera",
-  "@shareLinkScanHint": {
-    "description": "Caption under the QR code"
-  },
-  "shareLinkAddressPicker": "Choose Network Address",
-  "@shareLinkAddressPicker": {
-    "description": "Tooltip of the menu that switches between this device's LAN addresses when it has several"
-  },
-  "shareLinkServiceOffNote": "The file server is off. Turn it on so the link can be opened.",
-  "@shareLinkServiceOffNote": {
-    "description": "Note in the result sheet when the file server switch is off"
-  },
-  "shareLinkNoNetwork": "Not connected to a local network, so other devices can't open it yet",
-  "@shareLinkNoNetwork": {
-    "description": "Shown instead of an address when this device has no LAN address"
   },
   "shareLinkPasswordProtected": "Password protected",
   "@shareLinkPasswordProtected": {
@@ -1853,15 +1352,6 @@
   "shareLinksTitle": "Share Links",
   "@shareLinksTitle": {
     "description": "Sidebar row and title of the page that manages share links"
-  },
-  "shareLinksActiveCount": "{count, plural, =1{1 link on} other{{count} links on}}",
-  "@shareLinksActiveCount": {
-    "description": "Subtitle of the share links row on phones",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
   },
   "shareLinksService": "File Server",
   "@shareLinksService": {
@@ -1929,37 +1419,6 @@
       }
     }
   },
-  "shareLinkDownloads": "{count, plural, =1{1 download} other{{count} downloads}}",
-  "@shareLinkDownloads": {
-    "description": "How many downloads were started from the link",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
-  "shareLinkLastVisit": "Last visit {time}",
-  "@shareLinkLastVisit": {
-    "description": "When the link was last opened; time is like 今天 10:24",
-    "placeholders": {
-      "time": {
-        "type": "String"
-      }
-    }
-  },
-  "shareLinkNeverVisited": "Not opened yet",
-  "@shareLinkNeverVisited": {
-    "description": "Shown instead of the last visit time"
-  },
-  "shareLinkBytesServed": "{size} sent",
-  "@shareLinkBytesServed": {
-    "description": "How much data the link has served, e.g. 1.2 GB",
-    "placeholders": {
-      "size": {
-        "type": "String"
-      }
-    }
-  },
   "shareLinkQr": "QR Code",
   "@shareLinkQr": {
     "description": "Button / tooltip that shows the link's QR code"
@@ -2008,10 +1467,6 @@
   "@shareWebDownloadAll": {
     "description": "Web page: downloads everything shown as one zip"
   },
-  "shareWebDownloadZip": "Download as .zip",
-  "@shareWebDownloadZip": {
-    "description": "Web page: label of a folder row's download button"
-  },
   "shareWebItemCount": "{count, plural, =1{1 item} other{{count} items}}",
   "@shareWebItemCount": {
     "description": "Web page: how many items a folder holds",
@@ -2024,24 +1479,6 @@
   "shareWebEmptyFolder": "This folder is empty",
   "@shareWebEmptyFolder": {
     "description": "Web page"
-  },
-  "shareWebModified": "Modified {date}",
-  "@shareWebModified": {
-    "description": "Web page: when a shared file was last changed",
-    "placeholders": {
-      "date": {
-        "type": "String"
-      }
-    }
-  },
-  "shareWebFooter": "Shared from {device} with Whisper",
-  "@shareWebFooter": {
-    "description": "Web page footer",
-    "placeholders": {
-      "device": {
-        "type": "String"
-      }
-    }
   },
   "shareWebNotFoundTitle": "This Link Isn't Available",
   "@shareWebNotFoundTitle": {
@@ -2104,27 +1541,6 @@
   "windowStreamUnmute": "Unmute",
   "windowStreamMovedAway": "This window was opened on another device",
   "flowTaskOpenOn": "Showing on {device}",
-  "shareLinkBarAction": "Share Link",
-  "@shareLinkBarAction": {
-    "description": "Short label of the share-link button in the phone file manager's selection bar"
-  },
-  "windowStreamSourceErrorDesktopUnsupported": "This PC can't share windows",
-  "@windowStreamSourceErrorDesktopUnsupported": {
-    "description": "Window-stream source failure shown to the viewer: the host desktop cannot capture windows at all (reason code = WSN_CAPTURE_ERROR_UNSUPPORTED from the Windows source; Windows is supported, so this is only for very old builds or missing Graphics.Capture)."
-  },
-  "windowStreamSourceErrorElevated": "This window runs as administrator and can't be shared",
-  "@windowStreamSourceErrorElevated": {
-    "description": "Window-stream source: the chosen window belongs to a higher-integrity (administrator) process on Windows, so input can't be injected and it is excluded. Maps from a notFound/permission reason when the target was filtered out as elevated."
-  },
-  "windowStreamSourceNoteStagedInPlace": "{app} can't run in the background, sharing it in place",
-  "@windowStreamSourceNoteStagedInPlace": {
-    "description": "Window-stream source status note (not an error): the app refused to stage off-screen or produced no frames after moving, so it is mirrored in its real on-screen position instead of the background. Shown on the host, or logged. {app} is the application name.",
-    "placeholders": {
-      "app": {
-        "type": "String"
-      }
-    }
-  },
   "gnomeHelperTitle": "Window sharing helper",
   "@gnomeHelperTitle": {
     "description": "Linux (GNOME) settings row title: the GNOME Shell extension that lets other devices show this computer's windows."
@@ -2225,10 +1641,6 @@
   "@windowStreamShareSetting": {
     "description": "Settings switch: whether trusted devices may open and control this computer's windows (window flow source)"
   },
-  "windowStreamShareSettingDesc": "Trusted devices can open and use this computer's windows on their screens",
-  "@windowStreamShareSettingDesc": {
-    "description": "Detail under the window sharing settings switch"
-  },
   "deviceFilesAlwaysAllowed": "Always Allow Browsing My Files",
   "@deviceFilesAlwaysAllowed": {
     "description": "Device page switch: this device may browse my files without asking each time. Turning it off takes back an earlier \"Always allow\"."
@@ -2284,10 +1696,6 @@
   "@shareWebNext": {
     "description": "Web page: link to the next file in the folder"
   },
-  "shareLinkAllowAccess": "Allow Access",
-  "@shareLinkAllowAccess": {
-    "description": "Switch row in a share link's details: whether the link can be opened"
-  },
   "shareLinkAddress": "Address",
   "@shareLinkAddress": {
     "description": "Row label for this device's network address in the share link details"
@@ -2295,26 +1703,6 @@
   "shareLinksServiceFooter": "Devices on the same network can open a link in any browser. The server only runs while a link is on.",
   "@shareLinksServiceFooter": {
     "description": "Footer under the file server switch on the share links page"
-  },
-  "shareLinkVisitsLabel": "Visits",
-  "@shareLinkVisitsLabel": {
-    "description": "Row label in share link details"
-  },
-  "shareLinkDownloadsLabel": "Downloads",
-  "@shareLinkDownloadsLabel": {
-    "description": "Row label in share link details"
-  },
-  "shareLinkLastVisitLabel": "Last Visit",
-  "@shareLinkLastVisitLabel": {
-    "description": "Row label in share link details"
-  },
-  "shareLinkSentLabel": "Data Sent",
-  "@shareLinkSentLabel": {
-    "description": "Row label in share link details: how much data the link served"
-  },
-  "shareLinkNever": "Never",
-  "@shareLinkNever": {
-    "description": "Value of the last-visit row when nobody opened the link yet"
   },
   "androidWindowServiceTitle": "Window flow service",
   "@androidWindowServiceTitle": {
@@ -2351,10 +1739,6 @@
   "androidWindowServiceStop": "Turn off",
   "@androidWindowServiceStop": {
     "description": "Android window flow service button: stop the running service."
-  },
-  "androidWindowServiceSetup": "Set up",
-  "@androidWindowServiceSetup": {
-    "description": "Android window flow service primary button: begin first-time setup."
   },
   "androidWindowServiceHowTitle": "One-time setup",
   "@androidWindowServiceHowTitle": {
@@ -2436,10 +1820,6 @@
   "@androidWindowServiceEntryTitle": {
     "description": "Settings row title linking to the Android window flow service page."
   },
-  "androidWindowServiceEntryHint": "Let other devices open this phone's apps",
-  "@androidWindowServiceEntryHint": {
-    "description": "Settings row subtitle for the Android window flow service page."
-  },
   "androidWindowServiceComputerHint": "Connect this phone once to a computer running Whisper with window flow on; then every computer can use it",
   "@androidWindowServiceComputerHint": {
     "description": "Android window flow service hint shown when the phone cannot start the agent by itself (no bundled pairing): use a computer once."
@@ -2492,10 +1872,6 @@
       }
     }
   },
-  "remoteFilesPromptBodyReadOnlyDesktop": "If you allow it, it can see your home folder and open and copy files from it, but not change them.",
-  "@remoteFilesPromptBodyReadOnlyDesktop": {
-    "description": "Prompt body on a computer when 'Allow changes' is off."
-  },
   "remoteFilesPromptBodyReadOnlyPhone": "If you allow it, it can see this phone's internal storage and open and copy files from it, but not change them.",
   "@remoteFilesPromptBodyReadOnlyPhone": {
     "description": "Prompt body on a phone when 'Allow changes' is off."
@@ -2503,10 +1879,6 @@
   "islandOverlay": "Island in the background",
   "@islandOverlay": {
     "description": "Android settings row: the island drawn over other apps while Whisper is in the background"
-  },
-  "islandOverlayDesc": "Shows transfer progress at the top of the screen while Whisper is in the background. Needs permission to appear on top of other apps.",
-  "@islandOverlayDesc": {
-    "description": "Explains the background island and the \"display over other apps\" permission it needs"
   },
   "islandOverlayOn": "On",
   "@islandOverlayOn": {
@@ -2619,7 +1991,6 @@
   "shellWindowClose": "Close",
   "shellCardMenu": "Device card",
   "shellCardConnected": "Connected",
-  "shellCardUnpaired": "Not paired yet",
   "shellCardCan": "{device} can",
   "@shellCardCan": {
     "placeholders": {
@@ -2631,7 +2002,6 @@
   "shellCardTrust": "Connect without asking",
   "shellCardBrowse": "Browse my files",
   "shellCardChange": "Change my files",
-  "shellCardDetails": "Details",
   "shellCardAddress": "Address",
   "shellCardDiagnostics": "Connection diagnostics",
   "shellCardDisconnect": "Disconnect",
@@ -2640,8 +2010,6 @@
   "shellCardInput": "Input",
   "shellCardClipboard": "Clipboard",
   "shellCardMount": "Mount",
-  "shellOn": "On",
-  "shellOff": "Off",
   "shellPhoneDevices": "Devices",
   "shellPhoneControl": "Control",
   "shellPhoneSyncClipboard": "Sync clipboard to {device}",
@@ -2662,7 +2030,6 @@
       }
     }
   },
-  "shellPhoneNeedsConnection": "Available once connected",
   "shellPaletteDevice": "Device",
   "shellPaletteAction": "Action",
   "shellPalettePage": "Page",
@@ -2800,7 +2167,6 @@
       }
     }
   },
-  "soundGainLabel": "This device's playback gain",
   "soundResume": "Resume",
   "shareOpenSettings": "Turn on",
   "inputHintIdle": "Drag screens to arrange them. The pointer crosses where edges touch.",

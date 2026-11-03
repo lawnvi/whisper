@@ -18,7 +18,6 @@ import 'package:whisper/new_ui/shell/shell_island_sources.dart'
     show installShellIslandSources;
 import 'package:whisper/new_ui/shell/shell_window_chrome.dart'
     show shellIslandPlacement;
-import 'package:whisper/theme/whisper_ui.dart' show whisperNewUi;
 
 /// The app's island on phones: one black capsule level with a front camera in the
 /// middle of the screen, around it, as if the hole had grown; without such a
@@ -95,7 +94,7 @@ class _IslandHostState extends State<IslandHost> with TickerProviderStateMixin {
     _split = AnimationController.unbounded(vsync: this);
     _height = AnimationController.unbounded(vsync: this, value: 160);
     _center = widget.center ?? IslandSetup.install(widget.navigatorKey);
-    if (whisperNewUi && widget.center == null) {
+    if (widget.center == null) {
       installShellIslandSources(_center);
     }
     _center.haptics = _haptic;

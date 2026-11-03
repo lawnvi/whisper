@@ -650,7 +650,8 @@ input[type=range]::-moz-range-thumb{width:var(--tw);height:18px;border:0;border-
 /* 浮层 */
 #overlay{position:absolute;inset:0;pointer-events:none;z-index:30}
 #overlay>*{pointer-events:auto}
-.menu{position:absolute;min-width:210px;max-width:min(320px,calc(100% - 20px));padding:5px;border-radius:var(--r-m);background:var(--panel);backdrop-filter:blur(36px) saturate(1.8);-webkit-backdrop-filter:blur(36px) saturate(1.8);box-shadow:var(--shadow-2),var(--highlight);z-index:35;animation:menuin .36s var(--ease-smooth) both}
+.menu{position:absolute;min-width:190px;max-width:min(320px,calc(100% - 20px));padding:5px;border-radius:var(--r-m);background:var(--panel);backdrop-filter:blur(36px) saturate(1.8);-webkit-backdrop-filter:blur(36px) saturate(1.8);box-shadow:var(--shadow-2),var(--highlight);z-index:35;animation:menuin .36s var(--ease-smooth) both}
+.stage[data-frame=phone] .menu{min-width:210px}
 @keyframes menuin{from{opacity:0;transform:scale(.92) translateY(-6px)}to{opacity:1;transform:none}}
 .menu h5{margin:0;padding:5px 9px 4px;font-size:var(--t-tiny);font-weight:500;color:var(--ink2)}
 .mi{width:100%;display:flex;align-items:center;gap:9px;min-height:30px;padding:4px 9px;border-radius:var(--r-xs);text-align:left;font-size:var(--t-body)}

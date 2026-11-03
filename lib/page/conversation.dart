@@ -5,7 +5,6 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -38,8 +37,6 @@ import 'package:whisper/page/settings.dart' as app_settings;
 import 'package:whisper/page/window_stream/flow_space_page.dart';
 import 'package:whisper/page/transfer_assistant.dart';
 import 'package:whisper/remote_input/remote_input_coordinator.dart';
-import 'package:whisper/remote_input/mobile_control_screen.dart';
-import 'package:whisper/widget/computer_control_icon.dart';
 import 'package:whisper/remote_input/remote_input_failure_reason.dart';
 import 'package:whisper/remote_input/remote_input_layout.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
@@ -50,7 +47,6 @@ import 'package:whisper/socket/folder_transfer_manifest.dart'
 import 'package:whisper/socket/svrmanager.dart';
 import 'package:whisper/state/connection_attempt.dart';
 import 'package:whisper/state/connection_coordinator.dart';
-import 'package:whisper/state/desktop_quick_send_inbox.dart';
 import 'package:whisper/state/folder_message.dart';
 import 'package:whisper/state/transfer_speed_meter.dart';
 import 'package:whisper/state/pairing_request.dart';
@@ -360,13 +356,6 @@ class _SendMessageScreen extends State<SendMessageScreen>
       case AppLifecycleState.detached:
         break;
     }
-  }
-
-  void _updatePercent(double num) {
-    setState(() {
-      percent = num;
-    });
-    unawaited(_syncAndroidKeepAliveService());
   }
 
   Widget _buildAnimatedTransferProgress({
@@ -682,15 +671,6 @@ class _SendMessageScreen extends State<SendMessageScreen>
     await socketManager.cancelTransfer(transferId);
   }
 
-  _clearItems() {
-    _history.reset();
-    key.currentState?.removeAllItems((context, animation) {
-      //注意先 build 然后再去删除
-      messageList.clear();
-      return FadeTransition(opacity: animation, child: null);
-    }, duration: const Duration(milliseconds: 100));
-  }
-
   Future<void> _deleteMessages(
     List<MessageData> messages, {
     bool deleteFiles = false,
@@ -756,28 +736,9 @@ class _SendMessageScreen extends State<SendMessageScreen>
     });
   }
 
-  @Deprecated("use list view reverse")
-  void _scrollToBottom({bool isFirst = false}) async {
-    if (isFirst) {
-      _scrollController.jumpTo(
-        _scrollController.position.maxScrollExtent,
-        // duration: const Duration(milliseconds: 200),
-        // curve: Curves.easeOut,
-      );
-    } else {
-      await _scrollController.animateTo(
-        0,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final colorScheme = Theme.of(context).colorScheme;
-    final activeTransfer = _activeTransferSnapshot;
     final content = Column(
       children: [
         if (embedded && !widget.chromeless) _buildEmbeddedHeader(isDark),
@@ -798,22 +759,9 @@ class _SendMessageScreen extends State<SendMessageScreen>
             icon: const Icon(Icons.refresh_rounded, size: 18),
             label: Text(l10n.historyLoadFailed),
           ),
-        // In the new UI progress is on the file card and the island, not across
+        // Progress is on the file card and the island, not across
         // the top of the page.
-        if (whisperNewUi)
-          const SizedBox.shrink()
-        else if (activeTransfer?.state == FileTransferState.verifying)
-          LinearProgressIndicator(
-            minHeight: 3,
-            color: colorScheme.primary,
-            backgroundColor: colorScheme.primary.withValues(alpha: 0.14),
-          )
-        else if (percent > 0 && percent < 1)
-          _buildAnimatedTransferProgress(
-            value: percent,
-            builder: (context, value) =>
-                LinearProgressIndicator(value: value, color: Colors.lightGreen),
-          ),
+        const SizedBox.shrink(),
         Expanded(
           child: ValueListenableBuilder<double?>(
             valueListenable: _composerHeight,
@@ -846,64 +794,47 @@ class _SendMessageScreen extends State<SendMessageScreen>
             ),
           ),
         ),
-        if (!whisperNewUi)
-          WhisperAnimatedReveal(
-            visible: !_messageSelectionActive && _canSendCurrentDevice,
-            child: !_messageSelectionActive && _canSendCurrentDevice
-                ? Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _buildComposer(isDark),
-                      if (!embedded) const SizedBox(height: 6),
-                    ],
-                  )
-                : null,
-          ),
       ],
     );
 
-    final body = whisperNewUi
-        ? LayoutBuilder(
-            builder: (context, box) {
-              // A phone's width, not a phone: beside a sidebar it floats in the
-              // middle, as on a desktop.
-              final touch = WhisperLayout.of(context).compact && !isDesktop();
-              return Stack(
-                children: [
-                  Positioned.fill(child: content),
-                  // Nothing to write to: not a box that says so.
-                  if (!_messageSelectionActive && _canSendCurrentDevice)
-                    Positioned(
-                      left: 0,
-                      right: 0,
-                      bottom: touch ? 24 : 16,
-                      child: MeasureSize(
-                        onChange: (size) => _composerHeight.value = size.height,
-                        child: SafeArea(
-                          top: false,
-                          child: Center(
-                            child: SizedBox(
-                              width: touch
-                                  ? box.maxWidth - 36
-                                  : math.min(620, box.maxWidth - 96),
-                              child: _buildComposer(isDark),
-                            ),
-                          ),
-                        ),
+    final body = LayoutBuilder(
+      builder: (context, box) {
+        // A phone's width, not a phone: beside a sidebar it floats in the
+        // middle, as on a desktop.
+        final touch = WhisperLayout.of(context).compact && !isDesktop();
+        return Stack(
+          children: [
+            Positioned.fill(child: content),
+            // Nothing to write to: not a box that says so.
+            if (!_messageSelectionActive && _canSendCurrentDevice)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: touch ? 24 : 16,
+                child: MeasureSize(
+                  onChange: (size) => _composerHeight.value = size.height,
+                  child: SafeArea(
+                    top: false,
+                    child: Center(
+                      child: SizedBox(
+                        width: touch
+                            ? box.maxWidth - 36
+                            : math.min(620, box.maxWidth - 96),
+                        child: _buildComposer(isDark),
                       ),
                     ),
-                ],
-              );
-            },
-          )
-        : content;
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
     Widget base = embedded
         ? Material(color: Colors.transparent, child: body)
         : Scaffold(
-            backgroundColor: whisperNewUi ? context.wc.content : null,
-            appBar: whisperNewUi
-                ? _buildNewStandaloneBar()
-                : _buildStandaloneAppBar(isDark),
+            backgroundColor: context.wc.content,
+            appBar: _buildNewStandaloneBar(),
             body: body,
           );
 
@@ -915,10 +846,10 @@ class _SendMessageScreen extends State<SendMessageScreen>
       formats: const [Formats.fileUri],
       hitTestBehavior: HitTestBehavior.opaque,
       onDropEnter: (_) {
-        if (whisperNewUi) setState(() => _dropHover = true);
+        setState(() => _dropHover = true);
       },
       onDropLeave: (_) {
-        if (whisperNewUi) setState(() => _dropHover = false);
+        setState(() => _dropHover = false);
       },
       onDropOver: (event) {
         final canCopy = event.session.allowedOperations.contains(
@@ -934,7 +865,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
             : DropOperation.none;
       },
       onPerformDrop: (event) async {
-        if (whisperNewUi && mounted) setState(() => _dropHover = false);
+        if (mounted) setState(() => _dropHover = false);
         final paths = await Future.wait(
           event.session.items.map(_readDroppedFilePath),
         );
@@ -946,12 +877,10 @@ class _SendMessageScreen extends State<SendMessageScreen>
         }
         unawaited(_handleFileDrop(paths.cast<String>()));
       },
-      child: whisperNewUi
-          ? Stack(
-              fit: StackFit.expand,
-              children: [base, if (_dropHover) _buildDropFrame()],
-            )
-          : base,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [base, if (_dropHover) _buildDropFrame()],
+      ),
     );
   }
 
@@ -1278,26 +1207,6 @@ class _SendMessageScreen extends State<SendMessageScreen>
       ),
     );
     await _refreshCurrentDeviceState();
-  }
-
-  PreferredSizeWidget _buildStandaloneAppBar(bool isDark) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return AppBar(
-      leading: CupertinoNavigationBarBackButton(
-        color: colorScheme.primary,
-        onPressed: () {
-          if (widget.onBack != null) {
-            widget.onBack!();
-            return;
-          }
-          Navigator.popUntil(context, (route) {
-            return route.isFirst;
-          });
-        },
-      ),
-      title: _buildConversationTitle(isDark),
-      actions: _buildHeaderActions(isDark),
-    );
   }
 
   Widget _buildEmbeddedHeader(bool isDark) {
@@ -2632,109 +2541,34 @@ class _SendMessageScreen extends State<SendMessageScreen>
       var data = jsonDecode(messageData.content ?? "{}");
       content = "【${data['app']}】${data['title']}\n${data['text']}";
     }
-    if (whisperNewUi) {
-      final c = context.wc;
-      final mine = !isOpponent;
-      final body = WhisperType(touch: !isDesktop()).body;
-      final style = TextStyle(
-        fontSize: body,
-        height: 1.45,
-        color: mine ? c.onAccent : c.ink,
-      );
-      return Align(
-        alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: mine ? c.accent : c.bubble,
-            borderRadius: BorderRadius.circular(WhisperRadius.bubble),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
-            child: MessageLinkText(
-              text: content,
-              style: style,
-              linkStyle: style.copyWith(
-                color: mine ? c.onAccent : c.accent,
-                decoration: TextDecoration.underline,
-                decorationColor: mine ? c.onAccent : c.accent,
-              ),
-              linksEnabled: !_messageSelectionActive,
-              onOpen: _openMessageLink,
-              textAlign: TextAlign.left,
-            ),
-          ),
-        ),
-      );
-    }
-    final colorScheme = Theme.of(context).colorScheme;
-    final palette = context.whisperPalette;
-    final receivedBubbleColor = palette.messageIncoming;
-    final receivedBorderColor = palette.borderSubtle;
-    final sentBubbleColor = palette.messageOutgoing;
-    final sentBorderColor = colorScheme.primary.withValues(
-      alpha: Theme.of(context).brightness == Brightness.dark ? 0.14 : 0.08,
+    final c = context.wc;
+    final mine = !isOpponent;
+    final body = WhisperType(touch: !isDesktop()).body;
+    final style = TextStyle(
+      fontSize: body,
+      height: 1.45,
+      color: mine ? c.onAccent : c.ink,
     );
-    final textStyle = TextStyle(
-      color: colorScheme.onSurface,
-      fontSize: isDesktop() ? 16.5 : 16,
-      height: 1.55,
-    );
-    final linkStyle = textStyle.copyWith(
-      color: colorScheme.primary,
-      fontWeight: FontWeight.w600,
-      decoration: TextDecoration.underline,
-      decorationColor: colorScheme.primary.withValues(alpha: 0.55),
-    );
-
-    const verticalPadding = 10.0;
-    final actionReserve = isMobile() ? 22.0 : 21.0;
-
-    // Keep the bubble content-sized for short messages. The previous outer
-    // Container expanded to the available width, which made a one-line
-    // message look like a large empty card on phones and desktops alike.
     return Align(
-      alignment: isOpponent ? Alignment.centerLeft : Alignment.centerRight,
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(
-          isOpponent ? 2 : 18,
-          2,
-          isOpponent ? 18 : 2,
-          2,
+      alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: mine ? c.accent : c.bubble,
+          borderRadius: BorderRadius.circular(WhisperRadius.bubble),
         ),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: isOpponent ? receivedBubbleColor : sentBubbleColor,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: isOpponent ? receivedBorderColor : sentBorderColor,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
+          child: MessageLinkText(
+            text: content,
+            style: style,
+            linkStyle: style.copyWith(
+              color: mine ? c.onAccent : c.accent,
+              decoration: TextDecoration.underline,
+              decorationColor: mine ? c.onAccent : c.accent,
             ),
-          ),
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(
-              14,
-              verticalPadding,
-              trailingAction == null ? 14 : 8,
-              verticalPadding,
-            ),
-            child: Stack(
-              children: [
-                Padding(
-                  padding: EdgeInsets.only(
-                    right: trailingAction == null ? 0 : actionReserve,
-                  ),
-                  child: MessageLinkText(
-                    text: content,
-                    style: textStyle,
-                    linkStyle: linkStyle,
-                    linksEnabled: !_messageSelectionActive,
-                    onOpen: _openMessageLink,
-                    textAlign: TextAlign.left,
-                  ),
-                ),
-                if (trailingAction != null)
-                  Positioned(right: 0, bottom: 0, child: trailingAction),
-              ],
-            ),
+            linksEnabled: !_messageSelectionActive,
+            onOpen: _openMessageLink,
+            textAlign: TextAlign.left,
           ),
         ),
       ),
@@ -2831,9 +2665,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
         name: message.name,
         isFolder: isFolder,
         // Cancelled on purpose: it says so, without the warning colour.
-        failed:
-            failed &&
-            !(whisperNewUi && transfer?.state == FileTransferState.canceled),
+        failed: failed && !(transfer?.state == FileTransferState.canceled),
         active: isActiveTransfer,
         verifying: transfer?.state == FileTransferState.verifying,
         progress: transfer?.progress ?? 0,
@@ -2894,15 +2726,11 @@ class _SendMessageScreen extends State<SendMessageScreen>
       child: Container(
         // No bubble behind a picture: it stands on its own.
         decoration: BoxDecoration(
-          color: whisperNewUi ? null : cardColor,
-          borderRadius: BorderRadius.circular(
-            whisperNewUi ? WhisperRadius.m : 14,
-          ),
+          color: null,
+          borderRadius: BorderRadius.circular(WhisperRadius.m),
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(
-            whisperNewUi ? WhisperRadius.m : 14,
-          ),
+          borderRadius: BorderRadius.circular(WhisperRadius.m),
           child: showProgress && transfer.state != FileTransferState.verifying
               ? _buildAnimatedTransferProgress(
                   value: transfer.progress,

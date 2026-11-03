@@ -22,25 +22,14 @@ void main() {
     expect(remoteInputSection, contains('GestureDetector('));
   });
 
-  test('multi-device input workspace labels use AppLocalizations', () {
+  test('the input page has no hard-coded labels', () {
     final source = File(
-      'lib/remote_input/remote_input_workspace_screen.dart',
+      'lib/new_ui/input/shell_input_page.dart',
     ).readAsStringSync();
 
     for (final text in ['屏幕排列', '本机', '左侧', '右侧', '上方', '下方', '未贴边']) {
       expect(source, isNot(contains("'$text'")));
       expect(source, isNot(contains('"$text"')));
     }
-
-    expect(source, contains('l10n.remoteInputWorkspaceResolution'));
-    expect(source, contains('remoteInputLocalScreen'));
-    expect(source, contains('l10n.remoteInputWorkspaceReachable'));
-    expect(source, contains('l10n.remoteInputWorkspaceDisconnected'));
-    expect(source, contains('l10n.remoteInputWorkspaceUnsupported'));
-    expect(source, contains('l10n.remoteInputWorkspaceNoTargetsHint'));
-    expect(source, contains('l10n.remoteInputWorkspaceCanvasHint'));
-    expect(source, contains('l10n.remoteInputWorkspaceSelectTargetHint'));
-    expect(source, contains('remoteInputWorkspaceLocalBadge'));
-    expect(source, contains('remoteInputWorkspaceRemoteBadge'));
   });
 }

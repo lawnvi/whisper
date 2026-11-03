@@ -42,8 +42,7 @@ abstract final class WhisperWindow {
             ? WindowButtonStyle.kde
             : WindowButtonStyle.gnome);
 
-  /// Linux only: reads the button layout and follows it. Needs the runner's
-  /// channel, which it only registers with WHISPER_NEW_UI=1 in the environment.
+  /// Linux only: reads the button layout and follows it.
   static Future<void> followDecorationLayout() async {
     if (!Platform.isLinux) return;
     _channel.setMethodCallHandler((call) async {
@@ -57,7 +56,7 @@ abstract final class WhisperWindow {
         buttonLayout.value = WindowButtonLayout.parse(layout);
       }
     } on MissingPluginException {
-      // Started without WHISPER_NEW_UI=1: buttons on the right.
+      // No channel: buttons on the right.
     }
   }
 

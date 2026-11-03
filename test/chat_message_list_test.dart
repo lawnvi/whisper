@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/message.dart';
 import 'package:whisper/widget/chat_message_list.dart';
@@ -58,6 +59,9 @@ void main() {
     ];
     var created = 0;
     Widget list() => MaterialApp(
+      locale: const Locale('zh'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(
         body: ChatMessageList(
           buildFileMessage: (_, __) => const SizedBox.shrink(),
@@ -105,6 +109,9 @@ void main() {
     for (final width in [704.0, 320.0]) {
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: Row(
               children: [
@@ -141,11 +148,10 @@ void main() {
       final text = tester.getSize(
         find.byKey(const ValueKey('message-bubble-103')),
       );
-      expect(incoming.width, lessThanOrEqualTo(360));
-      expect(incoming.width, lessThanOrEqualTo((width - 28) * 0.618));
-      expect(text.width, lessThanOrEqualTo((width - 28) * 0.78));
-      expect(incoming.left, 50 + 14);
-      expect(outgoing.right, 50 + width - 14);
+      expect(incoming.width, lessThanOrEqualTo(276));
+      expect(text.width, lessThanOrEqualTo((width - 32) * 0.72));
+      expect(incoming.left, 50 + 16);
+      expect(outgoing.right, 50 + width - 16);
       expect(tester.takeException(), isNull);
     }
     await tester.pumpWidget(const SizedBox.shrink());
@@ -157,6 +163,9 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: ChatMessageList(
             buildFileMessage: (_, __) => const SizedBox.shrink(),
@@ -176,7 +185,7 @@ void main() {
     );
 
     final list = tester.widget<SliverPadding>(find.byType(SliverPadding).first);
-    expect(list.padding, const EdgeInsets.only(bottom: 12));
+    expect(list.padding, const EdgeInsets.fromLTRB(16, 8, 16, 84));
   });
 
   testWidgets('long pressing a text message opens message actions', (
@@ -188,6 +197,9 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: ChatMessageList(
             buildFileMessage: (_, __) => const SizedBox.shrink(),
@@ -268,6 +280,9 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: ChatMessageList(
             buildFileMessage: (_, __) => const SizedBox.shrink(),
@@ -355,6 +370,9 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         theme: ThemeData(platform: TargetPlatform.macOS),
         home: Scaffold(
           body: ChatMessageList(
@@ -388,47 +406,6 @@ void main() {
     await tester.tap(find.text('复制文件'));
     await tester.pumpAndSettle();
     expect(copiedFile?.id, 7);
-  });
-
-  testWidgets('copy icon morphs into a check and resets', (tester) async {
-    final listKey = GlobalKey<SliverAnimatedListState>();
-    final controller = ScrollController();
-    var copied = '';
-    final message = _message(id: 8, content: 'copy me');
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: ChatMessageList(
-            buildFileMessage: (_, __) => const SizedBox.shrink(),
-            buildTextMessage: (message, _, trailingAction) => Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(message.content ?? ''),
-                if (trailingAction != null) trailingAction,
-              ],
-            ),
-            controller: controller,
-            listKey: listKey,
-            messages: <MessageData>[message],
-            onOpenContainingFolder: (_) {},
-            onOpenFile: (_) {},
-            onCopyText: (value) => copied = value,
-            onDeleteMessage: (_, {deleteFile = false}) async {},
-            onDeleteMessages: (_, {deleteFiles = false}) async {},
-            selfUid: 'me',
-          ),
-        ),
-      ),
-    );
-
-    await tester.tap(find.byKey(const ValueKey<String>('message-copy-8')));
-    await tester.pump(const Duration(milliseconds: 180));
-    expect(copied, 'copy me');
-    expect(find.byIcon(Icons.check_rounded), findsOneWidget);
-
-    await tester.pump(const Duration(milliseconds: 1000));
-    expect(find.byIcon(Icons.content_copy_rounded), findsOneWidget);
   });
 
   test('timestamps appear only at the start of five-minute clusters', () {

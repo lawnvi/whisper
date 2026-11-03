@@ -85,48 +85,6 @@ void main() {
     },
   );
 
-  testWidgets(
-    'records and saves a global shortcut without capturing the screen',
-    (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          locale: const Locale('en'),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: Builder(
-            builder: (context) => Scaffold(
-              body: TextButton(
-                onPressed: () => showScreenshotShortcutDialog(
-                  context,
-                  screenshotController: controller,
-                ),
-                child: const Text('Configure'),
-              ),
-            ),
-          ),
-        ),
-      );
-      await tester.tap(find.text('Configure'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Click here, then press a key combination'));
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
-      await tester.sendKeyEvent(LogicalKeyboardKey.keyK);
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-      await tester.pump();
-      const expected = ScreenshotShortcut(key: 'K', control: true, shift: true);
-      expect(
-        find.text(expected.label(macOS: controller.macOS)),
-        findsOneWidget,
-      );
-      await tester.tap(find.text('Confirm'));
-      await tester.pumpAndSettle();
-      expect(controller.shortcut, expected);
-      expect(backend.captures, 0);
-    },
-  );
-
   test('restores disabled shortcut without registering it', () async {
     saved = jsonEncode({...custom.toJson(), 'enabled': false});
     await controller.initialize('Capture region');

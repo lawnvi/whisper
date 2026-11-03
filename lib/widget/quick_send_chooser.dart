@@ -5,19 +5,15 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:whisper/helper/android_document_picker.dart';
-import 'package:whisper/helper/device_form_factor.dart';
 import 'package:whisper/new_ui/phone/phone_parts.dart' show showPhoneSheet;
 import 'package:whisper/new_ui/picker/quick_send_sheet.dart';
-import 'package:whisper/theme/whisper_ui.dart' show whisperNewUi;
+
 import 'package:whisper/model/LocalDatabase.dart';
-import 'package:whisper/helper/helper.dart'
-    show formatSize, platformIcon, platformLabel;
+import 'package:whisper/helper/helper.dart' show formatSize;
 import 'package:whisper/helper/memory_bounded_image.dart';
 import 'package:whisper/helper/video_thumbnail.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/theme/app_theme.dart';
-import 'package:whisper/widget/glass_bottom_sheet.dart';
-import 'package:whisper/widget/glass_dialog.dart';
 import 'package:whisper/widget/media_message_preview.dart'
     show MediaFileKind, mediaFileKindFor;
 
@@ -107,274 +103,15 @@ Future<String?> showQuickSendSheet(
   required ValueListenable<List<QuickSendTarget>> targets,
   String? initialTargetId,
 }) {
-  if (whisperNewUi) {
-    return showPhoneSheet<String>(
-      context,
-      builder: (context) => QuickSendPicker(
-        touch: true,
-        items: items,
-        targets: targets,
-        initialTargetId: initialTargetId,
-      ),
-    );
-  }
-  return showWhisperGlassBottomSheet<String>(
+  return showPhoneSheet<String>(
     context,
-    builder: (context) => QuickSendChooser(
-      layout: QuickSendChooserLayout.sheet,
+    builder: (context) => QuickSendPicker(
+      touch: true,
       items: items,
       targets: targets,
       initialTargetId: initialTargetId,
     ),
   );
-}
-
-/// The content preview and device picker shared by Android system share and
-/// desktop quick send. Only connected devices are offered, and the list
-/// follows connections that come and go while it is open.
-class QuickSendChooser extends StatefulWidget {
-  const QuickSendChooser({
-    super.key,
-    required this.layout,
-    required this.items,
-    required this.targets,
-    this.initialTargetId,
-  });
-
-  final QuickSendChooserLayout layout;
-  final List<QuickSendItem> items;
-  final ValueListenable<List<QuickSendTarget>> targets;
-  final String? initialTargetId;
-
-  @override
-  State<QuickSendChooser> createState() => _QuickSendChooserState();
-}
-
-class _QuickSendChooserState extends State<QuickSendChooser> {
-  String? _selectedId;
-
-  @override
-  void initState() {
-    super.initState();
-    _selectedId = widget.initialTargetId;
-  }
-
-  String? _resolveSelection(List<QuickSendTarget> targets) {
-    if (targets.any((target) => target.id == _selectedId)) {
-      return _selectedId;
-    }
-    // A single device needs no choice, including one that connects late.
-    return targets.length == 1 ? targets.single.id : null;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    return ValueListenableBuilder<List<QuickSendTarget>>(
-      valueListenable: widget.targets,
-      builder: (context, targets, _) {
-        final selectedId = _resolveSelection(targets);
-        final content = _buildContent(context, targets, selectedId);
-        final actions = <Widget>[
-          WhisperDialogButton(
-            label: l10n.quickSendLater,
-            onPressed: () => Navigator.of(context).pop(),
-          ),
-          WhisperDialogButton(
-            key: const ValueKey<String>('quick-send-confirm'),
-            label: l10n.quickSendSend,
-            prominent: true,
-            onPressed: selectedId == null
-                ? null
-                : () => Navigator.of(context).pop(selectedId),
-          ),
-        ];
-        final title = Text(l10n.quickSendTitle);
-        switch (widget.layout) {
-          case QuickSendChooserLayout.sheet:
-            return WhisperGlassBottomSheet(
-              maxSheetWidth: 560,
-              maxContentWidth: 520,
-              title: title,
-              content: content,
-              actions: actions,
-            );
-          case QuickSendChooserLayout.dialog:
-            return WhisperGlassDialog(
-              constraints: const BoxConstraints(
-                minWidth: 320,
-                maxWidth: 460,
-                maxHeight: 640,
-              ),
-              borderRadius: 22,
-              titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 12),
-              contentPadding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
-              actionsPadding: EdgeInsets.zero,
-              title: DefaultTextStyle.merge(
-                textAlign: TextAlign.center,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
-                child: title,
-              ),
-              content: SingleChildScrollView(child: content),
-              actions: actions,
-            );
-        }
-      },
-    );
-  }
-
-  Widget _buildContent(
-    BuildContext context,
-    List<QuickSendTarget> targets,
-    String? selectedId,
-  ) {
-    final l10n = AppLocalizations.of(context)!;
-    final palette = context.whisperPalette;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        QuickSendContentPreview(items: widget.items),
-        const SizedBox(height: 20),
-        Padding(
-          padding: const EdgeInsets.only(left: 4, bottom: 8),
-          child: Text(
-            l10n.quickSendTargets,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: palette.textMuted,
-            ),
-          ),
-        ),
-        if (targets.isEmpty)
-          Padding(
-            key: const ValueKey<String>('quick-send-no-targets'),
-            padding: const EdgeInsets.symmetric(vertical: 18),
-            child: Column(
-              children: [
-                Icon(
-                  Icons.link_off_rounded,
-                  size: 26,
-                  color: palette.textMuted,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  l10n.quickSendNoConnectedDevices,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: palette.textMuted),
-                ),
-              ],
-            ),
-          )
-        else
-          for (final target in targets)
-            Padding(
-              padding: EdgeInsets.only(
-                bottom: identical(target, targets.last) ? 0 : 8,
-              ),
-              child: QuickSendTargetTile(
-                target: target,
-                selected: target.id == selectedId,
-                onTap: () => setState(() => _selectedId = target.id),
-              ),
-            ),
-      ],
-    );
-  }
-}
-
-class QuickSendTargetTile extends StatelessWidget {
-  const QuickSendTargetTile({
-    super.key,
-    required this.target,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final QuickSendTarget target;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final palette = context.whisperPalette;
-    final tablet = DeviceFormFactors.shared.isTablet(target.id);
-    final platform = target.platform.trim().isEmpty
-        ? ''
-        : platformLabel(target.platform, tablet: tablet);
-    return Semantics(
-      selected: selected,
-      button: true,
-      child: WhisperGlassSurface(
-        key: ValueKey<String>('quick-send-target-${target.id}'),
-        borderRadius: BorderRadius.circular(14),
-        showTopHighlight: false,
-        showShadow: false,
-        neutral: true,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(14),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 14, 10),
-            child: Row(
-              children: [
-                CircleAvatar(
-                  radius: 18,
-                  backgroundColor: Colors.lightBlue,
-                  child: Icon(
-                    platformIcon(target.platform, tablet: tablet),
-                    size: 18,
-                    color: Colors.white,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        target.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          color: colors.onSurface,
-                        ),
-                      ),
-                      if (platform.isNotEmpty)
-                        Text(
-                          platform,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: palette.textMuted,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Icon(
-                  selected
-                      ? Icons.check_circle_rounded
-                      : Icons.radio_button_unchecked_rounded,
-                  size: 22,
-                  color: selected
-                      ? colors.primary
-                      : palette.textMuted.withValues(alpha: 0.5),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 /// Text, photo and file previews for content waiting in quick send.

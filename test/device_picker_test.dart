@@ -2,8 +2,7 @@
 // sheet on a phone, quick send, and the six digits after a scan.
 //
 // To look at them:
-//   WHISPER_RENDER_DIR=/some/dir flutter test --no-pub \
-//     --dart-define=WHISPER_NEW_UI=true test/device_picker_test.dart
+//   WHISPER_RENDER_DIR=/some/dir flutter test --no-pub test/device_picker_test.dart
 
 import 'dart:async';
 

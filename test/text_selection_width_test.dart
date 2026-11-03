@@ -50,7 +50,7 @@ void main() {
       'lib/widget/message_link_text.dart': 1,
       'lib/page/transfer_assistant.dart': 1,
       'lib/page/settings.dart': 1,
-      'lib/widget/chat_composer.dart': 3,
+      'lib/widget/chat_composer.dart': 1,
       'lib/remote_input/mobile_control_screen.dart': 1,
     };
     for (final entry in expected.entries) {

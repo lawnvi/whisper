@@ -13,7 +13,6 @@ import '../../helper/toast.dart';
 import '../../l10n/app_localizations.dart';
 import '../../widget/device_glyph.dart';
 import '../../widget/island/island_activity.dart';
-import '../../widget/island/island_host.dart';
 import '../../widget/island/island_views.dart';
 import '../../window_stream/core/window_stream_models.dart';
 import '../../window_stream/remote/remote_peer_source.dart';
@@ -23,25 +22,6 @@ import 'flow_space_theme.dart';
 import 'flow_space_widgets.dart';
 
 export '../../widget/island/island_host.dart' show IslandHost;
-
-/// Windows other devices send here ("送出去") are one kind of activity on the
-/// app's island ([IslandHost]), with file copies, transfers, the speaker and
-/// this phone being streamed. This name stays for callers that still mount
-/// the island by it; new code uses [IslandHost].
-class WindowOfferHost extends StatelessWidget {
-  const WindowOfferHost({
-    super.key,
-    required this.child,
-    required this.navigatorKey,
-  });
-
-  final Widget child;
-  final GlobalKey<NavigatorState> navigatorKey;
-
-  @override
-  Widget build(BuildContext context) =>
-      IslandHost(navigatorKey: navigatorKey, child: child);
-}
 
 /// Windows other devices send here ("送出去"): each one arrives as the
 /// small island and swells into a card with the window, "忽略" and "查看",

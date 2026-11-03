@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:whisper/model/LocalDatabase.dart';
-import 'package:whisper/new_ui/phone/phone_parts.dart';
 import 'package:whisper/new_ui/shell/shell_data.dart';
 import 'package:whisper/new_ui/shell/shell_parts.dart';
 import 'package:whisper/state/chat_session_list.dart';

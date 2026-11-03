@@ -6,17 +6,13 @@ void main() {
   group('desktop window theme bridge', () {
     test('syncs app theme mode to the native desktop window', () {
       final mainSource = File('lib/main.dart').readAsStringSync();
+      final window = File('lib/theme/whisper_window.dart').readAsStringSync();
 
-      expect(mainSource, contains('MethodChannel('));
-      expect(mainSource, contains("'com.vireen.whisper/window_theme'"));
+      expect(window, contains("'com.vireen.whisper/window_theme'"));
       expect(mainSource, contains('Future<void> _applyDesktopWindowTheme'));
-      expect(mainSource, contains('windowManager.setBrightness(brightness)'));
-      expect(mainSource, contains('Platform.isWindows'));
-      expect(mainSource, contains('Platform.isMacOS'));
-      expect(
-        mainSource,
-        contains("_windowThemeChannel.invokeMethod<void>('setBrightness'"),
-      );
+      expect(mainSource, contains('WhisperWindow.applyBrightness(brightness)'));
+      expect(window, contains('windowManager.setBrightness(brightness)'));
+      expect(window, contains("_channel.invokeMethod<void>('setBrightness'"));
       expect(mainSource, contains('didChangePlatformBrightness'));
       expect(
         mainSource,
@@ -25,20 +21,10 @@ void main() {
     });
 
     test('keeps the macOS native title bar on the Flutter page surface', () {
-      final mainSource = File('lib/main.dart').readAsStringSync();
       final runner = File(
         'macos/Runner/MainFlutterWindow.swift',
       ).readAsStringSync();
 
-      expect(
-        mainSource,
-        contains('AppTheme.fallbackPalette(brightness).surfaceCanvas'),
-      );
-      expect(mainSource, contains('backgroundColor: windowBackground'));
-      expect(
-        mainSource,
-        contains("'backgroundColor': windowBackground.toARGB32()"),
-      );
       expect(runner, contains('com.vireen.whisper/window_theme'));
       expect(runner, contains('titlebarAppearsTransparent = true'));
       expect(runner, contains('titleVisibility = .visible'));
@@ -74,7 +60,6 @@ void main() {
         expect(plugin, contains('com.vireen.whisper/window_theme'));
         expect(plugin, contains('DwmSetWindowAttribute'));
         expect(plugin, contains('brightness == "dark"'));
-        expect(mainSource, contains('windowButtonVisibility: true'));
         expect(
           mainSource,
           contains('await windowManager.setMinimizable(true)'),
@@ -89,10 +74,7 @@ void main() {
     );
 
     test('the Windows title bar keeps the brightness the app chose', () {
-      final mainSource = File('lib/main.dart').readAsStringSync();
-      final runner = File(
-        'windows/runner/win32_window.cpp',
-      ).readAsStringSync();
+      final runner = File('windows/runner/win32_window.cpp').readAsStringSync();
       final plugin = File(
         'windows/runner/window_theme_plugin.cpp',
       ).readAsStringSync();
@@ -118,19 +100,13 @@ void main() {
       // colour as its caption colour instead.
       expect(plugin, contains('DWMWA_CAPTION_COLOR'));
       expect(plugin, contains('GetIntValue(*args, "backgroundColor")'));
-      expect(
-        mainSource,
-        contains("'backgroundColor': windowBackground.toARGB32()"),
-      );
 
       // The window plugin only darkens while the system is dark, so it is
       // left out of this on Windows.
+      final window = File('lib/theme/whisper_window.dart').readAsStringSync();
       expect(
-        mainSource,
-        contains(
-          'if (!Platform.isWindows) {\n'
-          '      await windowManager.setBrightness(brightness);',
-        ),
+        window.indexOf("_channel.invokeMethod<void>('setBrightness'"),
+        lessThan(window.indexOf('windowManager.setBrightness(brightness)')),
       );
     });
   });

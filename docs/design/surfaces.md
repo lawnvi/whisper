@@ -249,7 +249,7 @@
 1. **页头**：这台的设备图 96、声波（5 根，宽 3、间距 3、高 18，放着时动，停着时是灰点）、标题 `title`、一句 `body` `ink2`。
 2. **勾选列表**（内缩分组，分隔线缩进 60）：只列连着的和在附近的设备，不在附近的不列。每行高 60：设备图 36（占 38 宽）、文字、声道、右边圆形勾选 22。**同步情况就写在这一行**：放着的时候，第一行是名称（`body`，太长就截断）加同步质量（`note` `ink2`，有问题时 `warn`，不截断），第二行是具体数字「网络 2ms · 抖动 1ms · 缓冲 80ms · 晚包 0」（`note` `ink2`，等宽数字）。还在估算时数字写「—」，这样不跳。没放的时候只有名称，下面按状态写「未连接」或「已停止」。**点勾选就开始放**，不用再点开始。在附近没连接的变淡，写「未连接」，不能选。
 3. **声道就在行内**：左、立体声、右、单声道，分段控件，高 36（按钮 30，内边距 3），勾选后才出现。不另外展开，每行一样高。
-4. **总开关**（有成员才显示）：共享这台的声音，关闭后成员留着。**不另外做同步详情**。数字那一行不带同步质量，因为名称旁边已经写了；现有 `audioGroupSyncEvidenceCompact` 带质量前缀且没有单位，要新加一个键。
+4. **总开关**（有成员才显示）：共享这台的声音，关闭后成员留着。**不另外做同步详情**。数字那一行不带同步质量，因为名称旁边已经写了；
 
 **声道默认值**：第一台立体声。第二台加入时，如果用户没动过声道，自动分成左右。剩一台时回到立体声。第三台起立体声。
 
@@ -338,13 +338,13 @@
 | 异常 | 显示 |
 |---|---|
 | 没有可控制的电脑 | 画布上只有这台，底部写 `remoteInputWorkspaceNoTargets`，总开关禁用 |
-| 这台没有权限（macOS 辅助功能，`lib/widget/macos_permission_setting.dart`） | 底部写原因和「去开启」，打开总开关不生效 |
+| 这台没有权限（macOS 辅助功能，设置页） | 底部写原因和「去开启」，打开总开关不生效 |
 | 这台不支持（`supportsNativeRemoteInput` 为假） | 侧栏顶部没有键鼠入口 |
-| 对方版本不支持（`remoteInputWorkspaceUnsupported`） | 候选里禁用，写「不支持」 |
+| 对方版本不支持 | 候选里禁用，写「不支持」 |
 | 对方没有信任这台（`remoteInputPeerMustTrustThisDevice`） | 屏幕写「没有连上」，选中看原因 |
-| 冲突（`remoteInputWorkspaceConflict`） | 布局自动贴回后不应出现；如果对方上报的屏幕变了，自动重排一次 |
+| 冲突 | 布局自动贴回后不应出现；如果对方上报的屏幕变了，自动重排一次 |
 
-现有入口：`lib/remote_input/remote_input_workspace_screen.dart`（三栏，2548 行，替换它），数据 `RemoteInputWorkspaceCoordinator` 和 `RemoteInputWorkspaceSnapshot`。
+入口：`lib/new_ui/input/shell_input_page.dart`，数据 `RemoteInputWorkspaceCoordinator` 和 `RemoteInputWorkspaceSnapshot`。
 
 ## 共享链接
 
@@ -496,7 +496,7 @@ log.txt · 发到 iMac · 57%          传输中才有，灰的，不能点
 | 局域网断开 | 橙色警告 | 其他设备发现不了这台，「查看」 |
 | 文件访问请求 | 橙色问号 | iMac 想浏览你的文件：这次允许、始终允许、拒绝 |
 | 配对请求（`lib/widget/pairing_dialog.dart`） | 设备图 | 配对新设备，2698b 请求连接，6 位数字单独一块：数字一致、拒绝 |
-| 投屏请求（`lib/widget/cast_request_prompt.dart`） | 橙色问号 | 来自 192.168.31.9 的设备想投屏：允许、拒绝 |
+| 投屏请求 | 橙色问号 | 来自 192.168.31.9 的设备想投屏：允许、拒绝 |
 | 送来的窗口（`lib/page/window_stream/flow_offer_banner.dart`） | 窗口 | iMac 送来了备忘录：打开、忽略。正在前台用 Whisper 时直接打开 |
 | 文件拷贝（`CopyIslandSource`） | 进度环 | 从 iMac 拷到 下载 |
 | 结果（2.6 秒后消失） | 勾 | 已和 2698b 配对 |
@@ -530,8 +530,8 @@ log.txt · 发到 iMac · 57%          传输中才有，灰的，不能点
 |---|---|---|---|---|
 | 通用 | 昵称 | 行内编辑 | 全部 | `nickname` :468 |
 | 通用 | 外观 | 分段：自动、浅色、深色 | 全部 | `themeMode` :447 |
-| 通用 | 语言 | 弹出按钮：跟随系统、简体中文、English、Español | 全部 | `selectLanguage` :958 |
-| 通用 | 文件保存到 | 桌面：路径 +「更改…」；手机：整行点开 | 全部 | `_buildSaveDirectoryItem` :974 |
+| 通用 | 语言 | 弹出按钮：跟随系统、简体中文、English、Español | 全部 | — |
+| 通用 | 文件保存到 | 桌面：路径 +「更改…」；手机：整行点开 | 全部 | — |
 | 连接 | 服务端口 | 行内编辑（数字） | 全部 | `serverPortTitle` :488 |
 | 连接 | 自动连接互信设备 | 开关 | 全部 | `autoConnectTrustedDevices` :499 |
 | 连接 | 接收电视投屏 | 开关，下面写状态 | 桌面 | `castReceiverTitle` :525 |
@@ -541,16 +541,16 @@ log.txt · 发到 iMac · 57%          传输中才有，灰的，不能点
 | 连接 | 窗口流转服务 | 整行点开 | Android | `androidWindowServiceEntryTitle` :710 |
 | 系统 | 开机自启动 | 开关 | 桌面 | `launchAtStartup` :575 |
 | 系统 | 关闭时隐藏到托盘 | 开关 | 桌面 | `close2tray` :661 |
-| 系统 | 启用截图快捷键 | 开关，现在在对话框里（`lib/widget/screenshot_controls.dart`） | 桌面 | `screenshotShortcutEnabled` |
+| 系统 | 启用截图快捷键 | 开关，现在在对话框里（`lib/widget/screenshot_controls.dart`） | 桌面 | — |
 | 系统 | 截图快捷键 | 录制按钮，启用时才显示。注册失败时写 `screenshotShortcutUnavailable` | 桌面 | `screenshotShortcutTitle` :561 |
 | 系统 | 锁屏与 UAC 时接收键鼠 | 两行：标题加 `windowsLockScreenInputHint`，右边状态加按钮（未安装 + 安装、需更新 + 修复、运行中或未运行 + 卸载），都要管理员确认。进行中写 `windowsLockScreenInputWorking`，没有按钮 | Windows | `windowsLockScreenInput` :626 |
 | 系统 | 窗口流转组件 | 两行：标题加 `gnomeHelperHint`，右边状态加按钮（`gnomeHelperNotInstalled`、`gnomeHelperNeedsRelogin`、`gnomeHelperReady`）。进行中写 `gnomeHelperWorking` | Linux，只有 GNOME 的 Wayland 会话才显示（`lib/window_stream/linux/gnome_shell_helper.dart`） | `GnomeHelperTile` :659 |
-| 共享与权限 | 辅助功能、屏幕与系统录音、仅系统录音 | 3 行，写已允许或未允许（`macPermissionGranted` / `macPermissionDenied`），整行点开系统设置 | macOS | `_buildMacPermissionItems` :686 |
+| 共享与权限 | 辅助功能、屏幕与系统录音、仅系统录音 | 3 行，写已允许或未允许（`macPermissionGranted` / `macPermissionDenied`），整行点开系统设置 | macOS | — |
 | 共享与权限 | 允许查看和操作本机窗口 | 开关 | 桌面 | `windowStreamShareSetting` :688 |
-| 共享与权限 | 允许访问剪贴板（收不收别人同步来的） | 开关 | 全部 | `accessClipboard` :729 |
+| 共享与权限 | 允许访问剪贴板（收不收别人同步来的） | 开关 | 全部 | — |
 | 共享与权限 | 自动同步剪贴板 | 开关 | 全部 | `clipboardAutoSync` :745 |
-| 共享与权限 | 播放别处声音的增益 | 滑块 1 到 3，步长 0.1，写「1.0x」 | 全部 | `audioSharePlaybackGainSetting` :766 |
-| 共享与权限 | 键鼠共享滚轮速度 | 滑块 0.5 到 3，步长 0.1 | 桌面 | `remoteInputScrollMultiplierSetting` :785 |
+| 共享与权限 | 播放别处声音的增益 | 滑块 1 到 3，步长 0.1，写「1.0x」 | 全部 | — |
+| 共享与权限 | 键鼠共享滚轮速度 | 滑块 0.5 到 3，步长 0.1 | 桌面 | — |
 | 通知 | 忽略安卓通知 | 开关 | 全部 | `ignoreNotification` :916 |
 | 通知 | 验证码写入剪贴板 | 开关 | 全部 | `copyVerifyCode` :934 |
 | 通知 | 推送安卓通知 | 开关 | Android | `pushNotification` :875 |
@@ -560,7 +560,7 @@ log.txt · 发到 iMac · 57%          传输中才有，灰的，不能点
 
 **手机的分组**：通用（通用 4 项 + 增益）、连接（服务端口、自动连接互信设备，加连接的 4 个 Android 项）、剪贴板和通知（允许访问剪贴板、自动同步剪贴板，加通知 4 项）、最后一组不起标题（版本、关于 Whisper）。iOS 没有 Android 项。
 
-**版本行**：左边「版本」，右边按状态（`_updateStatusLabel`）：
+**版本行**：左边「版本」，右边按状态：
 
 | 状态 | 右边 | 点一下 |
 |---|---|---|

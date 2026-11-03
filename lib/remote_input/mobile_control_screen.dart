@@ -317,9 +317,7 @@ class _MobileControlScreenState extends State<MobileControlScreen>
   bool get _showBothControls {
     final query = MediaQuery.of(context);
     // What this page has, beside a sidebar.
-    final room = whisperNewUi
-        ? query.size.width - WhisperLayout.of(context).sidebarWidth
-        : query.size.width;
+    final room = query.size.width - WhisperLayout.of(context).sidebarWidth;
     return room >= 840 &&
         query.size.height - query.viewInsets.bottom >= 450 &&
         !_editingText;
@@ -508,9 +506,7 @@ class _MobileControlScreenState extends State<MobileControlScreen>
   }
 
   bool get _tabletop =>
-      whisperNewUi &&
-      _tab == 0 &&
-      WhisperLayout.of(context).posture == WhisperPosture.tabletop;
+      _tab == 0 && WhisperLayout.of(context).posture == WhisperPosture.tabletop;
 
   /// surfaces.md「控制页」: over the fold the device, under it the touchpad and
   /// buttons, like a laptop. 36 between them keeps clear of the fold.
@@ -543,7 +539,9 @@ class _MobileControlScreenState extends State<MobileControlScreen>
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    _active ? l10n.mobileControlActive : l10n.mobileControlReady,
+                    _active
+                        ? l10n.mobileControlActive
+                        : l10n.mobileControlReady,
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: type.note,
@@ -873,8 +871,7 @@ class _MobileControlScreenState extends State<MobileControlScreen>
     );
   }
 
-  bool get _shortWindow =>
-      whisperNewUi && WhisperLayout.of(context).shortHeight && !_tabletop;
+  bool get _shortWindow => WhisperLayout.of(context).shortHeight && !_tabletop;
 
   Widget _pointerActions() {
     final short = _shortWindow;

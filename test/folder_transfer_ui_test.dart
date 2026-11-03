@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
+import 'package:whisper/theme/whisper_icons.dart';
 import 'package:whisper/helper/folder_transfer_store.dart';
 import 'package:whisper/helper/transfer_failure_message.dart';
 import 'package:whisper/l10n/app_localizations.dart';
@@ -57,15 +58,15 @@ void main() {
   group('file message card', () {
     testWidgets('a folder shows a folder, a file shows a file', (tester) async {
       await tester.pumpWidget(_app(_card(isFolder: true)));
-      expect(find.byIcon(Icons.folder_rounded), findsOneWidget);
-      expect(find.byIcon(Icons.insert_drive_file), findsNothing);
+      expect(find.byType(WhisperFolderArt), findsOneWidget);
+      expect(find.byType(WhisperDocArt), findsNothing);
       expect(find.text('Project Files'), findsOneWidget);
       expect(find.text('status'), findsOneWidget);
       expect(find.byKey(FileMessageCard.skippedKey), findsNothing);
 
       await tester.pumpWidget(_app(_card(isFolder: false)));
-      expect(find.byIcon(Icons.insert_drive_file), findsOneWidget);
-      expect(find.byIcon(Icons.folder_rounded), findsNothing);
+      expect(find.byType(WhisperDocArt), findsOneWidget);
+      expect(find.byType(WhisperFolderArt), findsNothing);
     });
 
     testWidgets('what was left out is one tap away', (tester) async {
@@ -85,23 +86,29 @@ void main() {
       expect(opened, 1);
     });
 
-    testWidgets('progress and failure replace the icon', (tester) async {
+    testWidgets('a transfer can be cancelled, a failure retried', (
+      tester,
+    ) async {
+      Finder glyph(WhisperGlyph g) =>
+          find.byWidgetPredicate((w) => w is WhisperIcon && w.glyph == g);
+      var cancelled = 0;
       await tester.pumpWidget(
-        _app(_card(isFolder: true, active: true, onCancel: () {})),
+        _app(_card(isFolder: true, active: true, onCancel: () => cancelled++)),
       );
       await tester.pump();
-      expect(find.byType(CircularProgressIndicator), findsOneWidget);
-      expect(find.byIcon(Icons.folder_rounded), findsNothing);
       expect(find.text('status 40%'), findsOneWidget);
-      expect(find.byTooltip('Cancel'), findsOneWidget);
-      expect(find.byTooltip('Retry'), findsNothing);
+      expect(glyph(WhisperGlyph.flip), findsNothing);
+      await tester.tap(glyph(WhisperGlyph.x));
+      expect(cancelled, 1);
 
+      var retried = 0;
       await tester.pumpWidget(
-        _app(_card(isFolder: true, failed: true, onRetry: () {})),
+        _app(_card(isFolder: true, failed: true, onRetry: () => retried++)),
       );
       await tester.pumpAndSettle();
-      expect(find.byIcon(Icons.error_outline_rounded), findsOneWidget);
-      expect(find.byTooltip('Retry'), findsOneWidget);
+      expect(glyph(WhisperGlyph.x), findsNothing);
+      await tester.tap(glyph(WhisperGlyph.flip));
+      expect(retried, 1);
     });
   });
 

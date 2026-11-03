@@ -1,5 +1,4 @@
 import 'package:whisper/new_ui/shell/shell_requests.dart';
-import 'package:whisper/theme/whisper_ui.dart';
 import 'dart:async';
 import 'dart:ui' show FontFeature;
 
@@ -13,7 +12,6 @@ import 'package:whisper/cast_receiver/upnp.dart' show timeText;
 import 'package:whisper/helper/toast.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/theme/app_theme.dart';
-import 'package:whisper/widget/cast_request_prompt.dart';
 
 /// Keeps the main navigation mounted while playback is shown in a child window.
 class CastPlaybackHost extends StatelessWidget {
@@ -31,17 +29,11 @@ class CastPlaybackHost extends StatelessWidget {
         children: [
           child ?? const SizedBox.shrink(),
           if (requests.pending case final request?)
-            whisperNewUi
-                ? _CastIslandAsk(
-                    key: ObjectKey(request),
-                    request: request,
-                    gate: requests,
-                  )
-                : CastRequestPrompt(
-                    key: ObjectKey(request),
-                    request: request,
-                    gate: requests,
-                  ),
+            _CastIslandAsk(
+              key: ObjectKey(request),
+              request: request,
+              gate: requests,
+            ),
         ],
       ),
     );

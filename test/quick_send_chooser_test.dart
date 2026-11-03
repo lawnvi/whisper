@@ -12,11 +12,6 @@ import 'support/source_reading.dart';
 
 void main() {
   const mac = QuickSendTarget(id: 'mac', name: 'Study iMac', platform: 'macos');
-  const windows = QuickSendTarget(
-    id: 'win',
-    name: 'Laptop',
-    platform: 'windows',
-  );
 
   Future<Future<String?>> openSheet(
     WidgetTester tester, {
@@ -68,67 +63,6 @@ void main() {
     );
     return button.onPressed != null;
   }
-
-  testWidgets('a device that connects while the sheet is open is selected', (
-    tester,
-  ) async {
-    final targets = ValueNotifier<List<QuickSendTarget>>(
-      const <QuickSendTarget>[],
-    );
-    final result = await openSheet(tester, targets: targets);
-
-    expect(find.text('还没有已连接的设备，连接后即可发送'), findsOneWidget);
-    expect(sendEnabled(tester), isFalse);
-
-    targets.value = const <QuickSendTarget>[mac];
-    await tester.pumpAndSettle();
-
-    expect(find.text('Study iMac'), findsOneWidget);
-    expect(find.text('Mac'), findsOneWidget);
-    expect(sendEnabled(tester), isTrue);
-
-    await tester.tap(find.text('发送'));
-    await tester.pumpAndSettle();
-    expect(await result, 'mac');
-  });
-
-  testWidgets('several devices wait for an explicit choice', (tester) async {
-    final targets = ValueNotifier<List<QuickSendTarget>>(
-      const <QuickSendTarget>[mac, windows],
-    );
-    final result = await openSheet(tester, targets: targets);
-
-    expect(sendEnabled(tester), isFalse);
-    await tester.tap(find.text('Laptop'));
-    await tester.pumpAndSettle();
-    expect(sendEnabled(tester), isTrue);
-
-    await tester.tap(find.text('发送'));
-    await tester.pumpAndSettle();
-    expect(await result, 'win');
-  });
-
-  testWidgets('a chosen device that disconnects clears the choice', (
-    tester,
-  ) async {
-    final targets = ValueNotifier<List<QuickSendTarget>>(
-      const <QuickSendTarget>[mac, windows],
-    );
-    final result = await openSheet(tester, targets: targets);
-
-    await tester.tap(find.text('Laptop'));
-    await tester.pumpAndSettle();
-    targets.value = const <QuickSendTarget>[mac];
-    await tester.pumpAndSettle();
-
-    expect(find.text('Laptop'), findsNothing);
-    // Only the remaining device is left, so it becomes the target.
-    expect(sendEnabled(tester), isTrue);
-
-    await tester.tap(find.text('稍后'));
-    await tester.pumpAndSettle();
-    expect(await result, isNull);
-  });
 
   testWidgets('photos show as tiles and other files as rows', (tester) async {
     final targets = ValueNotifier<List<QuickSendTarget>>(

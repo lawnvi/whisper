@@ -2,8 +2,7 @@
 // its own.
 //
 // To look at them next to docs/design/reference/:
-//   WHISPER_RENDER_DIR=/some/dir flutter test --no-pub \
-//     --dart-define=WHISPER_NEW_UI=true test/phone_apps_test.dart
+//   WHISPER_RENDER_DIR=/some/dir flutter test --no-pub test/phone_apps_test.dart
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';

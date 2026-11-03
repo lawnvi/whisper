@@ -5,70 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:whisper/helper/toast.dart';
 import 'package:whisper/helper/windows_input_service.dart';
 import 'package:whisper/l10n/app_localizations.dart';
-import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/widget/app_dialogs.dart';
-
-/// The lock screen input service's state, shown the way iOS settings show a
-/// value: a quiet label before the disclosure arrow, with a coloured dot so
-/// the state does not rest on wording alone.
-class WindowsLockScreenInputStatus extends StatelessWidget {
-  const WindowsLockScreenInputStatus({super.key, required this.controller});
-
-  final WindowsInputServiceController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    final palette = context.whisperPalette;
-    return AnimatedBuilder(
-      animation: controller,
-      builder: (context, _) {
-        final (label, color) = switch (controller.state) {
-          WindowsInputServiceState.running => (
-            l10n.windowsLockScreenInputRunning,
-            palette.trusted,
-          ),
-          WindowsInputServiceState.stopped => (
-            l10n.windowsLockScreenInputStopped,
-            palette.warning,
-          ),
-          WindowsInputServiceState.outdated => (
-            l10n.windowsLockScreenInputOutdated,
-            palette.warning,
-          ),
-          _ => (
-            l10n.windowsLockScreenInputNotInstalled,
-            palette.textMuted.withValues(alpha: 0.5),
-          ),
-        };
-        return Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (controller.busy)
-              const CupertinoActivityIndicator(radius: 7)
-            else
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-              ),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                fontSize: 14,
-                letterSpacing: 0,
-                color: palette.textMuted,
-              ),
-            ),
-            const SizedBox(width: 6),
-            Icon(Icons.arrow_forward_ios, size: 14, color: palette.textMuted),
-          ],
-        );
-      },
-    );
-  }
-}
 
 String _installLabel(AppLocalizations l10n, WindowsInputServiceState state) =>
     state == WindowsInputServiceState.notInstalled
@@ -103,43 +40,6 @@ Future<void> changeWindowsLockScreenInput(
   final result = await (uninstall ? service.uninstall() : service.install());
   if (result == WindowsInputServiceResult.failed) {
     showAppToast(l10n.windowsLockScreenInputFailed, tone: AppToastTone.error);
-  }
-}
-
-/// Whether a running service also reaches UAC prompts, which appear once the
-/// session is unlocked. It sits at the end of the service's row, apart from
-/// the row's own install and uninstall action.
-class WindowsElevatedInputSwitch extends StatelessWidget {
-  const WindowsElevatedInputSwitch({super.key, required this.controller});
-
-  final WindowsInputServiceController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    return AnimatedBuilder(
-      animation: controller,
-      builder: (context, _) {
-        final available =
-            controller.state == WindowsInputServiceState.running &&
-            !controller.busy;
-        return Tooltip(
-          message: l10n.windowsElevatedInput,
-          child: CupertinoSwitch(
-            value: controller.elevatedAllowed,
-            onChanged: available
-                ? (value) => unawaited(
-                    changeWindowsElevatedInput(
-                      context,
-                      value,
-                      controller: controller,
-                    ),
-                  )
-                : null,
-          ),
-        );
-      },
-    );
   }
 }
 

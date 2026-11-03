@@ -23,21 +23,14 @@ Future<T?> showWhisperDialog<T>(
   RouteSettings? routeSettings,
 }) {
   final reduceMotion = MediaQuery.disableAnimationsOf(context);
-  final brightness = Theme.of(context).brightness;
 
   return Navigator.of(context, rootNavigator: useRootNavigator).push<T>(
     WhisperFrostedPageRoute<T>(
-      barrierBlurSigma: blurBackground && !whisperNewUi
-          ? whisperModalBlurSigma(context)
-          : 0,
+      barrierBlurSigma: 0,
       settings: routeSettings,
       barrierDismissible: barrierDismissible,
       barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
-      barrierColor: whisperNewUi
-          ? context.wc.scrim
-          : brightness == Brightness.dark
-          ? Colors.black.withValues(alpha: 0.50)
-          : const Color(0xFF0F172A).withValues(alpha: 0.24),
+      barrierColor: context.wc.scrim,
       transitionDuration: reduceMotion
           ? Duration.zero
           : whisperDialogEnterDuration,
@@ -206,39 +199,7 @@ class WhisperGlassDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (whisperNewUi) return _buildNew(context);
-    return Dialog(
-      insetPadding: insetPadding,
-      insetAnimationDuration: insetAnimationDuration,
-      backgroundColor: Colors.transparent,
-      shadowColor: Colors.transparent,
-      surfaceTintColor: Colors.transparent,
-      clipBehavior: Clip.none,
-      child: ConstrainedBox(
-        constraints: constraints,
-        child: WhisperGlassSurface(
-          borderRadius: BorderRadius.circular(borderRadius),
-          blurBackground: blurBackground,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: <Widget>[
-              if (title != null) Padding(padding: titlePadding, child: title),
-              if (content != null)
-                Flexible(
-                  fit: FlexFit.loose,
-                  child: Padding(padding: contentPadding, child: content),
-                ),
-              if (actions.isNotEmpty)
-                Padding(
-                  padding: actionsPadding,
-                  child: WhisperDialogActionBar(actions: actions),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
+    return _buildNew(context);
   }
 }
 
@@ -256,40 +217,12 @@ class WhisperAlertDialog extends StatelessWidget {
   final List<Widget> actions;
 
   @override
-  Widget build(BuildContext context) => whisperNewUi
-      ? WhisperGlassDialog(
-          constraints: const BoxConstraints(maxWidth: 380, maxHeight: 620),
-          title: Text(title),
-          content: SingleChildScrollView(child: content),
-          actions: actions,
-        )
-      : WhisperGlassDialog(
-          constraints: const BoxConstraints(maxWidth: 420, maxHeight: 620),
-          borderRadius: 22,
-          titlePadding: const EdgeInsets.fromLTRB(24, 26, 24, 8),
-          contentPadding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-          actionsPadding: EdgeInsets.zero,
-          title: Text(
-            title,
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-              fontSize: 20,
-              height: 1.3,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          content: SingleChildScrollView(
-            child: DefaultTextStyle.merge(
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: context.whisperPalette.textMuted,
-                height: 1.5,
-              ),
-              child: content,
-            ),
-          ),
-          actions: actions,
-        );
+  Widget build(BuildContext context) => WhisperGlassDialog(
+    constraints: const BoxConstraints(maxWidth: 380, maxHeight: 620),
+    title: Text(title),
+    content: SingleChildScrollView(child: content),
+    actions: actions,
+  );
 }
 
 class WhisperGlassSurface extends StatelessWidget {
@@ -425,55 +358,6 @@ class WhisperGlassSurface extends StatelessWidget {
   }
 }
 
-class WhisperDialogActionBar extends StatelessWidget {
-  const WhisperDialogActionBar({super.key, required this.actions});
-
-  final List<Widget> actions;
-
-  @override
-  Widget build(BuildContext context) {
-    final dividerColor = context.whisperPalette.borderSubtle.withValues(
-      alpha: Theme.of(context).brightness == Brightness.dark ? 0.72 : 0.82,
-    );
-    final topBorder = BorderSide(color: dividerColor, width: 0.75);
-
-    return DecoratedBox(
-      decoration: BoxDecoration(border: Border(top: topBorder)),
-      child: actions.length <= 2
-          ? SizedBox(
-              height: 52,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: <Widget>[
-                  for (var index = 0; index < actions.length; index += 1) ...[
-                    if (index > 0)
-                      SizedBox(
-                        width: 0.75,
-                        child: ColoredBox(color: dividerColor),
-                      ),
-                    Expanded(child: actions[index]),
-                  ],
-                ],
-              ),
-            )
-          : Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                for (var index = 0; index < actions.length; index += 1) ...[
-                  if (index > 0)
-                    SizedBox(
-                      height: 0.75,
-                      child: ColoredBox(color: dividerColor),
-                    ),
-                  SizedBox(height: 52, child: actions[index]),
-                ],
-              ],
-            ),
-    );
-  }
-}
-
 class WhisperDialogButton extends StatelessWidget {
   const WhisperDialogButton({
     super.key,
@@ -492,88 +376,15 @@ class WhisperDialogButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (whisperNewUi) {
-      return ShellButton(
-        label: label,
-        touch: !isDesktop(),
-        onTap: onPressed,
-        kind: destructive
-            ? ShellButtonKind.danger
-            : prominent
-            ? ShellButtonKind.primary
-            : ShellButtonKind.normal,
-      );
-    }
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
-    final palette = context.whisperPalette;
-    final isDark = theme.brightness == Brightness.dark;
-    final foreground = destructive ? palette.danger : colors.primary;
-    final child = Row(
-      mainAxisSize: MainAxisSize.max,
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: <Widget>[
-        if (icon != null) ...<Widget>[
-          Icon(icon, size: 18),
-          const SizedBox(width: 7),
-        ],
-        Flexible(
-          child: Text(
-            label,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-          ),
-        ),
-      ],
-    );
-    return TextButton(
-      onPressed: onPressed,
-      style: ButtonStyle(
-        minimumSize: const WidgetStatePropertyAll<Size>(Size(0, 52)),
-        padding: const WidgetStatePropertyAll<EdgeInsetsGeometry>(
-          EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-        ),
-        shape: const WidgetStatePropertyAll<OutlinedBorder>(
-          RoundedRectangleBorder(),
-        ),
-        foregroundColor: WidgetStateProperty.resolveWith<Color?>((states) {
-          if (states.contains(WidgetState.disabled)) {
-            return colors.onSurface.withValues(alpha: 0.38);
-          }
-          if (states.contains(WidgetState.pressed)) {
-            return Color.lerp(foreground, colors.onSurface, 0.16);
-          }
-          return foreground;
-        }),
-        backgroundColor: WidgetStateProperty.resolveWith<Color>((states) {
-          if (states.contains(WidgetState.disabled)) {
-            return Colors.transparent;
-          }
-          if (states.contains(WidgetState.pressed)) {
-            return foreground.withValues(alpha: isDark ? 0.20 : 0.14);
-          }
-          if (states.contains(WidgetState.hovered)) {
-            return foreground.withValues(alpha: isDark ? 0.14 : 0.08);
-          }
-          if (states.contains(WidgetState.focused)) {
-            return foreground.withValues(alpha: isDark ? 0.16 : 0.10);
-          }
-          return Colors.transparent;
-        }),
-        overlayColor: const WidgetStatePropertyAll<Color>(Colors.transparent),
-        splashFactory: NoSplash.splashFactory,
-        animationDuration: const Duration(milliseconds: 120),
-        textStyle: WidgetStatePropertyAll<TextStyle>(
-          TextStyle(
-            fontSize: 17,
-            height: 1.25,
-            fontWeight: prominent ? FontWeight.w600 : FontWeight.w400,
-          ),
-        ),
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      ),
-      child: child,
+    return ShellButton(
+      label: label,
+      touch: !isDesktop(),
+      onTap: onPressed,
+      kind: destructive
+          ? ShellButtonKind.danger
+          : prominent
+          ? ShellButtonKind.primary
+          : ShellButtonKind.normal,
     );
   }
 }

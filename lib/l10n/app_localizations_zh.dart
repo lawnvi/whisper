@@ -39,9 +39,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get mobileControlRightShort => '右键';
 
   @override
-  String get mobileControlStopShort => '停止';
-
-  @override
   String get mobileControlPermission =>
       '请在 Mac 的“系统设置 → 隐私与安全性 → 辅助功能”中允许 Whisper，然后重新开始。';
 
@@ -70,12 +67,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get remoteInputPeerReady => '已就绪，等待切入';
 
   @override
-  String get remoteInputManualSessionTitle => '手机键鼠';
-
-  @override
-  String get remoteInputManualSessionHint => '手机控制独立于下方的桌面键鼠工作区。';
-
-  @override
   String get mobileControlPreparing => '正在连接控制';
 
   @override
@@ -83,9 +74,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get mobileControlTouchpad => '触控板';
-
-  @override
-  String get mobileControlHoldMove => '按住此处，转腕移动光标';
 
   @override
   String get mobileControlTouchHint => '单指移动 · 轻点左击\n双指轻点右击 · 双指滑动滚动';
@@ -101,9 +89,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get mobileControlRight => '右键';
-
-  @override
-  String get mobileControlKeyboard => '虚拟键盘';
 
   @override
   String get mobileControlText => '文字输入';
@@ -130,9 +115,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get mobileControlTextSent => '文字已交给电脑系统，请查看目标应用。';
 
   @override
-  String get mobileControlSensorUnavailable => '体感不可用，已切换到触控板。';
-
-  @override
   String get mobileControlSensitivity => '体感移动速度';
 
   @override
@@ -143,9 +125,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get mobileControlCalibrationDone => '校准完成';
-
-  @override
-  String get mobileControlIdleHint => '开始后可控制光标和键盘，离开此页面会停止。';
 
   @override
   String mobileControlReceiving(String name) {
@@ -193,27 +172,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get screenshotShortcutTitle => '截图快捷键';
 
   @override
-  String get screenshotShortcutDesc =>
-      '框选屏幕区域后复制到剪贴板，由你自行粘贴；截图时保持 Whisper 窗口原样';
-
-  @override
-  String get screenshotShortcutEnabled => '启用全局快捷键';
-
-  @override
-  String get screenshotShortcutDisabled => '已关闭 · 仍可使用截图按钮';
-
-  @override
   String get screenshotShortcutUnavailable => '快捷键未注册 · 点击配置';
-
-  @override
-  String get screenshotShortcutRecord => '点击这里，然后按下组合键';
-
-  @override
-  String get screenshotShortcutHint =>
-      '使用 Ctrl、Alt 或 Command/Super 搭配字母、数字或 F1–F12；截图时按 Esc 取消，Wayland 下需在系统对话框确认快捷键';
-
-  @override
-  String get screenshotShortcutReset => '恢复默认快捷键';
 
   @override
   String get screenshotShortcutInvalid => '请使用有效组合键，并避开快捷发送的快捷键';
@@ -225,26 +184,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get connectDeviceTitle => '连接设备';
 
   @override
-  String get connectDeviceDesc => '输入对方局域网地址与端口';
-
-  @override
-  String get connectTo => '连接到';
-
-  @override
   String get connectRequest => '连接请求';
-
-  @override
-  String connectRequestDesc(String device) {
-    return '接入设备：$device?';
-  }
-
-  @override
-  String connectRequestNotificationBody(String name, String host) {
-    return '$name($host)请求连接';
-  }
-
-  @override
-  String get connectRequestExpired => '连接请求已过期';
 
   @override
   String transferNotificationTitle(int count) {
@@ -308,12 +248,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get setting => '设置';
 
   @override
-  String get sendTips => '发点什么...';
-
-  @override
-  String get sendFiles => '发送文件';
-
-  @override
   String get trust => '自动接入';
 
   @override
@@ -323,24 +257,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deleteDevice => '删除设备';
 
   @override
-  String serverPort(Object port) {
-    return '服务端口 $port';
-  }
-
-  @override
   String get serverPortTitle => '服务端口';
 
   @override
-  String get accessClipboard => '允许访问剪切板';
-
-  @override
   String get clipboardAutoSync => '自动同步剪切板';
-
-  @override
-  String get clipboardAutoSyncDesc => '同步到当前可信设备；键鼠工作区中同步到已连接的工作区设备';
-
-  @override
-  String get doubleClickRmMessage => '双击消息删除';
 
   @override
   String get close2tray => '关闭时隐藏到托盘';
@@ -349,13 +269,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get nickname => '昵称';
 
   @override
-  String get nicknameDesc => '请输入昵称';
-
-  @override
   String get port => '服务端口';
-
-  @override
-  String get portDesc => '请输入 1001 到 65535 之间的端口';
 
   @override
   String get timeoutTitle => '连接超时';
@@ -408,13 +322,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get delete => '删除';
 
   @override
-  String get deleteConfirm => '确认删除';
-
-  @override
   String get warning => '警告';
-
-  @override
-  String get deleteWarningText => '连接正在使用，禁止快速删除';
 
   @override
   String get close => '关闭';
@@ -431,27 +339,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get brokeConnectTitle => '断开连接';
 
   @override
-  String brokeConnectDesc(String device) {
-    return '断开 $device';
-  }
-
-  @override
   String get connectFailed => '连接失败';
 
   @override
   String get connectAlreadyInProgress => '连接正在进行中';
 
   @override
-  String get deviceBusy => '服务占线';
-
-  @override
   String get startServerFailed => '服务启动失败';
 
   @override
   String get deleteMessageTitle => '删除消息';
-
-  @override
-  String get deleteMessageDesc => '确定删除此消息吗？';
 
   @override
   String get selectMessages => '多选';
@@ -493,9 +390,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get selectNotifyApp => '选择通知应用';
 
   @override
-  String get copyVerifyCode => '验证码写入剪切板';
-
-  @override
   String get open => '打开';
 
   @override
@@ -503,9 +397,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get openInDir => '所在文件夹';
-
-  @override
-  String get keepFile => '保留文件';
 
   @override
   String get deleteFile => '删除文件';
@@ -529,24 +420,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get followSystem => '跟随系统';
 
   @override
-  String get lightMode => '明亮';
-
-  @override
-  String get darkMode => '暗黑';
-
-  @override
-  String get selectThemeMode => '选择主题模式';
-
-  @override
-  String get selectLanguage => '选择语言';
-
-  @override
-  String get searchChats => '搜索';
-
-  @override
-  String get selectConversationPlaceholder => '选择一个设备开始对话';
-
-  @override
   String get connectedNow => '当前已连接';
 
   @override
@@ -559,9 +432,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sharedFile => '发送了一个文件';
 
   @override
-  String get connectToSend => '连接后即可发送消息';
-
-  @override
   String get localeNameZhHans => '简体中文';
 
   @override
@@ -572,12 +442,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get autoConnectTrustedDevices => '自动连接互信设备';
-
-  @override
-  String get mutualTrustEnabled => '双向互信已开启';
-
-  @override
-  String get mutualTrustNotEstablished => '尚未形成双向互信';
 
   @override
   String get windowsLockScreenInput => '锁屏与 UAC 时接收键鼠';
@@ -652,9 +516,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get androidBackgroundKeepAlive => '后台保活连接';
 
   @override
-  String get androidBackgroundKeepAliveDesc => '保持局域网接收服务运行，便于在后台或锁屏时收到连接请求';
-
-  @override
   String get androidBackgroundKeepAliveActiveTitle => 'Whisper 正在监听局域网连接';
 
   @override
@@ -662,10 +523,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get androidBatteryOptimization => '电池优化白名单';
-
-  @override
-  String get androidBatteryOptimizationDesc =>
-      '建议允许后台运行，并把 Whisper 加入电池优化白名单，尤其是小米、OPPO、vivo、华为设备';
 
   @override
   String get fileTransferQueued => '排队中';
@@ -714,47 +571,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get audioShareStart => '把本机声音共享给对端';
 
   @override
-  String get audioSharePlaybackGainTitle => '共享扬声器增益';
-
-  @override
-  String audioSharePlaybackGainSetting(String gain) {
-    return '共享扬声器增益：$gain';
-  }
-
-  @override
-  String get audioSharePlaybackGainDesc => '只影响本机播放对端共享声音，过高可能产生削波';
-
-  @override
   String get remoteInputScrollMultiplierTitle => '键鼠共享滚轮速度';
 
   @override
-  String remoteInputScrollMultiplierSetting(String multiplier) {
-    return '键鼠共享滚轮速度：$multiplier';
-  }
-
-  @override
-  String get remoteInputScrollMultiplierDesc => '只影响本机作为被控端时接收的远端滚轮事件';
-
-  @override
   String get audioShareUnsupportedCapture => '当前设备不支持系统音频采集';
-
-  @override
-  String get audioGroupShareStart => '同步到多台扬声器';
-
-  @override
-  String get audioGroupAdjust => '调整音频共享';
 
   @override
   String get audioGroupSelectSinks => '选择播放设备';
 
   @override
   String get audioGroupStart => '开始同步播放';
-
-  @override
-  String get audioGroupApply => '应用配置';
-
-  @override
-  String get audioGroupStop => '停止共享';
 
   @override
   String get audioGroupRoleStereo => '立体声';
@@ -782,52 +608,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get audioGroupSyncUnstable => '同步波动';
-
-  @override
-  String get audioGroupDeviceIdle => '未播放';
-
-  @override
-  String get audioGroupLatencyShortLabel => '网络';
-
-  @override
-  String get audioGroupJitterShortLabel => '抖动';
-
-  @override
-  String get audioGroupBufferShortLabel => '缓冲';
-
-  @override
-  String get audioGroupRecentLatePacketShortLabel => '晚包';
-
-  @override
-  String get audioGroupClockOffsetLabel => '时钟偏移';
-
-  @override
-  String audioGroupSyncEvidence(
-    Object quality,
-    Object clockOffsetLabel,
-    Object offset,
-    Object rtt,
-    Object jitter,
-    Object buffer,
-    Object latePackets,
-  ) {
-    return '$quality · $clockOffsetLabel ${offset}ms · RTT ${rtt}ms · 抖动 ${jitter}ms · 缓冲 ${buffer}ms · 晚包 $latePackets';
-  }
-
-  @override
-  String audioGroupSyncEvidenceCompact(
-    Object quality,
-    Object latencyLabel,
-    Object rtt,
-    Object jitterLabel,
-    Object jitter,
-    Object bufferLabel,
-    Object buffer,
-    Object latePacketLabel,
-    Object latePackets,
-  ) {
-    return '$quality · $latencyLabel$rtt · $jitterLabel$jitter · $bufferLabel$buffer · $latePacketLabel$latePackets';
-  }
 
   @override
   String audioShareFailed(String error) {
@@ -879,52 +659,13 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get remoteInputLayoutTitle => '屏幕排列';
-
-  @override
-  String get remoteInputLocalScreen => '本机';
-
-  @override
-  String get remoteInputEdgeLeft => '左侧';
-
-  @override
-  String get remoteInputEdgeRight => '右侧';
-
-  @override
-  String get remoteInputEdgeTop => '上方';
-
-  @override
-  String get remoteInputEdgeBottom => '下方';
-
-  @override
-  String get remoteInputEdgeNotAdjacent => '未贴边';
-
-  @override
-  String get remoteInputWorkspaceTitle => '键鼠工作区';
-
-  @override
-  String get remoteInputWorkspaceTooltip => '键鼠工作区';
-
-  @override
-  String get remoteInputWorkspaceStart => '启动';
-
-  @override
   String get remoteInputWorkspaceStop => '停止';
 
   @override
   String get remoteInputWorkspaceNoTargets => '没有可用的桌面被控设备';
 
   @override
-  String get remoteInputWorkspaceNoTargetsHint => '连接并信任支持键鼠控制的桌面设备后会显示在这里';
-
-  @override
-  String get remoteInputWorkspaceSelectTargets => '被控设备';
-
-  @override
   String get remoteInputWorkspaceCanvasTitle => '屏幕排列';
-
-  @override
-  String get remoteInputWorkspaceCanvasHint => '拖动远端屏幕并贴近本机屏幕边缘';
 
   @override
   String remoteInputWorkspaceExitShortcut(String shortcut) {
@@ -932,64 +673,8 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get remoteInputWorkspaceSelectTargetHint => '从左侧选择至少一台被控设备';
-
-  @override
-  String get remoteInputWorkspaceLocalBadge => '本机';
-
-  @override
-  String get remoteInputWorkspaceRemoteBadge => '远端';
-
-  @override
-  String get remoteInputWorkspaceDetailsTitle => '设备详情';
-
-  @override
-  String get remoteInputWorkspaceFocusTarget => '查看设备';
-
-  @override
-  String get remoteInputWorkspaceAddTarget => '加入工作区';
-
-  @override
-  String get remoteInputWorkspaceRemoveTarget => '移出工作区';
-
-  @override
-  String get remoteInputWorkspaceState => '状态';
-
-  @override
-  String get remoteInputWorkspaceResolution => '分辨率';
-
-  @override
-  String get remoteInputWorkspaceConflict => '边缘重叠';
-
-  @override
-  String get remoteInputWorkspaceReachable => '可达';
-
-  @override
-  String get remoteInputWorkspaceDisconnected => '未连接到工作区';
-
-  @override
-  String get remoteInputWorkspaceUnsupported => '不支持工作区路由';
-
-  @override
-  String get remoteInputWorkspaceTargetIdle => '未启用';
-
-  @override
-  String get remoteInputWorkspaceStatusIdle => '键鼠工作区未启用';
-
-  @override
-  String get remoteInputWorkspaceStatusOffering => '正在等待被控设备确认';
-
-  @override
-  String get remoteInputWorkspaceStatusArmed => '移动到屏幕边缘开始控制目标设备';
-
-  @override
   String remoteInputWorkspaceStatusActive(String peer) {
     return '正在控制 $peer';
-  }
-
-  @override
-  String remoteInputWorkspaceStatusFailed(String error) {
-    return '键鼠工作区失败：$error';
   }
 
   @override
@@ -1038,40 +723,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get fileDropRejected => '无法发送这些文件';
 
   @override
-  String get validationRequired => '此项不能为空';
-
-  @override
   String get validationNicknameRequired => '请输入昵称';
 
   @override
   String get validationNicknameTooLong => '昵称不能超过 64 个字符';
-
-  @override
-  String get validationHostRequired => '请输入主机名或 IP 地址';
-
-  @override
-  String get validationHostInvalid => '请输入有效的 IPv4、IPv6、.local 或主机名';
-
-  @override
-  String get validationPortInvalid => '请输入 1001 到 65535 之间的端口';
-
-  @override
-  String get settingsSectionDeviceAppearance => '设备与外观';
-
-  @override
-  String get settingsSectionDeviceAppearanceDesc => '名称、主题和本机在附近设备上的显示方式';
-
-  @override
-  String get settingsSectionConnectionTransfer => '连接与传输';
-
-  @override
-  String get settingsSectionConnectionTransferDesc => '服务端口、文件保存和可信设备连接';
-
-  @override
-  String get settingsSectionSystemBehavior => '系统行为';
-
-  @override
-  String get settingsSectionSystemBehaviorDesc => '启动、后台和窗口行为';
 
   @override
   String get settingsSectionPermissionsSharing => '权限与共享';
@@ -1080,55 +735,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsSectionPermissionsSharingDesc => '剪贴板、信任、音频和键鼠权限';
 
   @override
-  String get settingsSectionMobileIntegration => '移动端集成';
-
-  @override
-  String get settingsSectionMobileIntegrationDesc => '后台连接和电池行为';
-
-  @override
-  String get settingsSectionNotificationForwarding => '通知转发';
-
-  @override
-  String get settingsSectionNotificationForwardingDesc => 'Android 通知处理和验证码辅助';
-
-  @override
-  String get settingsSectionLanguageFiles => '语言与文件';
-
-  @override
-  String get settingsSectionLanguageFilesDesc => '语言和文件保存目录';
-
-  @override
-  String get settingsSaveDirectory => '保存目录';
-
-  @override
-  String get settingsChangeDirectory => '更改保存目录';
-
-  @override
-  String get settingsOpenDirectory => '打开保存目录';
-
-  @override
-  String get settingsVersion => '版本';
-
-  @override
-  String get settingsSectionAbout => '关于';
-
-  @override
-  String get settingsSectionAboutDesc => '版本更新和应用信息';
-
-  @override
-  String get checkForUpdates => '检查更新';
-
-  @override
   String currentVersion(String version) {
     return '当前版本 $version';
-  }
-
-  @override
-  String get checkingForUpdates => '正在检查更新…';
-
-  @override
-  String updateAvailableVersion(String version) {
-    return '发现新版本 $version';
   }
 
   @override
@@ -1154,11 +762,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get viewRelease => '查看 Release';
 
   @override
-  String downloadingUpdate(int progress) {
-    return '正在下载 $progress%';
-  }
-
-  @override
   String get updateInstallerOpened => '更新包已校验，已交给系统安装器';
 
   @override
@@ -1177,45 +780,19 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sourceCode => 'GitHub 源代码';
 
   @override
-  String get appListSearchPlaceholder => '搜索应用';
-
-  @override
   String get appListClearSearch => '清除应用搜索';
-
-  @override
-  String get deselectAll => '取消全选';
 
   @override
   String get settingsLoadFailedTitle => '无法加载设置';
 
   @override
-  String get settingsLoadFailedBody => '请检查本机应用服务后重试。';
-
-  @override
   String get appListLoadFailedTitle => '无法加载应用';
-
-  @override
-  String get appListLoadFailedBody => '请检查应用访问权限后重试。';
 
   @override
   String get appListSaveFailed => '无法保存通知应用选择';
 
   @override
   String get notificationApps => '通知应用';
-
-  @override
-  String notificationAppsSelected(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '已选择 $count 个应用',
-      zero: '尚未选择应用',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get notificationAppsDisabled => '开启通知转发后可选择应用';
 
   @override
   String get notificationForwardingUpdateFailed => '无法更新通知转发，请重试';
@@ -1225,11 +802,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get pairingNewDeviceTitle => '配对新设备';
-
-  @override
-  String pairingNewDeviceDescription(String device) {
-    return '$device 请求建立可信连接';
-  }
 
   @override
   String pairingNewDeviceCompareCode(String device) {
@@ -1366,33 +938,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get transferAssistantFavoriteFailed => '无法更新收藏，请重试';
 
   @override
-  String get qrPairingTitle => '二维码连接';
-
-  @override
   String get qrMyCode => '我的二维码';
 
   @override
-  String get qrScanCode => '扫码连接';
-
-  @override
-  String get qrShowCodeHint => '让另一台设备扫描此二维码，地址和设备身份会同时核验';
-
-  @override
-  String qrFingerprint(String fingerprint) {
-    return '身份指纹 $fingerprint';
-  }
-
-  @override
   String get qrWifiUnavailable => '未检测到可用的局域网地址，请先连接 Wi-Fi 再刷新二维码';
-
-  @override
-  String get qrCopyLink => '复制连接信息';
-
-  @override
-  String get qrLinkCopied => '连接信息已复制';
-
-  @override
-  String get qrScanHint => '扫描对方 Whisper 中显示的二维码';
 
   @override
   String get qrCameraUnavailable => '无法使用相机，请在系统设置中允许 Whisper 访问相机';
@@ -1458,9 +1007,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get quickSendLater => '稍后';
 
   @override
-  String get quickSendSend => '发送';
-
-  @override
   String androidSystemShareWaitingForDevice(String device) {
     return '已选择 $device，连接后将自动发送';
   }
@@ -1500,9 +1046,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get desktopQuickSendFailedRetained => '发送未完成，内容已保留';
 
   @override
-  String get desktopQuickSendEmptyClipboard => '剪贴板中没有可发送的内容';
-
-  @override
   String get desktopQuickSendShortcutUnavailable => '全局发送快捷键被其他应用占用';
 
   @override
@@ -1535,19 +1078,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get messageLinkOpenFailed => '无法打开此链接';
-
-  @override
-  String get connectFirstDevice => '连接你的第一台设备';
-
-  @override
-  String get deviceConnectionGuide =>
-      '在另一台设备打开 Whisper，并连接同一个 Wi-Fi 或局域网。附近设备会自动显示在列表中。';
-
-  @override
-  String get manualConnectAction => '手动输入地址';
-
-  @override
-  String get deviceDiscoveryHelp => '没有发现设备？可尝试二维码连接，或在两台设备的系统设置中允许本地网络访问。';
 
   @override
   String get deviceOffline => '离线设备';
@@ -1620,11 +1150,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String castRequestCountdown(int seconds) {
-    return '$seconds 秒后自动允许，你也可以拒绝。';
-  }
-
-  @override
   String get castRequestDeny => '拒绝';
 
   @override
@@ -1646,25 +1171,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get mobileControlKeysTab => '键盘';
 
   @override
-  String get mobileControlTextTab => '文字';
-
-  @override
   String get mobileControlSettings => '指针设置';
-
-  @override
-  String get mobileControlLiftHint => '松手暂停，调整握姿后继续。';
-
-  @override
-  String get mobileControlDragHint => '按住左键即可拖拽。';
 
   @override
   String get mobileControlPrecisionHint => '慢转精细定位，快转大幅移动。';
 
   @override
   String get mobileControlCalibrationRetry => '请保持手机静止，再试一次校准。';
-
-  @override
-  String get mobileControlStartShort => '开始';
 
   @override
   String get mobileControlMotionStart => '开启体感';
@@ -1689,9 +1202,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get mobileControlScrollSpeed => '滚轮滑动速度';
-
-  @override
-  String get mobileControlScrollRail => '滑动\n滚动';
 
   @override
   String get mobileControlPermissionDesktop =>
@@ -1733,9 +1243,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get mobileControlInjectionHelp => '电脑未能执行输入，请检查系统控制权限后重新开始。';
 
   @override
-  String get clipboardAutoSyncAndroidDesc => '回到 Whisper 后，将新复制的文字同步到当前可信设备';
-
-  @override
   String get historyLoadFailed => '历史记录未能加载，点按重试';
 
   @override
@@ -1755,18 +1262,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get connectionAddressTab => 'IP / 端口';
-
-  @override
-  String get connectionAddressLabel => 'IP 地址或主机名';
-
-  @override
-  String get connectionDetailsTab => '本机信息';
-
-  @override
-  String get connectionAddressHint => '填写对方 Whisper 首页显示的地址和端口。两台设备需连接同一局域网。';
-
-  @override
-  String get qrCopyFailed => '复制失败，请重试';
 
   @override
   String get attachFile => '文件';
@@ -1878,9 +1373,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get windowStreamTitle => '手机应用';
-
-  @override
   String get windowStreamConnecting => '正在连接…';
 
   @override
@@ -1902,12 +1394,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get windowStreamDisconnected => '连接已断开，可以关闭这个窗口';
 
   @override
-  String get windowStreamNoDevice => '没有发现手机';
-
-  @override
-  String get windowStreamNoDeviceHint => '用数据线连接手机，或在手机的开发者选项里打开“无线调试”。';
-
-  @override
   String get windowStreamUnauthorized => '请在手机上允许这台电脑调试';
 
   @override
@@ -1923,19 +1409,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get windowStreamUnsupported => '这台电脑暂时还不能打开手机应用窗口';
 
   @override
-  String get windowStreamRunningApps => '正在运行';
-
-  @override
-  String get windowStreamAllApps => '所有应用';
-
-  @override
   String get windowStreamSearchApps => '搜索应用';
-
-  @override
-  String get windowStreamLoadingApps => '正在读取应用…';
-
-  @override
-  String get windowStreamOnDesktop => '在桌面上';
 
   @override
   String get windowStreamShowSystemApps => '显示系统应用';
@@ -1959,36 +1433,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get windowStreamSpaceTitle => '流转';
 
   @override
-  String get windowStreamRecents => '最近';
-
-  @override
-  String get windowStreamWindows => '窗口';
-
-  @override
-  String get windowStreamApps => '应用';
-
-  @override
-  String get windowStreamViaUsb => 'USB 连接';
-
-  @override
-  String get windowStreamViaWifi => '无线调试';
-
-  @override
-  String get windowStreamViaWhisper => '已连接';
-
-  @override
-  String get windowStreamStatusLive => '直播';
-
-  @override
-  String get windowStreamStatusPaused => '已暂停';
-
-  @override
-  String get windowStreamStatusConnecting => '连接中';
-
-  @override
-  String get windowStreamStatusEnded => '已断开';
-
-  @override
   String get windowStreamPause => '暂停';
 
   @override
@@ -1996,12 +1440,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get windowStreamClose => '关闭';
-
-  @override
-  String get windowStreamNoWindows => '还没有打开的窗口';
-
-  @override
-  String get windowStreamNoWindowsHint => '点开一个应用或最近任务，它会出现在这里';
 
   @override
   String get windowStreamNoDevices => '还没有可用的设备';
@@ -2024,9 +1462,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get windowStreamKeyboard => '键盘';
 
   @override
-  String get windowStreamNoRecents => '这台设备上没有正在运行的应用';
-
-  @override
   String get windowStreamSourceLocked => '这台电脑已锁屏，解锁后才能流转它的窗口';
 
   @override
@@ -2045,16 +1480,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get windowStreamNotPaired => '未配对';
 
   @override
-  String get windowStreamOpenHere => '在本机打开';
-
-  @override
   String windowStreamSendTo(String device) {
     return '送到 $device';
-  }
-
-  @override
-  String windowStreamSendHint(String device) {
-    return '选一个本机窗口送到 $device。点开后窗口会挪到那台设备上，不再占这台电脑的屏幕；那边关掉后自动回到原处。';
   }
 
   @override
@@ -2090,22 +1517,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get remoteFilesTitle => '文件';
 
   @override
-  String remoteFilesOfDevice(String device) {
-    return '$device 的文件';
-  }
-
-  @override
   String get remoteFilesThisDevice => '本机';
-
-  @override
-  String remoteFilesWaiting(String device) {
-    return '正在等 $device 允许…';
-  }
-
-  @override
-  String remoteFilesDenied(String device) {
-    return '$device 没有允许浏览文件';
-  }
 
   @override
   String remoteFilesOffline(String device) {
@@ -2119,11 +1531,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get remoteFilesEmptyFolder => '这个文件夹是空的';
-
-  @override
-  String remoteFilesCopyTo(String target) {
-    return '拷贝到 $target';
-  }
 
   @override
   String get remoteFilesNewFolder => '新建文件夹';
@@ -2146,11 +1553,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String remoteFilesCopyStarted(int count) {
-    return '正在拷贝 $count 项';
-  }
-
-  @override
   String get remoteFilesFailed => '操作没有完成';
 
   @override
@@ -2158,11 +1560,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get remoteFilesShowHidden => '显示隐藏文件';
-
-  @override
-  String remoteFilesItemCount(int count) {
-    return '$count 项';
-  }
 
   @override
   String remoteFilesSelected(int count) {
@@ -2174,11 +1571,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get remoteFilesDone => '完成';
-
-  @override
-  String remoteFilesDropHint(String device) {
-    return '拖到这里，拷贝到 $device';
-  }
 
   @override
   String get remoteFilesPlaceRoot => '主目录';
@@ -2213,10 +1605,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get remoteFilesPromptBodyDesktop =>
-      '允许后，它能看到你的主目录，并在里面拷贝、新建、重命名和删除文件。删除的文件会进废纸篓。';
-
-  @override
   String get remoteFilesPromptBodyPhone =>
       '允许后，它能看到这台手机的内部存储，并在里面拷贝、新建、重命名和删除文件。删除的文件不能恢复。';
 
@@ -2247,20 +1635,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get windowStreamTouchBlockedFixed => '好了，手机可以操作了';
-
-  @override
-  String get remoteFilesFavorites => '个人收藏';
-
-  @override
-  String get remoteFilesLocations => '位置';
-
-  @override
-  String get remoteFilesBrowse => '浏览';
-
-  @override
-  String remoteFilesWaitingAllow(String device) {
-    return '请在 $device 上点“允许”';
-  }
 
   @override
   String get remoteFilesWaitingDetail => 'Whisper 正在那台设备上询问是否让本机浏览文件。';
@@ -2327,9 +1701,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get remoteFilesForward => '前进';
-
-  @override
   String get remoteFilesOpen => '打开';
 
   @override
@@ -2342,26 +1713,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get remoteFilesRefresh => '刷新';
-
-  @override
-  String remoteFilesStatusSelected(int selected, int count) {
-    return '已选择 $selected 项，共 $count 项';
-  }
-
-  @override
-  String remoteFilesCopyProgress(int count, int percent) {
-    return '正在拷贝 $count 项 · $percent%';
-  }
-
-  @override
-  String remoteFilesCopyDone(int count) {
-    return '已拷贝 $count 项';
-  }
-
-  @override
-  String remoteFilesCopyPartly(int failed) {
-    return '$failed 项没有拷贝成功';
-  }
 
   @override
   String get remoteFilesSameDevice => '已经在这台设备上了';
@@ -2420,53 +1771,22 @@ class AppLocalizationsZh extends AppLocalizations {
   String get remoteFilesMore => '更多';
 
   @override
-  String get remoteFilesClose => '关闭文件';
-
-  @override
-  String get remoteFilesClipboardReady => '可以在访达等应用里粘贴了';
-
-  @override
-  String get remoteFilesClipboardOnPaste => '已复制，在 Whisper 里粘贴时开始传输';
-
-  @override
-  String remoteFilesClipboardOnPasteDrag(String app) {
-    return '已复制，在 Whisper 里粘贴时开始传输；放进$app请直接拖过去';
-  }
-
-  @override
   String get windowStreamTextSize => '文字大小';
 
   @override
   String get macPermissionAccessibility => '辅助功能';
 
   @override
-  String get macPermissionAccessibilityDesc => '共享键盘鼠标、在流转来的窗口里操作时需要';
-
-  @override
   String get macPermissionScreenRecording => '屏幕与系统录音';
 
   @override
-  String get macPermissionScreenRecordingDesc =>
-      '把窗口流转出去、当扬声器、截图时需要；改了之后重新打开 Whisper 才生效';
-
-  @override
   String get macPermissionAudioCapture => '仅系统录音';
-
-  @override
-  String get macPermissionAudioCaptureDesc =>
-      '可选。不开也会把声音带过去；开了以后 Mac 这边静音，浏览器的声音也能带上';
 
   @override
   String get macPermissionGranted => '已允许';
 
   @override
   String get macPermissionDenied => '未允许';
-
-  @override
-  String get macPermissionNotAsked => '未设置';
-
-  @override
-  String get macPermissionOptional => '可选';
 
   @override
   String get windowStreamQuality => '画质';
@@ -2487,31 +1807,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get windowStreamQualityHint => '越高越清晰，也越占网络';
 
   @override
-  String get windowStreamReceiveOnly => '只接收窗口';
-
-  @override
-  String get windowStreamNotConnected => '未连接';
-
-  @override
-  String get windowStreamConnectFirst => '先在 Whisper 里连上这台手机，才能流转它的应用';
-
-  @override
-  String windowStreamOpenHereDetail(String device) {
-    return '用 $device 上的应用';
-  }
-
-  @override
-  String windowStreamSendToDetail(String device) {
-    return '把窗口挪到 $device 上';
-  }
-
-  @override
-  String get toolbarMoreTools => '更多功能';
-
-  @override
-  String get toolbarFewerTools => '收起';
-
-  @override
   String get windowStreamStreaming => '流转中';
 
   @override
@@ -2528,12 +1823,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get deviceFeaturesSection => '功能';
-
-  @override
-  String get deviceFeatureFlowDetail => '用它的应用和窗口，或把窗口送过去';
-
-  @override
-  String get deviceFeatureFilesDetail => '浏览和拷贝它的文件';
 
   @override
   String get deviceFeatureNeedsConnection => '连接后可用';
@@ -2562,14 +1851,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get remoteFilesFileManager => '文件管理器';
-
-  @override
-  String remoteFilesShowInApp(String app) {
-    return '在$app中打开';
-  }
-
-  @override
-  String get remoteFilesEject => '推出';
 
   @override
   String remoteFilesMountTooOld(String device, String app) {
@@ -2656,11 +1937,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get remoteFilesCopyShowAll => '查看全部传输';
 
   @override
-  String remoteFilesCopyMore(int count) {
-    return '还有 $count 个拷贝';
-  }
-
-  @override
   String get remoteFilesCopyAlready => '这些项目已经在拷贝到这里了';
 
   @override
@@ -2668,9 +1944,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get remoteFilesTransfersEmpty => '还没有拷贝';
-
-  @override
-  String get remoteFilesTransfersEmptyDetail => '在这里拷贝的文件，进度和结果都会列在这里';
 
   @override
   String get remoteFilesTransfersClear => '清除已结束';
@@ -2827,12 +2100,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get shareLinkMenuCreate => '创建共享链接…';
 
   @override
-  String get shareLinkCreateTitle => '创建共享链接';
-
-  @override
-  String get shareLinkCreateDetail => '同一局域网里的设备用浏览器打开链接就能下载，不用装 Whisper。';
-
-  @override
   String shareLinkDefaultName(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -2846,25 +2113,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get shareLinkRoute => '路由';
 
   @override
-  String get shareLinkRouteHelp => '不填就用上面这个随机路由';
-
-  @override
   String get shareLinkShortRoute => '简短路由';
 
   @override
-  String get shareLinkShortRouteDetail => '4 个字符，方便口头告诉别人';
-
-  @override
   String get shareLinkPassword => '密码';
-
-  @override
-  String get shareLinkPasswordOptional => '可不填';
-
-  @override
-  String get shareLinkShowPassword => '显示密码';
-
-  @override
-  String get shareLinkHidePassword => '隐藏密码';
 
   @override
   String get shareLinkCreate => '创建链接';
@@ -2885,41 +2137,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get shareLinkCreateFailed => '没能创建链接';
 
   @override
-  String get shareLinkReady => '链接已创建';
-
-  @override
   String get shareLinkCopy => '复制链接';
-
-  @override
-  String get shareLinkCopied => '已复制';
-
-  @override
-  String get shareLinkScanHint => '也可以用手机相机扫一扫';
-
-  @override
-  String get shareLinkAddressPicker => '选择网络地址';
-
-  @override
-  String get shareLinkServiceOffNote => '服务已关闭，打开后链接才能访问';
-
-  @override
-  String get shareLinkNoNetwork => '没有连上局域网，其他设备暂时打不开';
 
   @override
   String get shareLinkPasswordProtected => '有密码';
 
   @override
   String get shareLinksTitle => '共享链接';
-
-  @override
-  String shareLinksActiveCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count 个链接开着',
-    );
-    return '$_temp0';
-  }
 
   @override
   String get shareLinksService => '文件服务';
@@ -2969,29 +2193,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String shareLinkDownloads(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count 次下载',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String shareLinkLastVisit(String time) {
-    return '最近访问 $time';
-  }
-
-  @override
-  String get shareLinkNeverVisited => '还没人打开过';
-
-  @override
-  String shareLinkBytesServed(String size) {
-    return '已发送 $size';
-  }
-
-  @override
   String get shareLinkQr => '二维码';
 
   @override
@@ -3030,9 +2231,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get shareWebDownloadAll => '全部下载（.zip）';
 
   @override
-  String get shareWebDownloadZip => '下载为 .zip';
-
-  @override
   String shareWebItemCount(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -3044,16 +2242,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get shareWebEmptyFolder => '这个文件夹是空的';
-
-  @override
-  String shareWebModified(String date) {
-    return '修改于 $date';
-  }
-
-  @override
-  String shareWebFooter(String device) {
-    return '来自 $device · 用 Whisper 共享';
-  }
 
   @override
   String get shareWebNotFoundTitle => '这个链接打不开';
@@ -3112,20 +2300,6 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String flowTaskOpenOn(String device) {
     return '正在 $device 上显示';
-  }
-
-  @override
-  String get shareLinkBarAction => '共享链接';
-
-  @override
-  String get windowStreamSourceErrorDesktopUnsupported => '这台电脑不支持窗口流转';
-
-  @override
-  String get windowStreamSourceErrorElevated => '这个窗口以管理员身份运行，无法流转';
-
-  @override
-  String windowStreamSourceNoteStagedInPlace(String app) {
-    return '$app 不支持在后台运行，正在原位置流转';
   }
 
   @override
@@ -3209,9 +2383,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get windowStreamShareSetting => '允许查看和操作本机窗口';
 
   @override
-  String get windowStreamShareSettingDesc => '已信任的设备可以在它们那边打开并操作这台电脑上的窗口';
-
-  @override
   String get deviceFilesAlwaysAllowed => '始终允许浏览我的文件';
 
   @override
@@ -3248,28 +2419,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get shareWebNext => '下一个';
 
   @override
-  String get shareLinkAllowAccess => '允许访问';
-
-  @override
   String get shareLinkAddress => '地址';
 
   @override
   String get shareLinksServiceFooter => '同一局域网里的设备用浏览器打开链接就能下载。服务只在有开着的链接时运行。';
-
-  @override
-  String get shareLinkVisitsLabel => '访问次数';
-
-  @override
-  String get shareLinkDownloadsLabel => '下载次数';
-
-  @override
-  String get shareLinkLastVisitLabel => '最近访问';
-
-  @override
-  String get shareLinkSentLabel => '已发送';
-
-  @override
-  String get shareLinkNever => '从未';
 
   @override
   String get androidWindowServiceTitle => '窗口流转服务';
@@ -3299,9 +2452,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get androidWindowServiceStop => '停止服务';
-
-  @override
-  String get androidWindowServiceSetup => '开始设置';
 
   @override
   String get androidWindowServiceHowTitle => '一次性设置';
@@ -3367,9 +2517,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get androidWindowServiceEntryTitle => '窗口流转服务';
 
   @override
-  String get androidWindowServiceEntryHint => '让其他设备流转这台手机的应用';
-
-  @override
   String get androidWindowServiceComputerHint =>
       '把这台手机连到一台装了 Whisper、开着窗口流转的电脑一次，就能开启；之后其他电脑都能用';
 
@@ -3403,18 +2550,11 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get remoteFilesPromptBodyReadOnlyDesktop =>
-      '允许后，它能看到你的主目录，打开和拷出里面的文件，但不能改动。';
-
-  @override
   String get remoteFilesPromptBodyReadOnlyPhone =>
       '允许后，它能看到这台手机的内部存储，打开和拷出里面的文件，但不能改动。';
 
   @override
   String get islandOverlay => '后台灵动岛';
-
-  @override
-  String get islandOverlayDesc => 'Whisper 在后台时，在屏幕顶部显示传输进度。需要允许显示在其他应用上层。';
 
   @override
   String get islandOverlayOn => '已开启';
@@ -3575,9 +2715,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get shellCardConnected => '已连接';
 
   @override
-  String get shellCardUnpaired => '还没有配对';
-
-  @override
   String shellCardCan(String device) {
     return '$device 可以';
   }
@@ -3590,9 +2727,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get shellCardChange => '修改我的文件';
-
-  @override
-  String get shellCardDetails => '详细信息';
 
   @override
   String get shellCardAddress => '地址';
@@ -3619,12 +2753,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get shellCardMount => '挂载';
 
   @override
-  String get shellOn => '开';
-
-  @override
-  String get shellOff => '关';
-
-  @override
   String get shellPhoneDevices => '设备';
 
   @override
@@ -3645,9 +2773,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String shellComposerHint(String device) {
     return '发给 $device';
   }
-
-  @override
-  String get shellPhoneNeedsConnection => '连接后可用';
 
   @override
   String get shellPaletteDevice => '设备';
@@ -3874,9 +2999,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String soundGainValue(String value) {
     return '${value}x';
   }
-
-  @override
-  String get soundGainLabel => '这台的播放增益';
 
   @override
   String get soundResume => '继续';

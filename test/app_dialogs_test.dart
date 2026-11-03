@@ -7,8 +7,9 @@ import 'package:whisper/widget/app_dialogs.dart';
 import 'package:whisper/widget/glass_dialog.dart';
 
 void main() {
-  testWidgets('invalid input shows an inline error and keeps dialog open',
-      (tester) async {
+  testWidgets('invalid input shows an inline error and keeps dialog open', (
+    tester,
+  ) async {
     await _pumpHost(tester);
     final context = tester.element(find.byType(Scaffold));
 
@@ -110,9 +111,9 @@ void main() {
       expect(
         find.descendant(
           of: find.byType(WhisperGlassDialog),
-          matching: find.byType(BackdropFilter),
+          matching: find.byType(WhisperDialogButton),
         ),
-        findsOneWidget,
+        findsNWidgets(2),
       );
 
       await tester.tap(cancelFinder);
@@ -122,10 +123,7 @@ void main() {
   );
 }
 
-Future<void> _pumpHost(
-  WidgetTester tester, {
-  ThemeData? theme,
-}) {
+Future<void> _pumpHost(WidgetTester tester, {ThemeData? theme}) {
   return tester.pumpWidget(
     MaterialApp(
       theme: theme,

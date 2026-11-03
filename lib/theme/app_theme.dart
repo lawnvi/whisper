@@ -153,11 +153,10 @@ class AppTheme {
 
   static ThemeData get darkTheme => _buildTheme(_darkScheme, _darkPalette);
 
-  /// The new UI sets its own sizes and asks nothing else of the text theme:
+  /// The interface sets its own sizes and asks nothing else of the text theme:
   /// Material's letter spacing spreads Chinese apart, and its leading sits text
   /// off centre against the prototype's.
   static TextTheme _textTheme(TextTheme theme) {
-    if (!whisperNewUi) return theme;
     TextStyle? plain(TextStyle? style) => style?.copyWith(
       letterSpacing: 0,
       leadingDistribution: TextLeadingDistribution.even,
@@ -276,7 +275,7 @@ class AppTheme {
     return base.copyWith(
       extensions: <ThemeExtension<dynamic>>[
         palette,
-        // The new UI's tokens, unused by the old pages (migration.md「怎么过渡」).
+        // The interface's tokens.
         colorScheme.brightness == Brightness.dark
             ? WhisperColors.dark
             : WhisperColors.light,
@@ -290,10 +289,12 @@ class AppTheme {
           color: colorScheme.onSurface,
         ),
       ),
-      textTheme: _textTheme(base.textTheme.apply(
-        bodyColor: colorScheme.onSurface,
-        displayColor: colorScheme.onSurface,
-      )),
+      textTheme: _textTheme(
+        base.textTheme.apply(
+          bodyColor: colorScheme.onSurface,
+          displayColor: colorScheme.onSurface,
+        ),
+      ),
     );
   }
 }

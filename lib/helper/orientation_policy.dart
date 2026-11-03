@@ -19,7 +19,7 @@ abstract final class WhisperOrientation {
       window.shortestSide < WhisperLayout.regularWidth;
 
   static void sync() {
-    if (!whisperNewUi || _holders.isNotEmpty) return;
+    if (_holders.isNotEmpty) return;
     if (!Platform.isAndroid && !Platform.isIOS) return;
     final view = WidgetsBinding.instance.platformDispatcher.implicitView;
     if (view == null || view.devicePixelRatio <= 0) return;
@@ -45,14 +45,7 @@ abstract final class WhisperOrientation {
   /// Back to how the app is held everywhere else.
   static void release(Object owner) {
     final held = _holders.remove(owner);
-    if (!whisperNewUi) {
-      unawaited(
-        SystemChrome.setPreferredOrientations(const [
-          DeviceOrientation.portraitUp,
-        ]),
-      );
-      return;
-    }
+
     if (held) _upright = null;
     sync();
   }

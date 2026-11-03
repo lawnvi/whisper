@@ -29,7 +29,6 @@ import 'package:whisper/page/remote_files/files_desktop.dart';
 import 'package:whisper/page/remote_files/files_drag.dart';
 import 'package:whisper/page/remote_files/files_icons.dart';
 import 'package:whisper/page/remote_files/files_model.dart';
-import 'package:whisper/page/remote_files/files_phone.dart';
 import 'package:whisper/page/remote_files/files_transfers.dart';
 import 'package:whisper/page/remote_files/remote_files_page.dart';
 import 'package:whisper/remote_files/fs_browser.dart';
@@ -282,52 +281,6 @@ void main() {
     );
   }
 
-  testWidgets('the desktop window looks and works like Finder', (tester) async {
-    await tester.binding.setSurfaceSize(const Size(1100, 720));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    late FilesController controller;
-    await tester.runAsync(() async {
-      controller = controllerFor();
-      await _until(() => controller.entries.isNotEmpty);
-    });
-    final actions = FilesActions(
-      controller: controller,
-      context: () => tester.element(find.byType(FinderView)),
-    );
-    await tester.pumpWidget(
-      app(FinderView(controller: controller, actions: actions)),
-    );
-    await tester.pump();
-    expect(find.text('Favorites'), findsOneWidget);
-    expect(find.text('Locations'), findsOneWidget);
-    expect(find.text('OnePlus'), findsOneWidget);
-    expect(find.text('Date Modified'), findsOneWidget);
-    expect(find.text('JPG Image'), findsOneWidget);
-    expect(find.text('5 items'), findsOneWidget);
-
-    await tester.tap(find.text('b2.txt'));
-    await tester.pump();
-    expect(find.text('1 of 5 selected'), findsOneWidget);
-
-    await tester.tap(find.byIcon(CupertinoIcons.square_grid_2x2));
-    // The list fades into the icons, the selection kept.
-    await tester.pump(const Duration(milliseconds: 120));
-    expect(find.text('Date Modified'), findsOneWidget);
-    await tester.pump(const Duration(milliseconds: 300));
-    await tester.pump();
-    expect(controller.view, FilesView.icons);
-    expect(find.text('Date Modified'), findsNothing);
-    expect(find.text('1 of 5 selected'), findsOneWidget);
-
-    // Copies have their own place, at the bottom of the sidebar.
-    await tester.tap(find.text('Transfers').first);
-    await tester.pump(const Duration(milliseconds: 300));
-    expect(controller.transfersOpen, isTrue);
-    expect(find.byType(FilesTransfersList), findsOneWidget);
-    expect(tester.takeException(), isNull);
-    controller.dispose();
-  });
-
   testWidgets('pressing an item shows no drag picture until it moves', (
     tester,
   ) async {
@@ -455,76 +408,6 @@ void main() {
     controller.dispose();
   });
 
-  testWidgets(
-    'a tablet selects several by taps and opens menus by holding',
-    (tester) async {
-      await tester.binding.setSurfaceSize(const Size(1024, 768));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
-      late FilesController controller;
-      await tester.runAsync(() async {
-        controller = controllerFor();
-        await _until(() => controller.entries.isNotEmpty);
-      });
-      final actions = FilesActions(
-        controller: controller,
-        context: () => tester.element(find.byType(FinderView)),
-      );
-      await tester.pumpWidget(
-        app(
-          FinderView(controller: controller, actions: actions),
-          size: const Size(1024, 768),
-        ),
-      );
-      await tester.pump();
-
-      await tester.tap(find.text('Select'), kind: PointerDeviceKind.touch);
-      await tester.pump();
-      expect(find.text('Done'), findsOneWidget);
-      for (final name in ['b2.txt', 'photo.jpg', 'z folder']) {
-        await tester.tap(find.text(name), kind: PointerDeviceKind.touch);
-        await tester.pump(const Duration(milliseconds: 400));
-      }
-      expect(controller.selection, {'b2.txt', 'photo.jpg', 'z folder'});
-      // A second tap takes one away again (no folder opens meanwhile).
-      await tester.tap(find.text('z folder'), kind: PointerDeviceKind.touch);
-      await tester.pump(const Duration(milliseconds: 400));
-      expect(controller.selection, {'b2.txt', 'photo.jpg'});
-      expect(controller.location!.path, '');
-      // Pressed through its handler: copies left by earlier tests show the
-      // window's island over the middle of the toolbar.
-      tester
-          .widget<GestureDetector>(
-            find
-                .ancestor(
-                  of: find.text('Done'),
-                  matching: find.byType(GestureDetector),
-                )
-                .first,
-          )
-          .onTap!();
-      await tester.pump();
-      expect(find.text('Select'), findsOneWidget);
-
-      // Held on the blank below the items: the folder's menu.
-      final blank = await tester.startGesture(
-        const Offset(700, 700),
-        kind: PointerDeviceKind.touch,
-      );
-      await tester.pump(const Duration(milliseconds: 700));
-      await blank.up();
-      await tester.pump(const Duration(milliseconds: 300));
-      expect(find.text('New folder'), findsWidgets);
-      expect(find.text('Select All'), findsOneWidget);
-      await tester.tap(find.text('Select All'), kind: PointerDeviceKind.touch);
-      await tester.pump(const Duration(milliseconds: 300));
-      expect(controller.selection.length, controller.entries.length);
-      expect(find.text('Done'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-      controller.dispose();
-    },
-    variant: TargetPlatformVariant.only(TargetPlatform.iOS),
-  );
-
   testWidgets('on macOS and Windows items are dragged by the system', (
     tester,
   ) async {
@@ -571,74 +454,6 @@ void main() {
     debugDefaultTargetPlatformOverride = null;
   });
 
-  testWidgets('a folder clicked in the list stays visible on the blue row', (
-    tester,
-  ) async {
-    await tester.binding.setSurfaceSize(const Size(1100, 720));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    late FilesController controller;
-    await tester.runAsync(() async {
-      controller = controllerFor();
-      await _until(() => controller.entries.isNotEmpty);
-    });
-    final actions = FilesActions(
-      controller: controller,
-      context: () => tester.element(find.byType(FinderView)),
-    );
-    await tester.pumpWidget(
-      app(FinderView(controller: controller, actions: actions)),
-    );
-    await tester.pump();
-    await tester.tap(find.text('z folder'));
-    await tester.pump();
-    // Blue on blue the folder would vanish, looking like it flashed.
-    final outlined = tester
-        .widgetList<FsFileIcon>(find.byType(FsFileIcon))
-        .where((icon) => icon.onAccent)
-        .map((icon) => icon.entry.name);
-    expect(outlined, ['z folder']);
-    controller.dispose();
-  });
-
-  testWidgets('another device\'s places unfold only when asked', (
-    tester,
-  ) async {
-    await tester.binding.setSurfaceSize(const Size(1100, 720));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    late FilesController controller;
-    await tester.runAsync(() async {
-      controller = controllerFor();
-      await _until(() => controller.entries.isNotEmpty);
-      await controller.open(controller.deviceById('phone')!);
-    });
-    final actions = FilesActions(
-      controller: controller,
-      context: () => tester.element(find.byType(FinderView)),
-    );
-    await tester.pumpWidget(
-      app(FinderView(controller: controller, actions: actions)),
-    );
-    await tester.pump();
-    // Going to the device does not unfold it.
-    final disclosure = find.byKey(const ValueKey('files-sidebar-expand'));
-    expect(disclosure, findsOneWidget);
-    expect(controller.sidebarExpanded, isEmpty);
-    final folded = find.text('Documents').evaluate().length;
-
-    await tester.tap(disclosure);
-    await tester.pump(const Duration(milliseconds: 300));
-    expect(controller.sidebarExpanded, {'phone'});
-    expect(find.text('Documents').evaluate().length, folded + 1);
-
-    // Clicked again where it is already shown, the device folds away.
-    await tester.tap(find.text('OnePlus').first);
-    await tester.pump(const Duration(milliseconds: 300));
-    expect(controller.sidebarExpanded, isEmpty);
-    expect(find.text('Documents').evaluate().length, folded);
-    expect(tester.takeException(), isNull);
-    controller.dispose();
-  });
-
   test(
     'a folder being opened keeps the last one up until it is ready',
     () async {
@@ -656,105 +471,6 @@ void main() {
       expect(controller.shownLocation!.path, 'Documents');
     },
   );
-
-  testWidgets('the phone starts on Browse and pushes into folders', (
-    tester,
-  ) async {
-    await tester.binding.setSurfaceSize(const Size(390, 800));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    late FilesController controller;
-    await tester.runAsync(() async {
-      controller = controllerFor();
-      await _until(() => controller.entries.isNotEmpty);
-    });
-    final actions = FilesActions(
-      controller: controller,
-      context: () => tester.element(find.byType(FilesPhoneView)),
-    );
-    await tester.pumpWidget(
-      app(
-        FilesPhoneView(
-          controller: controller,
-          actions: actions,
-          startAtDevice: false,
-        ),
-        size: const Size(390, 800),
-      ),
-    );
-    await tester.pump();
-    expect(find.text('Browse'), findsWidgets);
-    expect(find.text('This device'), findsOneWidget);
-    await tester.runAsync(() async {
-      await tester.tap(find.text('Documents').first);
-      await Future<void>.delayed(const Duration(milliseconds: 200));
-    });
-    await tester.pumpAndSettle();
-    expect(controller.location!.path, 'Documents');
-    expect(find.text('This folder is empty'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-    controller.dispose();
-  });
-
-  testWidgets('an iPhone opens its Whisper folder as "This device"', (
-    tester,
-  ) async {
-    // Its sandbox is the one folder there is: tapped as "This device", it
-    // reads as that, not as a favorite of the same name (seen on an iPad).
-    await tester.binding.setSurfaceSize(const Size(390, 800));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    late FilesController controller;
-    await tester.runAsync(() async {
-      controller = FilesController(
-        local: LocalFsBrowser(
-          files: FsHostFiles(
-            resolver: FsPathResolver([
-              FsRoot(
-                id: 'documents',
-                directory: local.path,
-                kind: FsRootKind.documents,
-              ),
-            ]),
-          ),
-        ),
-        peers: FilesPeers(
-          connected: () => const {},
-          canBrowse: (_) => false,
-          describe: (_) => (name: '', platform: ''),
-        ),
-      );
-      await _until(() => controller.entries.isNotEmpty);
-    });
-    final actions = FilesActions(
-      controller: controller,
-      context: () => tester.element(find.byType(FilesPhoneView)),
-    );
-    await tester.pumpWidget(
-      app(
-        FilesPhoneView(
-          controller: controller,
-          actions: actions,
-          startAtDevice: false,
-        ),
-        size: const Size(390, 800),
-      ),
-    );
-    await tester.pump();
-    expect(find.text('This device'), findsOneWidget);
-    expect(find.text('Favorites'), findsNothing);
-    expect(find.text('Whisper Folder'), findsNothing);
-    await tester.runAsync(() async {
-      await tester.tap(find.text('This device'));
-      await Future<void>.delayed(const Duration(milliseconds: 200));
-    });
-    await tester.pumpAndSettle();
-    expect(controller.location!.root, 'documents');
-    expect(controller.location!.path, '');
-    expect(find.text('This device'), findsWidgets);
-    expect(find.text('Whisper Folder'), findsNothing);
-    expect(find.text('b2.txt'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-    controller.dispose();
-  });
 
   /// A copy into this device's home folder of [names], landed as [landed].
   FileCopyBatch copyHere(List<String> names, {Map<String, String>? landed}) {
@@ -846,77 +562,6 @@ void main() {
     expect(find.text('f75.txt'), findsOneWidget);
     expect(tester.takeException(), isNull);
     controller.dispose();
-  });
-
-  testWidgets('a copy shown on the phone lights up its row a moment', (
-    tester,
-  ) async {
-    await tester.binding.setSurfaceSize(const Size(390, 800));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    late FilesController controller;
-    await tester.runAsync(() async {
-      await addFiles(40);
-      controller = controllerFor();
-      await _until(() => controller.entries.length > 40);
-    });
-    final actions = FilesActions(
-      controller: controller,
-      context: () => tester.element(find.byType(FilesPhoneView)),
-    );
-    await tester.pumpWidget(
-      app(
-        FilesPhoneView(
-          controller: controller,
-          actions: actions,
-          startAtDevice: true,
-        ),
-        size: const Size(390, 800),
-      ),
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('f35.txt'), findsNothing);
-
-    await tester.runAsync(() => controller.reveal(copyHere(['f35.txt'])));
-    await tester.pumpAndSettle();
-    expect(find.text('f35.txt'), findsOneWidget);
-    Color rowColor() {
-      final box = tester.widget<AnimatedContainer>(
-        find
-            .ancestor(
-              of: find.text('f35.txt'),
-              matching: find.byType(AnimatedContainer),
-            )
-            .first,
-      );
-      return (box.decoration! as BoxDecoration).color!;
-    }
-
-    expect(rowColor().a, greaterThan(0));
-    // Not a selection to act on: the phone is not selecting.
-    expect(controller.selection, isEmpty);
-    // The fade was set off from the reveal, on real time.
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 2100)),
-    );
-    await tester.pumpAndSettle();
-    expect(rowColor().a, 0);
-    expect(tester.takeException(), isNull);
-    controller.dispose();
-  });
-
-  test('the file manager opens from a device\'s page', () {
-    final conversation = File('lib/page/conversation.dart').readAsStringSync();
-    expect(conversation, contains('RemoteFilesPage(peerId: device.uid'));
-    expect(conversation, contains('features: _deviceFeatures()'));
-    final deviceList = deviceListSource();
-    expect(deviceList, isNot(contains('RemoteFilesPage()')));
-    expect(canOfferRemoteFiles(), !Platform.isIOS);
-    final page = File(
-      'lib/page/remote_files/remote_files_page.dart',
-    ).readAsStringSync();
-    expect(page, contains('constraints.maxWidth >= 700'));
-    expect(page, contains('FinderView('));
-    expect(page, contains('FilesPhoneView('));
   });
 
   test(
@@ -1286,84 +931,6 @@ void main() {
       );
       await tester.pump();
       expect(tester.getSize(find.byKey(face)), const Size(84, 84));
-    });
-
-    testWidgets('⌘C, a place in the sidebar, ⌘V: the paste starts at once', (
-      tester,
-    ) async {
-      await tester.binding.setSurfaceSize(const Size(1100, 720));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
-      // Real time passes here, enough for the system drag and drop to set
-      // itself up: it finds no native side and does nothing.
-      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-        const MethodChannel('dev.irondash.engine_context'),
-        (call) async => 1,
-      );
-      final native = superNativeExtensionsContext as MockMessageChannelContext;
-      for (final channel in ['DragManager', 'DropManager']) {
-        native.registerMockMethodCallHandler(channel, (call) async => null);
-      }
-      late FilesController controller;
-      await tester.runAsync(() async {
-        (controller, _) = await browsePhone();
-      });
-      final actions = FilesActions(
-        controller: controller,
-        context: () => tester.element(find.byType(FinderView)),
-      );
-      await tester.pumpWidget(
-        app(FinderView(controller: controller, actions: actions)),
-      );
-      await tester.pump();
-      // What the keys start runs in the test's zone: frames and real time
-      // both have to pass.
-      Future<void> until(bool Function() done) async {
-        for (var i = 0; i < 200 && !done(); i++) {
-          await tester.runAsync(
-            () => Future<void>.delayed(const Duration(milliseconds: 10)),
-          );
-          await tester.pump();
-        }
-        expect(done(), isTrue);
-      }
-
-      final primary = Platform.isMacOS
-          ? LogicalKeyboardKey.metaLeft
-          : LogicalKeyboardKey.controlLeft;
-      Future<void> press(LogicalKeyboardKey key) async {
-        await tester.sendKeyDownEvent(primary);
-        await tester.sendKeyEvent(key);
-        await tester.sendKeyUpEvent(primary);
-        await tester.pump();
-      }
-
-      // A file no other test here copies (the same paste twice within
-      // seconds is one copy).
-      await tester.tap(find.text('b10.txt'));
-      await tester.pump();
-      await press(LogicalKeyboardKey.keyC);
-      await until(() => controller.clipboardOnPaste);
-      expect(controller.copies, isEmpty);
-
-      // This Mac's Documents, picked in the sidebar.
-      await tester.tap(find.text('Documents').first);
-      await until(() => controller.location?.deviceId == FilesDevice.localId);
-      await press(LogicalKeyboardKey.keyV);
-      await until(() => controller.copies.length == 1);
-      final fetching = controller.copies.keys.single;
-      FileCopyBatch? pasted() => controller.copyList.batches
-          .where((batch) => batch.transfers.containsKey(fetching))
-          .firstOrNull;
-      await until(() => pasted() != null);
-      expect(pasted()!.finished, isFalse);
-
-      await tester.runAsync(() => arrive(fetching, 'b10.txt', 'ten'));
-      final landed = File(p.join(local.path, 'Documents', 'b10.txt'));
-      await until(landed.existsSync);
-      await until(() => pasted()!.finished);
-      await tester.pumpWidget(const SizedBox());
-      // The status bar's "copied" note goes after a while.
-      await tester.pump(const Duration(seconds: 9));
     });
   });
 }

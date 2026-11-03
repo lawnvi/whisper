@@ -1,6 +1,3 @@
-// The new composer, which is behind the flag until the old one goes:
-//   flutter test --no-pub --dart-define=WHISPER_NEW_UI=true \
-//     test/chat_composer_capsule_test.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/l10n/app_localizations.dart';
@@ -70,7 +67,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     expect(shows(WhisperGlyph.check), isFalse);
     expect(shows(WhisperGlyph.clip), isTrue);
-  }, skip: !whisperNewUi);
+  });
 
   testWidgets('typing puts the buttons away, and only send is left', (
     tester,
@@ -101,7 +98,7 @@ void main() {
     expect(tester.getRect(send).bottom, greaterThanOrEqualTo(field.bottom));
     expect(tester.getRect(send).left, greaterThanOrEqualTo(field.right));
     expect(tester.getRect(send).left - field.right, lessThan(8));
-  }, skip: !whisperNewUi);
+  });
 
   testWidgets('no tick when nothing went', (tester) async {
     await pump(tester, sync: () async => false);
@@ -109,7 +106,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(shows(WhisperGlyph.check), isFalse);
-  }, skip: !whisperNewUi);
+  });
 
   testWidgets('no words in the box, also when it cannot be used', (
     tester,
@@ -120,5 +117,5 @@ void main() {
     expect(find.byKey(ChatComposer.clipboardButtonKey), findsNothing);
     expect(find.byKey(ChatComposer.sendButtonKey), findsNothing);
     expect(find.byKey(ChatComposer.attachmentButtonKey), findsNothing);
-  }, skip: !whisperNewUi);
+  });
 }

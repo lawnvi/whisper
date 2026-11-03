@@ -6,7 +6,6 @@ import 'package:whisper/helper/toast.dart' show appNavigatorKey;
 import 'package:whisper/new_ui/shell/shell_island.dart';
 import 'package:whisper/new_ui/shell/shell_island_sources.dart';
 import 'package:whisper/new_ui/shell/shell_parts.dart';
-import 'package:whisper/new_ui/shell/shell_requests.dart';
 import 'package:whisper/theme/whisper_ui.dart';
 import 'package:whisper/theme/whisper_window.dart';
 import 'package:whisper/widget/island/island_center.dart';

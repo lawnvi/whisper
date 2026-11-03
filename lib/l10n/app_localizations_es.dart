@@ -39,9 +39,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get mobileControlRightShort => 'Derecho';
 
   @override
-  String get mobileControlStopShort => 'Parar';
-
-  @override
   String get mobileControlPermission =>
       'Permite Whisper en Ajustes del Sistema → Privacidad y seguridad → Accesibilidad en el Mac y vuelve a iniciar.';
 
@@ -70,13 +67,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get remoteInputPeerReady => 'Listo, esperando la entrada';
 
   @override
-  String get remoteInputManualSessionTitle => 'Control desde el móvil';
-
-  @override
-  String get remoteInputManualSessionHint =>
-      'El control desde el móvil es independiente del espacio de trabajo de abajo.';
-
-  @override
   String get mobileControlPreparing => 'Preparando control';
 
   @override
@@ -84,10 +74,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get mobileControlTouchpad => 'Panel táctil';
-
-  @override
-  String get mobileControlHoldMove =>
-      'Mantén pulsado y gira la muñeca para mover';
 
   @override
   String get mobileControlTouchHint =>
@@ -105,9 +91,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get mobileControlRight => 'Clic derecho';
-
-  @override
-  String get mobileControlKeyboard => 'Teclado virtual';
 
   @override
   String get mobileControlText => 'Entrada de texto';
@@ -137,10 +120,6 @@ class AppLocalizationsEs extends AppLocalizations {
       'Texto entregado al sistema. Revisa la aplicación de destino.';
 
   @override
-  String get mobileControlSensorUnavailable =>
-      'Movimiento no disponible. Se ha activado el panel táctil.';
-
-  @override
   String get mobileControlSensitivity => 'Velocidad del puntero por movimiento';
 
   @override
@@ -152,10 +131,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get mobileControlCalibrationDone => 'Calibración completada';
-
-  @override
-  String get mobileControlIdleHint =>
-      'Inicia para controlar el ratón y el teclado. Al salir se detiene el control.';
 
   @override
   String mobileControlReceiving(String name) {
@@ -207,30 +182,8 @@ class AppLocalizationsEs extends AppLocalizations {
   String get screenshotShortcutTitle => 'Atajo de captura';
 
   @override
-  String get screenshotShortcutDesc =>
-      'Selecciona una región sin ocultar Whisper y cópiala al portapapeles para pegarla manualmente.';
-
-  @override
-  String get screenshotShortcutEnabled => 'Activar atajo global';
-
-  @override
-  String get screenshotShortcutDisabled =>
-      'Desactivado · el botón de captura sigue disponible';
-
-  @override
   String get screenshotShortcutUnavailable =>
       'Atajo no registrado · pulsa para configurarlo';
-
-  @override
-  String get screenshotShortcutRecord =>
-      'Pulsa aquí y presiona una combinación de teclas';
-
-  @override
-  String get screenshotShortcutHint =>
-      'Usa Ctrl, Alt o Command/Super con una letra, número o F1–F12. Esc cancela la captura. En Wayland, confirma el atajo en el diálogo del sistema.';
-
-  @override
-  String get screenshotShortcutReset => 'Restaurar atajo predeterminado';
 
   @override
   String get screenshotShortcutInvalid =>
@@ -244,26 +197,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get connectDeviceTitle => 'Conectar dispositivo';
 
   @override
-  String get connectDeviceDesc => 'Ingresar IP y puerto';
-
-  @override
-  String get connectTo => 'Conectar a';
-
-  @override
   String get connectRequest => 'Solicitud de conexión';
-
-  @override
-  String connectRequestDesc(String device) {
-    return '¿Nuevo dispositivo: $device?';
-  }
-
-  @override
-  String connectRequestNotificationBody(String name, String host) {
-    return '$name ($host) quiere conectarse';
-  }
-
-  @override
-  String get connectRequestExpired => 'La solicitud de conexión ha expirado';
 
   @override
   String transferNotificationTitle(int count) {
@@ -328,12 +262,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get setting => 'Ajustes';
 
   @override
-  String get sendTips => 'Escribe algo...';
-
-  @override
-  String get sendFiles => 'Enviar archivos';
-
-  @override
   String get trust => 'Confiar en este dispositivo';
 
   @override
@@ -343,25 +271,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get deleteDevice => 'Eliminar dispositivo';
 
   @override
-  String serverPort(Object port) {
-    return 'Puerto del servidor $port';
-  }
-
-  @override
   String get serverPortTitle => 'Puerto del servidor';
 
   @override
-  String get accessClipboard => 'Permitir acceso al portapapeles';
-
-  @override
   String get clipboardAutoSync => 'Sincronizar el portapapeles automáticamente';
-
-  @override
-  String get clipboardAutoSyncDesc =>
-      'Sincroniza con el dispositivo de confianza actual o con los dispositivos conectados del espacio de teclado y ratón';
-
-  @override
-  String get doubleClickRmMessage => 'Eliminar mensaje al hacer doble clic';
 
   @override
   String get close2tray => 'Ocultar en la bandeja al cerrar';
@@ -370,13 +283,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get nickname => 'Apodo';
 
   @override
-  String get nicknameDesc => 'Introduce un apodo';
-
-  @override
   String get port => 'Puerto';
-
-  @override
-  String get portDesc => 'Introduce un puerto entre 1001 y 65535';
 
   @override
   String get timeoutTitle => 'Tiempo de espera de conexión';
@@ -432,14 +339,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get delete => 'Eliminar';
 
   @override
-  String get deleteConfirm => 'Confirmar eliminación';
-
-  @override
   String get warning => 'Advertencia';
-
-  @override
-  String get deleteWarningText =>
-      'La conexión está activa, no se puede eliminar rápidamente';
 
   @override
   String get close => 'Cerrar';
@@ -457,27 +357,16 @@ class AppLocalizationsEs extends AppLocalizations {
   String get brokeConnectTitle => 'Desconectar';
 
   @override
-  String brokeConnectDesc(String device) {
-    return 'Desconectar $device';
-  }
-
-  @override
   String get connectFailed => 'Error de conexión';
 
   @override
   String get connectAlreadyInProgress => 'La conexión ya está en curso';
 
   @override
-  String get deviceBusy => 'Dispositivo ocupado';
-
-  @override
   String get startServerFailed => 'No se pudo iniciar el servidor';
 
   @override
   String get deleteMessageTitle => 'Eliminar mensaje';
-
-  @override
-  String get deleteMessageDesc => '¿Seguro que quieres eliminarlo?';
 
   @override
   String get selectMessages => 'Seleccionar mensajes';
@@ -520,9 +409,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get selectNotifyApp => 'Aplicaciones de notificaciones';
 
   @override
-  String get copyVerifyCode => 'Copiar código de verificación al portapapeles';
-
-  @override
   String get open => 'Abrir';
 
   @override
@@ -530,9 +416,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get openInDir => 'Abrir carpeta';
-
-  @override
-  String get keepFile => 'Conservar archivo';
 
   @override
   String get deleteFile => 'Eliminar archivo';
@@ -556,25 +439,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get followSystem => 'Seguir al sistema';
 
   @override
-  String get lightMode => 'Claro';
-
-  @override
-  String get darkMode => 'Oscuro';
-
-  @override
-  String get selectThemeMode => 'Seleccionar modo de tema';
-
-  @override
-  String get selectLanguage => 'Seleccionar idioma';
-
-  @override
-  String get searchChats => 'Buscar';
-
-  @override
-  String get selectConversationPlaceholder =>
-      'Selecciona un dispositivo para empezar a chatear';
-
-  @override
   String get connectedNow => 'Conectado ahora';
 
   @override
@@ -585,9 +449,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get sharedFile => 'Compartio un archivo';
-
-  @override
-  String get connectToSend => 'Conectate para enviar mensajes';
 
   @override
   String get localeNameZhHans => 'Chino simplificado';
@@ -601,13 +462,6 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get autoConnectTrustedDevices =>
       'Conectar automáticamente los dispositivos con confianza mutua';
-
-  @override
-  String get mutualTrustEnabled => 'La confianza mutua esta activada';
-
-  @override
-  String get mutualTrustNotEstablished =>
-      'La confianza mutua aun no esta establecida';
 
   @override
   String get windowsLockScreenInput =>
@@ -691,10 +545,6 @@ class AppLocalizationsEs extends AppLocalizations {
       'Mantener la conexion en segundo plano';
 
   @override
-  String get androidBackgroundKeepAliveDesc =>
-      'Mantiene activa la recepcion por LAN para recibir solicitudes de conexion en segundo plano o con la pantalla bloqueada';
-
-  @override
   String get androidBackgroundKeepAliveActiveTitle =>
       'Whisper escucha conexiones LAN';
 
@@ -704,10 +554,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get androidBatteryOptimization => 'Optimizacion de bateria';
-
-  @override
-  String get androidBatteryOptimizationDesc =>
-      'Se recomienda permitir actividad en segundo plano y excluir Whisper de la optimizacion de bateria en Android';
 
   @override
   String get fileTransferQueued => 'En cola';
@@ -762,39 +608,12 @@ class AppLocalizationsEs extends AppLocalizations {
       'Compartir el audio de este dispositivo con el otro';
 
   @override
-  String get audioSharePlaybackGainTitle => 'Ganancia del altavoz compartido';
-
-  @override
-  String audioSharePlaybackGainSetting(String gain) {
-    return 'Ganancia del altavoz compartido: $gain';
-  }
-
-  @override
-  String get audioSharePlaybackGainDesc =>
-      'Solo afecta al audio compartido reproducido en este dispositivo. Valores altos pueden recortar';
-
-  @override
   String get remoteInputScrollMultiplierTitle =>
       'Velocidad de desplazamiento compartido';
 
   @override
-  String remoteInputScrollMultiplierSetting(String multiplier) {
-    return 'Velocidad de desplazamiento compartido: $multiplier';
-  }
-
-  @override
-  String get remoteInputScrollMultiplierDesc =>
-      'Solo afecta eventos de rueda remotos recibidos cuando este dispositivo esta siendo controlado';
-
-  @override
   String get audioShareUnsupportedCapture =>
       'Este dispositivo no admite captura de audio del sistema';
-
-  @override
-  String get audioGroupShareStart => 'Sincronizar con varios altavoces';
-
-  @override
-  String get audioGroupAdjust => 'Ajustar audio compartido';
 
   @override
   String get audioGroupSelectSinks =>
@@ -802,12 +621,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get audioGroupStart => 'Iniciar reproduccion sincronizada';
-
-  @override
-  String get audioGroupApply => 'Aplicar configuracion';
-
-  @override
-  String get audioGroupStop => 'Detener audio compartido';
 
   @override
   String get audioGroupRoleStereo => 'Estereo';
@@ -836,52 +649,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get audioGroupSyncUnstable => 'Sincronizacion inestable';
-
-  @override
-  String get audioGroupDeviceIdle => 'Inactivo';
-
-  @override
-  String get audioGroupLatencyShortLabel => 'red ';
-
-  @override
-  String get audioGroupJitterShortLabel => 'fluct. ';
-
-  @override
-  String get audioGroupBufferShortLabel => 'bufer ';
-
-  @override
-  String get audioGroupRecentLatePacketShortLabel => 'tardios ';
-
-  @override
-  String get audioGroupClockOffsetLabel => 'desfase de reloj';
-
-  @override
-  String audioGroupSyncEvidence(
-    Object quality,
-    Object clockOffsetLabel,
-    Object offset,
-    Object rtt,
-    Object jitter,
-    Object buffer,
-    Object latePackets,
-  ) {
-    return '$quality · $clockOffsetLabel ${offset}ms · RTT ${rtt}ms · fluctuacion ${jitter}ms · bufer ${buffer}ms · tardios $latePackets';
-  }
-
-  @override
-  String audioGroupSyncEvidenceCompact(
-    Object quality,
-    Object latencyLabel,
-    Object rtt,
-    Object jitterLabel,
-    Object jitter,
-    Object bufferLabel,
-    Object buffer,
-    Object latePacketLabel,
-    Object latePackets,
-  ) {
-    return '$quality · $latencyLabel$rtt · $jitterLabel$jitter · $bufferLabel$buffer · $latePacketLabel$latePackets';
-  }
 
   @override
   String audioShareFailed(String error) {
@@ -945,36 +712,6 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get remoteInputLayoutTitle => 'Distribucion de pantalla';
-
-  @override
-  String get remoteInputLocalScreen => 'Este dispositivo';
-
-  @override
-  String get remoteInputEdgeLeft => 'Izquierda';
-
-  @override
-  String get remoteInputEdgeRight => 'Derecha';
-
-  @override
-  String get remoteInputEdgeTop => 'Arriba';
-
-  @override
-  String get remoteInputEdgeBottom => 'Abajo';
-
-  @override
-  String get remoteInputEdgeNotAdjacent => 'Sin borde compartido';
-
-  @override
-  String get remoteInputWorkspaceTitle => 'Espacio de teclado y mouse';
-
-  @override
-  String get remoteInputWorkspaceTooltip => 'Espacio de teclado y mouse';
-
-  @override
-  String get remoteInputWorkspaceStart => 'Iniciar';
-
-  @override
   String get remoteInputWorkspaceStop => 'Detener';
 
   @override
@@ -982,18 +719,7 @@ class AppLocalizationsEs extends AppLocalizations {
       'No hay equipos de escritorio disponibles';
 
   @override
-  String get remoteInputWorkspaceNoTargetsHint =>
-      'Los equipos conectados y de confianza compatibles con teclado y mouse aparecerán aquí';
-
-  @override
-  String get remoteInputWorkspaceSelectTargets => 'Equipos controlados';
-
-  @override
   String get remoteInputWorkspaceCanvasTitle => 'Distribucion de pantalla';
-
-  @override
-  String get remoteInputWorkspaceCanvasHint =>
-      'Arrastra una pantalla remota hasta un borde de este equipo';
 
   @override
   String remoteInputWorkspaceExitShortcut(String shortcut) {
@@ -1001,70 +727,8 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get remoteInputWorkspaceSelectTargetHint =>
-      'Selecciona al menos un equipo controlado a la izquierda';
-
-  @override
-  String get remoteInputWorkspaceLocalBadge => 'Este equipo';
-
-  @override
-  String get remoteInputWorkspaceRemoteBadge => 'Remoto';
-
-  @override
-  String get remoteInputWorkspaceDetailsTitle => 'Detalles del dispositivo';
-
-  @override
-  String get remoteInputWorkspaceFocusTarget => 'Ver dispositivo';
-
-  @override
-  String get remoteInputWorkspaceAddTarget => 'Agregar al espacio';
-
-  @override
-  String get remoteInputWorkspaceRemoveTarget => 'Quitar del espacio';
-
-  @override
-  String get remoteInputWorkspaceState => 'Estado';
-
-  @override
-  String get remoteInputWorkspaceResolution => 'Resolución';
-
-  @override
-  String get remoteInputWorkspaceConflict => 'Bordes superpuestos';
-
-  @override
-  String get remoteInputWorkspaceReachable => 'Accesible';
-
-  @override
-  String get remoteInputWorkspaceDisconnected =>
-      'No conectado al espacio de trabajo';
-
-  @override
-  String get remoteInputWorkspaceUnsupported =>
-      'No admite rutas del espacio de trabajo';
-
-  @override
-  String get remoteInputWorkspaceTargetIdle => 'No activado';
-
-  @override
-  String get remoteInputWorkspaceStatusIdle =>
-      'El espacio de teclado y mouse esta desactivado';
-
-  @override
-  String get remoteInputWorkspaceStatusOffering =>
-      'Esperando confirmacion de los equipos';
-
-  @override
-  String get remoteInputWorkspaceStatusArmed =>
-      'Mueve al borde de la pantalla para controlar un equipo';
-
-  @override
   String remoteInputWorkspaceStatusActive(String peer) {
     return 'Controlando $peer';
-  }
-
-  @override
-  String remoteInputWorkspaceStatusFailed(String error) {
-    return 'Error del espacio de teclado y mouse: $error';
   }
 
   @override
@@ -1116,46 +780,11 @@ class AppLocalizationsEs extends AppLocalizations {
   String get fileDropRejected => 'No se pueden enviar estos archivos';
 
   @override
-  String get validationRequired => 'Este campo es obligatorio';
-
-  @override
   String get validationNicknameRequired => 'Introduce un apodo';
 
   @override
   String get validationNicknameTooLong =>
       'El apodo no puede superar los 64 caracteres';
-
-  @override
-  String get validationHostRequired =>
-      'Introduce un nombre de host o dirección IP';
-
-  @override
-  String get validationHostInvalid =>
-      'Introduce una dirección IPv4, IPv6, .local o un host válido';
-
-  @override
-  String get validationPortInvalid => 'Introduce un puerto entre 1001 y 65535';
-
-  @override
-  String get settingsSectionDeviceAppearance => 'Dispositivo y apariencia';
-
-  @override
-  String get settingsSectionDeviceAppearanceDesc =>
-      'Nombre, tema y visibilidad de este dispositivo en la red cercana';
-
-  @override
-  String get settingsSectionConnectionTransfer => 'Conexión y transferencia';
-
-  @override
-  String get settingsSectionConnectionTransferDesc =>
-      'Puerto del servidor, archivos guardados y conexiones de confianza';
-
-  @override
-  String get settingsSectionSystemBehavior => 'Comportamiento del sistema';
-
-  @override
-  String get settingsSectionSystemBehaviorDesc =>
-      'Inicio, segundo plano y comportamiento de las ventanas';
 
   @override
   String get settingsSectionPermissionsSharing => 'Permisos y uso compartido';
@@ -1165,59 +794,8 @@ class AppLocalizationsEs extends AppLocalizations {
       'Acceso al portapapeles, confianza, audio, teclado y ratón';
 
   @override
-  String get settingsSectionMobileIntegration => 'Integración móvil';
-
-  @override
-  String get settingsSectionMobileIntegrationDesc =>
-      'Conexión en segundo plano y uso de la batería';
-
-  @override
-  String get settingsSectionNotificationForwarding =>
-      'Reenvío de notificaciones';
-
-  @override
-  String get settingsSectionNotificationForwardingDesc =>
-      'Gestión de notificaciones de Android y ayuda con códigos de verificación';
-
-  @override
-  String get settingsSectionLanguageFiles => 'Idioma y archivos';
-
-  @override
-  String get settingsSectionLanguageFilesDesc => 'Idioma y carpeta de guardado';
-
-  @override
-  String get settingsSaveDirectory => 'Carpeta de guardado';
-
-  @override
-  String get settingsChangeDirectory => 'Cambiar carpeta de guardado';
-
-  @override
-  String get settingsOpenDirectory => 'Abrir carpeta de guardado';
-
-  @override
-  String get settingsVersion => 'Versión';
-
-  @override
-  String get settingsSectionAbout => 'Acerca de';
-
-  @override
-  String get settingsSectionAboutDesc =>
-      'Actualizaciones e información de la aplicación';
-
-  @override
-  String get checkForUpdates => 'Buscar actualizaciones';
-
-  @override
   String currentVersion(String version) {
     return 'Versión actual $version';
-  }
-
-  @override
-  String get checkingForUpdates => 'Buscando actualizaciones…';
-
-  @override
-  String updateAvailableVersion(String version) {
-    return 'Actualización disponible: $version';
   }
 
   @override
@@ -1244,11 +822,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get viewRelease => 'Ver versión';
 
   @override
-  String downloadingUpdate(int progress) {
-    return 'Descargando $progress%';
-  }
-
-  @override
   String get updateInstallerOpened =>
       'La actualización verificada está lista en el instalador del sistema';
 
@@ -1270,27 +843,13 @@ class AppLocalizationsEs extends AppLocalizations {
   String get sourceCode => 'Código fuente en GitHub';
 
   @override
-  String get appListSearchPlaceholder => 'Buscar aplicaciones';
-
-  @override
   String get appListClearSearch => 'Borrar búsqueda de aplicaciones';
-
-  @override
-  String get deselectAll => 'Deseleccionar todo';
 
   @override
   String get settingsLoadFailedTitle => 'No se pudieron cargar los ajustes';
 
   @override
-  String get settingsLoadFailedBody =>
-      'Comprueba los servicios locales de la aplicación e inténtalo de nuevo.';
-
-  @override
   String get appListLoadFailedTitle => 'No se pudieron cargar las aplicaciones';
-
-  @override
-  String get appListLoadFailedBody =>
-      'Comprueba el acceso a las aplicaciones e inténtalo de nuevo.';
 
   @override
   String get appListSaveFailed =>
@@ -1298,22 +857,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get notificationApps => 'Aplicaciones de notificaciones';
-
-  @override
-  String notificationAppsSelected(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count aplicaciones seleccionadas',
-      one: '1 aplicación seleccionada',
-      zero: 'No hay aplicaciones seleccionadas',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get notificationAppsDisabled =>
-      'Activa el reenvío de notificaciones para elegir aplicaciones';
 
   @override
   String get notificationForwardingUpdateFailed =>
@@ -1324,11 +867,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get pairingNewDeviceTitle => 'Emparejar un dispositivo nuevo';
-
-  @override
-  String pairingNewDeviceDescription(String device) {
-    return '$device quiere establecer una conexión de confianza';
-  }
 
   @override
   String pairingNewDeviceCompareCode(String device) {
@@ -1475,36 +1013,11 @@ class AppLocalizationsEs extends AppLocalizations {
       'No se pudieron actualizar los favoritos. Inténtalo de nuevo';
 
   @override
-  String get qrPairingTitle => 'Conectar con código QR';
-
-  @override
   String get qrMyCode => 'Mi código QR';
-
-  @override
-  String get qrScanCode => 'Escanear para conectar';
-
-  @override
-  String get qrShowCodeHint =>
-      'Haz que el otro dispositivo escanee este código para verificar la dirección y la identidad';
-
-  @override
-  String qrFingerprint(String fingerprint) {
-    return 'Huella de identidad $fingerprint';
-  }
 
   @override
   String get qrWifiUnavailable =>
       'No se encontró una dirección LAN válida. Conéctate a Wi-Fi y actualiza el código';
-
-  @override
-  String get qrCopyLink => 'Copiar datos de conexión';
-
-  @override
-  String get qrLinkCopied => 'Datos de conexión copiados';
-
-  @override
-  String get qrScanHint =>
-      'Escanea el código que muestra Whisper en el otro dispositivo';
 
   @override
   String get qrCameraUnavailable =>
@@ -1574,9 +1087,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get quickSendLater => 'Más tarde';
 
   @override
-  String get quickSendSend => 'Enviar';
-
-  @override
   String androidSystemShareWaitingForDevice(String device) {
     return 'Esperando a $device; el envío comenzará cuando se conecte';
   }
@@ -1623,10 +1133,6 @@ class AppLocalizationsEs extends AppLocalizations {
       'El envío no terminó; el contenido se ha conservado';
 
   @override
-  String get desktopQuickSendEmptyClipboard =>
-      'El portapapeles no tiene contenido compatible';
-
-  @override
   String get desktopQuickSendShortcutUnavailable =>
       'El atajo global de envío ya está en uso';
 
@@ -1665,20 +1171,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get messageLinkOpenFailed => 'No se pudo abrir este enlace';
-
-  @override
-  String get connectFirstDevice => 'Conecta tu primer dispositivo';
-
-  @override
-  String get deviceConnectionGuide =>
-      'Abre Whisper en otro dispositivo conectado a la misma red Wi-Fi o local. Los dispositivos cercanos aparecen automáticamente en la lista.';
-
-  @override
-  String get manualConnectAction => 'Introducir dirección';
-
-  @override
-  String get deviceDiscoveryHelp =>
-      '¿No aparecen dispositivos? Prueba el enlace por QR o permite el acceso a la red local en los ajustes del sistema de ambos dispositivos.';
 
   @override
   String get deviceOffline => 'Dispositivos sin conexión';
@@ -1759,11 +1251,6 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String castRequestCountdown(int seconds) {
-    return 'Se permitirá en $seconds segundos. Puedes rechazarla.';
-  }
-
-  @override
   String get castRequestDeny => 'Rechazar';
 
   @override
@@ -1785,18 +1272,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get mobileControlKeysTab => 'Teclado';
 
   @override
-  String get mobileControlTextTab => 'Texto';
-
-  @override
   String get mobileControlSettings => 'Ajustes del puntero';
-
-  @override
-  String get mobileControlLiftHint =>
-      'Levanta el dedo para pausar y recolocar.';
-
-  @override
-  String get mobileControlDragHint =>
-      'Mantén el botón izquierdo para arrastrar.';
 
   @override
   String get mobileControlPrecisionHint =>
@@ -1805,9 +1281,6 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get mobileControlCalibrationRetry =>
       'Mantén el teléfono quieto y vuelve a calibrar.';
-
-  @override
-  String get mobileControlStartShort => 'Iniciar';
 
   @override
   String get mobileControlMotionStart => 'Activar movimiento';
@@ -1835,9 +1308,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get mobileControlScrollSpeed => 'Velocidad de desplazamiento';
-
-  @override
-  String get mobileControlScrollRail => 'Desliza\npara desplazar';
 
   @override
   String get mobileControlPermissionDesktop =>
@@ -1887,10 +1357,6 @@ class AppLocalizationsEs extends AppLocalizations {
       'El ordenador no pudo procesar la entrada. Revisa los permisos de control y vuelve a iniciar.';
 
   @override
-  String get clipboardAutoSyncAndroidDesc =>
-      'Sincroniza el texto copiado con el dispositivo de confianza actual al volver a Whisper';
-
-  @override
   String get historyLoadFailed =>
       'No se pudo cargar el historial. Toca para reintentar.';
 
@@ -1913,19 +1379,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get connectionAddressTab => 'IP / puerto';
-
-  @override
-  String get connectionAddressLabel => 'Dirección IP o nombre de host';
-
-  @override
-  String get connectionDetailsTab => 'Este equipo';
-
-  @override
-  String get connectionAddressHint =>
-      'Consulta la dirección y el puerto en la pantalla principal de Whisper del otro dispositivo. Ambos deben estar en la misma red local.';
-
-  @override
-  String get qrCopyFailed => 'No se pudo copiar. Inténtalo de nuevo.';
 
   @override
   String get attachFile => 'Archivo';
@@ -2044,9 +1497,6 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get windowStreamTitle => 'Apps del teléfono';
-
-  @override
   String get windowStreamConnecting => 'Conectando…';
 
   @override
@@ -2071,13 +1521,6 @@ class AppLocalizationsEs extends AppLocalizations {
       'Desconectado. Puedes cerrar esta ventana';
 
   @override
-  String get windowStreamNoDevice => 'No se encontró ningún teléfono';
-
-  @override
-  String get windowStreamNoDeviceHint =>
-      'Conecta el teléfono con un cable o activa la depuración inalámbrica en las opciones de desarrollador.';
-
-  @override
   String get windowStreamUnauthorized =>
       'Permite la depuración desde este ordenador en tu teléfono';
 
@@ -2097,19 +1540,7 @@ class AppLocalizationsEs extends AppLocalizations {
       'Las ventanas de apps del teléfono aún no están disponibles en este ordenador';
 
   @override
-  String get windowStreamRunningApps => 'En ejecución';
-
-  @override
-  String get windowStreamAllApps => 'Todas las apps';
-
-  @override
   String get windowStreamSearchApps => 'Buscar apps';
-
-  @override
-  String get windowStreamLoadingApps => 'Cargando apps…';
-
-  @override
-  String get windowStreamOnDesktop => 'En el escritorio';
 
   @override
   String get windowStreamShowSystemApps => 'Mostrar apps del sistema';
@@ -2134,36 +1565,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get windowStreamSpaceTitle => 'Flujo';
 
   @override
-  String get windowStreamRecents => 'Recientes';
-
-  @override
-  String get windowStreamWindows => 'Ventanas';
-
-  @override
-  String get windowStreamApps => 'Apps';
-
-  @override
-  String get windowStreamViaUsb => 'Conectado por USB';
-
-  @override
-  String get windowStreamViaWifi => 'Depuración inalámbrica';
-
-  @override
-  String get windowStreamViaWhisper => 'Conectado';
-
-  @override
-  String get windowStreamStatusLive => 'En vivo';
-
-  @override
-  String get windowStreamStatusPaused => 'En pausa';
-
-  @override
-  String get windowStreamStatusConnecting => 'Conectando';
-
-  @override
-  String get windowStreamStatusEnded => 'Desconectado';
-
-  @override
   String get windowStreamPause => 'Pausar';
 
   @override
@@ -2171,13 +1572,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get windowStreamClose => 'Cerrar';
-
-  @override
-  String get windowStreamNoWindows => 'No hay ventanas abiertas';
-
-  @override
-  String get windowStreamNoWindowsHint =>
-      'Abre una app o una tarea reciente y aparecerá aquí';
 
   @override
   String get windowStreamNoDevices => 'Aún no hay dispositivos';
@@ -2201,10 +1595,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get windowStreamKeyboard => 'Teclado';
 
   @override
-  String get windowStreamNoRecents =>
-      'No hay nada en ejecución en este dispositivo';
-
-  @override
   String get windowStreamSourceLocked =>
       'Este ordenador está bloqueado. Desbloquéalo para transmitir sus ventanas.';
 
@@ -2224,16 +1614,8 @@ class AppLocalizationsEs extends AppLocalizations {
   String get windowStreamNotPaired => 'Sin vincular';
 
   @override
-  String get windowStreamOpenHere => 'Abrir aquí';
-
-  @override
   String windowStreamSendTo(String device) {
     return 'Enviar a $device';
-  }
-
-  @override
-  String windowStreamSendHint(String device) {
-    return 'Elige una ventana de este ordenador para enviarla a $device. Al abrirla allí sale de esta pantalla y vuelve cuando se cierra en $device.';
   }
 
   @override
@@ -2271,22 +1653,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get remoteFilesTitle => 'Archivos';
 
   @override
-  String remoteFilesOfDevice(String device) {
-    return 'Archivos de $device';
-  }
-
-  @override
   String get remoteFilesThisDevice => 'Este dispositivo';
-
-  @override
-  String remoteFilesWaiting(String device) {
-    return 'Esperando a que $device lo permita…';
-  }
-
-  @override
-  String remoteFilesDenied(String device) {
-    return '$device no permitió explorar sus archivos';
-  }
 
   @override
   String remoteFilesOffline(String device) {
@@ -2300,11 +1667,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get remoteFilesEmptyFolder => 'Esta carpeta está vacía';
-
-  @override
-  String remoteFilesCopyTo(String target) {
-    return 'Copiar a $target';
-  }
 
   @override
   String get remoteFilesNewFolder => 'Nueva carpeta';
@@ -2327,11 +1689,6 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String remoteFilesCopyStarted(int count) {
-    return 'Copiando $count elementos';
-  }
-
-  @override
   String get remoteFilesFailed => 'No se pudo completar';
 
   @override
@@ -2339,11 +1696,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get remoteFilesShowHidden => 'Mostrar archivos ocultos';
-
-  @override
-  String remoteFilesItemCount(int count) {
-    return '$count elementos';
-  }
 
   @override
   String remoteFilesSelected(int count) {
@@ -2355,11 +1707,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get remoteFilesDone => 'Listo';
-
-  @override
-  String remoteFilesDropHint(String device) {
-    return 'Suelta aquí para copiar a $device';
-  }
 
   @override
   String get remoteFilesPlaceRoot => 'Inicio';
@@ -2394,10 +1741,6 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get remoteFilesPromptBodyDesktop =>
-      'Si lo permites, podrá ver tu carpeta de inicio y copiar, crear, renombrar y eliminar archivos allí. Lo eliminado irá a la papelera.';
-
-  @override
   String get remoteFilesPromptBodyPhone =>
       'Si lo permites, podrá ver el almacenamiento interno de este teléfono y copiar, crear, renombrar y eliminar archivos allí. Lo eliminado no se puede recuperar.';
 
@@ -2429,20 +1772,6 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get windowStreamTouchBlockedFixed =>
       'Listo. El teléfono vuelve a responder.';
-
-  @override
-  String get remoteFilesFavorites => 'Favoritos';
-
-  @override
-  String get remoteFilesLocations => 'Ubicaciones';
-
-  @override
-  String get remoteFilesBrowse => 'Explorar';
-
-  @override
-  String remoteFilesWaitingAllow(String device) {
-    return 'Toca «Permitir» en $device';
-  }
 
   @override
   String get remoteFilesWaitingDetail =>
@@ -2510,9 +1839,6 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get remoteFilesForward => 'Adelante';
-
-  @override
   String get remoteFilesOpen => 'Abrir';
 
   @override
@@ -2525,26 +1851,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get remoteFilesRefresh => 'Actualizar';
-
-  @override
-  String remoteFilesStatusSelected(int selected, int count) {
-    return '$selected de $count seleccionados';
-  }
-
-  @override
-  String remoteFilesCopyProgress(int count, int percent) {
-    return 'Copiando $count elementos · $percent %';
-  }
-
-  @override
-  String remoteFilesCopyDone(int count) {
-    return '$count elementos copiados';
-  }
-
-  @override
-  String remoteFilesCopyPartly(int failed) {
-    return '$failed elementos no se copiaron';
-  }
 
   @override
   String get remoteFilesSameDevice => 'Ya está en este dispositivo';
@@ -2605,56 +1911,23 @@ class AppLocalizationsEs extends AppLocalizations {
   String get remoteFilesMore => 'Más';
 
   @override
-  String get remoteFilesClose => 'Cerrar archivos';
-
-  @override
-  String get remoteFilesClipboardReady => 'Listo para pegar en otras apps';
-
-  @override
-  String get remoteFilesClipboardOnPaste =>
-      'Copiado. Se transfiere al pegarlo en Whisper.';
-
-  @override
-  String remoteFilesClipboardOnPasteDrag(String app) {
-    return 'Copiado. Se envía al pegarlo en Whisper; arrástralo para llevarlo a $app';
-  }
-
-  @override
   String get windowStreamTextSize => 'Tamaño del texto';
 
   @override
   String get macPermissionAccessibility => 'Accesibilidad';
 
   @override
-  String get macPermissionAccessibilityDesc =>
-      'Necesario para compartir teclado y ratón y usar ventanas transmitidas';
-
-  @override
   String get macPermissionScreenRecording =>
       'Grabación de pantalla y audio del sistema';
 
   @override
-  String get macPermissionScreenRecordingDesc =>
-      'Necesario para transmitir ventanas, reproducir el sonido del Mac en otro sitio y hacer capturas; se aplica al volver a abrir Whisper';
-
-  @override
   String get macPermissionAudioCapture => 'Solo grabación de audio del sistema';
-
-  @override
-  String get macPermissionAudioCaptureDesc =>
-      'Opcional. Sin él el sonido también se envía; con él este Mac queda en silencio y también llega el sonido de los navegadores';
 
   @override
   String get macPermissionGranted => 'Permitido';
 
   @override
   String get macPermissionDenied => 'No permitido';
-
-  @override
-  String get macPermissionNotAsked => 'Sin configurar';
-
-  @override
-  String get macPermissionOptional => 'Opcional';
 
   @override
   String get windowStreamQuality => 'Calidad';
@@ -2676,32 +1949,6 @@ class AppLocalizationsEs extends AppLocalizations {
       'Más nítida cuanto más alta, con más uso de red';
 
   @override
-  String get windowStreamReceiveOnly => 'Solo recibe ventanas';
-
-  @override
-  String get windowStreamNotConnected => 'Sin conectar';
-
-  @override
-  String get windowStreamConnectFirst =>
-      'Conéctate primero a este teléfono en Whisper para transmitir sus apps';
-
-  @override
-  String windowStreamOpenHereDetail(String device) {
-    return 'Usa las apps de $device';
-  }
-
-  @override
-  String windowStreamSendToDetail(String device) {
-    return 'Mueve una ventana a $device';
-  }
-
-  @override
-  String get toolbarMoreTools => 'Más funciones';
-
-  @override
-  String get toolbarFewerTools => 'Mostrar menos';
-
-  @override
   String get windowStreamStreaming => 'Abierta aquí';
 
   @override
@@ -2718,13 +1965,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get deviceFeaturesSection => 'Funciones';
-
-  @override
-  String get deviceFeatureFlowDetail =>
-      'Usa sus apps y ventanas o envíale ventanas';
-
-  @override
-  String get deviceFeatureFilesDetail => 'Explora y copia sus archivos';
 
   @override
   String get deviceFeatureNeedsConnection => 'Disponible al conectar';
@@ -2753,14 +1993,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get remoteFilesFileManager => 'Archivos';
-
-  @override
-  String remoteFilesShowInApp(String app) {
-    return 'Abrir en $app';
-  }
-
-  @override
-  String get remoteFilesEject => 'Expulsar';
 
   @override
   String remoteFilesMountTooOld(String device, String app) {
@@ -2847,11 +2079,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get remoteFilesCopyShowAll => 'Ver todas las transferencias';
 
   @override
-  String remoteFilesCopyMore(int count) {
-    return '$count copias más';
-  }
-
-  @override
   String get remoteFilesCopyAlready => 'Ya se están copiando aquí';
 
   @override
@@ -2859,10 +2086,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get remoteFilesTransfersEmpty => 'Aún no hay copias';
-
-  @override
-  String get remoteFilesTransfersEmptyDetail =>
-      'Los archivos copiados aquí muestran aquí su progreso y resultado';
 
   @override
   String get remoteFilesTransfersClear => 'Borrar terminadas';
@@ -3034,13 +2257,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get shareLinkMenuCreate => 'Crear enlace para compartir…';
 
   @override
-  String get shareLinkCreateTitle => 'Crear enlace para compartir';
-
-  @override
-  String get shareLinkCreateDetail =>
-      'Los dispositivos de la misma red pueden abrir el enlace en un navegador para descargar. No necesitan Whisper.';
-
-  @override
   String shareLinkDefaultName(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -3055,27 +2271,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get shareLinkRoute => 'Ruta';
 
   @override
-  String get shareLinkRouteHelp =>
-      'Déjalo vacío para usar la ruta aleatoria que se muestra';
-
-  @override
   String get shareLinkShortRoute => 'Ruta corta';
 
   @override
-  String get shareLinkShortRouteDetail =>
-      '4 caracteres, fácil de decir en voz alta';
-
-  @override
   String get shareLinkPassword => 'Contraseña';
-
-  @override
-  String get shareLinkPasswordOptional => 'Opcional';
-
-  @override
-  String get shareLinkShowPassword => 'Mostrar contraseña';
-
-  @override
-  String get shareLinkHidePassword => 'Ocultar contraseña';
 
   @override
   String get shareLinkCreate => 'Crear enlace';
@@ -3099,44 +2298,13 @@ class AppLocalizationsEs extends AppLocalizations {
   String get shareLinkCreateFailed => 'No se pudo crear el enlace';
 
   @override
-  String get shareLinkReady => 'Enlace listo';
-
-  @override
   String get shareLinkCopy => 'Copiar enlace';
-
-  @override
-  String get shareLinkCopied => 'Copiado';
-
-  @override
-  String get shareLinkScanHint => 'O escanéalo con la cámara de un teléfono';
-
-  @override
-  String get shareLinkAddressPicker => 'Elegir dirección de red';
-
-  @override
-  String get shareLinkServiceOffNote =>
-      'El servidor de archivos está desactivado. Actívalo para que se pueda abrir el enlace.';
-
-  @override
-  String get shareLinkNoNetwork =>
-      'Sin conexión a una red local: otros dispositivos aún no pueden abrirlo';
 
   @override
   String get shareLinkPasswordProtected => 'Protegido con contraseña';
 
   @override
   String get shareLinksTitle => 'Enlaces compartidos';
-
-  @override
-  String shareLinksActiveCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count enlaces activos',
-      one: '1 enlace activo',
-    );
-    return '$_temp0';
-  }
 
   @override
   String get shareLinksService => 'Servidor de archivos';
@@ -3189,30 +2357,6 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String shareLinkDownloads(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count descargas',
-      one: '1 descarga',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String shareLinkLastVisit(String time) {
-    return 'Última visita: $time';
-  }
-
-  @override
-  String get shareLinkNeverVisited => 'Aún no se ha abierto';
-
-  @override
-  String shareLinkBytesServed(String size) {
-    return '$size enviados';
-  }
-
-  @override
   String get shareLinkQr => 'Código QR';
 
   @override
@@ -3252,9 +2396,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get shareWebDownloadAll => 'Descargar todo (.zip)';
 
   @override
-  String get shareWebDownloadZip => 'Descargar como .zip';
-
-  @override
   String shareWebItemCount(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -3267,16 +2408,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get shareWebEmptyFolder => 'Esta carpeta está vacía';
-
-  @override
-  String shareWebModified(String date) {
-    return 'Modificado: $date';
-  }
-
-  @override
-  String shareWebFooter(String device) {
-    return 'Compartido desde $device con Whisper';
-  }
 
   @override
   String get shareWebNotFoundTitle => 'Este enlace no está disponible';
@@ -3341,22 +2472,6 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String flowTaskOpenOn(String device) {
     return 'Se muestra en $device';
-  }
-
-  @override
-  String get shareLinkBarAction => 'Compartir enlace';
-
-  @override
-  String get windowStreamSourceErrorDesktopUnsupported =>
-      'Este PC no puede compartir ventanas';
-
-  @override
-  String get windowStreamSourceErrorElevated =>
-      'Esta ventana se ejecuta como administrador y no se puede compartir';
-
-  @override
-  String windowStreamSourceNoteStagedInPlace(String app) {
-    return '$app no puede ejecutarse en segundo plano, compartiéndola donde está';
   }
 
   @override
@@ -3444,10 +2559,6 @@ class AppLocalizationsEs extends AppLocalizations {
       'Compartir las ventanas de este ordenador';
 
   @override
-  String get windowStreamShareSettingDesc =>
-      'Los dispositivos de confianza pueden abrir y usar las ventanas de este ordenador en sus pantallas';
-
-  @override
   String get deviceFilesAlwaysAllowed =>
       'Permitir siempre explorar mis archivos';
 
@@ -3486,29 +2597,11 @@ class AppLocalizationsEs extends AppLocalizations {
   String get shareWebNext => 'Siguiente';
 
   @override
-  String get shareLinkAllowAccess => 'Permitir acceso';
-
-  @override
   String get shareLinkAddress => 'Dirección';
 
   @override
   String get shareLinksServiceFooter =>
       'Los dispositivos de la misma red pueden abrir un enlace en cualquier navegador. El servidor solo funciona mientras haya un enlace activo.';
-
-  @override
-  String get shareLinkVisitsLabel => 'Visitas';
-
-  @override
-  String get shareLinkDownloadsLabel => 'Descargas';
-
-  @override
-  String get shareLinkLastVisitLabel => 'Última visita';
-
-  @override
-  String get shareLinkSentLabel => 'Datos enviados';
-
-  @override
-  String get shareLinkNever => 'Nunca';
 
   @override
   String get androidWindowServiceTitle => 'Servicio de flujo de ventanas';
@@ -3539,9 +2632,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get androidWindowServiceStop => 'Desactivar';
-
-  @override
-  String get androidWindowServiceSetup => 'Configurar';
 
   @override
   String get androidWindowServiceHowTitle => 'Configuración única';
@@ -3615,10 +2705,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get androidWindowServiceEntryTitle => 'Servicio de flujo de ventanas';
 
   @override
-  String get androidWindowServiceEntryHint =>
-      'Permite que otros dispositivos abran las apps de este teléfono';
-
-  @override
   String get androidWindowServiceComputerHint =>
       'Conecta este teléfono una vez a un ordenador con Whisper y el flujo de ventanas activado; después todos los ordenadores podrán usarlo';
 
@@ -3653,19 +2739,11 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get remoteFilesPromptBodyReadOnlyDesktop =>
-      'Si lo permites, podrá ver tu carpeta de inicio y abrir y copiar sus archivos, pero no cambiarlos.';
-
-  @override
   String get remoteFilesPromptBodyReadOnlyPhone =>
       'Si lo permites, podrá ver el almacenamiento interno de este teléfono y abrir y copiar sus archivos, pero no cambiarlos.';
 
   @override
   String get islandOverlay => 'Isla en segundo plano';
-
-  @override
-  String get islandOverlayDesc =>
-      'Muestra el progreso de las transferencias en la parte superior de la pantalla mientras Whisper está en segundo plano. Necesita permiso para mostrarse sobre otras apps.';
 
   @override
   String get islandOverlayOn => 'Activada';
@@ -3835,9 +2913,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get shellCardConnected => 'Conectado';
 
   @override
-  String get shellCardUnpaired => 'Sin emparejar';
-
-  @override
   String shellCardCan(String device) {
     return '$device puede';
   }
@@ -3850,9 +2925,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get shellCardChange => 'Modificar mis archivos';
-
-  @override
-  String get shellCardDetails => 'Detalles';
 
   @override
   String get shellCardAddress => 'Dirección';
@@ -3879,12 +2951,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get shellCardMount => 'Montar';
 
   @override
-  String get shellOn => 'Sí';
-
-  @override
-  String get shellOff => 'No';
-
-  @override
   String get shellPhoneDevices => 'Dispositivos';
 
   @override
@@ -3905,9 +2971,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String shellComposerHint(String device) {
     return 'Mensaje a $device';
   }
-
-  @override
-  String get shellPhoneNeedsConnection => 'Disponible al conectar';
 
   @override
   String get shellPaletteDevice => 'Dispositivo';
@@ -4149,9 +3212,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String soundGainValue(String value) {
     return '${value}x';
   }
-
-  @override
-  String get soundGainLabel => 'Ganancia de reproducción de este dispositivo';
 
   @override
   String get soundResume => 'Reanudar';

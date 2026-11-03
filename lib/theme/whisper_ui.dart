@@ -12,10 +12,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
 
-/// The redesigned UI is built behind this flag and stays off by default until
-/// it has been tried and accepted (docs/design/migration.md「怎么过渡」).
-const bool whisperNewUi = bool.fromEnvironment('WHISPER_NEW_UI');
-
 /// All colors of the design language. Values come from DESIGN.md.
 @immutable
 class WhisperColors extends ThemeExtension<WhisperColors> {
@@ -180,7 +176,15 @@ class WhisperColors extends ThemeExtension<WhisperColors> {
 }
 
 extension WhisperTheme on BuildContext {
-  WhisperColors get wc => Theme.of(this).extension<WhisperColors>()!;
+  /// A bare theme (a small window of its own, a dialog in a test) still gets the
+  /// colours of its brightness rather than a crash.
+  WhisperColors get wc {
+    final theme = Theme.of(this);
+    return theme.extension<WhisperColors>() ??
+        (theme.brightness == Brightness.dark
+            ? WhisperColors.dark
+            : WhisperColors.light);
+  }
 }
 
 /// The coloured tiles of the settings sections, the one place the interface

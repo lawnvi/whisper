@@ -9,7 +9,6 @@ import 'package:whisper/state/chat_session_list.dart';
 import 'package:whisper/theme/whisper_device_art.dart';
 import 'package:whisper/theme/whisper_icons.dart';
 import 'package:whisper/theme/whisper_ui.dart';
-import 'package:whisper/theme/whisper_window.dart';
 import 'package:whisper/widget/context_menu_region.dart';
 
 /// docs/design/surfaces.md「侧栏」.

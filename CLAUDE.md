@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Two companion docs are authoritative and should be treated as part of these instructions:
 - `AGENTS.md` — setup/verification commands, project structure, code style, security notes, and commit conventions.
-- `DESIGN.md` — the only source of UI rules: grammar, tokens, do's and don'ts. Read it before any UI work. Start at `docs/design/README.md` when implementing the redesign: it links `surfaces.md` (per-screen specs), `flutter.md` (tested code), `migration.md` (steps; the code has not migrated yet), `decisions.md` (why, what was rejected, what is open) and the local prototype. Feature specs must not define visual values.
+- `DESIGN.md` — the only source of UI rules: grammar, tokens, do's and don'ts. Read it before any UI work. Start at `docs/design/README.md` when implementing the redesign: it links `surfaces.md` (per-screen specs), `flutter.md` (tested code), `migration.md` (the steps and what each one delivered), `decisions.md` (why, what was rejected, what is open) and the local prototype. Feature specs must not define visual values.
 
 This file focuses on the big-picture architecture that is not obvious from reading any single file.
 
@@ -45,7 +45,7 @@ The app is built around **singleton coordinators**, not a DI/Provider tree. Most
 UI and app logic subscribe to networking events through the **`ISocketEvent` listener interface** (`onMessage`, `onAuth`, `onProgress`, `onTransferUpdated`, `onConnect`, `onClose`, …). This is the main seam between the socket layer and the rest of the app — add new cross-cutting events here.
 
 ### App state — `lib/state/`
-Coordinators that sit above the socket layer: `connection_coordinator.dart` (connection lifecycle/models), `auto_connect_planner.dart`, `chat_session_list.dart`, `peer_profile.dart` (remote device profiles), `device_workspace_state.dart`, `resumable_transfer_window.dart`, `app_shutdown.dart`, `discovery_resolve_limiter.dart` (throttles mDNS resolution).
+Coordinators that sit above the socket layer: `connection_coordinator.dart` (connection lifecycle/models), `auto_connect_planner.dart`, `chat_session_list.dart`, `peer_profile.dart` (remote device profiles), `resumable_transfer_window.dart`, `app_shutdown.dart`, `discovery_resolve_limiter.dart` (throttles mDNS resolution).
 
 ### Feature subsystems (self-contained, protocol + coordinator + platform bridge)
 - `lib/audio/` — system-audio sharing. Capture → Opus codec → packet transport → fan-out to one or more playback sinks, with clock sync and channel/group roles. Entry points: `audio_share_coordinator.dart`, `audio_group_coordinator.dart`, `audio_share_manager.dart`.
@@ -60,7 +60,7 @@ Each subsystem follows the same shape: a `*_protocol.dart` (wire format), a `*_c
 Drift (SQLite) database in `LocalDatabase.dart`. `device.dart`, `message.dart` (`MessageEnum` typed messages), `file_transfer.dart` are the row models.
 
 ### Other
-- `lib/page/` screens, `lib/widget/` reusable UI, `lib/helper/` platform helpers (files, clipboard sync, notifications, Android background service, desktop startup), `lib/theme/` (`AppTheme` + `WhisperPalette` tokens — see DESIGN.md), `lib/l10n/` ARB files (zh/en/es).
+- `lib/new_ui/` the interface (shell, phone, settings, files, sound, input, tray), `lib/page/` screens and the page-level logic behind it, `lib/widget/` reusable UI, `lib/helper/` platform helpers (files, clipboard sync, notifications, Android background service, desktop startup), `lib/theme/` (`AppTheme` + `WhisperPalette` tokens — see DESIGN.md), `lib/l10n/` ARB files (zh/en/es).
 - `android/ ios/ macos/ linux/ windows/` native runners; platform-specific behavior should stay behind the helper/coordinator/native-plugin boundaries.
 
 ## Generated files — never hand-edit

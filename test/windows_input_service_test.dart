@@ -497,26 +497,17 @@ void main() {
 
     test('one row: its state opens the action, its switch is for UAC', () {
       final settings = File('lib/page/settings.dart').readAsStringSync();
-      final row = settings.substring(
-        settings.indexOf('if (_windowsInputService.supported)'),
-        settings.indexOf('l10n.close2tray,'),
-      );
+      final layout = File(
+        'lib/new_ui/settings/settings_layout.dart',
+      ).readAsStringSync();
       // A machine-wide service behind a UAC prompt has more states than on
       // and off, and installing it is not a preference to flip.
       expect(
-        RegExp(r'_windowsInputService\.supported').allMatches(settings),
+        RegExp(r'_windowsInputService\.supported').allMatches(layout),
         hasLength(1),
       );
-      expect(row, isNot(contains('CupertinoSwitch')));
-      expect(row, contains('trailing: WindowsLockScreenInputStatus('));
-      expect(row, contains('changeWindowsLockScreenInput('));
-      expect(row, contains('enabled: !service.busy,'));
-      // The switch sits beside the row instead of being its trailing widget,
-      // so tapping the row never toggles it.
-      expect(
-        row.indexOf('child: WindowsElevatedInputSwitch('),
-        greaterThan(row.indexOf('trailing: WindowsLockScreenInputStatus(')),
-      );
+      expect(layout, contains('changeWindowsLockScreenInput('));
+      expect(layout, contains('changeWindowsElevatedInput('));
       expect(
         settings,
         contains(
@@ -527,15 +518,9 @@ void main() {
       final control = File(
         'lib/widget/windows_input_service_setting.dart',
       ).readAsStringSync();
-      // A dot carries the colour; the wording still names the state.
-      expect(control, contains('palette.trusted'));
-      expect(control, contains('palette.warning'));
-      expect(control, contains('shape: BoxShape.circle'));
-      expect(control, isNot(contains('FilledButton')));
       // One standard confirmation, then UAC.
       expect(control, contains('isDestructive: uninstall,'));
       expect(control, contains('l10n.windowsLockScreenInputFailed'));
-      expect(control, contains('value: controller.elevatedAllowed,'));
       expect(control, contains('isDestructive: enable,'));
       expect(control, contains('l10n.windowsElevatedInputFailed'));
       expect('await confirmAction('.allMatches(control), hasLength(2));

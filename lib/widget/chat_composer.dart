@@ -64,7 +64,7 @@ class ChatComposer extends StatelessWidget {
   final Future<void> Function()? onSendClipboardImages;
   final ValueChanged<int>? onRemoveClipboardImage;
 
-  /// In the new UI: 发给 iMac, or 连接 iMac 后可以发送 with a button to do so.
+  /// 发给 iMac, or 连接 iMac 后可以发送 with a button to do so.
   final String? composerHint, disabledHint;
 
   /// Sends the clipboard and says whether it went, for the button to show it.
@@ -99,169 +99,17 @@ class ChatComposer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    if (whisperNewUi) {
-      return Actions(
-        actions: <Type, Action<Intent>>{
-          if (isDesktopStyle && canSend && onPasteClipboard != null)
-            PasteTextIntent: CallbackAction<PasteTextIntent>(
-              onInvoke: (_) {
-                unawaited(_handlePasteShortcut());
-                return null;
-              },
-            ),
-        },
-        child: _buildCapsule(context),
-      );
-    }
-
-    if (isDesktopStyle) {
-      return Actions(
-        actions: <Type, Action<Intent>>{
-          if (canSend && onPasteClipboard != null)
-            // Shared input on macOS dispatches a paste intent directly.
-            PasteTextIntent: CallbackAction<PasteTextIntent>(
-              onInvoke: (_) {
-                unawaited(_handlePasteShortcut());
-                return null;
-              },
-            ),
-        },
-        child: _buildDesktopComposer(context, colorScheme),
-      );
-    }
-
-    return _buildMobileComposer(context, colorScheme);
-  }
-
-  Widget _buildDesktopComposer(BuildContext context, ColorScheme colorScheme) {
-    final palette = context.whisperPalette;
-    final accentColor = colorScheme.primary;
-    final containerColor = Color.lerp(
-      palette.surfaceCanvas,
-      palette.surfaceElevated,
-      colorScheme.brightness == Brightness.dark ? 0.72 : 0.62,
-    )!;
-    final borderColor = palette.borderSubtle;
-    return Container(
-      key: desktopContainerKey,
-      margin: const EdgeInsets.fromLTRB(18, 10, 18, 18),
-      padding: const EdgeInsets.fromLTRB(20, 14, 18, 14),
-      decoration: BoxDecoration(
-        color: containerColor,
-        borderRadius: BorderRadius.circular(30),
-        border: Border.all(color: borderColor),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(
-              alpha: colorScheme.brightness == Brightness.dark ? 0.18 : 0.05,
-            ),
-            blurRadius: 28,
-            offset: const Offset(0, 12),
+    return Actions(
+      actions: <Type, Action<Intent>>{
+        if (isDesktopStyle && canSend && onPasteClipboard != null)
+          PasteTextIntent: CallbackAction<PasteTextIntent>(
+            onInvoke: (_) {
+              unawaited(_handlePasteShortcut());
+              return null;
+            },
           ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          WhisperAnimatedReveal(
-            visible:
-                _showsClipboardFilesPreview || _showsClipboardImagesPreview,
-            child: _showsClipboardFilesPreview || _showsClipboardImagesPreview
-                ? Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: AnimatedSize(
-                      duration: whisperMotionDuration(context),
-                      curve: Curves.easeOutCubic,
-                      alignment: Alignment.topLeft,
-                      child: _showsClipboardFilesPreview
-                          ? _buildClipboardFilesPreview(context)
-                          : _buildClipboardImagesPreview(context),
-                    ),
-                  )
-                : null,
-          ),
-          GestureDetector(
-            key: desktopInputRegionKey,
-            behavior: HitTestBehavior.opaque,
-            onTap: canSend ? focusNode.requestFocus : null,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: 58),
-              child: Align(
-                alignment: Alignment.topLeft,
-                child: Focus(
-                  onKeyEvent: (_, event) => _handleKeyEvent(event),
-                  child: TextField(
-                    key: const ValueKey('chat-composer-textfield'),
-                    controller: controller,
-                    focusNode: focusNode,
-                    enabled: canSend,
-                    keyboardType: TextInputType.multiline,
-                    textInputAction: TextInputAction.newline,
-                    minLines: 1,
-                    maxLines: 5,
-                    selectionWidthStyle: BoxWidthStyle.tight,
-                    autofocus: isDesktop(),
-                    autocorrect: true,
-                    cursorColor: accentColor,
-                    style: TextStyle(
-                      color: colorScheme.onSurface,
-                      fontSize: 16,
-                      height: 1.45,
-                    ),
-                    decoration: InputDecoration(
-                      isCollapsed: true,
-                      isDense: true,
-                      filled: false,
-                      fillColor: Colors.transparent,
-                      border: InputBorder.none,
-                      enabledBorder: InputBorder.none,
-                      focusedBorder: InputBorder.none,
-                      disabledBorder: InputBorder.none,
-                      errorBorder: InputBorder.none,
-                      focusedErrorBorder: InputBorder.none,
-                      contentPadding: EdgeInsets.zero,
-                      hintText: canSend
-                          ? (AppLocalizations.of(context)?.sendTips ??
-                                '发点什么...')
-                          : (AppLocalizations.of(context)?.connectToSend ??
-                                '连接后即可发送消息'),
-                      hintStyle: TextStyle(
-                        color: palette.textMuted,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              if (clipboardEnabled)
-                _ClipboardActionButton(
-                  key: clipboardButtonKey,
-                  enabled: canSend && !isLoading,
-                  onPressed: onSendClipboard,
-                  buttonSize: 26,
-                  iconSize: 15,
-                ),
-              if (isDesktop()) const ScreenshotButton(),
-              const Spacer(),
-              _buildPrimaryActionButton(
-                context,
-                colorScheme: colorScheme,
-                buttonSize: 48,
-                iconSize: 20,
-              ),
-            ],
-          ),
-        ],
-      ),
+      },
+      child: _buildCapsule(context),
     );
   }
 
@@ -478,104 +326,6 @@ class ChatComposer extends StatelessWidget {
     );
   }
 
-  Widget _buildMobileComposer(BuildContext context, ColorScheme colorScheme) {
-    final palette = context.whisperPalette;
-    final accentColor = colorScheme.primary;
-    final outerContainerColor = colorScheme.surface;
-    final containerColor = Color.lerp(
-      palette.surfaceCanvas,
-      palette.surfaceElevated,
-      colorScheme.brightness == Brightness.dark ? 0.72 : 0.62,
-    )!;
-    final borderColor = palette.borderSubtle;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 8, 14, 14),
-      decoration: BoxDecoration(color: outerContainerColor),
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(18, 14, 16, 12),
-        decoration: BoxDecoration(
-          color: containerColor,
-          borderRadius: BorderRadius.circular(30),
-          border: Border.all(color: borderColor),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(
-                alpha: colorScheme.brightness == Brightness.dark ? 0.12 : 0.05,
-              ),
-              blurRadius: 24,
-              offset: const Offset(0, 10),
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Focus(
-              onKeyEvent: (_, event) => _handleKeyEvent(event),
-              child: TextField(
-                controller: controller,
-                focusNode: focusNode,
-                enabled: canSend,
-                keyboardType: TextInputType.multiline,
-                textInputAction: TextInputAction.newline,
-                cursorColor: accentColor,
-                autofocus: isDesktop(),
-                autocorrect: true,
-                minLines: 1,
-                maxLines: 6,
-                selectionWidthStyle: BoxWidthStyle.tight,
-                style: TextStyle(
-                  color: colorScheme.onSurface,
-                  fontSize: 16,
-                  height: 1.42,
-                ),
-                decoration: InputDecoration(
-                  isCollapsed: true,
-                  isDense: true,
-                  filled: false,
-                  fillColor: Colors.transparent,
-                  border: InputBorder.none,
-                  enabledBorder: InputBorder.none,
-                  focusedBorder: InputBorder.none,
-                  disabledBorder: InputBorder.none,
-                  errorBorder: InputBorder.none,
-                  focusedErrorBorder: InputBorder.none,
-                  contentPadding: EdgeInsets.zero,
-                  hintText: canSend
-                      ? (AppLocalizations.of(context)?.sendTips ?? '发点什么...')
-                      : (AppLocalizations.of(context)?.connectToSend ??
-                            '连接后即可发送消息'),
-                  hintStyle: TextStyle(color: palette.textMuted, fontSize: 16),
-                ),
-              ),
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                if (clipboardEnabled)
-                  _ClipboardActionButton(
-                    key: clipboardButtonKey,
-                    enabled: canSend && !isLoading,
-                    onPressed: onSendClipboard,
-                    buttonSize: 28,
-                    iconSize: 18,
-                  ),
-                const Spacer(),
-                _buildPrimaryActionButton(
-                  context,
-                  colorScheme: colorScheme,
-                  buttonSize: 42,
-                  iconSize: 20,
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildClipboardImagesPreview(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final palette = context.whisperPalette;
@@ -749,73 +499,6 @@ class ChatComposer extends StatelessWidget {
             icon: const Icon(Icons.close_rounded, size: 18),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildPrimaryActionButton(
-    BuildContext context, {
-    required ColorScheme colorScheme,
-    required double buttonSize,
-    required double iconSize,
-  }) {
-    final palette = context.whisperPalette;
-    final accentColor = colorScheme.primary;
-    final disabledBorderColor = palette.borderSubtle;
-    final showsAttachmentAction = _showsAttachmentAction;
-    final enabled =
-        canSend &&
-        !isLoading &&
-        (showsAttachmentAction ||
-            _hasDraftText ||
-            _canSendPendingClipboardFiles ||
-            _canSendPendingClipboardImages);
-    final backgroundColor = showsAttachmentAction
-        ? Colors.transparent
-        : (enabled ? accentColor : palette.surfaceMuted);
-    final foregroundColor = showsAttachmentAction
-        ? (enabled ? colorScheme.onSurfaceVariant : colorScheme.outline)
-        : (enabled ? Colors.white : colorScheme.outline);
-    return WhisperAnimatedSwitcher(
-      value: (showsAttachmentAction, isLoading),
-      scale: true,
-      // The builder's context is the button's own, which is where the
-      // attachment menu opens from.
-      child: Builder(
-        builder: (buttonContext) => IconButton(
-          key: showsAttachmentAction ? attachmentButtonKey : sendButtonKey,
-          onPressed: enabled ? () => _handlePrimaryAction(buttonContext) : null,
-          style: IconButton.styleFrom(
-            minimumSize: Size(buttonSize, buttonSize),
-            maximumSize: Size(buttonSize, buttonSize),
-            backgroundColor: backgroundColor,
-            foregroundColor: foregroundColor,
-            shape: const CircleBorder(),
-            padding: EdgeInsets.zero,
-            elevation: 0,
-            side: showsAttachmentAction
-                ? BorderSide.none
-                : BorderSide(
-                    color: enabled ? accentColor : disabledBorderColor,
-                  ),
-            splashFactory: NoSplash.splashFactory,
-            overlayColor: Colors.transparent,
-          ),
-          icon: isLoading
-              ? SizedBox(
-                  width: iconSize,
-                  height: iconSize,
-                  child: CupertinoActivityIndicator(
-                    color: showsAttachmentAction ? accentColor : Colors.white,
-                  ),
-                )
-              : Icon(
-                  showsAttachmentAction
-                      ? Icons.add_rounded
-                      : Icons.arrow_upward_rounded,
-                  size: iconSize,
-                ),
-        ),
       ),
     );
   }
@@ -1019,84 +702,6 @@ class ChatComposer extends StatelessWidget {
     }
     final mb = kb / 1024;
     return '${mb.toStringAsFixed(mb >= 10 ? 0 : 1)} MB';
-  }
-}
-
-class _ClipboardActionButton extends StatefulWidget {
-  final bool enabled;
-  final Future<void> Function() onPressed;
-  final double buttonSize;
-  final double iconSize;
-
-  const _ClipboardActionButton({
-    super.key,
-    required this.enabled,
-    required this.onPressed,
-    required this.buttonSize,
-    required this.iconSize,
-  });
-
-  @override
-  State<_ClipboardActionButton> createState() => _ClipboardActionButtonState();
-}
-
-class _ClipboardActionButtonState extends State<_ClipboardActionButton> {
-  Timer? _resetTimer;
-  bool _showConfirmation = false;
-
-  void _handlePressed() {
-    if (!widget.enabled) {
-      return;
-    }
-    setState(() => _showConfirmation = true);
-    HapticFeedback.selectionClick();
-    unawaited(widget.onPressed());
-    _resetTimer?.cancel();
-    _resetTimer = Timer(const Duration(milliseconds: 900), () {
-      if (mounted) {
-        setState(() => _showConfirmation = false);
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _resetTimer?.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return IconButton(
-      onPressed: widget.enabled ? _handlePressed : null,
-      style: IconButton.styleFrom(
-        minimumSize: Size(widget.buttonSize, widget.buttonSize),
-        maximumSize: Size(widget.buttonSize, widget.buttonSize),
-        backgroundColor: Colors.transparent,
-        foregroundColor: widget.enabled
-            ? colorScheme.onSurfaceVariant
-            : colorScheme.outline,
-        padding: EdgeInsets.zero,
-        elevation: 0,
-        splashFactory: NoSplash.splashFactory,
-        overlayColor: Colors.transparent,
-      ),
-      icon: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 160),
-        reverseDuration: const Duration(milliseconds: 140),
-        transitionBuilder: (child, animation) => FadeTransition(
-          opacity: animation,
-          child: ScaleTransition(scale: animation, child: child),
-        ),
-        child: Icon(
-          _showConfirmation ? Icons.check_rounded : Icons.content_copy_rounded,
-          key: ValueKey<bool>(_showConfirmation),
-          size: widget.iconSize,
-          color: _showConfirmation ? colorScheme.primary : null,
-        ),
-      ),
-    );
   }
 }
 

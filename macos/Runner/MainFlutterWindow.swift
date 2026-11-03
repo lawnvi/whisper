@@ -302,7 +302,7 @@ class MainFlutterWindow: NSWindow {
       result(nil)
       return true
     default:
-      return handleProbeCall(call, result: result)
+      return false
     }
   }
 

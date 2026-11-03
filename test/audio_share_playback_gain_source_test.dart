@@ -4,17 +4,16 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test('settings exposes shared speaker playback gain configuration', () {
-    final settings = File('lib/page/settings.dart').readAsStringSync();
+    final settings =
+        File('lib/page/settings.dart').readAsStringSync() +
+        File('lib/new_ui/settings/settings_layout.dart').readAsStringSync();
 
     expect(settings, contains('_audioSharePlaybackGain'));
-    expect(settings, contains('audioSharePlaybackGainSetting('));
-    expect(settings, contains('_showAudioSharePlaybackGainSheet'));
-    expect(settings, contains('showWhisperGlassBottomSheet<void>('));
-    expect(settings, contains('WhisperGlassBottomSheet('));
-    expect(settings, contains('WhisperSettingsSlider('));
     expect(settings, contains('setAudioSharePlaybackGain'));
     expect(
-        settings, contains('AudioShareCoordinator.shared.updatePlaybackGain'));
+      settings,
+      contains('AudioShareCoordinator.shared.updatePlaybackGain'),
+    );
   });
 
   test('local settings persists playback gain with safe bounds', () {

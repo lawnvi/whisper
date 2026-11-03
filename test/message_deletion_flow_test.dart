@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
+import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/widget/subtle_motion.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -45,6 +46,9 @@ Future<void> _pump(
   var selecting = false;
   await tester.pumpWidget(
     MaterialApp(
+      locale: const Locale('zh'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       navigatorKey: navigatorKey,
       home: StatefulBuilder(
         builder: (context, setState) {
@@ -179,7 +183,7 @@ void main() {
         },
       );
       await _action(tester, '多选');
-      await tester.tap(find.byTooltip('全选'));
+      await tester.tap(find.text('全选'));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('delete-selected-messages')));
       await tester.pumpAndSettle();
@@ -319,6 +323,9 @@ void main() {
       var escapeReceived = false;
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: Focus(
               autofocus: true,

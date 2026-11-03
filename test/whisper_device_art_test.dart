@@ -27,8 +27,6 @@ void main() {
     ]) {
       expect(deviceKindFor(platform), kind, reason: platform);
     }
-    // The icon of every spelling above exists in the old list too.
-    expect(platformIcon('darwin'), platformIcon('macos'));
   });
 
   testWidgets('measures like the prototype', (t) async {

@@ -4,13 +4,14 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test('desktop launch at startup setting is localized and desktop-only', () {
-    final source = File('lib/page/settings.dart').readAsStringSync();
+    final source =
+        File('lib/page/settings.dart').readAsStringSync() +
+        File('lib/new_ui/settings/settings_layout.dart').readAsStringSync();
 
     expect(
       source,
       contains("import 'package:whisper/helper/desktop_startup.dart';"),
     );
-    expect(source, contains("import 'package:whisper/helper/toast.dart';"));
     expect(source, contains('bool _launchAtStartup = false;'));
     expect(source, contains('DesktopStartupManager().isEnabled()'));
     expect(
@@ -19,14 +20,8 @@ void main() {
         RegExp(r'DesktopStartupManager\(\)\s*\.setEnabled\(\s*value\s*,?\s*\)'),
       ),
     );
-    expect(source, contains('l10n.launchAtStartup'));
-    expect(source, contains('l10n.launchAtStartupDesc'));
+    expect(source, contains('title: l10n.launchAtStartup,'));
     expect(source, contains('l10n.launchAtStartupFailed,'));
-
-    final desktopSection = RegExp(
-      r'if \(_isDesktopPlatform\)[\s\S]*?l10n\.launchAtStartup[\s\S]*?CupertinoSwitch',
-    );
-    expect(desktopSection.hasMatch(source), isTrue);
   });
 
   test('launch at startup strings are localized', () {

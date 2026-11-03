@@ -1,50 +1,12 @@
-import 'package:flutter/cupertino.dart';
+// What the Windows service row does when it is pressed. How the row looks is in
+// new_settings_test.dart.
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:whisper/helper/app_update.dart';
 import 'package:whisper/helper/windows_input_service.dart';
 import 'package:whisper/l10n/app_localizations.dart';
-import 'package:whisper/model/LocalDatabase.dart';
-import 'package:whisper/page/settings.dart';
 import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/widget/windows_input_service_setting.dart';
-
-const _presentation = SettingsPresentation(
-  device: DeviceData(
-    id: 0,
-    uid: 'local-device',
-    name: 'Studio PC',
-    host: '192.168.1.5',
-    port: 10002,
-    platform: 'windows',
-    isServer: true,
-    online: true,
-    clipboard: true,
-    auth: false,
-    lastTime: 0,
-  ),
-  saveDirectoryPath: r'C:\Users\tester\Downloads',
-  version: '2.4.0',
-  closeToTray: true,
-  copyVerificationCode: true,
-  listenAndroidNotifications: true,
-  ignoreAndroidNotifications: false,
-  autoConnect: true,
-  launchAtStartup: false,
-  androidBackgroundKeepAlive: true,
-  audioSharePlaybackGain: 1.0,
-  remoteInputScrollMultiplier: 1.0,
-  themeMode: ThemeMode.system,
-);
-
-const _title = 'Keyboard and mouse on the lock screen and UAC';
-
-class _NoUpdates implements AppUpdateManager {
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
 
 void main() {
   const channel = MethodChannel('test/windows_input_service_setting');
@@ -52,11 +14,10 @@ void main() {
   late List<String> states;
   late bool elevated;
 
-  Future<WindowsInputServiceController> pumpSettings(
+  Future<WindowsInputServiceController> pump(
     WidgetTester tester, {
     bool elevatedAllowed = false,
   }) async {
-    calls.clear();
     elevated = elevatedAllowed;
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (
       call,
@@ -72,241 +33,143 @@ void main() {
         null,
       ),
     );
-    tester.view
-      ..physicalSize = const Size(900, 1400)
-      ..devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
     final controller = WindowsInputServiceController(
       channel: channel,
       supported: true,
       pollInterval: Duration.zero,
       pollAttempts: 3,
     );
+    await controller.refresh();
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.lightTheme,
         locale: const Locale('en'),
-        localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
-          AppLocalizations.delegate,
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
-        home: SettingsScreen(
-          presentationLoader: () async => _presentation,
-          updateManager: _NoUpdates(),
-          autoCheckForUpdates: false,
-          windowsInputService: controller,
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => Column(
+              children: [
+                TextButton(
+                  onPressed: () => changeWindowsLockScreenInput(
+                    context,
+                    controller: controller,
+                  ),
+                  child: const Text('service'),
+                ),
+                TextButton(
+                  onPressed: () => changeWindowsElevatedInput(
+                    context,
+                    !controller.elevatedAllowed,
+                    controller: controller,
+                  ),
+                  child: const Text('uac'),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
-    );
-    await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(
-      find.text(_title),
-      200,
-      scrollable: find.byType(Scrollable).first,
     );
     await tester.pumpAndSettle();
     calls.clear();
     return controller;
   }
 
-  Finder row(String title) => find
-      .ancestor(of: find.text(title), matching: find.byType(GestureDetector))
-      .first;
-
-  testWidgets('the row shows the service state as a value, not a control', (
-    tester,
-  ) async {
-    states = <String>['notInstalled'];
-    await pumpSettings(tester);
-
-    final status = find.byType(WindowsLockScreenInputStatus);
-    expect(
-      find.descendant(of: status, matching: find.text('Not installed')),
-      findsOneWidget,
-    );
-    expect(
-      find.descendant(
-        of: status,
-        matching: find.byIcon(Icons.arrow_forward_ios),
-      ),
-      findsOneWidget,
-    );
-    expect(
-      find.descendant(of: status, matching: find.byType(ButtonStyleButton)),
-      findsNothing,
-    );
-    expect(
-      find.descendant(of: row(_title), matching: find.byType(CupertinoSwitch)),
-      findsNothing,
-    );
-  });
-
-  testWidgets('arrows centre on the row while switches stay by the title', (
-    tester,
-  ) async {
-    states = <String>['running'];
-    await pumpSettings(tester);
-
-    // Two lines of text make the row taller than its accessory.
-    final lockRow = row(_title);
-    final arrow = find.descendant(
-      of: lockRow,
-      matching: find.byIcon(Icons.arrow_forward_ios),
-    );
-    expect(
-      tester.getCenter(arrow).dy,
-      moreOrLessEquals(tester.getCenter(lockRow).dy, epsilon: 1),
-    );
-
-    final startupRow = row('Launch at startup');
-    final toggle = find.descendant(
-      of: startupRow,
-      matching: find.byType(CupertinoSwitch),
-    );
-    expect(
-      tester.getCenter(toggle).dy,
-      lessThan(tester.getCenter(startupRow).dy - 4),
-    );
-  });
-
-  testWidgets('tapping the row confirms once, then installs', (tester) async {
-    states = <String>['notInstalled', 'running'];
-    final controller = await pumpSettings(tester);
-
-    await tester.tap(find.text(_title));
+  Future<void> press(WidgetTester tester, String text) async {
+    await tester.tap(find.text(text));
     await tester.pumpAndSettle();
-    // Says what is about to be installed before UAC asks.
+  }
+
+  testWidgets('installing says what it does, then installs', (tester) async {
+    states = <String>['notInstalled', 'running'];
+    final controller = await pump(tester);
+
+    await press(tester, 'service');
     expect(find.textContaining('installs a system service'), findsOneWidget);
     expect(calls, isEmpty);
 
-    await tester.tap(find.text('Install'));
-    await tester.pumpAndSettle();
-
+    await press(tester, 'Install');
     expect(calls.first, 'installInputService');
     expect(controller.state, WindowsInputServiceState.running);
-    expect(find.text('Running'), findsOneWidget);
   });
 
   testWidgets('a running service is only removed after confirmation', (
     tester,
   ) async {
     states = <String>['running', 'notInstalled'];
-    final controller = await pumpSettings(tester);
+    final controller = await pump(tester);
 
-    await tester.tap(find.text(_title));
-    await tester.pumpAndSettle();
+    await press(tester, 'service');
     expect(find.textContaining('After uninstalling'), findsOneWidget);
-    await tester.tap(find.text('Cancel'));
-    await tester.pumpAndSettle();
+    await press(tester, 'Cancel');
     expect(calls, isEmpty);
     expect(controller.state, WindowsInputServiceState.running);
 
-    await tester.tap(find.text(_title));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Uninstall'));
-    await tester.pumpAndSettle();
-
+    await press(tester, 'service');
+    await press(tester, 'Uninstall');
     expect(calls.first, 'uninstallInputService');
-    expect(find.text('Not installed'), findsOneWidget);
+    expect(controller.state, WindowsInputServiceState.notInstalled);
   });
 
-  for (final (state, value) in [
-    ('stopped', 'Stopped'),
-    ('outdated', 'Needs update'),
-  ]) {
+  for (final state in ['stopped', 'outdated']) {
     testWidgets('a $state service is repaired by reinstalling over it', (
       tester,
     ) async {
       states = <String>[state, 'running'];
-      await pumpSettings(tester);
-      expect(find.text(value), findsOneWidget);
+      final controller = await pump(tester);
 
-      await tester.tap(find.text(_title));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Repair'));
-      await tester.pumpAndSettle();
-
+      await press(tester, 'service');
+      await press(tester, 'Repair');
       expect(calls.first, 'installInputService');
-      expect(find.text('Running'), findsOneWidget);
+      expect(controller.state, WindowsInputServiceState.running);
     });
   }
 
-  CupertinoSwitch elevatedSwitch(WidgetTester tester) => tester.widget(
-    find.descendant(
-      of: find.byType(WindowsElevatedInputSwitch),
-      matching: find.byType(CupertinoSwitch),
-    ),
-  );
-
-  testWidgets('the UAC switch is off and inert unless the service runs', (
-    tester,
-  ) async {
+  testWidgets('UAC control is off unless the service runs', (tester) async {
     states = <String>['stopped'];
-    final controller = await pumpSettings(tester, elevatedAllowed: true);
-
+    final controller = await pump(tester, elevatedAllowed: true);
     expect(controller.elevatedAllowed, isFalse);
-    expect(elevatedSwitch(tester).value, isFalse);
-    expect(elevatedSwitch(tester).onChanged, isNull);
   });
 
-  testWidgets('turning the UAC switch on warns before anything runs', (
+  testWidgets('turning UAC control on warns before anything runs', (
     tester,
   ) async {
     states = <String>['running'];
-    final controller = await pumpSettings(tester);
-    expect(elevatedSwitch(tester).value, isFalse);
+    final controller = await pump(tester);
 
-    await tester.tap(find.byType(WindowsElevatedInputSwitch));
-    await tester.pumpAndSettle();
-    // The confirmation spells out the UAC risk before the elevated run.
+    await press(tester, 'uac');
     expect(find.textContaining('get past UAC'), findsOneWidget);
     expect(calls, isEmpty);
 
     elevated = true;
-    await tester.tap(find.text('Turn on'));
-    await tester.pumpAndSettle();
-
-    // The switch never installs or removes the service.
+    await press(tester, 'Turn on');
+    // It never installs or removes the service.
     expect(calls.first, 'enableElevatedInput');
     expect(calls, isNot(contains('uninstallInputService')));
     expect(controller.elevatedAllowed, isTrue);
-    expect(elevatedSwitch(tester).value, isTrue);
   });
 
   testWidgets('declining the UAC warning changes nothing', (tester) async {
     states = <String>['running'];
-    final controller = await pumpSettings(tester);
+    final controller = await pump(tester);
 
-    await tester.tap(find.byType(WindowsElevatedInputSwitch));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Cancel'));
-    await tester.pumpAndSettle();
-
+    await press(tester, 'uac');
+    await press(tester, 'Cancel');
     expect(calls, isEmpty);
     expect(controller.elevatedAllowed, isFalse);
   });
 
-  testWidgets('uninstalling from the row also switches UAC control off', (
-    tester,
-  ) async {
+  testWidgets('uninstalling also switches UAC control off', (tester) async {
     states = <String>['running', 'notInstalled'];
-    final controller = await pumpSettings(tester, elevatedAllowed: true);
-    expect(elevatedSwitch(tester).value, isTrue);
+    final controller = await pump(tester, elevatedAllowed: true);
+    expect(controller.elevatedAllowed, isTrue);
 
-    // Tapping the row is the service's action, not the switch's.
-    await tester.tap(find.text(_title));
-    await tester.pumpAndSettle();
+    await press(tester, 'service');
     expect(find.textContaining('lock screen and UAC prompts'), findsOneWidget);
-    await tester.tap(find.text('Uninstall'));
-    await tester.pumpAndSettle();
-
+    await press(tester, 'Uninstall');
     expect(calls.first, 'uninstallInputService');
     expect(calls, isNot(contains('disableElevatedInput')));
     expect(controller.elevatedAllowed, isFalse);
-    expect(elevatedSwitch(tester).value, isFalse);
-    expect(elevatedSwitch(tester).onChanged, isNull);
   });
 }

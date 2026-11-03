@@ -19,7 +19,6 @@ import '../../l10n/app_localizations.dart';
 import '../../remote_files/fs_host.dart';
 import '../../socket/svrmanager.dart';
 import '../../remote_files/mount/remote_mounts.dart';
-import '../window_stream/flow_space_theme.dart';
 import 'files_icons.dart';
 
 /// Asks "‹device› wants to browse your files" over the whole app whenever
@@ -73,9 +72,7 @@ class _FileBrowsePromptHostState extends State<FileBrowsePromptHost> {
     if (asked != null && !identical(pending, asked)) {
       // Answered in the app, or given up on: off the island too.
       unawaited(IslandAsks.shared.settle(_askId(asked)));
-      if (whisperNewUi) {
-        RequestIslandSource.shared.settle(fileBrowseAskId(asked.peerId));
-      }
+      RequestIslandSource.shared.settle(fileBrowseAskId(asked.peerId));
     }
     if (pending != null && !identical(pending, _announced)) {
       _announced = pending;
@@ -91,7 +88,7 @@ class _FileBrowsePromptHostState extends State<FileBrowsePromptHost> {
   /// the background, put it on the island with its answers (Android), or
   /// notify.
   void _announce(FileBrowseRequest request) {
-    if (whisperNewUi && isDesktop()) {
+    if (isDesktop()) {
       final l10n = AppLocalizations.of(context);
       if (l10n != null) {
         askFileBrowse(
@@ -166,59 +163,28 @@ class _FileBrowsePromptHostState extends State<FileBrowsePromptHost> {
   @override
   Widget build(BuildContext context) {
     final request = _gate.pending;
-    if (whisperNewUi && isDesktop()) return widget.child;
+    if (isDesktop()) return widget.child;
     // A 弹层 that stays open through a fold: a bottom sheet in the compact size
     // class, in the middle beside a sidebar.
-    if (whisperNewUi) {
-      return Stack(
-        children: [
-          widget.child,
-          if (request != null)
-            Positioned.fill(
-              child: Material(
-                type: MaterialType.transparency,
-                child: ColoredBox(
-                  color: context.wc.scrim,
-                  child: PhoneSheetFrame(
-                    child: _PromptCard(
-                      key: ValueKey(request),
-                      request: request,
-                      onDecide: _gate.decide,
-                    ),
+    return Stack(
+      children: [
+        widget.child,
+        if (request != null)
+          Positioned.fill(
+            child: Material(
+              type: MaterialType.transparency,
+              child: ColoredBox(
+                color: context.wc.scrim,
+                child: PhoneSheetFrame(
+                  child: _PromptCard(
+                    key: ValueKey(request),
+                    request: request,
+                    onDecide: _gate.decide,
                   ),
                 ),
               ),
             ),
-        ],
-      );
-    }
-    return Stack(
-      children: [
-        widget.child,
-        Positioned.fill(
-          child: IgnorePointer(
-            ignoring: request == null,
-            child: AnimatedOpacity(
-              duration: FlowSpaceTokens.quickDuration,
-              opacity: request == null ? 0 : 1,
-              child: Material(
-                type: MaterialType.transparency,
-                child: ColoredBox(
-                  color: Colors.black.withValues(alpha: 0.32),
-                  child: request == null
-                      ? const SizedBox.expand()
-                      : Center(
-                          child: _PromptCard(
-                            key: ValueKey(request),
-                            request: request,
-                            onDecide: _gate.decide,
-                          ),
-                        ),
-                ),
-              ),
-            ),
           ),
-        ),
       ],
     );
   }
@@ -338,136 +304,6 @@ class _PromptCardState extends State<_PromptCard> {
 
   @override
   Widget build(BuildContext context) {
-    if (whisperNewUi) return _buildNew(context);
-    final request = widget.request;
-    final l10n = AppLocalizations.of(context)!;
-    final colors = FlowSpaceColors.of(context);
-    final phone = Platform.isAndroid || Platform.isIOS;
-    Widget button(
-      String label,
-      FileBrowseDecision decision, {
-      bool primary = false,
-    }) {
-      return SizedBox(
-        width: double.infinity,
-        child: CupertinoButton(
-          padding: const EdgeInsets.symmetric(vertical: 13),
-          color: primary ? colors.scheme.primary : colors.raisedSecondary,
-          borderRadius: BorderRadius.circular(14),
-          onPressed: () => unawaited(_decide(decision)),
-          child: Text(
-            label,
-            style: TextStyle(
-              color: primary ? Colors.white : colors.label,
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-      );
-    }
-
-    return Shortcuts(
-      shortcuts: const {
-        SingleActivator(LogicalKeyboardKey.escape): DismissIntent(),
-      },
-      child: Actions(
-        actions: {
-          DismissIntent: CallbackAction<DismissIntent>(
-            onInvoke: (_) => widget.onDecide(FileBrowseDecision.deny),
-          ),
-        },
-        child: Focus(
-          autofocus: true,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 360),
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: FlowGlass(
-                radius: 28,
-                tint: colors.raised.withValues(alpha: 0.92),
-                padding: const EdgeInsets.fromLTRB(22, 26, 22, 18),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 56,
-                      height: 56,
-                      decoration: ShapeDecoration(
-                        shape: RoundedSuperellipseBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        color: colors.scheme.primary.withValues(alpha: 0.12),
-                      ),
-                      child: Icon(
-                        CupertinoIcons.folder_fill,
-                        color: colors.scheme.primary,
-                        size: 28,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      l10n.remoteFilesPromptTitle(request.deviceName),
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: colors.label,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      switch ((phone, _allowChanges)) {
-                        (true, true) => l10n.remoteFilesPromptBodyPhone,
-                        (true, false) =>
-                          l10n.remoteFilesPromptBodyReadOnlyPhone,
-                        (false, true) => l10n.remoteFilesPromptBodyDesktop,
-                        (false, false) =>
-                          l10n.remoteFilesPromptBodyReadOnlyDesktop,
-                      },
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: colors.secondaryLabel,
-                        fontSize: 14,
-                        height: 1.4,
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            l10n.remoteFilesPromptAllowChanges,
-                            style: TextStyle(color: colors.label, fontSize: 15),
-                          ),
-                        ),
-                        CupertinoSwitch(
-                          value: _allowChanges,
-                          onChanged: (value) =>
-                              setState(() => _allowChanges = value),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 14),
-                    button(
-                      l10n.remoteFilesAllowOnce,
-                      FileBrowseDecision.once,
-                      primary: true,
-                    ),
-                    const SizedBox(height: 8),
-                    button(
-                      l10n.remoteFilesAllowAlways,
-                      FileBrowseDecision.always,
-                    ),
-                    const SizedBox(height: 8),
-                    button(l10n.remoteFilesDeny, FileBrowseDecision.deny),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
+    return _buildNew(context);
   }
 }

@@ -8,11 +8,8 @@ void main() {
   test('discovered devices persist fresh network addresses', () {
     final source = deviceListSource();
     final discovery = source.substring(
-      source.indexOf(
-        'case BonsoirDiscoveryServiceResolvedEvent() ||',
-      ),
-      source.indexOf(
-          'case BonsoirDiscoveryServiceResolveFailedEvent():'),
+      source.indexOf('case BonsoirDiscoveryServiceResolvedEvent() ||'),
+      source.indexOf('case BonsoirDiscoveryServiceResolveFailedEvent():'),
     );
 
     expect(source, contains('mergeStoredDeviceWithDiscovery'));
@@ -27,30 +24,28 @@ void main() {
     expect(discovery, contains('port: port'));
   });
 
-  test('connected nearby devices keep fresh discovery host over stored host',
-      () {
-    final source = deviceListSource();
-    final refresh = memberSource(source, 'Future<void> _refreshDevice');
+  test(
+    'connected nearby devices keep fresh discovery host over stored host',
+    () {
+      final source = deviceListSource();
+      final refresh = memberSource(source, 'Future<void> _refreshDevice');
 
-    // What the merge itself does is in device_list_rules_test.dart.
-    expect(
-      refresh,
-      contains(
-        'mergeStoredDeviceWithDiscovery(storedDevicesByUid[item.uid], item)',
-      ),
-    );
-    expect(refresh, isNot(contains('storedDevicesByUid[item.uid] ?? item')));
-  });
+      // What the merge itself does is in device_list_rules_test.dart.
+      expect(
+        refresh,
+        contains(
+          'mergeStoredDeviceWithDiscovery(storedDevicesByUid[item.uid], item)',
+        ),
+      );
+      expect(refresh, isNot(contains('storedDevicesByUid[item.uid] ?? item')));
+    },
+  );
 
   test('lost services clear persisted nearby state without TXT attributes', () {
     final source = deviceListSource();
     final discovery = source.substring(
-      source.indexOf(
-        'case BonsoirDiscoveryServiceResolvedEvent() ||',
-      ),
-      source.indexOf(
-        'case BonsoirDiscoveryServiceResolveFailedEvent():',
-      ),
+      source.indexOf('case BonsoirDiscoveryServiceResolvedEvent() ||'),
+      source.indexOf('case BonsoirDiscoveryServiceResolveFailedEvent():'),
     );
     final refresh = memberSource(source, 'Future<void> _refreshDevice');
 
@@ -81,9 +76,5 @@ void main() {
 
     expect(deviceList, contains('onDeviceDeleted: _removeDevice'));
     expect(conversation, contains('deleteDevice: widget.onDeviceDeleted'));
-    expect(
-      deviceList,
-      contains('if (!socketManager.isConnectedTo(deviceItem.uid))'),
-    );
   });
 }

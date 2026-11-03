@@ -9,56 +9,6 @@ import 'package:whisper/widget/glass_dialog.dart';
 import 'package:whisper/widget/quick_send_chooser.dart';
 
 void main() {
-  testWidgets('lays out pending quick-send content instead of only a barrier', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        locale: const Locale('zh'),
-        localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
-          AppLocalizations.delegate,
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: Builder(
-          builder: (context) => Scaffold(
-            body: Center(
-              child: FilledButton(
-                onPressed: () => showDesktopQuickSendDialog(
-                  context,
-                  drafts: const <DesktopQuickSendDraft>[
-                    DesktopQuickSendDraft(
-                      id: 'draft-1',
-                      source: DesktopQuickSendSource.clipboardShortcut,
-                      text: 'hello',
-                      filePaths: <String>[],
-                      receivedAt: 1,
-                    ),
-                  ],
-                  targets: ValueNotifier<List<QuickSendTarget>>(
-                    const <QuickSendTarget>[],
-                  ),
-                ),
-                child: const Text('open'),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-
-    await tester.tap(find.text('open'));
-    await tester.pumpAndSettle();
-
-    expect(tester.takeException(), isNull);
-    expect(find.byType(WhisperGlassDialog), findsOneWidget);
-    expect(find.text('快捷发送'), findsOneWidget);
-    expect(find.text('hello'), findsOneWidget);
-    expect(find.text('发送'), findsOneWidget);
-  });
-
   test('flattens drafts into texts and files in their original order', () {
     final items = desktopQuickSendItems(const <DesktopQuickSendDraft>[
       DesktopQuickSendDraft(

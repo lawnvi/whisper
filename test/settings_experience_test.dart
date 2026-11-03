@@ -12,12 +12,12 @@ import 'package:whisper/helper/app_update.dart';
 import 'package:whisper/helper/macos_permissions.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/model/LocalDatabase.dart';
+import 'package:whisper/new_ui/settings/settings_controls.dart';
 import 'package:whisper/page/settings.dart';
 import 'package:whisper/remote_files/mount/remote_mounts.dart';
 import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/widget/glass_bottom_sheet.dart';
 import 'package:whisper/widget/glass_dialog.dart';
-import 'package:whisper/widget/glass_settings_slider.dart';
 
 const _device = DeviceData(
   id: 0,
@@ -68,6 +68,12 @@ const _androidPresentation = SettingsPresentation(
   isDesktop: false,
   isMobile: true,
   notificationAppCount: 2,
+);
+
+SettingsSwitchRow _switchRow(WidgetTester tester) => tester.widget(
+  find.byWidgetPredicate(
+    (w) => w is SettingsSwitchRow && w.title == 'Forward Android Notifications',
+  ),
 );
 
 Finder _settingRow(String title) =>
@@ -148,73 +154,6 @@ Widget _settingsNavigationHome() => Builder(
   ),
 );
 
-class _FakeUpdateManager implements AppUpdateManager {
-  _FakeUpdateManager({
-    this.installDisposition = AppUpdateInstallDisposition.keepRunning,
-    this.downloadGate,
-  });
-
-  static final _release = AppUpdateRelease(
-    version: '2.5.0',
-    tagName: 'dev-v2.5.0',
-    channel: AppUpdateChannel.preview,
-    releaseUrl: Uri.parse(
-      'https://github.com/lawnvi/whisper/releases/tag/dev-v2.5.0',
-    ),
-    notes: 'Faster and more reliable updates.',
-    publishedAt: DateTime.utc(2026, 8, 15),
-    asset: AppUpdateAsset(
-      name: 'whisper-2.5.0-macos-arm64.dmg',
-      downloadUrl: Uri.parse(
-        'https://github.com/lawnvi/whisper/releases/download/dev-v2.5.0/whisper-2.5.0-macos-arm64.dmg',
-      ),
-      size: 1024,
-    ),
-  );
-
-  int checkCount = 0;
-  int downloadCount = 0;
-  int openInstallerCount = 0;
-  final AppUpdateInstallDisposition installDisposition;
-  final Completer<void>? downloadGate;
-
-  @override
-  Future<AppUpdateCheckResult> checkForUpdate({
-    required String currentVersion,
-    bool force = false,
-  }) async {
-    checkCount += 1;
-    return AppUpdateCheckResult(
-      status: AppUpdateStatus.updateAvailable,
-      currentVersion: currentVersion,
-      release: _release,
-    );
-  }
-
-  @override
-  Future<AppUpdateDownload> downloadUpdate(
-    AppUpdateRelease release, {
-    void Function(double progress)? onProgress,
-  }) async {
-    downloadCount += 1;
-    onProgress?.call(0.5);
-    await downloadGate?.future;
-    onProgress?.call(1);
-    return AppUpdateDownload(
-      release: release,
-      file: File('/tmp/whisper-test-update.dmg'),
-    );
-  }
-
-  @override
-  Future<AppUpdateInstallDisposition> openInstaller(
-    AppUpdateDownload download,
-  ) async {
-    openInstallerCount += 1;
-    return installDisposition;
-  }
-}
-
 Future<void> _pumpAt(
   WidgetTester tester, {
   required double width,
@@ -261,20 +200,6 @@ Future<void> _pumpAt(
 }
 
 void main() {
-  testWidgets('settings data does not replace the list during the page slide', (
-    tester,
-  ) async {
-    await tester.pumpWidget(_host(home: _settingsNavigationHome()));
-    await tester.tap(find.text('open settings'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
-    expect(find.byType(CupertinoActivityIndicator), findsOneWidget);
-    expect(find.text('Theme Mode'), findsNothing);
-    await tester.pumpAndSettle();
-    expect(find.text('Theme Mode'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
-
   testWidgets('closing settings during the opening slide cancels its wait', (
     tester,
   ) async {
@@ -296,200 +221,6 @@ void main() {
     TestWidgetsFlutterBinding.instance.platformDispatcher.clearAllTestValues();
   });
 
-  testWidgets('uses the original rows in a centered 760 px settings column', (
-    tester,
-  ) async {
-    await _pumpAt(tester, width: 1440);
-
-    final list = find.byType(ListView).first;
-    expect(tester.getSize(list).width, WhisperUi.settingsMaxWidth);
-    expect(
-      tester
-          .widget<ConstrainedBox>(
-            find
-                .ancestor(of: list, matching: find.byType(ConstrainedBox))
-                .first,
-          )
-          .constraints
-          .maxWidth,
-      WhisperUi.settingsMaxWidth,
-    );
-    expect(find.text('Device and appearance'), findsOneWidget);
-    expect(
-      find.text('Name, theme, and how this device appears nearby'),
-      findsNothing,
-    );
-    for (final title in <String>['Theme Mode', 'Nickname', 'Server Port']) {
-      expect(
-        tester.getSize(_settingRow(title)).height,
-        greaterThanOrEqualTo(48),
-      );
-    }
-  });
-
-  testWidgets('settings checks for updates and opens the verified installer', (
-    tester,
-  ) async {
-    final manager = _FakeUpdateManager();
-    await _pumpAt(tester, width: 720, height: 1500, updateManager: manager);
-
-    expect(manager.checkCount, 1);
-    await tester.scrollUntilVisible(
-      find.text('Check for updates'),
-      500,
-      scrollable: find.byType(Scrollable).first,
-    );
-    expect(find.text('Check for updates'), findsOneWidget);
-    final versionLabel = find.text('Update available: 2.5.0');
-    final updateBadge = find.byKey(
-      const ValueKey<String>('update-available-badge'),
-    );
-    expect(versionLabel, findsOneWidget);
-    expect(updateBadge, findsOneWidget);
-    expect(
-      tester.getTopLeft(updateBadge).dx - tester.getTopRight(versionLabel).dx,
-      greaterThanOrEqualTo(4),
-    );
-    expect(find.byIcon(Icons.download_rounded), findsNothing);
-    await tester.tap(find.text('Check for updates'));
-    await tester.pumpAndSettle();
-    expect(find.text('Version 2.5.0 is available'), findsWidgets);
-    expect(find.textContaining('You have 2.4.0'), findsOneWidget);
-
-    await tester.tap(find.text('Update'));
-    await tester.pumpAndSettle();
-    expect(manager.downloadCount, 1);
-    expect(manager.openInstallerCount, 1);
-  });
-
-  testWidgets('update download uses a compact determinate progress ring', (
-    tester,
-  ) async {
-    final gate = Completer<void>();
-    final manager = _FakeUpdateManager(downloadGate: gate);
-    await _pumpAt(tester, width: 720, height: 1500, updateManager: manager);
-
-    await tester.scrollUntilVisible(
-      find.text('Check for updates'),
-      500,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Check for updates'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Update'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 200));
-
-    final indicator = tester.widget<CircularProgressIndicator>(
-      find.byKey(const ValueKey<String>('update-progress-indicator')),
-    );
-    expect(indicator.value, closeTo(0.5, 0.01));
-    expect(indicator.strokeCap, StrokeCap.round);
-
-    gate.complete();
-    await tester.pumpAndSettle();
-  });
-
-  testWidgets(
-    'desktop update exits through the application shutdown callback',
-    (tester) async {
-      final manager = _FakeUpdateManager(
-        installDisposition: AppUpdateInstallDisposition.exitApplication,
-      );
-      var exitCount = 0;
-      await _pumpAt(
-        tester,
-        width: 720,
-        height: 1500,
-        updateManager: manager,
-        exitForUpdate: () async {
-          exitCount += 1;
-        },
-      );
-
-      await tester.scrollUntilVisible(
-        find.text('Check for updates'),
-        500,
-        scrollable: find.byType(Scrollable).first,
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Check for updates'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Update'));
-      await tester.pumpAndSettle();
-
-      expect(manager.openInstallerCount, 1);
-      expect(exitCount, 1);
-    },
-  );
-
-  testWidgets('about row contains website and source links', (tester) async {
-    await _pumpAt(tester, width: 720, height: 1500, autoCheckForUpdates: false);
-
-    await tester.scrollUntilVisible(
-      find.text('About Whisper'),
-      500,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('About Whisper'));
-    await tester.pumpAndSettle();
-
-    expect(find.byType(WhisperGlassDialog), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey<String>('compact-about-dialog')),
-      findsOneWidget,
-    );
-    expect(find.text('Current version 2.4.0'), findsWidgets);
-    expect(find.text('Official website'), findsOneWidget);
-    expect(find.text('GitHub source code'), findsOneWidget);
-    final websiteButton = tester.widget<TextButton>(
-      find.widgetWithText(TextButton, 'Official website'),
-    );
-    expect(
-      websiteButton.style!.overlayColor!.resolve(<WidgetState>{
-        WidgetState.hovered,
-      }),
-      Colors.transparent,
-    );
-    expect(
-      websiteButton.style!.backgroundColor!.resolve(<WidgetState>{
-        WidgetState.hovered,
-      })!.a,
-      greaterThan(0),
-    );
-    expect(
-      websiteButton.style!.shape!.resolve(<WidgetState>{}),
-      isA<RoundedRectangleBorder>(),
-    );
-  });
-
-  testWidgets('mobile about dialog uses the compact responsive layout', (
-    tester,
-  ) async {
-    await _pumpAt(tester, width: 390, height: 844, autoCheckForUpdates: false);
-
-    await tester.scrollUntilVisible(
-      find.text('About Whisper'),
-      500,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.ensureVisible(find.text('About Whisper'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('About Whisper'));
-    await tester.pumpAndSettle();
-
-    expect(
-      find.byKey(const ValueKey<String>('compact-about-dialog')),
-      findsOneWidget,
-    );
-    expect(find.byType(WhisperGlassDialog), findsOneWidget);
-    expect(find.text('Official website'), findsOneWidget);
-    expect(find.text('GitHub source code'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
-
   testWidgets(
     'settings remain usable at supported widths and 200 percent text',
     (tester) async {
@@ -504,787 +235,6 @@ void main() {
       }
     },
   );
-
-  testWidgets('section titles follow all supported locales without subtitles', (
-    tester,
-  ) async {
-    const expectations = <(Locale, String, String)>[
-      (Locale('zh'), '设备与外观', '名称、主题和本机在附近设备上的显示方式'),
-      (
-        Locale('en'),
-        'Device and appearance',
-        'Name, theme, and how this device appears nearby',
-      ),
-      (
-        Locale('es'),
-        'Dispositivo y apariencia',
-        'Nombre, tema y visibilidad de este dispositivo en la red cercana',
-      ),
-    ];
-
-    for (final entry in expectations) {
-      await _pumpAt(tester, width: 760, locale: entry.$1);
-      expect(find.text(entry.$2), findsOneWidget);
-      expect(find.text(entry.$3), findsNothing);
-    }
-  });
-
-  testWidgets('save directory retains tap and long press actions', (
-    tester,
-  ) async {
-    await _pumpAt(tester, width: 760);
-    await tester.scrollUntilVisible(
-      find.text('Language and files'),
-      500,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.pump();
-
-    expect(find.text(_presentation.saveDirectoryPath), findsOneWidget);
-    expect(_settingRow('Save directory'), findsOneWidget);
-  });
-
-  testWidgets('switch row owns one merged toggled semantic action', (
-    tester,
-  ) async {
-    final semantics = tester.ensureSemantics();
-    await _pumpAt(tester, width: 760);
-
-    final tile = _settingRow('Auto-connect mutually trusted devices');
-    final node = tester.getSemantics(tile);
-    expect(node.label, 'Auto-connect mutually trusted devices');
-    expect(node.hasFlag(SemanticsFlag.hasToggledState), isTrue);
-    expect(node.hasFlag(SemanticsFlag.isToggled), isTrue);
-    expect(
-      find.ancestor(
-        of: find.descendant(of: tile, matching: find.byType(CupertinoSwitch)),
-        matching: find.byType(ExcludeFocus),
-      ),
-      findsOneWidget,
-    );
-
-    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
-    await tester.pump();
-    semantics.dispose();
-  });
-
-  testWidgets(
-    'setting semantics include current values and preserve icon style',
-    (tester) async {
-      final semantics = tester.ensureSemantics();
-      await _pumpAt(tester, width: 760);
-
-      for (final expectation in <(String, String)>[
-        ('Theme Mode', 'Follow System'),
-        ('Nickname', 'Studio Mac'),
-        ('Server Port', 'Server Port 10002'),
-      ]) {
-        final tile = _settingRow(expectation.$1);
-        expect(tester.getSemantics(tile).label, contains(expectation.$2));
-      }
-      final themeTile = _settingRow('Theme Mode');
-      final leadingIcon = tester.widget<Icon>(
-        find.descendant(of: themeTile, matching: find.byIcon(Icons.dark_mode)),
-      );
-      expect(
-        leadingIcon.color,
-        AppTheme.lightTheme.extension<WhisperPalette>()!.textMuted,
-      );
-      expect(leadingIcon.size, isNull);
-      expect(tester.getSize(find.byIcon(Icons.dark_mode)), const Size(24, 24));
-
-      await tester.scrollUntilVisible(
-        find.text('Language and files'),
-        500,
-        scrollable: find.byType(Scrollable).first,
-      );
-      await tester.pump();
-      expect(
-        tester.getSemantics(_settingRow('Select Language')).label,
-        contains('English'),
-      );
-      expect(
-        tester.getSemantics(_settingRow('Check for updates')).label,
-        contains('2.4.0'),
-      );
-      semantics.dispose();
-    },
-  );
-
-  testWidgets('desktop theme and language keep the Apple glass action sheet', (
-    tester,
-  ) async {
-    await _pumpAt(
-      tester,
-      width: 720,
-      height: 1500,
-      platform: TargetPlatform.macOS,
-    );
-
-    await tester.tap(find.text('Theme Mode'));
-    await tester.pumpAndSettle();
-    const mainKey = ValueKey<String>('whisper-glass-action-sheet-main');
-    const cancelKey = ValueKey<String>('whisper-glass-action-sheet-cancel');
-    expect(find.byType(WhisperGlassActionSheet), findsOneWidget);
-    expect(find.byKey(mainKey), findsOneWidget);
-    expect(find.byKey(cancelKey), findsOneWidget);
-    expect(find.text('Select Theme Mode'), findsOneWidget);
-    expect(find.byIcon(Icons.check_rounded), findsNothing);
-    expect(tester.getSize(find.byKey(mainKey)).width, closeTo(590.4, 0.01));
-    expect(find.byType(WhisperGlassActionSheetAction), findsNWidgets(4));
-    await tester.tap(
-      find.widgetWithText(WhisperGlassActionSheetAction, 'Follow System'),
-    );
-    await tester.pumpAndSettle();
-
-    await tester.scrollUntilVisible(
-      find.text('Select Language'),
-      500,
-      scrollable: find.byType(Scrollable).first,
-    );
-    // The list grew (window sharing row): bring the row fully on screen
-    // before tapping it.
-    await tester.ensureVisible(find.text('Select Language'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Select Language'));
-    await tester.pumpAndSettle();
-    expect(find.byType(WhisperGlassActionSheet), findsOneWidget);
-    expect(find.byKey(mainKey), findsOneWidget);
-    expect(find.byKey(cancelKey), findsOneWidget);
-    expect(find.text('Select Language'), findsNWidgets(2));
-    expect(find.text('Simplified Chinese'), findsOneWidget);
-    expect(find.text('English'), findsWidgets);
-    expect(find.text('Spanish'), findsOneWidget);
-    expect(find.byIcon(Icons.check_rounded), findsNothing);
-    await tester.tap(
-      find.widgetWithText(WhisperGlassActionSheetAction, 'Cancel'),
-    );
-    await tester.pumpAndSettle();
-    expect(find.byKey(mainKey), findsNothing);
-  });
-
-  testWidgets('compact theme picker leaves room around its floating cards', (
-    tester,
-  ) async {
-    await _pumpAt(tester, width: 390, height: 844);
-
-    await tester.tap(find.text('Theme Mode'));
-    await tester.pumpAndSettle();
-    expect(find.byType(WhisperGlassActionSheet), findsOneWidget);
-    expect(find.text('Select Theme Mode'), findsOneWidget);
-    expect(
-      tester
-          .getSize(
-            find.byKey(
-              const ValueKey<String>('whisper-glass-action-sheet-main'),
-            ),
-          )
-          .width,
-      closeTo(358, 0.01),
-    );
-    expect(find.byType(WhisperGlassActionSheetAction), findsNWidgets(4));
-  });
-
-  testWidgets('gain and mouse progress controls use bottom glass sheets', (
-    tester,
-  ) async {
-    await _pumpAt(tester, width: 720, height: 1500);
-
-    await tester.scrollUntilVisible(
-      find.text('Shared speaker gain: 1.0×'),
-      400,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.tap(find.text('Shared speaker gain: 1.0×'));
-    await tester.pumpAndSettle();
-    expect(find.byType(WhisperGlassBottomSheet), findsOneWidget);
-    expect(find.byType(WhisperSettingsSlider), findsOneWidget);
-    expect(find.byType(WhisperGlassDialog), findsNothing);
-    await tester.tap(find.widgetWithText(WhisperDialogButton, 'Confirm'));
-    await tester.pumpAndSettle();
-
-    await tester.scrollUntilVisible(
-      find.text('Keyboard and mouse scroll speed: 1.0×'),
-      400,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.tap(find.text('Keyboard and mouse scroll speed: 1.0×'));
-    await tester.pumpAndSettle();
-    expect(find.byType(WhisperGlassBottomSheet), findsOneWidget);
-    expect(find.byType(WhisperSettingsSlider), findsOneWidget);
-    expect(find.text('0.5×'), findsOneWidget);
-    expect(find.text('3.0×'), findsOneWidget);
-  });
-
-  testWidgets('only an Android phone offers the window flow service', (
-    tester,
-  ) async {
-    await _pumpAt(tester, width: 760, presentation: _androidPresentation);
-    await tester.scrollUntilVisible(
-      find.text('Access Clipboard'),
-      400,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.pump();
-    expect(find.text('Window flow service'), findsOneWidget);
-    expect(
-      find.text('Let other devices open this phone\'s apps'),
-      findsOneWidget,
-    );
-
-    // A new settings screen, as on a desktop.
-    await tester.pumpWidget(const SizedBox());
-    await _pumpAt(tester, width: 760);
-    await tester.scrollUntilVisible(
-      find.text('Access Clipboard'),
-      400,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.pump();
-    expect(find.text('Window flow service'), findsNothing);
-  });
-
-  testWidgets('Android forwarding and app navigation are separate actions', (
-    tester,
-  ) async {
-    final semantics = tester.ensureSemantics();
-    final updates = <bool>[];
-    var opens = 0;
-    await _pumpAt(
-      tester,
-      width: 760,
-      presentation: _androidPresentation,
-      updateNotificationForwarding: (enabled) async => updates.add(enabled),
-      openNotificationApps: () async => opens += 1,
-    );
-    await tester.scrollUntilVisible(
-      find.text('Mobile integration'),
-      400,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.pump();
-
-    final forwarding = _settingRow('Forward Android Notifications');
-    var node = tester.getSemantics(forwarding);
-    expect(node.hasFlag(SemanticsFlag.hasToggledState), isTrue);
-    expect(node.hasFlag(SemanticsFlag.isToggled), isTrue);
-    await tester.tap(forwarding);
-    await tester.pump();
-    expect(updates, <bool>[false]);
-    expect(opens, 0);
-    node = tester.getSemantics(forwarding);
-    expect(node.hasFlag(SemanticsFlag.isToggled), isFalse);
-
-    await tester.tap(forwarding);
-    await tester.pump();
-    expect(updates, <bool>[false, true]);
-    expect(opens, 0);
-
-    final apps = _settingRow('Notification apps');
-    expect(
-      tester.getSemantics(apps).label,
-      contains('2 applications selected'),
-    );
-    await tester.tap(apps);
-    await tester.pump();
-    expect(opens, 1);
-    semantics.dispose();
-  });
-
-  testWidgets('notification forwarding serializes rapid keyboard activation', (
-    tester,
-  ) async {
-    final semantics = tester.ensureSemantics();
-    final pending = Completer<void>();
-    final updates = <bool>[];
-    await _pumpAt(
-      tester,
-      width: 760,
-      presentation: _androidPresentation,
-      updateNotificationForwarding: (enabled) {
-        updates.add(enabled);
-        return pending.future;
-      },
-    );
-    await tester.scrollUntilVisible(
-      find.text('Mobile integration'),
-      400,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.pump();
-
-    final forwarding = _settingRow('Forward Android Notifications');
-    await tester.tap(forwarding);
-    await tester.tap(forwarding);
-    await tester.pump();
-
-    expect(updates, <bool>[false]);
-    expect(
-      tester.getSemantics(forwarding).hasFlag(SemanticsFlag.isEnabled),
-      isFalse,
-    );
-    expect(
-      tester
-          .widget<CupertinoSwitch>(
-            find.descendant(
-              of: forwarding,
-              matching: find.byType(CupertinoSwitch),
-            ),
-          )
-          .onChanged,
-      isNull,
-    );
-
-    pending.complete();
-    await tester.pumpAndSettle();
-    expect(updates, <bool>[false]);
-    expect(
-      tester.getSemantics(forwarding).hasFlag(SemanticsFlag.isToggled),
-      isFalse,
-    );
-    semantics.dispose();
-  });
-
-  testWidgets(
-    'notification forwarding compensates persistence after refresh failure',
-    (tester) async {
-      var persisted = true;
-      var refreshes = 0;
-      final writes = <bool>[];
-      final listenerStates = <bool>[];
-      final messages = <String>[];
-      await _pumpAt(
-        tester,
-        width: 760,
-        presentation: _androidPresentation,
-        writeNotificationForwarding: (enabled) async {
-          persisted = enabled;
-          writes.add(enabled);
-        },
-        readNotificationForwarding: () async => persisted,
-        syncNotificationForwardingListener: (enabled) async {
-          listenerStates.add(enabled);
-        },
-        refreshNotificationRegistry: () async {
-          refreshes += 1;
-          if (refreshes == 1) {
-            throw StateError('registry refresh failed');
-          }
-        },
-        showMessage: messages.add,
-      );
-      await tester.scrollUntilVisible(
-        find.text('Mobile integration'),
-        400,
-        scrollable: find.byType(Scrollable).first,
-      );
-      await tester.pump();
-
-      final forwarding = _settingRow('Forward Android Notifications');
-      await tester.tap(forwarding);
-      await tester.pumpAndSettle();
-
-      expect(writes, <bool>[false, true]);
-      expect(listenerStates, <bool>[false, true]);
-      expect(refreshes, 2);
-      expect(persisted, isTrue);
-      expect(
-        tester.getSemantics(forwarding).hasFlag(SemanticsFlag.isToggled),
-        isTrue,
-      );
-      expect(messages, <String>[
-        'Notification forwarding could not be updated',
-      ]);
-    },
-  );
-
-  testWidgets('notification forwarding rolls back and reports update failure', (
-    tester,
-  ) async {
-    final messages = <String>[];
-    await _pumpAt(
-      tester,
-      width: 760,
-      presentation: _androidPresentation,
-      updateNotificationForwarding: (_) async {
-        throw StateError('persistence failed');
-      },
-      showMessage: messages.add,
-    );
-    await tester.scrollUntilVisible(
-      find.text('Mobile integration'),
-      400,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.pump();
-
-    final forwarding = _settingRow('Forward Android Notifications');
-    await tester.tap(forwarding);
-    await tester.pumpAndSettle();
-
-    expect(tester.takeException(), isNull);
-    expect(
-      tester.getSemantics(forwarding).hasFlag(SemanticsFlag.isToggled),
-      isTrue,
-    );
-    expect(
-      tester.getSemantics(forwarding).hasFlag(SemanticsFlag.isEnabled),
-      isTrue,
-    );
-    expect(messages, <String>['Notification forwarding could not be updated']);
-  });
-
-  testWidgets(
-    'notification forwarding stays off when listener access is denied',
-    (tester) async {
-      const disabled = SettingsPresentation(
-        device: _device,
-        saveDirectoryPath: '/storage/emulated/0/Download',
-        version: '2.4.0',
-        closeToTray: false,
-        copyVerificationCode: true,
-        listenAndroidNotifications: false,
-        ignoreAndroidNotifications: false,
-        autoConnect: true,
-        launchAtStartup: false,
-        androidBackgroundKeepAlive: true,
-        audioSharePlaybackGain: 1.0,
-        remoteInputScrollMultiplier: 1.0,
-        themeMode: ThemeMode.system,
-        isAndroid: true,
-        isDesktop: false,
-        isMobile: true,
-      );
-      final writes = <bool>[];
-      final listenerStates = <bool>[];
-      await _pumpAt(
-        tester,
-        width: 760,
-        presentation: disabled,
-        writeNotificationForwarding: (enabled) async => writes.add(enabled),
-        readNotificationForwarding: () async => false,
-        syncNotificationForwardingListener: (enabled) async {
-          listenerStates.add(enabled);
-          if (enabled) {
-            throw StateError('permission denied');
-          }
-        },
-        refreshNotificationRegistry: () async {},
-      );
-      await tester.scrollUntilVisible(
-        find.text('Forward Android Notifications'),
-        250,
-        scrollable: find.byType(Scrollable).first,
-      );
-      await tester.drag(find.byType(Scrollable).first, const Offset(0, -160));
-      await tester.pump();
-      await tester.tap(_settingRow('Forward Android Notifications'));
-      await tester.pumpAndSettle();
-
-      expect(listenerStates, <bool>[true, false]);
-      expect(writes, <bool>[false]);
-      expect(
-        tester
-            .widget<CupertinoSwitch>(
-              find.descendant(
-                of: _settingRow('Forward Android Notifications'),
-                matching: find.byType(CupertinoSwitch),
-              ),
-            )
-            .value,
-        isFalse,
-      );
-    },
-  );
-
-  testWidgets('notification app navigation is hidden while forwarding is off', (
-    tester,
-  ) async {
-    final disabled = SettingsPresentation(
-      device: _androidPresentation.device,
-      saveDirectoryPath: _androidPresentation.saveDirectoryPath,
-      version: _androidPresentation.version,
-      closeToTray: _androidPresentation.closeToTray,
-      copyVerificationCode: _androidPresentation.copyVerificationCode,
-      listenAndroidNotifications: false,
-      ignoreAndroidNotifications:
-          _androidPresentation.ignoreAndroidNotifications,
-      autoConnect: _androidPresentation.autoConnect,
-      launchAtStartup: _androidPresentation.launchAtStartup,
-      androidBackgroundKeepAlive:
-          _androidPresentation.androidBackgroundKeepAlive,
-      audioSharePlaybackGain: _androidPresentation.audioSharePlaybackGain,
-      remoteInputScrollMultiplier:
-          _androidPresentation.remoteInputScrollMultiplier,
-      themeMode: _androidPresentation.themeMode,
-      isAndroid: true,
-      isDesktop: false,
-      isMobile: true,
-      notificationAppCount: 2,
-    );
-    await _pumpAt(tester, width: 760, presentation: disabled);
-    await tester.scrollUntilVisible(
-      find.text('Mobile integration'),
-      400,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.pump();
-
-    expect(find.text('Notification apps'), findsNothing);
-  });
-
-  testWidgets('settings loader failure can retry without platform services', (
-    tester,
-  ) async {
-    var attempts = 0;
-    await _pumpAt(
-      tester,
-      width: 760,
-      loader: () async {
-        attempts += 1;
-        if (attempts == 1) {
-          throw StateError('load failed');
-        }
-        return _presentation;
-      },
-    );
-
-    expect(find.text('Settings could not be loaded'), findsOneWidget);
-    await tester.tap(find.text('Retry'));
-    await tester.pumpAndSettle();
-    expect(attempts, 2);
-    expect(find.text('Device and appearance'), findsOneWidget);
-  });
-
-  testWidgets(
-    'a Mac shows what it allows Whisper, each row asking for it',
-    (tester) async {
-      const channel = MethodChannel(MacPermissions.channelName);
-      final asked = <Object?>[];
-      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (
-        call,
-      ) async {
-        if (call.method == 'request') {
-          asked.add((call.arguments as Map)['kind']);
-        }
-        return <String, Object?>{
-          'accessibility': true,
-          'screenRecording': false,
-          'audioCapture': 'notAsked',
-        };
-      });
-      addTearDown(
-        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-          channel,
-          null,
-        ),
-      );
-      await _pumpAt(tester, width: 760);
-      final accessibility = _settingRow('Accessibility');
-      await tester.ensureVisible(accessibility);
-      await tester.pump();
-      expect(
-        find.descendant(of: accessibility, matching: find.text('Allowed')),
-        findsOneWidget,
-      );
-      final recording = _settingRow('Screen & System Audio Recording');
-      expect(
-        find.descendant(of: recording, matching: find.text('Not allowed')),
-        findsOneWidget,
-      );
-      final audio = _settingRow('System Audio Recording Only');
-      expect(
-        find.descendant(of: audio, matching: find.text('Optional')),
-        findsOneWidget,
-      );
-      await tester.tap(recording);
-      await tester.pump();
-      expect(asked, ['screenRecording']);
-    },
-    skip: !Platform.isMacOS,
-  );
-
-  testWidgets('successful mutation refresh preserves list scroll', (
-    tester,
-  ) async {
-    SharedPreferences.setMockInitialValues(<String, Object>{
-      '_clipboard': true,
-    });
-    final pendingRefresh = Completer<SettingsPresentation>();
-    var loads = 0;
-    await _pumpAt(
-      tester,
-      width: 760,
-      height: 500,
-      loader: () {
-        loads += 1;
-        return loads == 1
-            ? Future<SettingsPresentation>.value(_presentation)
-            : pendingRefresh.future;
-      },
-    );
-
-    await tester.drag(find.byType(ListView).first, const Offset(0, -500));
-    await tester.pump();
-    final clipboard = _settingRow('Access Clipboard');
-    // On a Mac the permission rows come first and push it further down.
-    await tester.ensureVisible(clipboard);
-    await tester.pump();
-    final scrollable = tester.state<ScrollableState>(
-      find.byType(Scrollable).first,
-    );
-    final offset = scrollable.position.pixels;
-    expect(offset, greaterThan(0));
-
-    await tester.tap(clipboard);
-    for (var index = 0; index < 5 && loads < 2; index += 1) {
-      await tester.pump();
-    }
-    await tester.pump();
-
-    expect(loads, 2);
-    expect(find.byType(CircularProgressIndicator), findsNothing);
-    expect(clipboard, findsOneWidget);
-    expect(scrollable.position.pixels, closeTo(offset, 0.1));
-
-    pendingRefresh.complete(
-      SettingsPresentation(
-        device: _device.copyWith(clipboard: false),
-        saveDirectoryPath: _presentation.saveDirectoryPath,
-        version: _presentation.version,
-        closeToTray: _presentation.closeToTray,
-        copyVerificationCode: _presentation.copyVerificationCode,
-        listenAndroidNotifications: _presentation.listenAndroidNotifications,
-        ignoreAndroidNotifications: _presentation.ignoreAndroidNotifications,
-        autoConnect: _presentation.autoConnect,
-        launchAtStartup: _presentation.launchAtStartup,
-        androidBackgroundKeepAlive: _presentation.androidBackgroundKeepAlive,
-        audioSharePlaybackGain: _presentation.audioSharePlaybackGain,
-        remoteInputScrollMultiplier: _presentation.remoteInputScrollMultiplier,
-        themeMode: _presentation.themeMode,
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    expect(clipboard, findsOneWidget);
-    expect(scrollable.position.pixels, closeTo(offset, 0.1));
-    expect(
-      tester.getSemantics(clipboard).hasFlag(SemanticsFlag.isToggled),
-      isFalse,
-    );
-  });
-
-  testWidgets('latest retry ignores an older failure and hides retry at once', (
-    tester,
-  ) async {
-    final older = Completer<SettingsPresentation>();
-    final latest = Completer<SettingsPresentation>();
-    var attempts = 0;
-    await _pumpAt(
-      tester,
-      width: 760,
-      loader: () {
-        attempts += 1;
-        if (attempts == 1) {
-          return Future<SettingsPresentation>.error(
-            StateError('initial failure'),
-          );
-        }
-        return attempts == 2 ? older.future : latest.future;
-      },
-    );
-
-    final retry = tester.widget<CupertinoButton>(
-      find.widgetWithText(CupertinoButton, 'Retry'),
-    );
-    retry.onPressed!();
-    retry.onPressed!();
-    await tester.pump();
-
-    expect(attempts, 3);
-    expect(find.text('Retry'), findsNothing);
-    expect(find.byType(CupertinoActivityIndicator), findsOneWidget);
-
-    latest.complete(_presentation);
-    await tester.pumpAndSettle();
-    expect(find.text('Device and appearance'), findsOneWidget);
-
-    older.completeError(StateError('stale failure'));
-    await tester.pumpAndSettle();
-    expect(find.text('Device and appearance'), findsOneWidget);
-    expect(find.text('Settings could not be loaded'), findsNothing);
-  });
-
-  testWidgets('latest retry failure ignores an older successful load', (
-    tester,
-  ) async {
-    final older = Completer<SettingsPresentation>();
-    final latest = Completer<SettingsPresentation>();
-    var attempts = 0;
-    await _pumpAt(
-      tester,
-      width: 760,
-      loader: () {
-        attempts += 1;
-        if (attempts == 1) {
-          return Future<SettingsPresentation>.error(
-            StateError('initial failure'),
-          );
-        }
-        return attempts == 2 ? older.future : latest.future;
-      },
-    );
-
-    final retry = tester.widget<CupertinoButton>(
-      find.widgetWithText(CupertinoButton, 'Retry'),
-    );
-    retry.onPressed!();
-    retry.onPressed!();
-    await tester.pump();
-
-    latest.completeError(StateError('latest failure'));
-    await tester.pumpAndSettle();
-    expect(find.text('Settings could not be loaded'), findsOneWidget);
-
-    older.complete(_presentation);
-    await tester.pumpAndSettle();
-    expect(find.text('Settings could not be loaded'), findsOneWidget);
-    expect(find.text('Device and appearance'), findsNothing);
-  });
-
-  testWidgets('nickname and port validation stays inline and accepts limits', (
-    tester,
-  ) async {
-    await _pumpAt(tester, width: 760);
-
-    await tester.tap(find.text('Nickname'));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(CupertinoTextField), '');
-    await tester.tap(find.text('Confirm'));
-    await tester.pump();
-    expect(find.text('Enter a nickname'), findsOneWidget);
-    expect(find.byType(WhisperGlassDialog), findsOneWidget);
-
-    await tester.enterText(
-      find.byType(CupertinoTextField),
-      '${'a' * 64}\u{1F680}',
-    );
-    await tester.tap(find.text('Confirm'));
-    await tester.pump();
-    expect(
-      find.text('Nickname must be 64 characters or fewer'),
-      findsOneWidget,
-    );
-    await tester.tap(find.text('Cancel'));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('Server Port'));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(CupertinoTextField), '1000');
-    await tester.tap(find.text('Confirm'));
-    await tester.pump();
-    expect(find.text('Enter a port from 1001 to 65535'), findsWidgets);
-  });
 
   testWidgets('disconnected client delete awaits confirmation and callback', (
     tester,
@@ -1495,5 +445,260 @@ void main() {
     final source = File('lib/page/settings.dart').readAsStringSync();
     expect(source, contains('RemoteMounts.shared.setWanted('));
     expect(source, contains('listenable: RemoteMounts.shared'));
+  });
+
+  testWidgets('notification forwarding serializes rapid keyboard activation', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    final pending = Completer<void>();
+    final updates = <bool>[];
+    await _pumpAt(
+      tester,
+      width: 760,
+      presentation: _androidPresentation,
+      updateNotificationForwarding: (enabled) {
+        updates.add(enabled);
+        return pending.future;
+      },
+    );
+    await tester.scrollUntilVisible(
+      find.text('Forward Android Notifications'),
+      400,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pump();
+
+    final forwarding = _settingRow('Forward Android Notifications');
+    await tester.tap(forwarding);
+    await tester.tap(forwarding);
+    await tester.pump();
+
+    expect(updates, <bool>[false]);
+    expect(_switchRow(tester).onChanged, isNull);
+
+    pending.complete();
+    await tester.pumpAndSettle();
+    expect(updates, <bool>[false]);
+    expect(_switchRow(tester).value, isFalse);
+    semantics.dispose();
+  });
+
+  testWidgets(
+    'notification forwarding compensates persistence after refresh failure',
+    (tester) async {
+      var persisted = true;
+      var refreshes = 0;
+      final writes = <bool>[];
+      final listenerStates = <bool>[];
+      final messages = <String>[];
+      await _pumpAt(
+        tester,
+        width: 760,
+        presentation: _androidPresentation,
+        writeNotificationForwarding: (enabled) async {
+          persisted = enabled;
+          writes.add(enabled);
+        },
+        readNotificationForwarding: () async => persisted,
+        syncNotificationForwardingListener: (enabled) async {
+          listenerStates.add(enabled);
+        },
+        refreshNotificationRegistry: () async {
+          refreshes += 1;
+          if (refreshes == 1) {
+            throw StateError('registry refresh failed');
+          }
+        },
+        showMessage: messages.add,
+      );
+      await tester.scrollUntilVisible(
+        find.text('Forward Android Notifications'),
+        400,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pump();
+
+      final forwarding = _settingRow('Forward Android Notifications');
+      await tester.tap(forwarding);
+      await tester.pumpAndSettle();
+
+      expect(writes, <bool>[false, true]);
+      expect(listenerStates, <bool>[false, true]);
+      expect(refreshes, 2);
+      expect(persisted, isTrue);
+      expect(
+        tester.getSemantics(forwarding).hasFlag(SemanticsFlag.isToggled),
+        isTrue,
+      );
+      expect(messages, <String>[
+        'Notification forwarding could not be updated',
+      ]);
+    },
+  );
+
+  testWidgets('notification forwarding rolls back and reports update failure', (
+    tester,
+  ) async {
+    final messages = <String>[];
+    await _pumpAt(
+      tester,
+      width: 760,
+      presentation: _androidPresentation,
+      updateNotificationForwarding: (_) async {
+        throw StateError('persistence failed');
+      },
+      showMessage: messages.add,
+    );
+    await tester.scrollUntilVisible(
+      find.text('Forward Android Notifications'),
+      400,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pump();
+
+    final forwarding = _settingRow('Forward Android Notifications');
+    await tester.tap(forwarding);
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(
+      tester.getSemantics(forwarding).hasFlag(SemanticsFlag.isToggled),
+      isTrue,
+    );
+    expect(
+      tester.getSemantics(forwarding).hasFlag(SemanticsFlag.isEnabled),
+      isTrue,
+    );
+    expect(messages, <String>['Notification forwarding could not be updated']);
+  });
+
+  testWidgets(
+    'notification forwarding stays off when listener access is denied',
+    (tester) async {
+      const disabled = SettingsPresentation(
+        device: _device,
+        saveDirectoryPath: '/storage/emulated/0/Download',
+        version: '2.4.0',
+        closeToTray: false,
+        copyVerificationCode: true,
+        listenAndroidNotifications: false,
+        ignoreAndroidNotifications: false,
+        autoConnect: true,
+        launchAtStartup: false,
+        androidBackgroundKeepAlive: true,
+        audioSharePlaybackGain: 1.0,
+        remoteInputScrollMultiplier: 1.0,
+        themeMode: ThemeMode.system,
+        isAndroid: true,
+        isDesktop: false,
+        isMobile: true,
+      );
+      final writes = <bool>[];
+      final listenerStates = <bool>[];
+      await _pumpAt(
+        tester,
+        width: 760,
+        presentation: disabled,
+        writeNotificationForwarding: (enabled) async => writes.add(enabled),
+        readNotificationForwarding: () async => false,
+        syncNotificationForwardingListener: (enabled) async {
+          listenerStates.add(enabled);
+          if (enabled) {
+            throw StateError('permission denied');
+          }
+        },
+        refreshNotificationRegistry: () async {},
+      );
+      await tester.scrollUntilVisible(
+        find.text('Forward Android Notifications'),
+        250,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.drag(find.byType(Scrollable).first, const Offset(0, -160));
+      await tester.pump();
+      await tester.tap(_settingRow('Forward Android Notifications'));
+      await tester.pumpAndSettle();
+
+      expect(listenerStates, <bool>[true, false]);
+      expect(writes, <bool>[false]);
+      expect(_switchRow(tester).value, isFalse);
+    },
+  );
+
+  testWidgets('latest retry ignores an older failure and hides retry at once', (
+    tester,
+  ) async {
+    final older = Completer<SettingsPresentation>();
+    final latest = Completer<SettingsPresentation>();
+    var attempts = 0;
+    await _pumpAt(
+      tester,
+      width: 760,
+      loader: () {
+        attempts += 1;
+        if (attempts == 1) {
+          return Future<SettingsPresentation>.error(
+            StateError('initial failure'),
+          );
+        }
+        return attempts == 2 ? older.future : latest.future;
+      },
+    );
+
+    final retry = tester.widget<SettingsButton>(
+      find.widgetWithText(SettingsButton, 'Retry'),
+    );
+    retry.onTap!();
+    retry.onTap!();
+    await tester.pump();
+
+    expect(attempts, 3);
+    expect(find.text('Retry'), findsNothing);
+    latest.complete(_presentation);
+    await tester.pumpAndSettle();
+    expect(find.byType(SettingsRow), findsWidgets);
+
+    older.completeError(StateError('stale failure'));
+    await tester.pumpAndSettle();
+    expect(find.byType(SettingsRow), findsWidgets);
+    expect(find.text('Settings could not be loaded'), findsNothing);
+  });
+
+  testWidgets('latest retry failure ignores an older successful load', (
+    tester,
+  ) async {
+    final older = Completer<SettingsPresentation>();
+    final latest = Completer<SettingsPresentation>();
+    var attempts = 0;
+    await _pumpAt(
+      tester,
+      width: 760,
+      loader: () {
+        attempts += 1;
+        if (attempts == 1) {
+          return Future<SettingsPresentation>.error(
+            StateError('initial failure'),
+          );
+        }
+        return attempts == 2 ? older.future : latest.future;
+      },
+    );
+
+    final retry = tester.widget<SettingsButton>(
+      find.widgetWithText(SettingsButton, 'Retry'),
+    );
+    retry.onTap!();
+    retry.onTap!();
+    await tester.pump();
+
+    latest.completeError(StateError('latest failure'));
+    await tester.pumpAndSettle();
+    expect(find.text('Settings could not be loaded'), findsOneWidget);
+
+    older.complete(_presentation);
+    await tester.pumpAndSettle();
+    expect(find.text('Settings could not be loaded'), findsOneWidget);
+    expect(find.byType(SettingsRow), findsNothing);
   });
 }

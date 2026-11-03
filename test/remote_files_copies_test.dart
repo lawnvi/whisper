@@ -394,20 +394,15 @@ void main() {
   test('copies show on an island on both layouts, with a list of them', () {
     String read(String path) => File(path).readAsStringSync();
     final desktop = read('lib/page/remote_files/files_desktop.dart');
-    final phone = read('lib/page/remote_files/files_phone.dart');
+    final phone = read('lib/new_ui/files/phone_files.dart');
     for (final page in [desktop, phone]) {
       expect(page, contains('FilesTransfersList('));
       // Phones and tablets show copies on the app's island and lend it
       // the page's "show all" and "show in Files".
       expect(page, contains('IslandCopyHooks.attach('));
     }
-    // The in-window island is for desktops only: one island on a phone.
-    expect(
-      desktop,
-      contains(
-        'if (isDesktop())\n                  Positioned.fill(\n                    child: FilesCopyIsland(',
-      ),
-    );
+    // One island: the app's.
+    expect(desktop, isNot(contains('FilesCopyIsland(')));
     expect(phone, isNot(contains('FilesCopyIsland(')));
     // Not a quiet line in the corner any more.
     expect(desktop, isNot(contains('CopyProgressLabel')));

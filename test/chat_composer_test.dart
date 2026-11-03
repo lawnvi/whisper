@@ -130,43 +130,6 @@ void main() {
     },
   );
 
-  testWidgets('clipboard action morphs into a check after tapping', (
-    tester,
-  ) async {
-    var sentClipboard = 0;
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: ChatComposer(
-            clipboardEnabled: true,
-            isInputEmpty: true,
-            isLoading: false,
-            isLocalhost: false,
-            canSend: true,
-            isDesktopStyle: true,
-            keyPressedMap: const <String, bool>{},
-            controller: TextEditingController(),
-            focusNode: FocusNode(),
-            onPickFiles: () async {},
-            onSendClipboard: () async {
-              sentClipboard++;
-            },
-            onSendText: (_) async => true,
-          ),
-        ),
-      ),
-    );
-
-    await tester.tap(find.byKey(ChatComposer.clipboardButtonKey));
-    await tester.pump(const Duration(milliseconds: 180));
-
-    expect(sentClipboard, 1);
-    expect(find.byIcon(Icons.check_rounded), findsOneWidget);
-
-    await tester.pump(const Duration(milliseconds: 800));
-    expect(find.byIcon(Icons.content_copy_rounded), findsOneWidget);
-  });
-
   testWidgets('desktop composer swaps to send action when text exists', (
     tester,
   ) async {
@@ -206,43 +169,6 @@ void main() {
 
     expect(sentText, 'hello');
     expect(controller.text, '');
-  });
-
-  testWidgets('desktop composer focuses from the full empty input region', (
-    tester,
-  ) async {
-    final focusNode = FocusNode();
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: ChatComposer(
-            clipboardEnabled: true,
-            isInputEmpty: true,
-            isLoading: false,
-            isLocalhost: false,
-            canSend: true,
-            isDesktopStyle: true,
-            keyPressedMap: const <String, bool>{},
-            controller: TextEditingController(),
-            focusNode: focusNode,
-            onPickFiles: () async {},
-            onSendClipboard: () async {},
-            onSendText: (_) async => true,
-          ),
-        ),
-      ),
-    );
-
-    focusNode.unfocus();
-    await tester.pump();
-    final region = find.byKey(ChatComposer.desktopInputRegionKey);
-    final rect = tester.getRect(region);
-    expect(rect.height, greaterThanOrEqualTo(58));
-
-    await tester.tapAt(Offset(rect.center.dx, rect.bottom - 3));
-    await tester.pump();
-
-    expect(focusNode.hasFocus, isTrue);
   });
 
   testWidgets('failed text send keeps the original draft', (tester) async {

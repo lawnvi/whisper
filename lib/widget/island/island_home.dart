@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/widgets.dart';
-import 'package:whisper/theme/whisper_ui.dart' show whisperNewUi;
+
 import 'package:whisper/widget/island/island_center.dart';
 
 /// The things on screen that show an activity themselves.
@@ -59,7 +59,7 @@ class _IslandHomeState extends State<IslandHome> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (!whisperNewUi && widget.center == null) return;
+
     _update(
       TickerMode.of(context) && (ModalRoute.of(context)?.isCurrent ?? true),
     );

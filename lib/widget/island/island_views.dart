@@ -213,71 +213,6 @@ class _SpinnerState extends State<_Spinner>
   }
 }
 
-/// A thin bar that fills smoothly.
-class IslandBar extends StatelessWidget {
-  const IslandBar({
-    super.key,
-    required this.value,
-    required this.tint,
-    this.height = 6,
-  });
-
-  final double value;
-  final Color tint;
-  final double height;
-
-  @override
-  Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(height / 2),
-      child: SizedBox(
-        height: height,
-        child: TweenAnimationBuilder<double>(
-          tween: Tween(end: value.clamp(0.0, 1.0)),
-          duration: const Duration(milliseconds: 420),
-          curve: Curves.easeOutCubic,
-          builder: (context, value, _) => CustomPaint(
-            painter: _BarPainter(
-              value: value,
-              tint: tint,
-              track: IslandColors.faint,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _BarPainter extends CustomPainter {
-  _BarPainter({required this.value, required this.tint, required this.track});
-
-  final double value;
-  final Color tint;
-  final Color track;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final radius = Radius.circular(size.height / 2);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(Offset.zero & size, radius),
-      Paint()..color = track,
-    );
-    if (value <= 0) {
-      return;
-    }
-    final width = math.max(size.height, size.width * value);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(Offset.zero & Size(width, size.height), radius),
-      Paint()..color = tint,
-    );
-  }
-
-  @override
-  bool shouldRepaint(_BarPainter old) =>
-      old.value != value || old.tint != tint || old.track != track;
-}
-
 /// Bars that dance while sound plays (still when motion is reduced or the
 /// sound is paused).
 class IslandEqualizer extends StatefulWidget {
@@ -719,28 +654,6 @@ class _PressState extends State<_Press> {
           child: widget.child,
         ),
       ),
-    );
-  }
-}
-
-/// A small dark disc behind a row's or the circle's picture.
-class IslandDisc extends StatelessWidget {
-  const IslandDisc({super.key, required this.child, this.size = 28});
-
-  final Widget child;
-  final double size;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: const BoxDecoration(
-        color: IslandColors.tile,
-        shape: BoxShape.circle,
-      ),
-      alignment: Alignment.center,
-      child: child,
     );
   }
 }

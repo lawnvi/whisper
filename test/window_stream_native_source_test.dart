@@ -403,11 +403,6 @@ void main() {
       'lib/window_stream/window_stream_coordinator.dart',
     ).readAsStringSync();
     expect(coordinator, contains('device.state != AdbDeviceState.offline'));
-    final deck = File(
-      'lib/page/window_stream/flow_recents_deck.dart',
-    ).readAsStringSync();
-    // On a touch screen the first tap fans the stack out.
-    expect(deck, contains('if (!_expanded && cards.length > 1)'));
   });
 
   test(

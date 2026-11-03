@@ -305,10 +305,6 @@ void main() {
   });
 
   group('wiring', () {
-    test('the new UI stays behind a flag that is off by default', () {
-      expect(whisperNewUi, isFalse);
-    });
-
     test('both app themes carry the new tokens and keep the old ones', () {
       expect(
         AppTheme.lightTheme.extension<WhisperColors>(),

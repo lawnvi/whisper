@@ -9,7 +9,7 @@ const _backdropKey = ValueKey<String>('whisper-modal-backdrop');
 
 void main() {
   for (final brightness in Brightness.values) {
-    for (final kind in ['dialog', 'glass sheet', 'material sheet']) {
+    for (final kind in ['material sheet']) {
       testWidgets('$kind has a full-window frosted barrier in $brightness', (
         tester,
       ) async {
@@ -33,10 +33,7 @@ void main() {
         final entering = tester.widget<BackdropFilter>(
           find.byKey(_backdropKey),
         );
-        expect(
-          entering.filter,
-          isNot(ImageFilter.blur(sigmaX: 2, sigmaY: 2)),
-        );
+        expect(entering.filter, isNot(ImageFilter.blur(sigmaX: 2, sigmaY: 2)));
         await tester.pumpAndSettle();
 
         final backdrop = find.byKey(_backdropKey);
@@ -62,9 +59,7 @@ void main() {
     }
   }
 
-  testWidgets('a required dialog keeps its frosted barrier on outside taps', (
-    tester,
-  ) async {
+  testWidgets('a required dialog stays on outside taps', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(home: Scaffold(body: SizedBox.expand())),
     );
@@ -77,12 +72,10 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tapAt(const Offset(8, 8));
     await tester.pumpAndSettle();
-    expect(find.byKey(_backdropKey), findsOneWidget);
     expect(find.text('Required'), findsOneWidget);
     Navigator.of(context).pop(true);
     await tester.pumpAndSettle();
     expect(await result, isTrue);
-    expect(find.byKey(_backdropKey), findsNothing);
   });
 
   testWidgets('high contrast and reduced motion retain an accessible barrier', (
@@ -135,14 +128,6 @@ void main() {
 
 Future<String?> _showModal(BuildContext context, String kind) {
   switch (kind) {
-    case 'glass sheet':
-      return showWhisperGlassBottomSheet<String>(
-        context,
-        builder: (_) => const WhisperGlassBottomSheet(
-          title: Text('Sheet'),
-          content: Text('Modal content'),
-        ),
-      );
     case 'material sheet':
       return showWhisperModalBottomSheet<String>(
         context: context,

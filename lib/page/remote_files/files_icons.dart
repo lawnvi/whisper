@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
 
-import '../../helper/device_form_factor.dart';
 import '../../helper/transfer_notification_aggregator.dart'
     show formatBytesForNotification;
 import '../../l10n/app_localizations.dart';
@@ -130,15 +129,6 @@ IconData fsDeviceIcon(String platform, {bool tablet = false}) =>
       'macos' => CupertinoIcons.device_laptop,
       _ => CupertinoIcons.desktopcomputer,
     };
-
-/// [device]'s icon, a tablet's when it said it is one (show it with
-/// [DeviceGlyph]).
-IconData filesDeviceIcon(FilesDevice device) => fsDeviceIcon(
-  device.platform,
-  tablet: device.isLocal
-      ? DeviceFormFactors.shared.localIsTablet
-      : DeviceFormFactors.shared.isTablet(device.id),
-);
 
 String fsKindName(AppLocalizations l10n, FsKind kind) => switch (kind) {
   FsKind.folder => l10n.remoteFilesKindFolder,

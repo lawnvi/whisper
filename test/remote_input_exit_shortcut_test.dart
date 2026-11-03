@@ -45,26 +45,11 @@ void main() {
     }
   });
 
-  test('the workspace always shows how to leave sharing', () {
+  test('the input page always says how to leave sharing', () {
     final source = File(
-      'lib/remote_input/remote_input_workspace_screen.dart',
+      'lib/new_ui/input/input_controller.dart',
     ).readAsStringSync();
-    final canvas = RegExp(
-      r'Widget _buildCanvasPanel\([\s\S]*?\n  Widget _buildScreenCanvas',
-    ).firstMatch(source)!.group(0)!;
-    final hint = canvas.indexOf('l10n.remoteInputWorkspaceExitShortcut(');
-    expect(hint, isNot(-1));
-    expect(canvas, contains('remoteInputReleaseHotkeyLabel('));
-    // Not behind any condition: it sits before the first conditional notice.
-    expect(
-      hint,
-      lessThan(canvas.indexOf('if (_devices.isNotEmpty && selectedDevices')),
-    );
-    // It must not swallow drags on the screens underneath it.
-    expect(
-      canvas.lastIndexOf('IgnorePointer(', hint),
-      greaterThan(canvas.lastIndexOf('Align(', hint)),
-    );
+    expect(source, contains('InputFooterExit(remoteInputReleaseHotkeyLabel('));
     expect(source, contains('releaseHotkey: remoteInputReleaseHotkey,'));
   });
 }

@@ -7,7 +7,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:whisper/helper/device_form_factor.dart';
 import 'package:whisper/helper/helper.dart';
 import 'package:whisper/page/remote_files/files_icons.dart';
-import 'package:whisper/page/window_stream/flow_space_widgets.dart';
 import 'package:whisper/state/peer_profile.dart';
 import 'package:whisper/widget/device_glyph.dart';
 import 'package:whisper/window_stream/core/window_stream_models.dart';
@@ -51,19 +50,8 @@ void main() {
     expect(again.isTablet('ipad'), isFalse);
   });
 
-  test('tablets get a tablet, phones keep their mark', () {
-    expect(platformIcon('ios'), Icons.apple_rounded);
-    expect(platformIcon('ios', tablet: true), Icons.tablet_mac_rounded);
-    expect(platformIcon('android'), Icons.android_rounded);
-    expect(platformIcon('android', tablet: true), Icons.tablet_android_rounded);
-    // A computer is what it is.
-    expect(platformIcon('macos', tablet: true), Icons.laptop_mac_rounded);
-    expect(platformLabel('ios', tablet: true), 'iPad');
+  test('tablets get a tablet glyph', () {
     // Beside Cupertino's thin phone, a tablet of the same weight.
-    expect(
-      flowDeviceGlyph(WindowStreamPlatform.ios, tablet: true),
-      tabletGlyph,
-    );
     expect(fsDeviceIcon('android', tablet: true), tabletGlyph);
     expect(fsDeviceIcon('android'), CupertinoIcons.device_phone_portrait);
   });
@@ -96,28 +84,6 @@ void main() {
       ),
       findsNothing,
     );
-  });
-
-  testWidgets('the shelf draws a tablet as one', (tester) async {
-    Future<void> card(bool tablet) => tester.pumpWidget(
-      MaterialApp(
-        home: Center(
-          child: FlowDeviceCard(
-            name: 'iPad',
-            subtitle: '',
-            platform: WindowStreamPlatform.ios,
-            hue: Colors.blue,
-            selected: false,
-            tablet: tablet,
-            onTap: () {},
-          ),
-        ),
-      ),
-    );
-    await card(false);
-    await card(true);
-    await tester.pumpAndSettle();
-    expect(tester.takeException(), isNull);
   });
 
   test('profiles carry it, at the version agreed with each peer', () {

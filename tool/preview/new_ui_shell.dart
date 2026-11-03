@@ -3,7 +3,7 @@
 // not start the app's services or touch its data or keys, so it is safe to run
 // beside an installed Whisper and from a remote session's scheduled task.
 //
-//   flutter run -d windows -t tool/preview/new_ui_shell.dart --dart-define=WHISPER_NEW_UI=true
+//   flutter run -d windows -t tool/preview/new_ui_shell.dart
 //
 // WHISPER_PREVIEW_DARK=1 for the dark theme.
 import 'dart:async';

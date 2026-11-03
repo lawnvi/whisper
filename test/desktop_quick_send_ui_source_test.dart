@@ -31,8 +31,6 @@ void main() {
     expect(source, contains('desktopQuickSendFailedRetained'));
     expect(source, contains('desktopQuickSendTargetConflict'));
     expect(source, contains('desktopQuickSendTargetNeedsReselection'));
-    expect(source, contains('Icons.verified_user_rounded'));
-    expect(source, contains('e2eeTrustedConnection'));
   });
 
   test('desktop toolbar leaves quick send to native entry points', () {
@@ -112,11 +110,7 @@ void main() {
       'lib/state/desktop_quick_send_inbox.dart',
       'lib/page/deviceList.dart',
     ]) {
-      expect(
-        readSource(path),
-        isNot(contains('sendFolder')),
-        reason: path,
-      );
+      expect(readSource(path), isNot(contains('sendFolder')), reason: path);
     }
     expect(
       File('lib/page/conversation.dart').readAsStringSync(),

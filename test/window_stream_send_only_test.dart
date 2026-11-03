@@ -89,16 +89,6 @@ void main() {
     expect(controller.selected?.info.name, 'Mac');
   });
 
-  test('the shelf lists send-only devices and sends to them', () {
-    final page = File(
-      'lib/page/window_stream/flow_space_page.dart',
-    ).readAsStringSync();
-    expect(page, contains('for (final peer in _controller.sendOnly)'));
-    expect(page, contains('subtitle: l10n.windowStreamReceiveOnly'));
-    expect(page, contains('onTap: () => _controller.selectTarget(peer)'));
-    expect(page, contains("key: ValueKey('send:\${target.peerId}')"));
-  });
-
   test('an adb phone is a source only while its Whisper is connected', () {
     final coordinator = File(
       'lib/window_stream/window_stream_coordinator.dart',
@@ -109,11 +99,6 @@ void main() {
     );
     expect(sources, contains('isAdbPhoneConnected(device)'));
     expect(coordinator, contains('WindowStreamViewer.shared.isConnected'));
-    final page = File(
-      'lib/page/window_stream/flow_space_page.dart',
-    ).readAsStringSync();
-    expect(page, contains('!_coordinator.isAdbPhoneConnected(device)'));
-    expect(page, contains('l10n.windowStreamConnectFirst'));
     final manager = File('lib/socket/svrmanager.dart').readAsStringSync();
     expect(
       manager,
