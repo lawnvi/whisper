@@ -340,6 +340,9 @@ object UnifiedForegroundNotification {
         builder: NotificationCompat.Builder,
         state: MediaState,
     ) {
+        // 状态栏和系统的岛左边放的就是这个图标:放声音就是波形,不是消息气泡。
+        builder.setSmallIcon(R.drawable.ic_stat_audio)
+            .setColor(TRANSFER_BLUE)
         if (state.state == MediaPlaybackService.STATE_PLAYING ||
             state.state == MediaPlaybackService.STATE_BUFFERING
         ) {
