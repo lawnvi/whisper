@@ -444,6 +444,97 @@ void main() {
     setUp(() => world = SoundWorld());
     tearDown(() => world.dispose());
 
+    Future<void> stopsThere(String peerId) async {
+      final session = world.group.session!;
+      await world.group.handleControlMessage(
+        AudioGroupControlMessage(
+          action: AudioGroupControlAction.groupStop,
+          groupId: session.groupId,
+          streamId: session.streamId,
+          sessionId: session.sinks[peerId]!.sessionId,
+          sourcePeerId: selfMac.uid,
+          sinkPeerId: peerId,
+        ),
+        localPeerId: selfMac.uid,
+        remoteHost: '',
+        remotePort: 0,
+        sendControl: (_, _) {},
+      );
+    }
+
+    test('the last device stopping it turns the switch off', () async {
+      final stopped = <String>[];
+      world.controller.onMemberStopped = stopped.add;
+      await world.controller.toggle(imacDevice.uid);
+      expect(world.controller.on, isTrue);
+      expect(world.controller.isSending(imacDevice.uid), isTrue);
+
+      await stopsThere(imacDevice.uid);
+
+      expect(world.controller.on, isFalse);
+      expect(world.controller.isSending(imacDevice.uid), isFalse);
+      expect(world.controller.isSelected(imacDevice.uid), isTrue);
+      expect(stopped, [imacDevice.uid]);
+      expect(
+        world.controller.rowFor(imacDevice, connected: true).phase,
+        SoundRowPhase.disconnected,
+      );
+    });
+
+    test('one of two stopping leaves the other playing', () async {
+      final stopped = <String>[];
+      world.controller.onMemberStopped = stopped.add;
+      await world.controller.toggle(imacDevice.uid);
+      await world.controller.toggle(xiaomiDevice.uid);
+
+      await stopsThere(xiaomiDevice.uid);
+
+      expect(world.controller.on, isTrue);
+      expect(world.controller.isSending(imacDevice.uid), isTrue);
+      expect(world.controller.isSending(xiaomiDevice.uid), isFalse);
+      expect(stopped, [xiaomiDevice.uid]);
+    });
+
+    test('turning it on again offers the sound again', () async {
+      await world.controller.toggle(imacDevice.uid);
+      await stopsThere(imacDevice.uid);
+      world.sentGroup.clear();
+
+      await world.controller.setOn(true);
+
+      expect(world.controller.on, isTrue);
+      expect(world.sentGroup.map((sent) => (sent.$1, sent.$2.action)), [
+        (imacDevice.uid, AudioGroupControlAction.groupOffer),
+      ]);
+    });
+
+    test('a device that stopped gets it back from its own button', () async {
+      await world.controller.toggle(imacDevice.uid);
+      await world.controller.toggle(xiaomiDevice.uid);
+      await stopsThere(xiaomiDevice.uid);
+      world.sentGroup.clear();
+
+      await world.controller.toggleSending(xiaomiDevice.uid);
+
+      expect(world.controller.isSending(xiaomiDevice.uid), isTrue);
+      expect(
+        world.sentGroup.where(
+          (sent) =>
+              sent.$1 == xiaomiDevice.uid &&
+              sent.$2.action == AudioGroupControlAction.groupOffer,
+        ),
+        hasLength(1),
+      );
+    });
+
+    test('stopping it here is not reported as the other device', () async {
+      final stopped = <String>[];
+      world.controller.onMemberStopped = stopped.add;
+      await world.controller.toggle(imacDevice.uid);
+      await world.controller.setOn(false);
+      expect(stopped, isEmpty);
+    });
+
     test('one failing leaves the others alone', () async {
       await world.controller.toggle(imacDevice.uid);
       await world.controller.toggle(xiaomiDevice.uid);

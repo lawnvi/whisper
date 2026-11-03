@@ -389,6 +389,9 @@ class _DeviceListScreen extends State<DeviceListScreen>
     _desktopSearchFocusNode.addListener(_handleDesktopSearchFocusChanged);
     _audioCoordinator.addListener(_handleDesktopAudioChanged);
     _audioGroupCoordinator.addListener(_handleDesktopAudioChanged);
+    if (whisperNewUi) {
+      ShellSoundController.shared.onMemberStopped = _noteSoundMemberStopped;
+    }
     _remoteInputCoordinator.addListener(
       _handleDesktopRemoteInputWorkspaceChanged,
     );
@@ -709,6 +712,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     _desktopSearchFocusNode.removeListener(_handleDesktopSearchFocusChanged);
     _audioCoordinator.removeListener(_handleDesktopAudioChanged);
     _audioGroupCoordinator.removeListener(_handleDesktopAudioChanged);
+    if (whisperNewUi) ShellSoundController.shared.onMemberStopped = null;
     _remoteInputCoordinator.removeListener(
       _handleDesktopRemoteInputWorkspaceChanged,
     );
@@ -1913,7 +1917,10 @@ class _DeviceListScreen extends State<DeviceListScreen>
     }
 
     final soundMembers = group?.isLive == true
-        ? [for (final uid in group!.sinks.keys) nameOf(uid)]
+        ? [
+            for (final sink in group!.sinks.values)
+              if (!sink.isTerminal) nameOf(sink.sinkPeerId),
+          ]
         : const <String>[];
     final playing = _audioGroupCoordinator.isPlaybackActive
         ? nameOf(_audioGroupCoordinator.playbackSourcePeerId)
@@ -2336,12 +2343,16 @@ class _DeviceListScreen extends State<DeviceListScreen>
       );
     }
     final group = _audioGroupCoordinator.session;
-    if (group?.isLive == true && group!.sinks.isNotEmpty) {
+    final playingOn = group?.isLive == true
+        ? [
+            for (final sink in group!.sinks.values)
+              if (!sink.isTerminal) nameOf(sink.sinkPeerId),
+          ]
+        : const <String>[];
+    if (playingOn.isNotEmpty) {
       moments['sound'] = StatusMoment(
         glyph: WhisperGlyph.speaker,
-        title: l10n.shellIslandPlayingOn(
-          group.sinks.keys.map(nameOf).join('、'),
-        ),
+        title: l10n.shellIslandPlayingOn(playingOn.join('、')),
         stopLabel: l10n.cancel,
         onStop: () => unawaited(_stopDesktopAudioShare()),
         home: IslandHomes.sound,
@@ -2417,7 +2428,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
       _ => false,
     };
     final activity = _inputActivityForPeer(uid);
-    final groupSink = _audioGroupCoordinator.session?.sinks.containsKey(uid);
+    final groupSink = _audioGroupCoordinator.session?.sinks[uid];
     final audio = _audioCoordinator.state;
     final playingFromIt =
         _audioGroupCoordinator.isPlaybackActive &&
@@ -2446,7 +2457,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
       controllingThis: activity?.phase == RemoteInputPeerPhase.receiving,
       pointerThere: activity?.phase == RemoteInputPeerPhase.controlling,
       playingOurs:
-          groupSink == true ||
+          (groupSink != null && !groupSink.isTerminal) ||
           (audio.isForPeer(uid) && audio.role == AudioShareRuntimeRole.source),
       flowWindows: WindowStreamCoordinator.shared.sessions
           .where(
@@ -2456,6 +2467,14 @@ class _DeviceListScreen extends State<DeviceListScreen>
           )
           .length,
       preview: session.preview,
+    );
+  }
+
+  void _noteSoundMemberStopped(String peerId) {
+    if (!mounted) return;
+    final name = socketManager.remoteProfileFor(peerId)?.device.name ?? peerId;
+    NoteIslandSource.shared.note(
+      AppLocalizations.of(context)!.soundMemberStoppedNotice(name),
     );
   }
 
@@ -2633,9 +2652,11 @@ class _DeviceListScreen extends State<DeviceListScreen>
             ? l10n.shellRowOffline
             : deviceRowText(l10n, _shellFacts(session.first)),
         onSound: supportsNativeSystemAudio()
-            ? () => unawaited(ShellSoundController.shared.toggle(target.uid))
+            ? () => unawaited(
+                ShellSoundController.shared.toggleSending(target.uid),
+              )
             : null,
-        soundOn: ShellSoundController.shared.isSelected(target.uid),
+        soundOn: ShellSoundController.shared.isSending(target.uid),
         soundStatus: switch (ShellSoundController.shared.channelOf(
           target.uid,
         )) {

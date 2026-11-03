@@ -1884,5 +1884,7 @@
   "shellAppsBringBack": "Recuperar",
   "shellManualConnectTitle": "Conectar por dirección",
   "shellManualConnectField": "Dirección y puerto",
-  "shellLinksChooseFolder": "Elegir carpeta"
+  "shellLinksChooseFolder": "Elegir carpeta",
+  "soundMemberStoppedThere": "Detenido en ese dispositivo",
+  "soundMemberStoppedNotice": "{device} dejó de reproducir"
 }

@@ -3087,5 +3087,7 @@
   "shellAppsBringBack": "Bring back",
   "shellManualConnectTitle": "Connect by address",
   "shellManualConnectField": "Address and port",
-  "shellLinksChooseFolder": "Choose folder"
+  "shellLinksChooseFolder": "Choose folder",
+  "soundMemberStoppedThere": "Stopped on that device",
+  "soundMemberStoppedNotice": "{device} stopped playing"
 }

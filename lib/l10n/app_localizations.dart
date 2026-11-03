@@ -7478,6 +7478,18 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'选择文件夹'**
   String get shellLinksChooseFolder;
+
+  /// No description provided for @soundMemberStoppedThere.
+  ///
+  /// In zh, this message translates to:
+  /// **'对方已停止播放'**
+  String get soundMemberStoppedThere;
+
+  /// No description provided for @soundMemberStoppedNotice.
+  ///
+  /// In zh, this message translates to:
+  /// **'{device} 停止了播放'**
+  String soundMemberStoppedNotice(String device);
 }
 
 class _AppLocalizationsDelegate

@@ -4542,4 +4542,12 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get shellLinksChooseFolder => 'Elegir carpeta';
+
+  @override
+  String get soundMemberStoppedThere => 'Detenido en ese dispositivo';
+
+  @override
+  String soundMemberStoppedNotice(String device) {
+    return '$device dejó de reproducir';
+  }
 }

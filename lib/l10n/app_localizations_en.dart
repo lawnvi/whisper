@@ -4491,4 +4491,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get shellLinksChooseFolder => 'Choose folder';
+
+  @override
+  String get soundMemberStoppedThere => 'Stopped on that device';
+
+  @override
+  String soundMemberStoppedNotice(String device) {
+    return '$device stopped playing';
+  }
 }

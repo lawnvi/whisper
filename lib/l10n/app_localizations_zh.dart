@@ -4242,4 +4242,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get shellLinksChooseFolder => '选择文件夹';
+
+  @override
+  String get soundMemberStoppedThere => '对方已停止播放';
+
+  @override
+  String soundMemberStoppedNotice(String device) {
+    return '$device 停止了播放';
+  }
 }

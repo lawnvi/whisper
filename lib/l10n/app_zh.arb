@@ -3251,5 +3251,14 @@
   "shellAppsBringBack": "拿回来",
   "shellManualConnectTitle": "输入地址连接",
   "shellManualConnectField": "地址和端口",
-  "shellLinksChooseFolder": "选择文件夹"
+  "shellLinksChooseFolder": "选择文件夹",
+  "soundMemberStoppedThere": "对方已停止播放",
+  "soundMemberStoppedNotice": "{device} 停止了播放",
+  "@soundMemberStoppedNotice": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  }
 }
