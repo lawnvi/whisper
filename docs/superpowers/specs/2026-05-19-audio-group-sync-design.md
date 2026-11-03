@@ -1,5 +1,7 @@
 # Audio Group Sync Design
 
+> **状态（2026-11-02 标注）：** 协议和运行机制仍然有效，界面以 `docs/design/surfaces.md`（声音）为准。见 `docs/design/decisions.md`。
+
 ## Goal
 
 把 Whisper 的音频共享从“一台 source 只能推给一个 sink”的一对一模型，升级为“一台 source 可以同时推给多个 sink”的音频组模型。第一版目标是 **准同步扬声器组**：局域网内多台设备可以共同播放同一音频流，支持左/右声道分配，并通过时钟估算、目标播放时间和 jitter buffer 让听感尽量同步。

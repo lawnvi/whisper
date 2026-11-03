@@ -1,5 +1,7 @@
 # Whisper App Experience Foundation Implementation Plan
 
+> **状态：已回退，只作历史（2026-11-02 标注）。** 见 `docs/design/decisions.md`。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 把 Whisper Flutter App 收敛为安静、可靠、可访问的局域网工作台，并补齐空状态、响应式布局、确认反馈与视觉回归门禁。

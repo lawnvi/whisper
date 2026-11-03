@@ -1,3 +1,5 @@
+> **历史记录（2026-11-02 从仓库根目录移来）。** 里面的证据路径都在临时目录，已经失效。结论已摘到 `docs/design/decisions.md`。
+
 # Design QA
 
 ## Inputs

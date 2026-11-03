@@ -1,209 +1,418 @@
 ---
-version: alpha
-name: Whisper Design System
-description: Design direction for the Whisper Flutter app and companion product site.
+version: 1.0
+name: Whisper 界面语言
+description: Whisper Flutter App 的界面语言：语法、质感、token、规则。代码还没有迁移，过渡规则见「怎么读这份文档」。
+status: 已定稿（2026-11-02），代码还没有迁移。接手先看 docs/design/README.md
 colors:
-  primary: "#2563EB"
-  primary-dark: "#7CA7FF"
-  secondary: "#0EA5E9"
-  connected: "#0284C7"
-  trusted: "#16A34A"
-  warning: "#D97706"
-  danger: "#DC2626"
-  surface: "#FFFFFF"
-  surface-muted: "#E2E8F0"
-  surface-canvas: "#F1F5F9"
-  text: "#0F172A"
-  text-muted: "#64748B"
-  message-incoming: "#F8FAFC"
-  message-outgoing: "#EFF6FF"
-  dark-surface: "#000000"
-  dark-surface-elevated: "#0A0A0A"
-  dark-surface-muted: "#141414"
-  dark-border: "#242424"
-  dark-text: "#E2E8F0"
-  dark-text-muted: "#8A8F98"
+  canvas: "#F5F5F7"
+  content: "#FFFFFF"
+  group: "#FFFFFF"
+  raised: "#FFFFFF"
+  bubble: "#E9E9EB"
+  ink: "#1D1D1F"
+  ink2: "#6E6E73"
+  ink3: "#86868B"
+  ink2-glass: "#515156"
+  accent: "#007AFF"
+  on-accent: "#FFFFFF"
+  ok: "#1F7A36"
+  warn: "#C93400"
+  bad: "#D70015"
+  sidebar-solid: "#EFEFF3"
+  canvas-dark: "#000000"
+  content-dark: "#1C1C1E"
+  group-dark: "#1C1C1E"
+  raised-dark: "#2C2C2E"
+  bubble-dark: "#2C2C2E"
+  sidebar-solid-dark: "#252528"
+  ink-dark: "#F5F5F7"
+  ink2-dark: "#A1A1A6"
+  ink3-dark: "#8E8E93"
+  ink2-glass-dark: "#C0C0C6"
+  accent-dark: "#0A84FF"
+  ok-dark: "#30D158"
+  warn-dark: "#FFB340"
+  bad-dark: "#FF6961"
+overlays:
+  # 浅色 / 深色
+  sep: "rgba(60,60,67,.10) / rgba(235,235,245,.14)"
+  fill: "rgba(120,120,128,.10) / rgba(120,120,128,.24)"
+  fill2: "rgba(120,120,128,.18) / rgba(120,120,128,.36)"
+  selected: "rgba(0,0,0,.07) / rgba(255,255,255,.10)"
+  sidebar-selected: "rgba(255,255,255,.62) / rgba(255,255,255,.12)，桌面侧栏的选中行，带投影和高光，像分段控件的滑块"
+glass:
+  # 底色 + 背景模糊 + 饱和度。窗口材质各平台不同，见「平台」
+  sidebar: "rgba(238,238,243,.66) / rgba(38,38,42,.62)，模糊 44，饱和 1.8"
+  control: "rgba(255,255,255,.72) / rgba(58,58,60,.68)，模糊 30，饱和 1.8"
+  panel: "rgba(246,246,249,.74) / rgba(36,36,40,.72)，模糊 44，饱和 1.9"
+  mica: "Windows 11 的侧栏，系统画，Flutter 不画底色。原型用 rgba(243,243,243,.9) / rgba(32,32,32,.92) 模拟。失去焦点时系统退成 #F3F3F3 / #202020"
+elevation:
+  # 只有这三层阴影。.5 的扩散是很细的外轮廓
+  e1: "贴在画布上的分组。0 1px 3px rgba(0,0,0,.05) / 0 1px 2px rgba(0,0,0,.3), 0 0 0 .5px rgba(255,255,255,.06)"
+  e2: "浮在内容上的控件。0 8px 28px rgba(0,0,0,.14), 0 1px 4px rgba(0,0,0,.08), 0 0 0 .5px rgba(0,0,0,.08) / 0 8px 28px rgba(0,0,0,.5), 0 1px 4px rgba(0,0,0,.4), 0 0 0 .5px rgba(255,255,255,.1)"
+  e3: "窗口、面板、托盘。0 32px 80px rgba(16,24,48,.32), 0 8px 24px rgba(16,24,48,.14), 0 0 0 .5px rgba(0,0,0,.2) / 0 32px 80px rgba(0,0,0,.62), 0 8px 24px rgba(0,0,0,.4), 0 0 0 .5px rgba(255,255,255,.14)"
+  highlight: "玻璃顶边。inset 0 .5px 0 rgba(255,255,255,.8) / rgba(255,255,255,.14)"
+wallpapers:
+  # 设备图和屏幕块里的渐变，从左上到右下。按配对顺序循环分配，这台固定用 self，没配对的用 unpaired。
+  # 都在强调色的邻近色里（蓝、青、靛、紫），不用橙、红、绿，放在蓝色界面旁边才协调
+  self: ["#5B8CFF", "#8F7BFF"]
+  device-1: ["#2A93FF", "#3CC4E8"]
+  device-2: ["#6F86FF", "#A78BFA"]
+  device-3: ["#22AECB", "#5BD3C6"]
+  device-4: ["#7F7BFF", "#C58AF0"]
+  unpaired: ["#C3CBD6", "#9AA6B8"]
 typography:
-  screen-title:
-    fontFamily: system
-    fontSize: 28px
-    fontWeight: 700
-    lineHeight: 1.2
-    letterSpacing: 0em
-  section-title:
-    fontFamily: system
-    fontSize: 20px
-    fontWeight: 650
-    lineHeight: 1.25
-    letterSpacing: 0em
-  body:
-    fontFamily: system
-    fontSize: 16px
-    fontWeight: 400
-    lineHeight: 1.5
-    letterSpacing: 0em
-  label:
-    fontFamily: system
-    fontSize: 13px
-    fontWeight: 600
-    lineHeight: 1.25
-    letterSpacing: 0em
+  # 指针设备 / 触控设备，单位逻辑像素
+  large: [26, 32]
+  title: [20, 22]
+  head: [15, 17]
+  body: [14, 16]
+  note: [12, 14]
+  tiny: [11, 12]
 rounded:
-  control: 16px
-  list-item: 18px
-  card: 24px
-  pill: 999px
-spacing:
-  xs: 4px
-  sm: 8px
-  md: 16px
-  lg: 24px
-  xl: 32px
-components:
-  primary-action:
-    backgroundColor: "{colors.primary}"
-    textColor: "#FFFFFF"
-    typography: "{typography.label}"
-    rounded: "{rounded.control}"
-    padding: 12px
-  secondary-action:
-    backgroundColor: "{colors.secondary}"
-    textColor: "{colors.text}"
-    typography: "{typography.label}"
-    rounded: "{rounded.control}"
-    padding: 12px
-  status-chip:
-    backgroundColor: "{colors.connected}"
-    rounded: "{rounded.pill}"
-    size: 10px
-  trusted-chip:
-    backgroundColor: "{colors.trusted}"
-    textColor: "{colors.text}"
-    typography: "{typography.label}"
-    rounded: "{rounded.pill}"
-    padding: 8px
-  warning-chip:
-    backgroundColor: "{colors.warning}"
-    textColor: "{colors.text}"
-    typography: "{typography.label}"
-    rounded: "{rounded.pill}"
-    padding: 8px
-  danger-chip:
-    backgroundColor: "{colors.danger}"
-    textColor: "#FFFFFF"
-    typography: "{typography.label}"
-    rounded: "{rounded.pill}"
-    padding: 8px
-  muted-panel:
-    backgroundColor: "{colors.surface-muted}"
-    textColor: "{colors.text}"
-    rounded: "{rounded.control}"
-    padding: 16px
-  muted-label:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.text-muted}"
-    typography: "{typography.label}"
-  canvas:
-    backgroundColor: "{colors.surface-canvas}"
-    textColor: "{colors.text}"
-  conversation-card:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.text}"
-    typography: "{typography.body}"
-    rounded: "{rounded.card}"
-    padding: 16px
-  message-incoming:
-    backgroundColor: "{colors.message-incoming}"
-    textColor: "{colors.text}"
-    rounded: "{rounded.control}"
-    padding: 12px
-  message-outgoing:
-    backgroundColor: "{colors.message-outgoing}"
-    textColor: "{colors.text}"
-    rounded: "{rounded.control}"
-    padding: 12px
-  dark-primary-action:
-    backgroundColor: "{colors.primary-dark}"
-    textColor: "{colors.dark-surface}"
-    typography: "{typography.label}"
-    rounded: "{rounded.control}"
-    padding: 12px
-  dark-shell:
-    backgroundColor: "{colors.dark-surface}"
-    textColor: "{colors.dark-text}"
-  dark-card:
-    backgroundColor: "{colors.dark-surface-elevated}"
-    textColor: "{colors.dark-text}"
-    rounded: "{rounded.card}"
-    padding: 16px
-  dark-muted-panel:
-    backgroundColor: "{colors.dark-surface-muted}"
-    textColor: "{colors.dark-text-muted}"
-    rounded: "{rounded.control}"
-    padding: 16px
-  dark-separator:
-    backgroundColor: "{colors.dark-border}"
-    textColor: "{colors.dark-text-muted}"
-    height: 1px
+  xs: 6
+  s: 10
+  m: 14
+  l: 20
+  capsule: 999
+spacing: [4, 8, 12, 16, 24, 32]
+motion:
+  # response 秒 / 阻尼比，mass = 1 时 stiffness = (2π/response)²，damping = 2·阻尼比·√stiffness
+  follow: { response: 0.15, damping-ratio: 1.0, stiffness: 1755, damping: 83.8 }
+  snappy: { response: 0.28, damping-ratio: 0.9, stiffness: 504, damping: 40.4 }
+  smooth: { response: 0.42, damping-ratio: 0.86, stiffness: 224, damping: 25.7 }
+  expressive: { response: 0.5, damping-ratio: 0.72, stiffness: 158, damping: 18.1 }
+breakpoints:
+  # 都看窗口，不看设备
+  compact: "< 600"
+  regular: "600–1000"
+  expanded: ">= 1000"
+  short-height: "< 600"
+targets:
+  touch: 48
+  pointer: 28
 ---
 
-# DESIGN.md
+# Whisper 界面语言
 
-## Overview
+> 你的几台设备是一个地方。Whisper 把它们轻轻连起来，只在需要的时候开口。
 
-Whisper should feel calm, local-first, and practical: a reliable chat-like workspace for moving files, text, audio, and input between nearby personal devices. The app UI is task-focused and should stay quiet enough for repeated daily use. The product site may be more editorial, but it should still show the real product and avoid exaggerated cloud/SaaS language because the core value is LAN-first collaboration.
+## 怎么读这份文档
 
-## Colors
+**这是界面规则的唯一来源。** 其他文档不能定义颜色、字号、圆角、动效或控件样式，只能引用这里。
 
-- Use blue as the primary action and connection color: `#2563EB` in light mode and `#7CA7FF` / `#38BDF8` accents in dark mode.
-- Use green only for trust/success states, amber for warnings, and red for destructive or failed states.
-- Keep large surfaces neutral: white and slate-tinted surfaces in light mode, true black and near-black layers in dark mode.
-- Chat bubbles should remain subtle: incoming `#F8FAFC`, outgoing `#EFF6FF`, and low-contrast dark equivalents.
-- Do not make new screens monochrome blue. Use semantic green, amber, red, and neutral surface layers to preserve scanability.
+| 文档 | 管什么 | 什么时候读 |
+|---|---|---|
+| [`docs/design/README.md`](docs/design/README.md) | 接手的入口：现状、读的顺序、用户在意什么、检查工具、做完的标准 | 第一次接手 |
+| `DESIGN.md`（本文） | 语法、质感、token、全局规则 | 每次碰界面 |
+| [`docs/design/surfaces.md`](docs/design/surfaces.md) | 每个界面的结构、尺寸、状态、文案、代码入口 | 改某个界面时 |
+| [`docs/design/flutter.md`](docs/design/flutter.md) | 编译和测试过的 Flutter 代码 | 写 Flutter 时 |
+| [`docs/design/decisions.md`](docs/design/decisions.md) | 为什么这么定，用户否决过什么，还有哪些待定 | 想改规则之前 |
+| [`docs/design/migration.md`](docs/design/migration.md) | 差距、步骤、每步的完成标准、数据从哪来 | 动手之前 |
+| [`docs/design/whisper-ui-language.html`](docs/design/whisper-ui-language.html) | 可以点的原型，是质感的参照 | 看效果，判断手感 |
 
-## Typography
+`docs/superpowers/` 里的 spec 和 plan 是历史记录，协议和架构部分仍然有效，界面部分以本文为准。发生冲突时，顺序是：用户最新的明确要求 > 本文 > `surfaces.md` > 其他文档。
 
-Use the platform/system font stack through Flutter Material 3 and Tailwind/system fonts on the web. Keep hierarchy modest inside tool surfaces: screen titles can be prominent, but lists, chat rows, settings, transfer states, and controls should use compact readable text. Chinese, English, and Spanish strings must fit without clipping, so prefer flexible layouts over fixed-width labels.
+**代码还没有迁移。** 新 token 和旧 token 会并存一段时间。新界面用 `flutter.md` 的 `WhisperColors` 和 `WhisperSprings`，旧界面不动，直到它被重做，见 `migration.md`「怎么过渡」。
 
-## Layout
+## 原则
 
-- Mobile uses a single-column flow: device discovery, conversation, transfer controls, and settings should each be easy to scan with one thumb.
-- Desktop can use denser master-detail layouts, especially for device lists plus active conversation/workspace state.
-- Keep repeated rows stable in height where possible so connection, transfer, and remote-input state changes do not shift the whole view.
-- Use `16px` as the normal spacing unit, with `8px` for tight internal gaps and `24px` or `32px` for major groups.
-- Product-site pages should keep the first viewport focused on Whisper itself, with real screenshots or app imagery visible early.
+1. **有质感。** 界面是有层次的实物：玻璃、纸面和光影，不是一堆灰色方块。见「质感」。
+2. **连续。** 东西不会凭空出现或跳变。每次状态变化都有过渡，而且可以中途打断。见「动效」。
+3. **安静。** 正常时不说话，异常时才说话。不解释界面怎么用，不显示没发生的事。
+4. **直接。** 常用的事一步到。设备行保持两行。这是 2026-10-07 回退留下的要求。
+5. **真实。** 屏幕按真实比例排，窗口沿真实方向飞，文案写出谁对谁做了什么。协议做不到的事不画入口。
+6. **一处。** 一个强调色，一个设备选取器，一个灵动岛，一个按钮组件，一套弹簧。要加第二个，先改这份文档。
+7. **入乡随俗。** 骨架和动效全平台一致，窗口按钮、快捷键和材质跟随系统。
 
-## Elevation And Depth
+## 语法：设备是地点，功能只有三种
 
-The app should rely on tonal surfaces and subtle borders more than shadows. Existing cards use large rounded corners and low/no elevation; preserve that unless a platform convention strongly suggests otherwise. Avoid heavy glass, blur, dramatic gradients, and decorative blobs in the app shell.
+用户看不到这些词，它们是设计时的判断工具。新功能不发明界面，先回答下面的问题。
 
-## Shapes
+| 问题 | 是什么 | 放哪 | 例子 |
+|---|---|---|---|
+| 需要一块屏幕看内容吗？ | **地点** | 设备里的分页，最多 3 到 4 个 | 对话、文件、应用 |
+| 是两台设备之间持续的状态吗？ | **连通** | 设备卡片上的圆形开关 | 剪贴板、挂载 |
+| 是一台对多台的持续状态吗？ | **共享** | 侧栏顶部的入口进入一页，加上圆形开关和托盘 | 声音、键鼠 |
+| 有开始和结束，或者在等人回应吗？ | **时刻** | 灵动岛，结束后自己消失 | 传输、送来的窗口、各种请求 |
+| 只和这台自己有关吗？ | **设置** | 左下角的设置 | 端口、下载目录、投屏接收 |
 
-- Current Flutter controls use rounded inputs around `16px`, list items around `18px`, cards around `24px`, and status chips as pills.
-- Icons should be familiar platform/material symbols where available.
-- Keep chat bubbles, device rows, and status chips visually related; avoid introducing unrelated geometric styles within the same feature.
+共享链接面向没有 Whisper 的人，不属于任何一台设备，不需要先连接设备。桌面放在左下角，手机放在设置里。
 
-## Components
+**手机上有些功能不存在，语法表也不一样**，见「手机」。平板和折叠屏的功能和手机一样，见「平板和折叠屏」。
 
-- Buttons: reserve the primary filled style for the main action in a view. Secondary actions should be tonal, outlined, icon-only, or text buttons depending on importance.
-- Device rows: show name, platform, discovery/connection state, trust state, and recent activity without making the row feel like a marketing card.
-- Chat composer: keep attachment/file actions, text entry, and send state reachable without crowding the input.
-- Transfer progress: show file name, direction, progress, speed, and recoverable state clearly; failures need a visible retry or explanation when available.
-- Remote input and audio controls: make role, active peer, and stop/release actions obvious because these features affect another device.
-- Settings: group by user outcome, not implementation detail. Keep dangerous or privacy-sensitive toggles separated and clearly labeled.
-- Toasts: use `showAppToast` for every transient message, never a raw `SnackBar`. It shows one capsule at the top centre; set the tone (`info`, `success`, `warning`, `error`) so the icon matches the outcome. Do not toast a state the screen already shows, such as a button that has just changed to its active or stopped look.
-- Web product sections: use the same blue/neutral palette, screenshots, concise feature blocks, and real capability language.
+**共享页**：能看到所有成员，每个成员有自己的状态，一个失败不影响其他，当场给出重试或原因。形式跟着内容走，不追求统一骨架：声音是一张可以勾选的列表（AirPlay），键鼠是屏幕排列（系统设置的显示器排列）。设备卡片和托盘是同一个会话的快捷入口，不是另一套状态。
 
-## Accessibility And Responsiveness
+**能力状态**只有：可用、进行中、需要连接、需要授权（当场给去开启的按钮）、不支持（不显示）。
 
-Maintain strong text contrast in both light and dark themes. Hit targets should remain comfortable on touch devices while desktop layouts may be denser. Do not rely on color alone for connection, trust, warning, or failure states. Check long localized strings, file names, device names, and IP addresses for overflow.
+## 质感
 
-## Do's And Don'ts
+这一节决定 Whisper 看起来像不像一件用心的东西。
 
-- Do reuse `AppTheme` and `WhisperPalette` tokens before adding colors.
-- Do keep LAN/privacy limitations honest in product copy.
-- Do test both compact mobile and wider desktop layouts for UI changes.
-- Do update ARB localization files for new user-facing strings.
-- Don't introduce public-cloud or account-centric UI assumptions unless the product direction changes.
-- Don't add decorative visuals that obscure real device, transfer, audio, or remote-input state.
-- Don't hand-edit generated localization or Drift files.
+### 层次：纸面放在画布上
+
+- **内缩分组**是最基本的结构：白色的 `group` 放在浅灰的 `canvas` 上，带 `e1` 阴影。设置、设备卡片、共享页都是这样。**不要把灰底块放在灰底上**，那样层次就没了。
+- 对话和文件的内容面是纯白 `content`，直接铺满。
+- 一屏只有三种高度：贴着画布（`e1`）、浮在内容上（`e2`）、窗口和面板（`e3`）。
+
+### 玻璃：只给会透出东西的地方
+
+| 层 | 是什么 | 材质 |
+|---|---|---|
+| 窗口材质 | 侧栏 | `sidebar` 玻璃，透出桌面 |
+| 内容 | 消息、文件、分组 | 实色 |
+| 控制 | 输入框、操作胶囊、分页胶囊 | `control` 玻璃，加高光 |
+| 面板 | 托盘、菜单、搜索 | `panel` 玻璃，加高光 |
+| 遮罩 | 面板后面 | 半透明 |
+
+- 玻璃的顶边有一条 0.5 像素的高光（`inset 0 .5px 0`），这是它像玻璃而不是半透明色块的原因。
+- **玻璃上的次要文字用 `ink2-glass`。** 背后是用户的桌面，普通的次要色不够。按最饱和的壁纸和异色窗口算过，都在 4.5:1 以上。
+- **窗口材质跟平台走，控制层和面板不跟。** 侧栏透出的是桌面，要系统配合：macOS 系统材质，Windows 11 云母，其他实色 `sidebar-solid`，见「平台」。输入框、操作胶囊、窗口里的菜单透出的是窗口自己的内容，`BackdropFilter` 就能做到，全平台一样是玻璃。
+
+### 线条：细、浅、缩进
+
+问题不是有没有线，是线粗不粗、该不该有。
+
+- **文件列表、共享链接、对话、桌面的设备列表不画分隔线。** 2026-11-02 用户明确说过这些地方线条太重。分组也不描边，靠一层很淡的阴影浮起来。
+- 内缩分组的行之间可以有分隔线：0.5 像素（低分屏 1 像素），`sep` 色，左边缩进到文字开始的位置。行数少、行高够的分组可以不要线，比如桌面设置。
+- 侧栏和内容之间、滚动后的工具栏下方，可以有 0.5 像素的 `sep`。
+- 不用 1 像素的深色实线，不给卡片描边。
+
+### 设备是实物
+
+- **设备列表**用小的写实设备图：桌面电脑宽 32、手机和平板高 30，手机、平板和折叠屏上放大 1.3 倍。折叠屏不单独画，都用手机的图。连着的和没配对的是原本的颜色，配对过、在附近但没连接的略淡（饱和 0.7，不透明 72%），离线的褪成灰色半透明（50%）。
+- **大尺寸**用写实的设备图：银色机身、黑色边框，屏幕里是这台设备的壁纸。设备卡片、声音列表、托盘、空状态都用它。
+- **键鼠排列**里的屏幕显示壁纸和菜单栏，像系统设置的显示器排列。指针用真实的箭头。
+- 壁纸是每台设备唯一的彩色来源，界面其他地方不给设备分配颜色。
+
+## 色彩
+
+| 角色 | 用在 | 不用在 |
+|---|---|---|
+| **中性色**（`canvas` `content` `group` `ink*`） | 所有大面积 | |
+| **强调色**（`accent`） | 主按钮、开关、勾选、选中的文件行、我发的消息、进度；链接、次要按钮、蓝色图标和状态文字。**只有这一种蓝，全平台一样，不另设更深的蓝色字** | 装饰 |
+| **语义色**（`ok` `warn` `bad`） | 结果和风险，总是配文字或图标 | 表示「开」 |
+| **壁纸** | 只在设备图和屏幕块里，都在强调色的邻近色里 | 界面元素 |
+
+- **强调色是鲜明的蓝，用得少。** 用户定的 `#007AFF`，深色 `#0A84FF`。不为了对比度把它压暗，暗了就闷了。
+- **浅色的中性色是冷灰。** 不用暖灰，不用偏蓝的 Slate。
+- **深色模式保留纯黑画布**，内容和分组是 `#1C1C1E`，靠高度分层。
+- **文字至少 4.5:1，图形和控件至少 3:1。** 例外是这个蓝，这是选它的代价：白底上的蓝字约 4:1，透出彩色壁纸的侧栏上约 3:1，蓝底上的白字浅色 4.0:1、深色 3.7:1。所以蓝色小字用中等字重，白字不小于 `body`（选中文件行的大小和日期是已知的例外），状态不只靠颜色表达。 `ink3` 只给图形和禁用态。对比度是底线，不是选色的方法，选色要看画面。
+- **图标优先用内容本身**：共享链接的图标就是文件和文件夹，不用一排相同的彩色方块。
+- **警告只给小图标着色**，文字用次要色，大片橙褐色的字显脏。
+- **两个例外**：设置分区的彩色小图标（系统设置的惯例）；App 图标自己的颜色。品牌的那圈环只出现在 App 图标和单色的托盘图标上。
+
+## 字体
+
+系统字体，不再引入新的字体资源。Windows 沿用已经打包的 Noto Sans SC（`AppTypography`，可变字重，中等和半粗都是真的）。Linux 用桌面的默认字体。6 个角色，2 种密度，见文件头。正文和列表用常规或中等字重，只有标题和名称用半粗。不用半号。中文不用负字距。尊重系统文字缩放，验证到 200%。
+
+## 形状
+
+- 圆角 4 级加胶囊。按钮和分段控件是胶囊。嵌套时内圆角 = 外圆角 − 内边距。优先用连续曲率（`RoundedSuperellipseBorder`）。
+- 间距用 4、8、12、16、24、32。留白要舍得。
+
+## 动效
+
+全局 4 个弹簧，见文件头。不写时长。
+
+| 弹簧 | 用在 |
+|---|---|
+| `follow` | 拖动、滑块，手还在屏幕上的时候 |
+| `snappy` | 分段控件、开关、按压、放下后贴边 |
+| `smooth` | 页面、面板、展开收起、窗口打开和关闭 |
+| `expressive` | 灵动岛，一屏最多一个 |
+
+**连续性的规则：**
+
+- **状态变化不重建界面。** 同一个控件要留着同一个元素，开关才能滑过去，选中才能过渡。Flutter 里靠稳定的 `key` 和隐式动画，不要用 `key` 换掉整棵子树，也不要用 `setState` 重建到丢失动画状态。
+- **每次按压都有反馈**：缩小到 0.97 再弹回。圆形开关缩到 0.92。开关的滑块按下时变宽。
+- **展开收起连高度一起走弹簧**，不要跳。
+- **分页切换要像液体流过去**，这是 Whisper 的标志性动效，代码见 `flutter.md`：
+  - 滑块的前缘先到、后缘跟上，移动时拉长变薄，到位后弹回。前缘用 response 0.24 / 阻尼 0.8，后缘用 0.44 / 0.9。
+  - 内容跟着方向走，走 `smooth`，两边同时发生。旧页：横移 9%、缩放到 0.97、淡出、模糊到 10。新页：从另一边 9%、缩放 0.985、透明、模糊 10 变清晰。
+  - 新页的文件行、应用图标依次升起：从下方 12、缩放 0.98、透明，每个间隔 24 毫秒，最多 16 个。
+  - 小分段（声道、外观）的滑块同样滑过去，不是跳过去。
+  - 切设备、进共享页不是分页切换，没有方向，内容从下方 5 淡入。
+  - 低端设备上模糊可以去掉，方向和依次升起要保留。
+- **新东西从它来的地方出现**：发出的消息从输入框升起，托盘从图标长出来，菜单从按钮长出来，窗口从图标放大。
+- 动画可以打断，改目标时保留速度。Flutter 里用 `SpringSimulation` 驱动 `AnimationController` 并传入当前速度。
+- 系统开启减少动态效果时，页面切换只淡入淡出，没有位移和模糊；小控件直接到位。
+
+## 布局
+
+- **3 个尺寸类，只看窗口宽度**：紧凑是页面栈；常规是侧栏加内容，设备卡片浮起；宽屏时设备卡片并排。不判断「这是不是平板」，见「平板和折叠屏」。
+- **设备卡片默认关着**，点信息按钮才打开。第一眼只有侧栏和内容。**高度跟着内容走**，不和窗口一样高，放不下才在卡片里滚动。
+- **桌面窗口最小 720×480**，不会进入紧凑尺寸类。
+- 窗口按钮融进工具栏或侧栏，不单独占一条标题栏，见「平台」。灵动岛在内容区的上方正中，不是窗口正中，放不下时让开工具栏的控件和窗口按钮，还放不下就落到工具栏下面，不盖标题。
+- **名字可以很长。** 名字和控件抢位置时，先把控件收起来，名字才截断。工具栏标题最多占三分之一，手机标题占满剩余空间。左下角名字占剩余宽度，超出就截断，图标紧挨着不动。
+- 共享页和设置的内容列最宽约 620，居中。
+- **消息贴近窗口两边**，边距 16，不做居中的窄列。输入框不跟着贴边：居中，最宽约 620，左右至少留 48。
+- **设备只有一个列表**，不分组：连着的在前，然后是附近的，最后是不在附近的。这样连过再多设备，附近的也不会被排到后面。
+- **设备下线不移动行。** 下线的留在原位变灰。连上或被发现才上移，移到新档位的最后面，不把上面的行顶下去。
+- **状态变化不改变布局。** 不让一行字把别的东西顶起来，异常走灵动岛。
+- **气泡按内容收缩**，折行后也收到最长一行（Flutter 用 `TextWidthBasis.longestLine`），宽度上限按字数（约 30 个字宽），不按窗口百分比。
+- 重复的行高度稳定。文件名、设备名、IP 和长文案要能截断或折行。
+
+## 手机
+
+手机不是缩小的桌面。不把桌面的结构挤进窄屏，用手机自己的交互。
+
+| 桌面 | 手机 |
+|---|---|
+| 侧栏 + 内容 | **页面栈**：设备列表 → 对话 → 设备页 → 文件、应用、控制。返回一层一层退 |
+| 左下角的共享链接 | **放在设置里**，不依赖任何设备，也不用先连接 |
+| 分页胶囊 | 对话页不用分页。顶部只放控制（对方是电脑时）和「⋯」，给长名字留位置 |
+| 设备卡片 | **设备页**：像通讯录的详情，先是控制、文件、应用三个圆形入口，下面是设置 |
+| 侧栏顶部的声音、键鼠，左下角的设置 | 不放。右上角是加号和设置 |
+| 设置窗口 | 设置是一个页面，几个大分组放在一起。**不做只有一两项的二级页，也不给一两项单独起标题**。首页已有的入口不重复放 |
+| 连接设备面板 | 连接设备页：二维码、扫码、地址三个标签，**默认二维码**。摄像头只有切到扫码才打开 |
+| 悬停、右键 | 没有，操作都要能直接点到 |
+
+**手机没有的功能不显示，也不写「不支持」：**
+
+- 不能共享系统声音，只能播放别的设备放过来的声音。控制放在灵动岛和那台设备的设备页。
+- 不能当键鼠的被控端。用「控制」页去操作电脑。
+- 不能挂载别的设备，没有托盘，没有截图按钮，没有窗口按钮和桌面快捷键。
+- 共享链接不需要连接任何设备，也不需要对方装 Whisper。在设置里进入，点加号选文件就能生成链接。
+
+页面切换走 `smooth`：新页面从右边推进来，旧页面往左退一点，返回时反过来。
+
+## 平板和折叠屏
+
+**不给设备分类。** 同一台折叠屏合上是手机，打开是平板；iPad 分屏时也可能比手机还窄。所以只做三个互不相干的判断：
+
+| 判断 | 看什么 | 决定什么 |
+|---|---|---|
+| **尺寸类** | 窗口宽度 | 骨架：页面栈，还是侧栏加内容 |
+| **密度** | 平台（iOS、Android 是触控） | 字号、行高、命中区 |
+| **功能** | 平台 | 有没有共享声音、键鼠被控、挂载、托盘 |
+
+所以 iPad 和打开的折叠屏是**桌面的骨架，手机的密度，手机的功能**。三折叠的三种状态正好落在三个尺寸类上，不需要专门的设计。每种设备的尺寸见 `surfaces.md`「平板和折叠屏」。
+
+**有侧栏的触控屏：**
+
+- 侧栏顶部和手机的列表一样：大标题「设备」、加号、设置。没有左下角，没有搜索。宽度是窗口的 32%，限制在 240 到 300。实色 `sidebar-solid`。
+- 工具栏有分页胶囊，放得下；对方是已连接的电脑时多一个控制按钮。分页的命中区用透明区域补足到 48。
+- 点信息按钮打开**设备卡片**，宽 320，不用设备页。卡片里没有控制、文件、应用三个入口，工具栏已经有了。
+- 设置、连接设备、共享链接在**内容区**打开，不弹窗。侧栏留着，这时没有选中的设备，点一台就回去。再往里走的页面左上角有返回。
+- 弹层在紧凑尺寸类是底部弹层，有侧栏时居中。
+- 对方是平板时用平板的设备图。平板不能被控制，和手机一样没有控制按钮。
+
+**折叠和展开不丢东西。** 设备、分页、草稿、滚动位置、打开的弹层都留着：
+
+- 展开：页面栈摊成侧栏加内容。这台设备在侧栏里选中，设备页变成打开的设备卡片。
+- 合上：这台设备留在栈顶，返回才回到列表。打开的设备卡片变成设备页。
+- 只做一次过渡：侧栏走 `smooth` 从左边滑入淡入。不重新进入页面，不播放依次升起。
+
+**折痕：**
+
+- **摊平时当它不存在。** 内容可以跨过折痕，三折叠也一样。折痕是屏幕的一部分，躲开它只会让布局变奇怪。
+- **书本姿态**（竖向半开）：侧栏的边对齐折痕，列表在左半边，内容在右半边。
+- **桌面姿态**（横向半开）：只有控制页变，折痕以上是设备，折痕以下是触控板和按键，像一台笔记本，侧栏收起。其他页面不变。**不为每个页面都做一版。**
+
+**高度不够**（窗口高度小于 600，比如小阔折叠横着放，或者键盘弹起）：控制页的按键放到触控板右边，二维码和文字左右放。其他页面靠滚动。
+
+**旋转**：宽度够（最短边不小于 600）就不锁方向。手机和合上的折叠屏才锁竖屏，折叠状态变化时要重新判断。
+
+**窗口可以变成任何大小**：iPad 分屏、台前调度、安卓小窗都一样，只看当前窗口。最窄验证到 320。
+
+## 组件
+
+- **焦点**：所有能点的东西都能用 Tab 到达，回车或空格触发，有 3 的强调色半透明外圈，见 `Pressable`。
+- **按钮**：1 个组件，3 档：填充（一屏一个主操作）、浅色、无底（强调文字）。胶囊形。破坏性操作用 `bad` 且要确认。
+- **圆形开关**：图标圆 + 名称，开时是实心强调色。一排放在设备卡片和托盘里。不要做成四个大方块。
+- **内缩分组**：见「质感」。圆角 `m`，行高 40（触控 48），内边距 6 / 12，分组标题 `note` 中等 `ink2`，距分组 6。
+- **滑块**：一条高 6 的细轨道，已走过的部分 `accent`，其余 `fill2`。滑块是白色胶囊，26×18（触控 30×18），带投影，按住时变大，不要圆点和水波。旁边写当前值，比如 `1.0x`。一个样式用到所有滑块，代码见 `flutter.md`。
+- **进度条**：高 4，圆头，已完成 `accent`，底 `fill2`，进度走弹簧。运行时有一道柔和的高光扫过，完成后消失。进度环：直径 20，粗 2.5。
+- **弹层**：宽 380，圆角 `l`，内边距 20，`e3`。从缩放 0.94 淡入，走 `smooth`。后面遮罩。紧凑尺寸类是底部弹层。
+- **菜单**：最小宽 210，`panel` 玻璃，圆角 `m`，内边距 5，每行高 30，圆角 `xs`，悬停 `accent` 白字。从按钮长出来：缩放 0.92、上移 6。
+- **勾选列表**：一行一台设备，右边圆形勾选。
+- **页头**：大的设备图或图标 + 标题 + 一句话，居中，像系统设置。只有共享页和空状态用。
+- **选项放在行内**：能放进一行的选项就放在行内，不另外展开一块。行高稳定，选不选都一样高。
+- **设置里的控件要看得出怎么改**，不能只显示一个值：
+  - 文字和数字：行内可以直接编辑。
+  - 2 到 3 个选项：分段控件。
+  - 4 个以上：弹出按钮，写当前值，带上下箭头，点开是带勾的菜单。比如语言。
+  - 连续的数：滑块加当前值，范围和现有 App 一样。比如增益 1 到 3，滚轮倍率 0.5 到 3。手机上标题和数值一行，滑块单独铺满一行。
+  - 路径：当前路径加「更改…」。
+  - 快捷键：按钮，点一下进入录制，按 Esc 取消。
+  - 真的不能改的才只显示值。
+  - **设置项以 `lib/page/settings.dart` 为准**，不编造，也不漏。全部项目见 `surfaces.md`「设置」。版本和关于是两行。
+- **设备选取器**：所有「选一台设备」都用它，只列可选的设备。
+- **提示**：一律 `showAppToast`，不用 `SnackBar`。设好语气（`info` `success` `warning` `error`）。迁移后，进行中的事走灵动岛，toast 只留给瞬时结果。
+- **图标**：优先用平台和 Material 现有的符号。只有图标的按钮必须有 tooltip 和读屏名称。
+
+## 文案
+
+- 短。能用一个词不用一句话。**不写操作说明**，控件自己要说得清楚，说不清是设计问题。
+- 用户的话，不用实现的话：「放到」不用「推流」，不说「连通」「工作区」。
+- 写主语和方向：「iMac 可以浏览我的文件」「把剪贴板同步给 iMac」。权限和连通分开放。
+- 写清不能做时的原因和下一步。
+- 所有文案走 ARB，中、英、西都要。
+- 局域网和隐私的限制要说实话。不暗示云端或账号。
+
+## 方向
+
+- 拉过来：从被点的图标长出来，先显示快照，第一帧到了再变清晰。送出去：缩小，沿弧线飞向侧栏里那台设备，那一行闪一下。
+- 声音和键鼠都只能由来源发起，接收方只能暂停、断开或停止。界面不能暗示可以反过来。
+
+## 无障碍和输入
+
+- 触控命中至少 48，指针至少 28。手机控制页的字母键是已确认的例外。
+- 拖动都要有键盘或点按的等价操作。悬停只是增强。
+- 不只靠颜色表达状态。焦点框是强调色的半透明外圈。
+- 连接变化、请求和失败要通知读屏，普通进度不要频繁打断。
+
+## 平台
+
+**骨架、控件和动效全平台一样，只有窗口这一层跟随系统。** 不换系统的强调色，不用 Fluent 的方角按钮，也不用 libadwaita 的控件。Whisper 在哪台电脑上都要认得出是 Whisper。在原型上方切换「平台」就能看到。
+
+| | macOS | Windows 11 | GNOME | KDE | Android |
+|---|---|---|---|---|---|
+| 窗口按钮 | 红绿灯，侧栏左上 | 46×32，贴窗口右上角 | 24 的灰底圆，在工具栏中线上 | 24，平时没有底，悬停才有圆，关闭悬停是红圆 | 无 |
+| 按钮位置 | 系统固定 | 右 | 读 `gtk-decoration-layout` | 同左 | |
+| 侧栏 | 系统材质 | 云母 | 实色 `sidebar-solid` | 同左 | 实色 |
+| 窗口圆角 | 系统 | 系统（8），最大化时方角 | 8（待验证） | 6（待验证） | |
+| 输入框、胶囊、窗口内菜单 | 玻璃 | 玻璃 | 玻璃，低端显卡退回实色 | 同左 | 待测性能 |
+| 托盘 | 面板，从菜单栏向下长，可以把文件拖到图标 | 面板，从任务栏向上长，**不能拖到图标**，先打开面板 | **只有菜单**，按面板的结构排 | 同左 | 灵动岛和通知 |
+| 托盘面板的材质 | `panel` 玻璃 | 亚克力，上面再叠 `panel` 的底色 | | | |
+| 快捷键 | ⌘K、⌘,、⌘⌥S | Ctrl+K、Ctrl+,、Ctrl+Alt+S | 同 Windows | 同 Windows | |
+| 文件管理器的叫法 | 访达 | 文件资源管理器 | 文件管理器 | 文件管理器 | |
+| 特有的设置 | 3 项系统权限 | 锁屏与 UAC 时接收键鼠 | 窗口流转组件（Wayland） | | 见「设置」 |
+
+- **Windows 10 没有云母**：侧栏用 `sidebar-solid`，窗口方角，托盘面板用不透明的 `raised`。系统关掉透明效果时云母自己会退成纯色，不用处理。
+- **亚克力不用在主窗口。** 实测背后有深色窗口时侧栏变成 `#8E8E8E` 的灰，又脏，字也看不清。见 `windows-real-acrylic-light.jpg`。
+- **拖动窗口**：工具栏和侧栏顶部的空白处。双击最大化，右键出系统菜单。
+- **低分屏**：Windows 常见 100% 和 150% 缩放。0.5 的线用 `1 / devicePixelRatio`，也就是一个物理像素，不要写死。
+
+代码在 `flutter.md`「窗口按钮」和「隐藏标题栏和云母」，每个平台的细节在 `surfaces.md`「窗口外壳」和「托盘」。
+
+## 改这份文档
+
+1. **新界面先过语法表。** 放不进去，说明语法要改。
+2. **改 token 或规则要留痕。** 同一次提交改本文、在 `decisions.md` 记一条原因，同步原型。
+3. **功能 spec 只写行为。** 需要特殊样式时写「见 DESIGN.md」，缺规则就补到本文。
+4. **原型和规范不能比现有功能少。** 改之前先列出现有界面的全部操作。
+5. **用户否决过的方案不重做。** 见 `decisions.md`。
+6. **具体的反馈不要放大成全局规则。** 用户说文件列表线太多，就改文件列表。上一版把线全局禁掉，界面就散了。
+7. **看画面，不只看数字。** 对比度、token 一致、测试全过都不等于好看。每次改完都要截图看，并和上一版比较。
+
+提交前自查：
+
+- [ ] 属于语法表的哪一类
+- [ ] 截图看过，和原型放在一起不掉档次
+- [ ] 灰底上没有叠灰底块，层次清楚
+- [ ] 状态变化有过渡，按压有反馈
+- [ ] 没有多余的说明文字和状态文字，文案写了主语，三种语言都有
+- [ ] 紧凑、常规、宽屏，深浅色，200% 文字都看过
+- [ ] 折叠和展开时设备、分页、草稿都还在
+- [ ] 能用键盘操作，读屏名称完整
+
+## 不要
+
+- 不要在 widget 里写色值、字号或动画时长。
+- 不要为一个功能建自己的 token、选取器或进度样式。
+- 不要给设备分配界面颜色，不要用彩色光晕和装饰渐变。
+- 不要把常用操作藏进面板，不要给设备行加第三行。
+- 不要手改生成的本地化和 Drift 文件。
+- 不要加公有云或账号相关的界面，除非产品方向变了。

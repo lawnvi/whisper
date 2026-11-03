@@ -1,5 +1,7 @@
 # Whisper App Experience Foundation - Design
 
+> **状态：已回退，只作历史（2026-11-02 标注）。** 这份方案 2026-07-10 实施后当天回退（`cb92250`）。界面规则以 `DESIGN.md` 为准，原因见 `docs/design/decisions.md`。
+
 > 本文只定义 Flutter App 的体验基础与首轮界面整改。`whisper-web/` 下载站、网络协议、
 > 发现/连接语义、文件传输协议、音频编码与键鼠控制协议不在本 spec 内。
 

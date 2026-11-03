@@ -54,7 +54,8 @@ CI currently runs `flutter pub get`, `flutter analyze`, and `flutter test` on pu
 - `test/`: Flutter unit/widget/source tests; many tests verify source-level platform integration and protocol behavior.
 - `script/`: local build, run, signing, packaging, and focused test helpers.
 - `.github/workflows/`: CI and multi-platform release packaging.
-- `docs/superpowers/`: existing design specs and implementation plans.
+- `docs/design/`: companions to `DESIGN.md`, starting at `README.md`: per-screen specs, Flutter recipes, migration steps, decisions, the local prototype, reference screenshots and check tools.
+- `docs/superpowers/`: existing design specs and implementation plans. Their UI sections are history; `DESIGN.md` wins.
 - `whisper-web/`: Next.js 15 product introduction site.
 
 ## Generated And Large Files
@@ -72,7 +73,7 @@ CI currently runs `flutter pub get`, `flutter analyze`, and `flutter test` on pu
 - Prefer explicit protocol/state transitions over implicit side effects, especially in `lib/socket/`, `lib/audio/`, `lib/remote_input/`, `lib/window_stream/`, and `lib/remote_files/`.
 - Keep UI strings localized through ARB files; avoid adding hardcoded user-facing copy in widgets.
 - Use existing singleton coordinators and managers when extending current flows; introduce new abstractions only when they reduce real duplication.
-- Preserve current Material 3 theme tokens from `AppTheme` and `WhisperPalette` when adding UI.
+- Follow `DESIGN.md` for all UI. The code has not migrated yet: see `docs/design/README.md`. New UI uses the tokens in `docs/design/flutter.md`; do not write raw values in widgets.
 - Add concise comments only for non-obvious protocol, platform, or concurrency behavior.
 
 ## Testing Instructions

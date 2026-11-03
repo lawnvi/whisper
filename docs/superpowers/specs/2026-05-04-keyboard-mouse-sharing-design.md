@@ -29,6 +29,8 @@ This fits the current project better than sending high-frequency events through 
 
 ## User Experience
 
+> **Status (2026-11-02):** the UI in this section is superseded by `docs/design/surfaces.md` (键鼠). Protocol and runtime sections below remain valid. See `docs/design/decisions.md`.
+
 ### Screen Arrangement
 
 Add a keyboard and mouse sharing settings entry that opens a screen arrangement canvas. The canvas shows:

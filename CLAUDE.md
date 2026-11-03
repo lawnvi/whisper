@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Two companion docs are authoritative and should be treated as part of these instructions:
 - `AGENTS.md` — setup/verification commands, project structure, code style, security notes, and commit conventions.
-- `DESIGN.md` — visual design system, color/typography tokens, and UI do's and don'ts.
+- `DESIGN.md` — the only source of UI rules: grammar, tokens, do's and don'ts. Read it before any UI work. Start at `docs/design/README.md` when implementing the redesign: it links `surfaces.md` (per-screen specs), `flutter.md` (tested code), `migration.md` (steps; the code has not migrated yet), `decisions.md` (why, what was rejected, what is open) and the local prototype. Feature specs must not define visual values.
 
 This file focuses on the big-picture architecture that is not obvious from reading any single file.
 
