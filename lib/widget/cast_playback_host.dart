@@ -1,3 +1,5 @@
+import 'package:whisper/new_ui/shell/shell_requests.dart';
+import 'package:whisper/theme/whisper_ui.dart';
 import 'dart:async';
 import 'dart:ui' show FontFeature;
 
@@ -29,11 +31,17 @@ class CastPlaybackHost extends StatelessWidget {
         children: [
           child ?? const SizedBox.shrink(),
           if (requests.pending case final request?)
-            CastRequestPrompt(
-              key: ObjectKey(request),
-              request: request,
-              gate: requests,
-            ),
+            whisperNewUi
+                ? _CastIslandAsk(
+                    key: ObjectKey(request),
+                    request: request,
+                    gate: requests,
+                  )
+                : CastRequestPrompt(
+                    key: ObjectKey(request),
+                    request: request,
+                    gate: requests,
+                  ),
         ],
       ),
     );
@@ -486,4 +494,57 @@ class _CastPlaybackViewState extends State<CastPlaybackView>
       ),
     );
   }
+}
+
+/// A cast request on the island instead of a dialog over the window.
+class _CastIslandAsk extends StatefulWidget {
+  const _CastIslandAsk({super.key, required this.request, required this.gate});
+
+  final CastRequest request;
+  final CastRequestGate gate;
+
+  @override
+  State<_CastIslandAsk> createState() => _CastIslandAskState();
+}
+
+class _CastIslandAskState extends State<_CastIslandAsk> {
+  static const _id = 'cast';
+
+  void _decide(bool allowed) {
+    RequestIslandSource.shared.settle(_id);
+    widget.gate.decide(widget.request, allowed);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final l10n = AppLocalizations.of(context)!;
+      RequestIslandSource.shared.ask(
+        id: _id,
+        title: l10n.castRequestTitle,
+        detail: l10n.castRequestMessage(widget.request.address),
+        answers: [
+          IslandAnswer(
+            l10n.castRequestAllow,
+            () => _decide(true),
+            primary: true,
+          ),
+          IslandAnswer(l10n.castRequestDeny, () => _decide(false)),
+        ],
+      );
+      widget.gate.presented(widget.request);
+    });
+  }
+
+  @override
+  void dispose() {
+    // Timed out or answered elsewhere: off the island too.
+    RequestIslandSource.shared.settle(_id);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.shrink();
 }

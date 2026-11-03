@@ -65,6 +65,55 @@ void LogApplicationWarning(ApplicationLogReason reason) {
 
 }  // namespace
 
+// The redesigned UI, off by default like the UI itself (docs/design/migration.md).
+// This runner decides before Dart starts, so it goes by the environment, not by
+// --dart-define. Run with WHISPER_NEW_UI=1 alongside the define.
+static gboolean uses_new_ui() {
+  return g_strcmp0(g_getenv("WHISPER_NEW_UI"), "1") == 0;
+}
+
+static FlValue* decoration_layout_value() {
+  g_autofree gchar* layout = nullptr;
+  g_object_get(gtk_settings_get_default(), "gtk-decoration-layout", &layout,
+               nullptr);
+  return fl_value_new_string(layout == nullptr ? "" : layout);
+}
+
+static void decoration_layout_changed(GtkSettings* settings,
+                                      GParamSpec* pspec,
+                                      gpointer channel) {
+  g_autoptr(FlValue) layout = decoration_layout_value();
+  fl_method_channel_invoke_method(FL_METHOD_CHANNEL(channel),
+                                  "decorationLayoutChanged", layout, nullptr,
+                                  nullptr, nullptr);
+}
+
+static void window_theme_method_call(FlMethodChannel* channel,
+                                     FlMethodCall* method_call,
+                                     gpointer user_data) {
+  if (g_strcmp0(fl_method_call_get_name(method_call), "getDecorationLayout") ==
+      0) {
+    g_autoptr(FlValue) layout = decoration_layout_value();
+    fl_method_call_respond_success(method_call, layout, nullptr);
+    return;
+  }
+  fl_method_call_respond_not_implemented(method_call, nullptr);
+}
+
+// Which side the window buttons go on, and when the user changes that.
+static void window_theme_channel_register(FlView* view) {
+  g_autoptr(FlStandardMethodCodec) codec = fl_standard_method_codec_new();
+  FlBinaryMessenger* messenger =
+      fl_engine_get_binary_messenger(fl_view_get_engine(view));
+  // The channel lives as long as the app.
+  FlMethodChannel* channel = fl_method_channel_new(
+      messenger, "com.vireen.whisper/window_theme", FL_METHOD_CODEC(codec));
+  fl_method_channel_set_method_call_handler(channel, window_theme_method_call,
+                                            nullptr, nullptr);
+  g_signal_connect(gtk_settings_get_default(), "notify::gtk-decoration-layout",
+                   G_CALLBACK(decoration_layout_changed), channel);
+}
+
 struct _MyApplication {
   GtkApplication parent_instance;
   char** dart_entrypoint_arguments;
@@ -94,9 +143,12 @@ static void my_application_activate(GApplication* application) {
   // If running on Wayland assume the header bar will work (may need changing
   // if future cases occur).
   gboolean use_header_bar = TRUE;
+  // Hiding the title bar without one loses the shadow and edge resizing: with a
+  // header bar, window_manager only makes it invisible and GTK keeps the frame.
+  const gboolean new_ui = uses_new_ui();
 #ifdef GDK_WINDOWING_X11
   GdkScreen* screen = gtk_window_get_screen(window);
-  if (GDK_IS_X11_SCREEN(screen)) {
+  if (!new_ui && GDK_IS_X11_SCREEN(screen)) {
     const gchar* wm_name = gdk_x11_screen_get_window_manager_name(screen);
     if (g_strcmp0(wm_name, "GNOME Shell") != 0) {
       use_header_bar = FALSE;
@@ -133,6 +185,9 @@ static void my_application_activate(GApplication* application) {
   screenshot_plugin_register(FL_PLUGIN_REGISTRY(view));
   desktop_quick_send_plugin_register(FL_PLUGIN_REGISTRY(view));
   file_manager_plugin_register(FL_PLUGIN_REGISTRY(view));
+  if (new_ui) {
+    window_theme_channel_register(view);
+  }
 
   gtk_widget_grab_focus(GTK_WIDGET(view));
 }

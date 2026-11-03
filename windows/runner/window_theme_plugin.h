@@ -11,6 +11,10 @@ void WindowThemePluginRegisterWithRegistrar(
 // is kept on the window itself. Returns false while the app has not chosen.
 bool WindowThemeChosenDarkMode(HWND window, BOOL* enable_dark_mode);
 
+// Whether the sub-window being created is the tray panel, which Dart says just
+// before creating it. Answers once.
+bool WindowThemeTakeNextWindowIsPanel();
+
 // Drops what was kept on |window|; for when the window is destroyed.
 void WindowThemeForget(HWND window);
 

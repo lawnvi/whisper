@@ -2,9 +2,11 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/source_reading.dart';
+
 void main() {
   test('discovered devices persist fresh network addresses', () {
-    final source = File('lib/page/deviceList.dart').readAsStringSync();
+    final source = deviceListSource();
     final discovery = source.substring(
       source.indexOf(
         'case BonsoirDiscoveryServiceResolvedEvent() ||',
@@ -13,7 +15,7 @@ void main() {
           'case BonsoirDiscoveryServiceResolveFailedEvent():'),
     );
 
-    expect(source, contains('_mergeStoredDeviceWithDiscovery'));
+    expect(source, contains('mergeStoredDeviceWithDiscovery'));
     expect(discovery, contains('final visibleDevice'));
     expect(discovery, contains('await db.upsertDevice(visibleDevice)'));
     expect(discovery, contains('if (!isLost)'));
@@ -27,31 +29,21 @@ void main() {
 
   test('connected nearby devices keep fresh discovery host over stored host',
       () {
-    final source = File('lib/page/deviceList.dart').readAsStringSync();
-    final refresh = source.substring(
-      source.indexOf('Future<void> _refreshDevice'),
-      source.indexOf('ChatSessionPreviewStrings _sessionPreviewStrings'),
-    );
-    final merge = source.substring(
-      source.indexOf('DeviceData _mergeStoredDeviceWithDiscovery'),
-      source.indexOf('Future<void> _refreshDevice'),
-    );
+    final source = deviceListSource();
+    final refresh = memberSource(source, 'Future<void> _refreshDevice');
 
+    // What the merge itself does is in device_list_rules_test.dart.
     expect(
       refresh,
       contains(
-        '_mergeStoredDeviceWithDiscovery(storedDevicesByUid[item.uid], item)',
+        'mergeStoredDeviceWithDiscovery(storedDevicesByUid[item.uid], item)',
       ),
     );
     expect(refresh, isNot(contains('storedDevicesByUid[item.uid] ?? item')));
-    expect(merge, contains('host: discovered.host.isNotEmpty'));
-    expect(merge, contains('port: discovered.port'));
-    expect(merge, contains('auth: stored.auth'));
-    expect(merge, contains('clipboard: stored.clipboard'));
   });
 
   test('lost services clear persisted nearby state without TXT attributes', () {
-    final source = File('lib/page/deviceList.dart').readAsStringSync();
+    final source = deviceListSource();
     final discovery = source.substring(
       source.indexOf(
         'case BonsoirDiscoveryServiceResolvedEvent() ||',
@@ -60,10 +52,7 @@ void main() {
         'case BonsoirDiscoveryServiceResolveFailedEvent():',
       ),
     );
-    final refresh = source.substring(
-      source.indexOf('Future<void> _refreshDevice'),
-      source.indexOf('ChatSessionPreviewStrings _sessionPreviewStrings'),
-    );
+    final refresh = memberSource(source, 'Future<void> _refreshDevice');
 
     expect(discovery, contains('_discoveryPresence.lost('));
     expect(discovery, contains('peerIdHint: advertisedUid'));
@@ -76,7 +65,7 @@ void main() {
   });
 
   test('deleted nearby peers stay hidden until their service is lost', () {
-    final source = File('lib/page/deviceList.dart').readAsStringSync();
+    final source = deviceListSource();
 
     expect(source, contains('socketManager.shouldSuppressDiscoveredPeer(uid)'));
     expect(
@@ -87,7 +76,7 @@ void main() {
   });
 
   test('conversation settings reports deletion back to the device list', () {
-    final deviceList = File('lib/page/deviceList.dart').readAsStringSync();
+    final deviceList = deviceListSource();
     final conversation = File('lib/page/conversation.dart').readAsStringSync();
 
     expect(deviceList, contains('onDeviceDeleted: _removeDevice'));

@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/source_reading.dart';
+
 /// Every C/C++ source of one platform's plugin (split into common/,
 /// receiver/, capture/ and exports_*), without the test tools.
 String nativeSources(String platform) {
@@ -223,7 +225,7 @@ void main() {
   });
 
   test('app shutdown closes window streams', () {
-    final deviceList = File('lib/page/deviceList.dart').readAsStringSync();
+    final deviceList = deviceListSource();
     final shutdown = RegExp(
       r'Future<void> _shutdownDesktopResources\(\) \{[\s\S]*?\]\);',
     ).firstMatch(deviceList)!.group(0)!;

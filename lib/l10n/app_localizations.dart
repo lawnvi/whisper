@@ -6105,6 +6105,1379 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'发送到 {device}'**
   String islandOverlayTo(String device);
+
+  /// No description provided for @shellRowConnecting.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在连接…'**
+  String get shellRowConnecting;
+
+  /// No description provided for @shellRowNearbyUnpaired.
+  ///
+  /// In zh, this message translates to:
+  /// **'在附近 · 可以配对'**
+  String get shellRowNearbyUnpaired;
+
+  /// No description provided for @shellRowNearby.
+  ///
+  /// In zh, this message translates to:
+  /// **'在附近'**
+  String get shellRowNearby;
+
+  /// No description provided for @shellRowOffline.
+  ///
+  /// In zh, this message translates to:
+  /// **'离线'**
+  String get shellRowOffline;
+
+  /// No description provided for @shellRowOfflineSince.
+  ///
+  /// In zh, this message translates to:
+  /// **'离线 · {time}'**
+  String shellRowOfflineSince(String time);
+
+  /// No description provided for @shellRowSoundHere.
+  ///
+  /// In zh, this message translates to:
+  /// **'声音放到这台'**
+  String get shellRowSoundHere;
+
+  /// No description provided for @shellRowControllingThis.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在控制这台'**
+  String get shellRowControllingThis;
+
+  /// No description provided for @shellRowPointerThere.
+  ///
+  /// In zh, this message translates to:
+  /// **'键鼠正在控制它'**
+  String get shellRowPointerThere;
+
+  /// No description provided for @shellRowPlayingOurs.
+  ///
+  /// In zh, this message translates to:
+  /// **'放着这台的声音'**
+  String get shellRowPlayingOurs;
+
+  /// No description provided for @shellRowWindows.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count} 个窗口'**
+  String shellRowWindows(int count);
+
+  /// No description provided for @shellTabChat.
+  ///
+  /// In zh, this message translates to:
+  /// **'对话'**
+  String get shellTabChat;
+
+  /// No description provided for @shellTabFiles.
+  ///
+  /// In zh, this message translates to:
+  /// **'文件'**
+  String get shellTabFiles;
+
+  /// No description provided for @shellTabApps.
+  ///
+  /// In zh, this message translates to:
+  /// **'应用'**
+  String get shellTabApps;
+
+  /// No description provided for @shellDeviceInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'设备信息'**
+  String get shellDeviceInfo;
+
+  /// No description provided for @shellSearch.
+  ///
+  /// In zh, this message translates to:
+  /// **'搜索'**
+  String get shellSearch;
+
+  /// No description provided for @shellAddDevice.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接新设备'**
+  String get shellAddDevice;
+
+  /// No description provided for @shellSound.
+  ///
+  /// In zh, this message translates to:
+  /// **'声音'**
+  String get shellSound;
+
+  /// No description provided for @shellInput.
+  ///
+  /// In zh, this message translates to:
+  /// **'键鼠'**
+  String get shellInput;
+
+  /// No description provided for @shellShareLinks.
+  ///
+  /// In zh, this message translates to:
+  /// **'共享链接'**
+  String get shellShareLinks;
+
+  /// No description provided for @shellSettings.
+  ///
+  /// In zh, this message translates to:
+  /// **'设置'**
+  String get shellSettings;
+
+  /// No description provided for @shellFirstDevice.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接第一台设备'**
+  String get shellFirstDevice;
+
+  /// No description provided for @shellConnectDevice.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接设备'**
+  String get shellConnectDevice;
+
+  /// No description provided for @shellNotConnected.
+  ///
+  /// In zh, this message translates to:
+  /// **'{device} 没有连接'**
+  String shellNotConnected(String device);
+
+  /// No description provided for @shellNotConnectedFiles.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接后可以浏览它的文件。'**
+  String get shellNotConnectedFiles;
+
+  /// No description provided for @shellNotConnectedApps.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接后可以看到它的窗口和应用。'**
+  String get shellNotConnectedApps;
+
+  /// No description provided for @shellConnect.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接'**
+  String get shellConnect;
+
+  /// No description provided for @shellConnecting.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在连接…'**
+  String get shellConnecting;
+
+  /// No description provided for @shellNearbyTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'{device} 在附近'**
+  String shellNearbyTitle(String device);
+
+  /// No description provided for @shellPairHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接后，两台设备会显示相同的 6 位数字。'**
+  String get shellPairHint;
+
+  /// No description provided for @shellComposerOffline.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接 {device} 后可以发送'**
+  String shellComposerOffline(String device);
+
+  /// No description provided for @shellSelfQrHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'另一台设备扫这个二维码就能连上这台'**
+  String get shellSelfQrHint;
+
+  /// No description provided for @shellSelfNoLan.
+  ///
+  /// In zh, this message translates to:
+  /// **'这台不在局域网里，其他设备发现不了它'**
+  String get shellSelfNoLan;
+
+  /// No description provided for @shellSelfAddress.
+  ///
+  /// In zh, this message translates to:
+  /// **'地址'**
+  String get shellSelfAddress;
+
+  /// No description provided for @shellSelfFingerprint.
+  ///
+  /// In zh, this message translates to:
+  /// **'身份指纹'**
+  String get shellSelfFingerprint;
+
+  /// No description provided for @shellEnterAddress.
+  ///
+  /// In zh, this message translates to:
+  /// **'输入地址…'**
+  String get shellEnterAddress;
+
+  /// No description provided for @shellDone.
+  ///
+  /// In zh, this message translates to:
+  /// **'完成'**
+  String get shellDone;
+
+  /// No description provided for @shellWindowMinimize.
+  ///
+  /// In zh, this message translates to:
+  /// **'最小化'**
+  String get shellWindowMinimize;
+
+  /// No description provided for @shellWindowMaximize.
+  ///
+  /// In zh, this message translates to:
+  /// **'最大化'**
+  String get shellWindowMaximize;
+
+  /// No description provided for @shellWindowRestore.
+  ///
+  /// In zh, this message translates to:
+  /// **'还原'**
+  String get shellWindowRestore;
+
+  /// No description provided for @shellWindowClose.
+  ///
+  /// In zh, this message translates to:
+  /// **'关闭'**
+  String get shellWindowClose;
+
+  /// No description provided for @shellCardMenu.
+  ///
+  /// In zh, this message translates to:
+  /// **'设备卡片'**
+  String get shellCardMenu;
+
+  /// No description provided for @shellCardConnected.
+  ///
+  /// In zh, this message translates to:
+  /// **'已连接'**
+  String get shellCardConnected;
+
+  /// No description provided for @shellCardUnpaired.
+  ///
+  /// In zh, this message translates to:
+  /// **'还没有配对'**
+  String get shellCardUnpaired;
+
+  /// No description provided for @shellCardCan.
+  ///
+  /// In zh, this message translates to:
+  /// **'{device} 可以'**
+  String shellCardCan(String device);
+
+  /// No description provided for @shellCardTrust.
+  ///
+  /// In zh, this message translates to:
+  /// **'不用确认就连上这台'**
+  String get shellCardTrust;
+
+  /// No description provided for @shellCardBrowse.
+  ///
+  /// In zh, this message translates to:
+  /// **'浏览我的文件'**
+  String get shellCardBrowse;
+
+  /// No description provided for @shellCardChange.
+  ///
+  /// In zh, this message translates to:
+  /// **'修改我的文件'**
+  String get shellCardChange;
+
+  /// No description provided for @shellCardDetails.
+  ///
+  /// In zh, this message translates to:
+  /// **'详细信息'**
+  String get shellCardDetails;
+
+  /// No description provided for @shellCardAddress.
+  ///
+  /// In zh, this message translates to:
+  /// **'地址'**
+  String get shellCardAddress;
+
+  /// No description provided for @shellCardDiagnostics.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接诊断'**
+  String get shellCardDiagnostics;
+
+  /// No description provided for @shellCardDisconnect.
+  ///
+  /// In zh, this message translates to:
+  /// **'断开连接'**
+  String get shellCardDisconnect;
+
+  /// No description provided for @shellCardRemove.
+  ///
+  /// In zh, this message translates to:
+  /// **'移除这台设备'**
+  String get shellCardRemove;
+
+  /// No description provided for @shellCardSound.
+  ///
+  /// In zh, this message translates to:
+  /// **'声音'**
+  String get shellCardSound;
+
+  /// No description provided for @shellCardInput.
+  ///
+  /// In zh, this message translates to:
+  /// **'键鼠'**
+  String get shellCardInput;
+
+  /// No description provided for @shellCardClipboard.
+  ///
+  /// In zh, this message translates to:
+  /// **'剪贴板'**
+  String get shellCardClipboard;
+
+  /// No description provided for @shellCardMount.
+  ///
+  /// In zh, this message translates to:
+  /// **'挂载'**
+  String get shellCardMount;
+
+  /// No description provided for @shellOn.
+  ///
+  /// In zh, this message translates to:
+  /// **'开'**
+  String get shellOn;
+
+  /// No description provided for @shellOff.
+  ///
+  /// In zh, this message translates to:
+  /// **'关'**
+  String get shellOff;
+
+  /// No description provided for @shellPhoneDevices.
+  ///
+  /// In zh, this message translates to:
+  /// **'设备'**
+  String get shellPhoneDevices;
+
+  /// No description provided for @shellPhoneControl.
+  ///
+  /// In zh, this message translates to:
+  /// **'控制'**
+  String get shellPhoneControl;
+
+  /// No description provided for @shellPhoneSyncClipboard.
+  ///
+  /// In zh, this message translates to:
+  /// **'把剪贴板同步给 {device}'**
+  String shellPhoneSyncClipboard(String device);
+
+  /// No description provided for @shellPhoneSearchHistory.
+  ///
+  /// In zh, this message translates to:
+  /// **'搜索聊天记录'**
+  String get shellPhoneSearchHistory;
+
+  /// No description provided for @shellLanDown.
+  ///
+  /// In zh, this message translates to:
+  /// **'局域网断开了'**
+  String get shellLanDown;
+
+  /// No description provided for @shellComposerHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'发给 {device}'**
+  String shellComposerHint(String device);
+
+  /// No description provided for @shellPhoneNeedsConnection.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接后可用'**
+  String get shellPhoneNeedsConnection;
+
+  /// No description provided for @shellPaletteDevice.
+  ///
+  /// In zh, this message translates to:
+  /// **'设备'**
+  String get shellPaletteDevice;
+
+  /// No description provided for @shellPaletteAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'动作'**
+  String get shellPaletteAction;
+
+  /// No description provided for @shellPalettePage.
+  ///
+  /// In zh, this message translates to:
+  /// **'页面'**
+  String get shellPalettePage;
+
+  /// No description provided for @shellPaletteMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'消息'**
+  String get shellPaletteMessage;
+
+  /// No description provided for @shellPalettePlayOn.
+  ///
+  /// In zh, this message translates to:
+  /// **'把这台的声音放到 {device}'**
+  String shellPalettePlayOn(String device);
+
+  /// No description provided for @shellPaletteControl.
+  ///
+  /// In zh, this message translates to:
+  /// **'用这台的键鼠控制 {device}'**
+  String shellPaletteControl(String device);
+
+  /// No description provided for @shellSettingsGeneral.
+  ///
+  /// In zh, this message translates to:
+  /// **'通用'**
+  String get shellSettingsGeneral;
+
+  /// No description provided for @shellSettingsConnection.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接'**
+  String get shellSettingsConnection;
+
+  /// No description provided for @shellSettingsSystem.
+  ///
+  /// In zh, this message translates to:
+  /// **'系统'**
+  String get shellSettingsSystem;
+
+  /// No description provided for @shellSettingsSharing.
+  ///
+  /// In zh, this message translates to:
+  /// **'共享与权限'**
+  String get shellSettingsSharing;
+
+  /// No description provided for @shellSettingsNotifications.
+  ///
+  /// In zh, this message translates to:
+  /// **'通知'**
+  String get shellSettingsNotifications;
+
+  /// No description provided for @shellSettingsAbout.
+  ///
+  /// In zh, this message translates to:
+  /// **'关于'**
+  String get shellSettingsAbout;
+
+  /// No description provided for @shellSettingsClipboardNotifications.
+  ///
+  /// In zh, this message translates to:
+  /// **'剪贴板和通知'**
+  String get shellSettingsClipboardNotifications;
+
+  /// No description provided for @shellSettingsAppearance.
+  ///
+  /// In zh, this message translates to:
+  /// **'外观'**
+  String get shellSettingsAppearance;
+
+  /// No description provided for @shellSettingsAppearanceAuto.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动'**
+  String get shellSettingsAppearanceAuto;
+
+  /// No description provided for @shellSettingsAppearanceLight.
+  ///
+  /// In zh, this message translates to:
+  /// **'浅色'**
+  String get shellSettingsAppearanceLight;
+
+  /// No description provided for @shellSettingsAppearanceDark.
+  ///
+  /// In zh, this message translates to:
+  /// **'深色'**
+  String get shellSettingsAppearanceDark;
+
+  /// No description provided for @shellSettingsLanguage.
+  ///
+  /// In zh, this message translates to:
+  /// **'语言'**
+  String get shellSettingsLanguage;
+
+  /// No description provided for @shellSettingsSaveTo.
+  ///
+  /// In zh, this message translates to:
+  /// **'文件保存到'**
+  String get shellSettingsSaveTo;
+
+  /// No description provided for @shellSettingsChange.
+  ///
+  /// In zh, this message translates to:
+  /// **'更改…'**
+  String get shellSettingsChange;
+
+  /// No description provided for @shellSettingsCast.
+  ///
+  /// In zh, this message translates to:
+  /// **'接收电视投屏'**
+  String get shellSettingsCast;
+
+  /// No description provided for @shellSettingsKeepAlive.
+  ///
+  /// In zh, this message translates to:
+  /// **'后台保持连接'**
+  String get shellSettingsKeepAlive;
+
+  /// No description provided for @shellSettingsScreenshotEnabled.
+  ///
+  /// In zh, this message translates to:
+  /// **'启用截图快捷键'**
+  String get shellSettingsScreenshotEnabled;
+
+  /// No description provided for @shellSettingsPressShortcut.
+  ///
+  /// In zh, this message translates to:
+  /// **'按下快捷键…'**
+  String get shellSettingsPressShortcut;
+
+  /// No description provided for @shellSettingsAllowClipboard.
+  ///
+  /// In zh, this message translates to:
+  /// **'允许访问剪贴板'**
+  String get shellSettingsAllowClipboard;
+
+  /// No description provided for @shellSettingsAutoClipboard.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动同步剪贴板'**
+  String get shellSettingsAutoClipboard;
+
+  /// No description provided for @shellSettingsPlaybackGain.
+  ///
+  /// In zh, this message translates to:
+  /// **'播放别处声音的增益'**
+  String get shellSettingsPlaybackGain;
+
+  /// No description provided for @shellSettingsCopyCode.
+  ///
+  /// In zh, this message translates to:
+  /// **'验证码写入剪贴板'**
+  String get shellSettingsCopyCode;
+
+  /// No description provided for @shellSettingsSharingNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'增益只影响这台播放的声音，过高可能失真。滚轮速度只影响这台被控制时。'**
+  String get shellSettingsSharingNote;
+
+  /// No description provided for @shellSettingsGainHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'过高可能失真'**
+  String get shellSettingsGainHint;
+
+  /// No description provided for @shellSettingsVersion.
+  ///
+  /// In zh, this message translates to:
+  /// **'版本'**
+  String get shellSettingsVersion;
+
+  /// No description provided for @shellSettingsVersionChecking.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在检查…'**
+  String get shellSettingsVersionChecking;
+
+  /// No description provided for @shellSettingsQrAndAddress.
+  ///
+  /// In zh, this message translates to:
+  /// **'二维码和地址'**
+  String get shellSettingsQrAndAddress;
+
+  /// No description provided for @shellSettingsMultiplier.
+  ///
+  /// In zh, this message translates to:
+  /// **'{value}x'**
+  String shellSettingsMultiplier(String value);
+
+  /// No description provided for @shellSettingsVersionLatest.
+  ///
+  /// In zh, this message translates to:
+  /// **'{version} · 已是最新'**
+  String shellSettingsVersionLatest(String version);
+
+  /// No description provided for @shellSettingsVersionAvailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'有新版本 {version}'**
+  String shellSettingsVersionAvailable(String version);
+
+  /// No description provided for @shellSettingsVersionDownloading.
+  ///
+  /// In zh, this message translates to:
+  /// **'下载中 {progress}%'**
+  String shellSettingsVersionDownloading(int progress);
+
+  /// No description provided for @shellSettingsAboutVersion.
+  ///
+  /// In zh, this message translates to:
+  /// **'版本 {version}'**
+  String shellSettingsAboutVersion(String version);
+
+  /// No description provided for @shellSettingsLinksOn.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count, plural, other{{count} 个开启中}}'**
+  String shellSettingsLinksOn(int count);
+
+  /// No description provided for @soundHeroIdleTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'放到其他设备'**
+  String get soundHeroIdleTitle;
+
+  /// No description provided for @soundHeroIdleBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'选几台设备，它们会一起响。'**
+  String get soundHeroIdleBody;
+
+  /// No description provided for @soundHeroPlaying.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在放到 {count} 台设备'**
+  String soundHeroPlaying(int count);
+
+  /// No description provided for @soundChannelLeft.
+  ///
+  /// In zh, this message translates to:
+  /// **'左'**
+  String get soundChannelLeft;
+
+  /// No description provided for @soundChannelRight.
+  ///
+  /// In zh, this message translates to:
+  /// **'右'**
+  String get soundChannelRight;
+
+  /// No description provided for @soundShareThisDevice.
+  ///
+  /// In zh, this message translates to:
+  /// **'共享这台的声音'**
+  String get soundShareThisDevice;
+
+  /// No description provided for @soundMemberStopped.
+  ///
+  /// In zh, this message translates to:
+  /// **'已停止'**
+  String get soundMemberStopped;
+
+  /// No description provided for @soundMemberNotConnected.
+  ///
+  /// In zh, this message translates to:
+  /// **'未连接'**
+  String get soundMemberNotConnected;
+
+  /// No description provided for @soundMemberFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有放出来 · {reason}'**
+  String soundMemberFailed(String reason);
+
+  /// No description provided for @soundMemberBusy.
+  ///
+  /// In zh, this message translates to:
+  /// **'它在放别处的声音'**
+  String get soundMemberBusy;
+
+  /// No description provided for @soundMemberSoloOnly.
+  ///
+  /// In zh, this message translates to:
+  /// **'只能单独放'**
+  String get soundMemberSoloOnly;
+
+  /// No description provided for @soundSyncNumbers.
+  ///
+  /// In zh, this message translates to:
+  /// **'网络 {network}ms · 抖动 {jitter}ms · 缓冲 {buffer}ms · 晚包 {late}'**
+  String soundSyncNumbers(
+    String network,
+    String jitter,
+    String buffer,
+    int late,
+  );
+
+  /// No description provided for @soundSyncNumbersPending.
+  ///
+  /// In zh, this message translates to:
+  /// **'网络 — · 抖动 — · 缓冲 — · 晚包 —'**
+  String get soundSyncNumbersPending;
+
+  /// No description provided for @soundPermissionNeeded.
+  ///
+  /// In zh, this message translates to:
+  /// **'需要允许屏幕与系统录音'**
+  String get soundPermissionNeeded;
+
+  /// No description provided for @soundCheckLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'把声音放到 {device}'**
+  String soundCheckLabel(String device);
+
+  /// No description provided for @soundChannelLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'{device} 的声道：{channel}'**
+  String soundChannelLabel(String device, String channel);
+
+  /// No description provided for @soundNoDevices.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有连着的设备'**
+  String get soundNoDevices;
+
+  /// No description provided for @soundSinkTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在播放 {device} 的声音'**
+  String soundSinkTitle(String device);
+
+  /// No description provided for @soundSinkHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'要换来源，先断开'**
+  String get soundSinkHint;
+
+  /// No description provided for @soundSinkPaused.
+  ///
+  /// In zh, this message translates to:
+  /// **'已暂停'**
+  String get soundSinkPaused;
+
+  /// No description provided for @soundSinkResuming.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在恢复…'**
+  String get soundSinkResuming;
+
+  /// No description provided for @soundGain.
+  ///
+  /// In zh, this message translates to:
+  /// **'增益'**
+  String get soundGain;
+
+  /// No description provided for @soundGainValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'{value}x'**
+  String soundGainValue(String value);
+
+  /// No description provided for @soundGainLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'这台的播放增益'**
+  String get soundGainLabel;
+
+  /// No description provided for @soundResume.
+  ///
+  /// In zh, this message translates to:
+  /// **'继续'**
+  String get soundResume;
+
+  /// No description provided for @shareOpenSettings.
+  ///
+  /// In zh, this message translates to:
+  /// **'去开启'**
+  String get shareOpenSettings;
+
+  /// No description provided for @inputHintIdle.
+  ///
+  /// In zh, this message translates to:
+  /// **'拖动屏幕来排列。指针从相接的边过去。'**
+  String get inputHintIdle;
+
+  /// No description provided for @inputHintExit.
+  ///
+  /// In zh, this message translates to:
+  /// **'按 {shortcut} 收回键鼠'**
+  String inputHintExit(String shortcut);
+
+  /// No description provided for @inputStatusWaiting.
+  ///
+  /// In zh, this message translates to:
+  /// **'等待确认'**
+  String get inputStatusWaiting;
+
+  /// No description provided for @inputStatusNotConnected.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有连上'**
+  String get inputStatusNotConnected;
+
+  /// No description provided for @inputSideRight.
+  ///
+  /// In zh, this message translates to:
+  /// **'在右边'**
+  String get inputSideRight;
+
+  /// No description provided for @inputSideLeft.
+  ///
+  /// In zh, this message translates to:
+  /// **'在左边'**
+  String get inputSideLeft;
+
+  /// No description provided for @inputSideAbove.
+  ///
+  /// In zh, this message translates to:
+  /// **'在上面'**
+  String get inputSideAbove;
+
+  /// No description provided for @inputSideBelow.
+  ///
+  /// In zh, this message translates to:
+  /// **'在下面'**
+  String get inputSideBelow;
+
+  /// No description provided for @inputSideElsewhere.
+  ///
+  /// In zh, this message translates to:
+  /// **'接在别的屏幕旁'**
+  String get inputSideElsewhere;
+
+  /// No description provided for @inputScreenCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count, plural, =2{两块屏幕} other{{count} 块屏幕}}'**
+  String inputScreenCount(int count);
+
+  /// No description provided for @inputResolution.
+  ///
+  /// In zh, this message translates to:
+  /// **'{width}×{height}'**
+  String inputResolution(int width, int height);
+
+  /// No description provided for @inputDetail.
+  ///
+  /// In zh, this message translates to:
+  /// **'{resolution} · {place}'**
+  String inputDetail(String resolution, String place);
+
+  /// No description provided for @inputRemove.
+  ///
+  /// In zh, this message translates to:
+  /// **'移出'**
+  String get inputRemove;
+
+  /// No description provided for @inputReasonPeerNotTrusting.
+  ///
+  /// In zh, this message translates to:
+  /// **'它还没有信任这台'**
+  String get inputReasonPeerNotTrusting;
+
+  /// No description provided for @inputReasonNotTrusted.
+  ///
+  /// In zh, this message translates to:
+  /// **'这台还没有信任它'**
+  String get inputReasonNotTrusted;
+
+  /// No description provided for @inputReasonUnsupported.
+  ///
+  /// In zh, this message translates to:
+  /// **'它的版本不支持'**
+  String get inputReasonUnsupported;
+
+  /// No description provided for @inputReasonPeerPermission.
+  ///
+  /// In zh, this message translates to:
+  /// **'它还没有允许被控制'**
+  String get inputReasonPeerPermission;
+
+  /// No description provided for @inputReasonBusy.
+  ///
+  /// In zh, this message translates to:
+  /// **'它现在不能被控制'**
+  String get inputReasonBusy;
+
+  /// No description provided for @inputReasonBlocked.
+  ///
+  /// In zh, this message translates to:
+  /// **'它接在没连上的屏幕后面'**
+  String get inputReasonBlocked;
+
+  /// No description provided for @inputCandidateUnsupported.
+  ///
+  /// In zh, this message translates to:
+  /// **'不支持'**
+  String get inputCandidateUnsupported;
+
+  /// No description provided for @inputPermissionNeeded.
+  ///
+  /// In zh, this message translates to:
+  /// **'需要允许辅助功能'**
+  String get inputPermissionNeeded;
+
+  /// No description provided for @inputControlledTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'{device} 正在控制这台'**
+  String inputControlledTitle(String device);
+
+  /// No description provided for @inputControlledHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'要控制别的电脑，先停止。'**
+  String get inputControlledHint;
+
+  /// No description provided for @inputSwitchLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'键鼠共享'**
+  String get inputSwitchLabel;
+
+  /// No description provided for @inputScreenLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'{device} 的屏幕，{detail}'**
+  String inputScreenLabel(String device, String detail);
+
+  /// No description provided for @inputAddLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'把 {device} 加入键鼠共享'**
+  String inputAddLabel(String device);
+
+  /// No description provided for @shellIslandFinished.
+  ///
+  /// In zh, this message translates to:
+  /// **'已完成'**
+  String get shellIslandFinished;
+
+  /// No description provided for @shellPaletteEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有找到'**
+  String get shellPaletteEmpty;
+
+  /// No description provided for @shellLinksServiceOff.
+  ///
+  /// In zh, this message translates to:
+  /// **'文件服务已关闭'**
+  String get shellLinksServiceOff;
+
+  /// No description provided for @shellLinksServiceIdle.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有开启的链接，服务没有运行'**
+  String get shellLinksServiceIdle;
+
+  /// No description provided for @shellLinksFoot.
+  ///
+  /// In zh, this message translates to:
+  /// **'对方不用装 Whisper，在同一局域网用浏览器打开就能下载。走的是普通 HTTP，密码只防止别人随意打开。'**
+  String get shellLinksFoot;
+
+  /// No description provided for @shellLinksEmptyTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'还没有链接'**
+  String get shellLinksEmptyTitle;
+
+  /// No description provided for @shellLinksEmptyBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'选一些文件，生成一个链接。对方不用装 Whisper，用浏览器打开就能下载。'**
+  String get shellLinksEmptyBody;
+
+  /// No description provided for @shellLinksChoose.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择文件'**
+  String get shellLinksChoose;
+
+  /// No description provided for @shellLinksNew.
+  ///
+  /// In zh, this message translates to:
+  /// **'新建'**
+  String get shellLinksNew;
+
+  /// No description provided for @shellLinkOff.
+  ///
+  /// In zh, this message translates to:
+  /// **'已关闭'**
+  String get shellLinkOff;
+
+  /// No description provided for @shellLinkMissing.
+  ///
+  /// In zh, this message translates to:
+  /// **'有些文件不在原来的位置了'**
+  String get shellLinkMissing;
+
+  /// No description provided for @shellLinkVisits.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count} 次访问'**
+  String shellLinkVisits(int count);
+
+  /// No description provided for @shellLinkDownloads.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count} 次下载'**
+  String shellLinkDownloads(int count);
+
+  /// No description provided for @shellLinkVisitsCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count} 次'**
+  String shellLinkVisitsCount(int count);
+
+  /// No description provided for @shellLinkEnabled.
+  ///
+  /// In zh, this message translates to:
+  /// **'开启'**
+  String get shellLinkEnabled;
+
+  /// No description provided for @shellLinkPassword.
+  ///
+  /// In zh, this message translates to:
+  /// **'密码'**
+  String get shellLinkPassword;
+
+  /// No description provided for @shellLinkPasswordSet.
+  ///
+  /// In zh, this message translates to:
+  /// **'已设置'**
+  String get shellLinkPasswordSet;
+
+  /// No description provided for @shellLinkPasswordNone.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有'**
+  String get shellLinkPasswordNone;
+
+  /// No description provided for @shellLinkVisitsLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'访问'**
+  String get shellLinkVisitsLabel;
+
+  /// No description provided for @shellLinkDownloadsLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'下载'**
+  String get shellLinkDownloadsLabel;
+
+  /// No description provided for @shellLinkDeleted.
+  ///
+  /// In zh, this message translates to:
+  /// **'链接已删除'**
+  String get shellLinkDeleted;
+
+  /// No description provided for @shellMore.
+  ///
+  /// In zh, this message translates to:
+  /// **'更多'**
+  String get shellMore;
+
+  /// No description provided for @shellFilesCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count} 项'**
+  String shellFilesCount(int count);
+
+  /// No description provided for @shellFilesSendTo.
+  ///
+  /// In zh, this message translates to:
+  /// **'发到…'**
+  String get shellFilesSendTo;
+
+  /// No description provided for @shellFilesCopyHere.
+  ///
+  /// In zh, this message translates to:
+  /// **'拷到这台'**
+  String get shellFilesCopyHere;
+
+  /// No description provided for @shellFilesAskOnDevice.
+  ///
+  /// In zh, this message translates to:
+  /// **'请在 {device} 上点允许'**
+  String shellFilesAskOnDevice(String device);
+
+  /// No description provided for @shellFilesDenied.
+  ///
+  /// In zh, this message translates to:
+  /// **'{device} 拒绝了'**
+  String shellFilesDenied(String device);
+
+  /// No description provided for @shellAppsMoving.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在流转'**
+  String get shellAppsMoving;
+
+  /// No description provided for @shellAppsRunsOn.
+  ///
+  /// In zh, this message translates to:
+  /// **'运行于 {device}，显示于这台'**
+  String shellAppsRunsOn(String device);
+
+  /// No description provided for @shellAppsEnd.
+  ///
+  /// In zh, this message translates to:
+  /// **'结束'**
+  String get shellAppsEnd;
+
+  /// No description provided for @shellAppsOn.
+  ///
+  /// In zh, this message translates to:
+  /// **'{device} 上的应用'**
+  String shellAppsOn(String device);
+
+  /// No description provided for @shellSettingsAppsSelected.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count, plural, =0{尚未选择} other{已选择 {count} 个}}'**
+  String shellSettingsAppsSelected(int count);
+
+  /// No description provided for @shellTrayClipboard.
+  ///
+  /// In zh, this message translates to:
+  /// **'剪贴板'**
+  String get shellTrayClipboard;
+
+  /// No description provided for @shellTrayClipboardEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'剪贴板是空的'**
+  String get shellTrayClipboardEmpty;
+
+  /// No description provided for @shellTrayScreenshot.
+  ///
+  /// In zh, this message translates to:
+  /// **'截图'**
+  String get shellTrayScreenshot;
+
+  /// No description provided for @shellTrayRecent.
+  ///
+  /// In zh, this message translates to:
+  /// **'最近的剪贴板'**
+  String get shellTrayRecent;
+
+  /// No description provided for @shellTrayOpen.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开 Whisper'**
+  String get shellTrayOpen;
+
+  /// No description provided for @shellTrayNoDevice.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有已连接的设备'**
+  String get shellTrayNoDevice;
+
+  /// No description provided for @shellTraySoundOff.
+  ///
+  /// In zh, this message translates to:
+  /// **'关'**
+  String get shellTraySoundOff;
+
+  /// No description provided for @shellTrayFrom.
+  ///
+  /// In zh, this message translates to:
+  /// **'{device} · {when}'**
+  String shellTrayFrom(String device, String when);
+
+  /// No description provided for @shellTrayThisDevice.
+  ///
+  /// In zh, this message translates to:
+  /// **'这台'**
+  String get shellTrayThisDevice;
+
+  /// No description provided for @shellTrayPlaying.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在播放 {device} 的声音'**
+  String shellTrayPlaying(String device);
+
+  /// No description provided for @shellTrayControlled.
+  ///
+  /// In zh, this message translates to:
+  /// **'{device} 在控制这台'**
+  String shellTrayControlled(String device);
+
+  /// No description provided for @shellTrayInputOn.
+  ///
+  /// In zh, this message translates to:
+  /// **'已开启'**
+  String get shellTrayInputOn;
+
+  /// No description provided for @shellIslandPlayingOn.
+  ///
+  /// In zh, this message translates to:
+  /// **'声音放到 {devices}'**
+  String shellIslandPlayingOn(String devices);
+
+  /// No description provided for @shellIslandControlling.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在控制 {device}'**
+  String shellIslandControlling(String device);
+
+  /// No description provided for @shellToday.
+  ///
+  /// In zh, this message translates to:
+  /// **'今天'**
+  String get shellToday;
+
+  /// No description provided for @shellYesterday.
+  ///
+  /// In zh, this message translates to:
+  /// **'昨天'**
+  String get shellYesterday;
+
+  /// No description provided for @shellTraySendClipboardTo.
+  ///
+  /// In zh, this message translates to:
+  /// **'发送剪贴板到'**
+  String get shellTraySendClipboardTo;
+
+  /// No description provided for @shellTraySendFileTo.
+  ///
+  /// In zh, this message translates to:
+  /// **'发送文件到'**
+  String get shellTraySendFileTo;
+
+  /// No description provided for @shellTrayPlayOn.
+  ///
+  /// In zh, this message translates to:
+  /// **'声音放到'**
+  String get shellTrayPlayOn;
+
+  /// No description provided for @phoneConnectQrHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'用另一台设备扫这个二维码'**
+  String get phoneConnectQrHint;
+
+  /// No description provided for @phoneConnectScanHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'对准另一台设备上的二维码'**
+  String get phoneConnectScanHint;
+
+  /// No description provided for @phoneConnectCopyLink.
+  ///
+  /// In zh, this message translates to:
+  /// **'拷贝连接链接'**
+  String get phoneConnectCopyLink;
+
+  /// No description provided for @phoneConnectCopied.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接链接已拷贝'**
+  String get phoneConnectCopied;
+
+  /// No description provided for @phoneConnectCopyFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'没拷贝成功，再试一次'**
+  String get phoneConnectCopyFailed;
+
+  /// No description provided for @phoneConnectOpenSettings.
+  ///
+  /// In zh, this message translates to:
+  /// **'去开启'**
+  String get phoneConnectOpenSettings;
+
+  /// No description provided for @phonePairApprove.
+  ///
+  /// In zh, this message translates to:
+  /// **'数字相同，配对'**
+  String get phonePairApprove;
+
+  /// No description provided for @pickerNoDevices.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有其他已连接的设备'**
+  String get pickerNoDevices;
+
+  /// No description provided for @pickerSendFile.
+  ///
+  /// In zh, this message translates to:
+  /// **'把「{name}」发到'**
+  String pickerSendFile(String name);
+
+  /// No description provided for @pickerSendItems.
+  ///
+  /// In zh, this message translates to:
+  /// **'把 {count} 项发到'**
+  String pickerSendItems(int count);
+
+  /// No description provided for @pickerSendText.
+  ///
+  /// In zh, this message translates to:
+  /// **'把这段文字发到'**
+  String get pickerSendText;
+
+  /// No description provided for @phoneFilesCopied.
+  ///
+  /// In zh, this message translates to:
+  /// **'已拷贝 {count} 项，到要放的文件夹里粘贴'**
+  String phoneFilesCopied(int count);
+
+  /// No description provided for @phoneConnectPort.
+  ///
+  /// In zh, this message translates to:
+  /// **'端口'**
+  String get phoneConnectPort;
+
+  /// No description provided for @shellLinkCreateTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'共享「{name}」'**
+  String shellLinkCreateTitle(String name);
+
+  /// No description provided for @shellLinkCreateBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'同一局域网的设备用浏览器打开就能下载。'**
+  String get shellLinkCreateBody;
+
+  /// No description provided for @shellLinkPasswordOptional.
+  ///
+  /// In zh, this message translates to:
+  /// **'密码（可不填）'**
+  String get shellLinkPasswordOptional;
+
+  /// No description provided for @shellAppsShownOn.
+  ///
+  /// In zh, this message translates to:
+  /// **'运行于这台，显示于 {device}'**
+  String shellAppsShownOn(String device);
+
+  /// No description provided for @shellAppsBringBack.
+  ///
+  /// In zh, this message translates to:
+  /// **'拿回来'**
+  String get shellAppsBringBack;
+
+  /// No description provided for @shellManualConnectTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'输入地址连接'**
+  String get shellManualConnectTitle;
+
+  /// No description provided for @shellManualConnectField.
+  ///
+  /// In zh, this message translates to:
+  /// **'地址和端口'**
+  String get shellManualConnectField;
+
+  /// No description provided for @shellLinksChooseFolder.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择文件夹'**
+  String get shellLinksChooseFolder;
 }
 
 class _AppLocalizationsDelegate

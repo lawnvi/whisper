@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xml/xml.dart';
 
+import 'support/source_reading.dart';
+
 void main() {
   final source = File('ios/Runner/AppDelegate.swift').readAsStringSync();
   final plist = XmlDocument.parse(
@@ -62,7 +64,7 @@ void main() {
     final notifications = File(
       'lib/helper/notification.dart',
     ).readAsStringSync();
-    final devices = File('lib/page/deviceList.dart').readAsStringSync();
+    final devices = deviceListSource();
     expect(notifications, contains('requestAlertPermission: false'));
     expect(notifications, contains('requestBadgePermission: false'));
     expect(notifications, contains('requestSoundPermission: false'));

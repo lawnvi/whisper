@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/source_reading.dart';
+
 void main() {
   test('socket auth flow gates duplicate incoming and outgoing requests', () {
     final source = File('lib/socket/svrmanager.dart').readAsStringSync();
@@ -21,7 +23,7 @@ void main() {
   });
 
   test('device connection entry points pass peer ids into socket auth', () {
-    final deviceList = File('lib/page/deviceList.dart').readAsStringSync();
+    final deviceList = deviceListSource();
     final conversation = File('lib/page/conversation.dart').readAsStringSync();
 
     expect(deviceList, contains('expectedPeerId: peerId ??'));

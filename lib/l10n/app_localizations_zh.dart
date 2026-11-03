@@ -3437,4 +3437,809 @@ class AppLocalizationsZh extends AppLocalizations {
   String islandOverlayTo(String device) {
     return '发送到 $device';
   }
+
+  @override
+  String get shellRowConnecting => '正在连接…';
+
+  @override
+  String get shellRowNearbyUnpaired => '在附近 · 可以配对';
+
+  @override
+  String get shellRowNearby => '在附近';
+
+  @override
+  String get shellRowOffline => '离线';
+
+  @override
+  String shellRowOfflineSince(String time) {
+    return '离线 · $time';
+  }
+
+  @override
+  String get shellRowSoundHere => '声音放到这台';
+
+  @override
+  String get shellRowControllingThis => '正在控制这台';
+
+  @override
+  String get shellRowPointerThere => '键鼠正在控制它';
+
+  @override
+  String get shellRowPlayingOurs => '放着这台的声音';
+
+  @override
+  String shellRowWindows(int count) {
+    return '$count 个窗口';
+  }
+
+  @override
+  String get shellTabChat => '对话';
+
+  @override
+  String get shellTabFiles => '文件';
+
+  @override
+  String get shellTabApps => '应用';
+
+  @override
+  String get shellDeviceInfo => '设备信息';
+
+  @override
+  String get shellSearch => '搜索';
+
+  @override
+  String get shellAddDevice => '连接新设备';
+
+  @override
+  String get shellSound => '声音';
+
+  @override
+  String get shellInput => '键鼠';
+
+  @override
+  String get shellShareLinks => '共享链接';
+
+  @override
+  String get shellSettings => '设置';
+
+  @override
+  String get shellFirstDevice => '连接第一台设备';
+
+  @override
+  String get shellConnectDevice => '连接设备';
+
+  @override
+  String shellNotConnected(String device) {
+    return '$device 没有连接';
+  }
+
+  @override
+  String get shellNotConnectedFiles => '连接后可以浏览它的文件。';
+
+  @override
+  String get shellNotConnectedApps => '连接后可以看到它的窗口和应用。';
+
+  @override
+  String get shellConnect => '连接';
+
+  @override
+  String get shellConnecting => '正在连接…';
+
+  @override
+  String shellNearbyTitle(String device) {
+    return '$device 在附近';
+  }
+
+  @override
+  String get shellPairHint => '连接后，两台设备会显示相同的 6 位数字。';
+
+  @override
+  String shellComposerOffline(String device) {
+    return '连接 $device 后可以发送';
+  }
+
+  @override
+  String get shellSelfQrHint => '另一台设备扫这个二维码就能连上这台';
+
+  @override
+  String get shellSelfNoLan => '这台不在局域网里，其他设备发现不了它';
+
+  @override
+  String get shellSelfAddress => '地址';
+
+  @override
+  String get shellSelfFingerprint => '身份指纹';
+
+  @override
+  String get shellEnterAddress => '输入地址…';
+
+  @override
+  String get shellDone => '完成';
+
+  @override
+  String get shellWindowMinimize => '最小化';
+
+  @override
+  String get shellWindowMaximize => '最大化';
+
+  @override
+  String get shellWindowRestore => '还原';
+
+  @override
+  String get shellWindowClose => '关闭';
+
+  @override
+  String get shellCardMenu => '设备卡片';
+
+  @override
+  String get shellCardConnected => '已连接';
+
+  @override
+  String get shellCardUnpaired => '还没有配对';
+
+  @override
+  String shellCardCan(String device) {
+    return '$device 可以';
+  }
+
+  @override
+  String get shellCardTrust => '不用确认就连上这台';
+
+  @override
+  String get shellCardBrowse => '浏览我的文件';
+
+  @override
+  String get shellCardChange => '修改我的文件';
+
+  @override
+  String get shellCardDetails => '详细信息';
+
+  @override
+  String get shellCardAddress => '地址';
+
+  @override
+  String get shellCardDiagnostics => '连接诊断';
+
+  @override
+  String get shellCardDisconnect => '断开连接';
+
+  @override
+  String get shellCardRemove => '移除这台设备';
+
+  @override
+  String get shellCardSound => '声音';
+
+  @override
+  String get shellCardInput => '键鼠';
+
+  @override
+  String get shellCardClipboard => '剪贴板';
+
+  @override
+  String get shellCardMount => '挂载';
+
+  @override
+  String get shellOn => '开';
+
+  @override
+  String get shellOff => '关';
+
+  @override
+  String get shellPhoneDevices => '设备';
+
+  @override
+  String get shellPhoneControl => '控制';
+
+  @override
+  String shellPhoneSyncClipboard(String device) {
+    return '把剪贴板同步给 $device';
+  }
+
+  @override
+  String get shellPhoneSearchHistory => '搜索聊天记录';
+
+  @override
+  String get shellLanDown => '局域网断开了';
+
+  @override
+  String shellComposerHint(String device) {
+    return '发给 $device';
+  }
+
+  @override
+  String get shellPhoneNeedsConnection => '连接后可用';
+
+  @override
+  String get shellPaletteDevice => '设备';
+
+  @override
+  String get shellPaletteAction => '动作';
+
+  @override
+  String get shellPalettePage => '页面';
+
+  @override
+  String get shellPaletteMessage => '消息';
+
+  @override
+  String shellPalettePlayOn(String device) {
+    return '把这台的声音放到 $device';
+  }
+
+  @override
+  String shellPaletteControl(String device) {
+    return '用这台的键鼠控制 $device';
+  }
+
+  @override
+  String get shellSettingsGeneral => '通用';
+
+  @override
+  String get shellSettingsConnection => '连接';
+
+  @override
+  String get shellSettingsSystem => '系统';
+
+  @override
+  String get shellSettingsSharing => '共享与权限';
+
+  @override
+  String get shellSettingsNotifications => '通知';
+
+  @override
+  String get shellSettingsAbout => '关于';
+
+  @override
+  String get shellSettingsClipboardNotifications => '剪贴板和通知';
+
+  @override
+  String get shellSettingsAppearance => '外观';
+
+  @override
+  String get shellSettingsAppearanceAuto => '自动';
+
+  @override
+  String get shellSettingsAppearanceLight => '浅色';
+
+  @override
+  String get shellSettingsAppearanceDark => '深色';
+
+  @override
+  String get shellSettingsLanguage => '语言';
+
+  @override
+  String get shellSettingsSaveTo => '文件保存到';
+
+  @override
+  String get shellSettingsChange => '更改…';
+
+  @override
+  String get shellSettingsCast => '接收电视投屏';
+
+  @override
+  String get shellSettingsKeepAlive => '后台保持连接';
+
+  @override
+  String get shellSettingsScreenshotEnabled => '启用截图快捷键';
+
+  @override
+  String get shellSettingsPressShortcut => '按下快捷键…';
+
+  @override
+  String get shellSettingsAllowClipboard => '允许访问剪贴板';
+
+  @override
+  String get shellSettingsAutoClipboard => '自动同步剪贴板';
+
+  @override
+  String get shellSettingsPlaybackGain => '播放别处声音的增益';
+
+  @override
+  String get shellSettingsCopyCode => '验证码写入剪贴板';
+
+  @override
+  String get shellSettingsSharingNote => '增益只影响这台播放的声音，过高可能失真。滚轮速度只影响这台被控制时。';
+
+  @override
+  String get shellSettingsGainHint => '过高可能失真';
+
+  @override
+  String get shellSettingsVersion => '版本';
+
+  @override
+  String get shellSettingsVersionChecking => '正在检查…';
+
+  @override
+  String get shellSettingsQrAndAddress => '二维码和地址';
+
+  @override
+  String shellSettingsMultiplier(String value) {
+    return '${value}x';
+  }
+
+  @override
+  String shellSettingsVersionLatest(String version) {
+    return '$version · 已是最新';
+  }
+
+  @override
+  String shellSettingsVersionAvailable(String version) {
+    return '有新版本 $version';
+  }
+
+  @override
+  String shellSettingsVersionDownloading(int progress) {
+    return '下载中 $progress%';
+  }
+
+  @override
+  String shellSettingsAboutVersion(String version) {
+    return '版本 $version';
+  }
+
+  @override
+  String shellSettingsLinksOn(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个开启中',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get soundHeroIdleTitle => '放到其他设备';
+
+  @override
+  String get soundHeroIdleBody => '选几台设备，它们会一起响。';
+
+  @override
+  String soundHeroPlaying(int count) {
+    return '正在放到 $count 台设备';
+  }
+
+  @override
+  String get soundChannelLeft => '左';
+
+  @override
+  String get soundChannelRight => '右';
+
+  @override
+  String get soundShareThisDevice => '共享这台的声音';
+
+  @override
+  String get soundMemberStopped => '已停止';
+
+  @override
+  String get soundMemberNotConnected => '未连接';
+
+  @override
+  String soundMemberFailed(String reason) {
+    return '没有放出来 · $reason';
+  }
+
+  @override
+  String get soundMemberBusy => '它在放别处的声音';
+
+  @override
+  String get soundMemberSoloOnly => '只能单独放';
+
+  @override
+  String soundSyncNumbers(
+    String network,
+    String jitter,
+    String buffer,
+    int late,
+  ) {
+    return '网络 ${network}ms · 抖动 ${jitter}ms · 缓冲 ${buffer}ms · 晚包 $late';
+  }
+
+  @override
+  String get soundSyncNumbersPending => '网络 — · 抖动 — · 缓冲 — · 晚包 —';
+
+  @override
+  String get soundPermissionNeeded => '需要允许屏幕与系统录音';
+
+  @override
+  String soundCheckLabel(String device) {
+    return '把声音放到 $device';
+  }
+
+  @override
+  String soundChannelLabel(String device, String channel) {
+    return '$device 的声道：$channel';
+  }
+
+  @override
+  String get soundNoDevices => '没有连着的设备';
+
+  @override
+  String soundSinkTitle(String device) {
+    return '正在播放 $device 的声音';
+  }
+
+  @override
+  String get soundSinkHint => '要换来源，先断开';
+
+  @override
+  String get soundSinkPaused => '已暂停';
+
+  @override
+  String get soundSinkResuming => '正在恢复…';
+
+  @override
+  String get soundGain => '增益';
+
+  @override
+  String soundGainValue(String value) {
+    return '${value}x';
+  }
+
+  @override
+  String get soundGainLabel => '这台的播放增益';
+
+  @override
+  String get soundResume => '继续';
+
+  @override
+  String get shareOpenSettings => '去开启';
+
+  @override
+  String get inputHintIdle => '拖动屏幕来排列。指针从相接的边过去。';
+
+  @override
+  String inputHintExit(String shortcut) {
+    return '按 $shortcut 收回键鼠';
+  }
+
+  @override
+  String get inputStatusWaiting => '等待确认';
+
+  @override
+  String get inputStatusNotConnected => '没有连上';
+
+  @override
+  String get inputSideRight => '在右边';
+
+  @override
+  String get inputSideLeft => '在左边';
+
+  @override
+  String get inputSideAbove => '在上面';
+
+  @override
+  String get inputSideBelow => '在下面';
+
+  @override
+  String get inputSideElsewhere => '接在别的屏幕旁';
+
+  @override
+  String inputScreenCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 块屏幕',
+      two: '两块屏幕',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String inputResolution(int width, int height) {
+    return '$width×$height';
+  }
+
+  @override
+  String inputDetail(String resolution, String place) {
+    return '$resolution · $place';
+  }
+
+  @override
+  String get inputRemove => '移出';
+
+  @override
+  String get inputReasonPeerNotTrusting => '它还没有信任这台';
+
+  @override
+  String get inputReasonNotTrusted => '这台还没有信任它';
+
+  @override
+  String get inputReasonUnsupported => '它的版本不支持';
+
+  @override
+  String get inputReasonPeerPermission => '它还没有允许被控制';
+
+  @override
+  String get inputReasonBusy => '它现在不能被控制';
+
+  @override
+  String get inputReasonBlocked => '它接在没连上的屏幕后面';
+
+  @override
+  String get inputCandidateUnsupported => '不支持';
+
+  @override
+  String get inputPermissionNeeded => '需要允许辅助功能';
+
+  @override
+  String inputControlledTitle(String device) {
+    return '$device 正在控制这台';
+  }
+
+  @override
+  String get inputControlledHint => '要控制别的电脑，先停止。';
+
+  @override
+  String get inputSwitchLabel => '键鼠共享';
+
+  @override
+  String inputScreenLabel(String device, String detail) {
+    return '$device 的屏幕，$detail';
+  }
+
+  @override
+  String inputAddLabel(String device) {
+    return '把 $device 加入键鼠共享';
+  }
+
+  @override
+  String get shellIslandFinished => '已完成';
+
+  @override
+  String get shellPaletteEmpty => '没有找到';
+
+  @override
+  String get shellLinksServiceOff => '文件服务已关闭';
+
+  @override
+  String get shellLinksServiceIdle => '没有开启的链接，服务没有运行';
+
+  @override
+  String get shellLinksFoot =>
+      '对方不用装 Whisper，在同一局域网用浏览器打开就能下载。走的是普通 HTTP，密码只防止别人随意打开。';
+
+  @override
+  String get shellLinksEmptyTitle => '还没有链接';
+
+  @override
+  String get shellLinksEmptyBody => '选一些文件，生成一个链接。对方不用装 Whisper，用浏览器打开就能下载。';
+
+  @override
+  String get shellLinksChoose => '选择文件';
+
+  @override
+  String get shellLinksNew => '新建';
+
+  @override
+  String get shellLinkOff => '已关闭';
+
+  @override
+  String get shellLinkMissing => '有些文件不在原来的位置了';
+
+  @override
+  String shellLinkVisits(int count) {
+    return '$count 次访问';
+  }
+
+  @override
+  String shellLinkDownloads(int count) {
+    return '$count 次下载';
+  }
+
+  @override
+  String shellLinkVisitsCount(int count) {
+    return '$count 次';
+  }
+
+  @override
+  String get shellLinkEnabled => '开启';
+
+  @override
+  String get shellLinkPassword => '密码';
+
+  @override
+  String get shellLinkPasswordSet => '已设置';
+
+  @override
+  String get shellLinkPasswordNone => '没有';
+
+  @override
+  String get shellLinkVisitsLabel => '访问';
+
+  @override
+  String get shellLinkDownloadsLabel => '下载';
+
+  @override
+  String get shellLinkDeleted => '链接已删除';
+
+  @override
+  String get shellMore => '更多';
+
+  @override
+  String shellFilesCount(int count) {
+    return '$count 项';
+  }
+
+  @override
+  String get shellFilesSendTo => '发到…';
+
+  @override
+  String get shellFilesCopyHere => '拷到这台';
+
+  @override
+  String shellFilesAskOnDevice(String device) {
+    return '请在 $device 上点允许';
+  }
+
+  @override
+  String shellFilesDenied(String device) {
+    return '$device 拒绝了';
+  }
+
+  @override
+  String get shellAppsMoving => '正在流转';
+
+  @override
+  String shellAppsRunsOn(String device) {
+    return '运行于 $device，显示于这台';
+  }
+
+  @override
+  String get shellAppsEnd => '结束';
+
+  @override
+  String shellAppsOn(String device) {
+    return '$device 上的应用';
+  }
+
+  @override
+  String shellSettingsAppsSelected(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已选择 $count 个',
+      zero: '尚未选择',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get shellTrayClipboard => '剪贴板';
+
+  @override
+  String get shellTrayClipboardEmpty => '剪贴板是空的';
+
+  @override
+  String get shellTrayScreenshot => '截图';
+
+  @override
+  String get shellTrayRecent => '最近的剪贴板';
+
+  @override
+  String get shellTrayOpen => '打开 Whisper';
+
+  @override
+  String get shellTrayNoDevice => '没有已连接的设备';
+
+  @override
+  String get shellTraySoundOff => '关';
+
+  @override
+  String shellTrayFrom(String device, String when) {
+    return '$device · $when';
+  }
+
+  @override
+  String get shellTrayThisDevice => '这台';
+
+  @override
+  String shellTrayPlaying(String device) {
+    return '正在播放 $device 的声音';
+  }
+
+  @override
+  String shellTrayControlled(String device) {
+    return '$device 在控制这台';
+  }
+
+  @override
+  String get shellTrayInputOn => '已开启';
+
+  @override
+  String shellIslandPlayingOn(String devices) {
+    return '声音放到 $devices';
+  }
+
+  @override
+  String shellIslandControlling(String device) {
+    return '正在控制 $device';
+  }
+
+  @override
+  String get shellToday => '今天';
+
+  @override
+  String get shellYesterday => '昨天';
+
+  @override
+  String get shellTraySendClipboardTo => '发送剪贴板到';
+
+  @override
+  String get shellTraySendFileTo => '发送文件到';
+
+  @override
+  String get shellTrayPlayOn => '声音放到';
+
+  @override
+  String get phoneConnectQrHint => '用另一台设备扫这个二维码';
+
+  @override
+  String get phoneConnectScanHint => '对准另一台设备上的二维码';
+
+  @override
+  String get phoneConnectCopyLink => '拷贝连接链接';
+
+  @override
+  String get phoneConnectCopied => '连接链接已拷贝';
+
+  @override
+  String get phoneConnectCopyFailed => '没拷贝成功，再试一次';
+
+  @override
+  String get phoneConnectOpenSettings => '去开启';
+
+  @override
+  String get phonePairApprove => '数字相同，配对';
+
+  @override
+  String get pickerNoDevices => '没有其他已连接的设备';
+
+  @override
+  String pickerSendFile(String name) {
+    return '把「$name」发到';
+  }
+
+  @override
+  String pickerSendItems(int count) {
+    return '把 $count 项发到';
+  }
+
+  @override
+  String get pickerSendText => '把这段文字发到';
+
+  @override
+  String phoneFilesCopied(int count) {
+    return '已拷贝 $count 项，到要放的文件夹里粘贴';
+  }
+
+  @override
+  String get phoneConnectPort => '端口';
+
+  @override
+  String shellLinkCreateTitle(String name) {
+    return '共享「$name」';
+  }
+
+  @override
+  String get shellLinkCreateBody => '同一局域网的设备用浏览器打开就能下载。';
+
+  @override
+  String get shellLinkPasswordOptional => '密码（可不填）';
+
+  @override
+  String shellAppsShownOn(String device) {
+    return '运行于这台，显示于 $device';
+  }
+
+  @override
+  String get shellAppsBringBack => '拿回来';
+
+  @override
+  String get shellManualConnectTitle => '输入地址连接';
+
+  @override
+  String get shellManualConnectField => '地址和端口';
+
+  @override
+  String get shellLinksChooseFolder => '选择文件夹';
 }

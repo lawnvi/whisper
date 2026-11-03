@@ -532,10 +532,13 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
     }
   }
 
+  /// A target that failed keeps its closed runtime until it is asked for again:
+  /// name it in [retryPeerIds] to send it a new offer.
   Future<bool> updateControllerWorkspaceRoutes({
     required List<RemoteInputWorkspaceTargetRequest> targets,
     required List<RemoteInputWorkspaceRoute> workspaceRoutes,
     required RemoteInputPeerControlSender sendControlTo,
+    Set<String> retryPeerIds = const <String>{},
   }) async {
     if (!_snapshot.isControllerLive) {
       return false;
@@ -572,6 +575,13 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
 
     for (final target in targets) {
       var runtime = _targets[target.peerId];
+      if (runtime != null &&
+          !runtime.snapshot.isLive &&
+          retryPeerIds.contains(target.peerId)) {
+        await _disposeTarget(runtime);
+        if (generation != _lifecycle.generation) return false;
+        runtime = null;
+      }
       if (runtime == null) {
         runtime = _createTargetRuntime(
           sourcePeerId: _snapshot.sourcePeerId,

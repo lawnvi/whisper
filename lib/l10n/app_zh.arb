@@ -558,14 +558,18 @@
   "currentVersion": "当前版本 {version}",
   "@currentVersion": {
     "placeholders": {
-      "version": {"type": "String"}
+      "version": {
+        "type": "String"
+      }
     }
   },
   "checkingForUpdates": "正在检查更新…",
   "updateAvailableVersion": "发现新版本 {version}",
   "@updateAvailableVersion": {
     "placeholders": {
-      "version": {"type": "String"}
+      "version": {
+        "type": "String"
+      }
     }
   },
   "updateUpToDate": "已是最新版本",
@@ -573,14 +577,20 @@
   "updateAvailableTitle": "发现新版本 {version}",
   "@updateAvailableTitle": {
     "placeholders": {
-      "version": {"type": "String"}
+      "version": {
+        "type": "String"
+      }
     }
   },
   "updateAvailableBody": "当前版本 {currentVersion}，可更新到 {latestVersion}。安装前会校验 GitHub 提供的文件哈希。",
   "@updateAvailableBody": {
     "placeholders": {
-      "currentVersion": {"type": "String"},
-      "latestVersion": {"type": "String"}
+      "currentVersion": {
+        "type": "String"
+      },
+      "latestVersion": {
+        "type": "String"
+      }
     }
   },
   "downloadAndInstallUpdate": "更新",
@@ -588,7 +598,9 @@
   "downloadingUpdate": "正在下载 {progress}%",
   "@downloadingUpdate": {
     "placeholders": {
-      "progress": {"type": "int"}
+      "progress": {
+        "type": "int"
+      }
     }
   },
   "updateInstallerOpened": "更新包已校验，已交给系统安装器",
@@ -758,7 +770,11 @@
   "quickSendNoConnectedDevices": "还没有已连接的设备，连接后即可发送",
   "quickSendMoreFiles": "另有 {count} 个文件",
   "@quickSendMoreFiles": {
-    "placeholders": { "count": { "type": "int" } }
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   },
   "quickSendLater": "稍后",
   "quickSendSend": "发送",
@@ -805,7 +821,11 @@
   "desktopQuickSendTargetNeedsReselection": "目标设备身份已变化或不再可信，内容已保留，请重新选择",
   "chatTimestampYesterday": "昨天 {time}",
   "@chatTimestampYesterday": {
-    "placeholders": { "time": { "type": "String" } }
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
   },
   "messageLinkOpenFailed": "无法打开此链接",
   "connectFirstDevice": "连接你的第一台设备",
@@ -2636,5 +2656,600 @@
         "type": "String"
       }
     }
-  }
+  },
+  "shellRowConnecting": "正在连接…",
+  "shellRowNearbyUnpaired": "在附近 · 可以配对",
+  "shellRowNearby": "在附近",
+  "shellRowOffline": "离线",
+  "shellRowOfflineSince": "离线 · {time}",
+  "@shellRowOfflineSince": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "shellRowSoundHere": "声音放到这台",
+  "shellRowControllingThis": "正在控制这台",
+  "shellRowPointerThere": "键鼠正在控制它",
+  "shellRowPlayingOurs": "放着这台的声音",
+  "shellRowWindows": "{count} 个窗口",
+  "@shellRowWindows": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shellTabChat": "对话",
+  "shellTabFiles": "文件",
+  "shellTabApps": "应用",
+  "shellDeviceInfo": "设备信息",
+  "shellSearch": "搜索",
+  "shellAddDevice": "连接新设备",
+  "shellSound": "声音",
+  "shellInput": "键鼠",
+  "shellShareLinks": "共享链接",
+  "shellSettings": "设置",
+  "shellFirstDevice": "连接第一台设备",
+  "shellConnectDevice": "连接设备",
+  "shellNotConnected": "{device} 没有连接",
+  "@shellNotConnected": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "shellNotConnectedFiles": "连接后可以浏览它的文件。",
+  "shellNotConnectedApps": "连接后可以看到它的窗口和应用。",
+  "shellConnect": "连接",
+  "shellConnecting": "正在连接…",
+  "shellNearbyTitle": "{device} 在附近",
+  "@shellNearbyTitle": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "shellPairHint": "连接后，两台设备会显示相同的 6 位数字。",
+  "shellComposerOffline": "连接 {device} 后可以发送",
+  "@shellComposerOffline": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "shellSelfQrHint": "另一台设备扫这个二维码就能连上这台",
+  "shellSelfNoLan": "这台不在局域网里，其他设备发现不了它",
+  "shellSelfAddress": "地址",
+  "shellSelfFingerprint": "身份指纹",
+  "shellEnterAddress": "输入地址…",
+  "shellDone": "完成",
+  "shellWindowMinimize": "最小化",
+  "shellWindowMaximize": "最大化",
+  "shellWindowRestore": "还原",
+  "shellWindowClose": "关闭",
+  "shellCardMenu": "设备卡片",
+  "shellCardConnected": "已连接",
+  "shellCardUnpaired": "还没有配对",
+  "shellCardCan": "{device} 可以",
+  "@shellCardCan": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "shellCardTrust": "不用确认就连上这台",
+  "shellCardBrowse": "浏览我的文件",
+  "shellCardChange": "修改我的文件",
+  "shellCardDetails": "详细信息",
+  "shellCardAddress": "地址",
+  "shellCardDiagnostics": "连接诊断",
+  "shellCardDisconnect": "断开连接",
+  "shellCardRemove": "移除这台设备",
+  "shellCardSound": "声音",
+  "shellCardInput": "键鼠",
+  "shellCardClipboard": "剪贴板",
+  "shellCardMount": "挂载",
+  "shellOn": "开",
+  "shellOff": "关",
+  "shellPhoneDevices": "设备",
+  "shellPhoneControl": "控制",
+  "shellPhoneSyncClipboard": "把剪贴板同步给 {device}",
+  "@shellPhoneSyncClipboard": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "shellPhoneSearchHistory": "搜索聊天记录",
+  "shellLanDown": "局域网断开了",
+  "shellComposerHint": "发给 {device}",
+  "@shellComposerHint": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "shellPhoneNeedsConnection": "连接后可用",
+  "shellPaletteDevice": "设备",
+  "shellPaletteAction": "动作",
+  "shellPalettePage": "页面",
+  "shellPaletteMessage": "消息",
+  "shellPalettePlayOn": "把这台的声音放到 {device}",
+  "@shellPalettePlayOn": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "shellPaletteControl": "用这台的键鼠控制 {device}",
+  "@shellPaletteControl": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "shellSettingsGeneral": "通用",
+  "shellSettingsConnection": "连接",
+  "shellSettingsSystem": "系统",
+  "shellSettingsSharing": "共享与权限",
+  "shellSettingsNotifications": "通知",
+  "shellSettingsAbout": "关于",
+  "shellSettingsClipboardNotifications": "剪贴板和通知",
+  "shellSettingsAppearance": "外观",
+  "shellSettingsAppearanceAuto": "自动",
+  "shellSettingsAppearanceLight": "浅色",
+  "shellSettingsAppearanceDark": "深色",
+  "shellSettingsLanguage": "语言",
+  "shellSettingsSaveTo": "文件保存到",
+  "shellSettingsChange": "更改…",
+  "shellSettingsCast": "接收电视投屏",
+  "shellSettingsKeepAlive": "后台保持连接",
+  "shellSettingsScreenshotEnabled": "启用截图快捷键",
+  "shellSettingsPressShortcut": "按下快捷键…",
+  "shellSettingsAllowClipboard": "允许访问剪贴板",
+  "shellSettingsAutoClipboard": "自动同步剪贴板",
+  "shellSettingsPlaybackGain": "播放别处声音的增益",
+  "shellSettingsCopyCode": "验证码写入剪贴板",
+  "shellSettingsSharingNote": "增益只影响这台播放的声音，过高可能失真。滚轮速度只影响这台被控制时。",
+  "shellSettingsGainHint": "过高可能失真",
+  "shellSettingsVersion": "版本",
+  "shellSettingsVersionChecking": "正在检查…",
+  "shellSettingsQrAndAddress": "二维码和地址",
+  "shellSettingsMultiplier": "{value}x",
+  "@shellSettingsMultiplier": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "shellSettingsVersionLatest": "{version} · 已是最新",
+  "@shellSettingsVersionLatest": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "shellSettingsVersionAvailable": "有新版本 {version}",
+  "@shellSettingsVersionAvailable": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "shellSettingsVersionDownloading": "下载中 {progress}%",
+  "@shellSettingsVersionDownloading": {
+    "placeholders": {
+      "progress": {
+        "type": "int"
+      }
+    }
+  },
+  "shellSettingsAboutVersion": "版本 {version}",
+  "@shellSettingsAboutVersion": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "shellSettingsLinksOn": "{count, plural, other{{count} 个开启中}}",
+  "@shellSettingsLinksOn": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "soundHeroIdleTitle": "放到其他设备",
+  "soundHeroIdleBody": "选几台设备，它们会一起响。",
+  "soundHeroPlaying": "正在放到 {count} 台设备",
+  "@soundHeroPlaying": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "soundChannelLeft": "左",
+  "soundChannelRight": "右",
+  "soundShareThisDevice": "共享这台的声音",
+  "soundMemberStopped": "已停止",
+  "soundMemberNotConnected": "未连接",
+  "soundMemberFailed": "没有放出来 · {reason}",
+  "@soundMemberFailed": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "soundMemberBusy": "它在放别处的声音",
+  "soundMemberSoloOnly": "只能单独放",
+  "soundSyncNumbers": "网络 {network}ms · 抖动 {jitter}ms · 缓冲 {buffer}ms · 晚包 {late}",
+  "@soundSyncNumbers": {
+    "placeholders": {
+      "network": {
+        "type": "String"
+      },
+      "jitter": {
+        "type": "String"
+      },
+      "buffer": {
+        "type": "String"
+      },
+      "late": {
+        "type": "int"
+      }
+    }
+  },
+  "soundSyncNumbersPending": "网络 — · 抖动 — · 缓冲 — · 晚包 —",
+  "soundPermissionNeeded": "需要允许屏幕与系统录音",
+  "soundCheckLabel": "把声音放到 {device}",
+  "@soundCheckLabel": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "soundChannelLabel": "{device} 的声道：{channel}",
+  "@soundChannelLabel": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      },
+      "channel": {
+        "type": "String"
+      }
+    }
+  },
+  "soundNoDevices": "没有连着的设备",
+  "soundSinkTitle": "正在播放 {device} 的声音",
+  "@soundSinkTitle": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "soundSinkHint": "要换来源，先断开",
+  "soundSinkPaused": "已暂停",
+  "soundSinkResuming": "正在恢复…",
+  "soundGain": "增益",
+  "soundGainValue": "{value}x",
+  "@soundGainValue": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "soundGainLabel": "这台的播放增益",
+  "soundResume": "继续",
+  "shareOpenSettings": "去开启",
+  "inputHintIdle": "拖动屏幕来排列。指针从相接的边过去。",
+  "inputHintExit": "按 {shortcut} 收回键鼠",
+  "@inputHintExit": {
+    "placeholders": {
+      "shortcut": {
+        "type": "String"
+      }
+    }
+  },
+  "inputStatusWaiting": "等待确认",
+  "inputStatusNotConnected": "没有连上",
+  "inputSideRight": "在右边",
+  "inputSideLeft": "在左边",
+  "inputSideAbove": "在上面",
+  "inputSideBelow": "在下面",
+  "inputSideElsewhere": "接在别的屏幕旁",
+  "inputScreenCount": "{count, plural, =2{两块屏幕} other{{count} 块屏幕}}",
+  "@inputScreenCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "inputResolution": "{width}×{height}",
+  "@inputResolution": {
+    "placeholders": {
+      "width": {
+        "type": "int"
+      },
+      "height": {
+        "type": "int"
+      }
+    }
+  },
+  "inputDetail": "{resolution} · {place}",
+  "@inputDetail": {
+    "placeholders": {
+      "resolution": {
+        "type": "String"
+      },
+      "place": {
+        "type": "String"
+      }
+    }
+  },
+  "inputRemove": "移出",
+  "inputReasonPeerNotTrusting": "它还没有信任这台",
+  "inputReasonNotTrusted": "这台还没有信任它",
+  "inputReasonUnsupported": "它的版本不支持",
+  "inputReasonPeerPermission": "它还没有允许被控制",
+  "inputReasonBusy": "它现在不能被控制",
+  "inputReasonBlocked": "它接在没连上的屏幕后面",
+  "inputCandidateUnsupported": "不支持",
+  "inputPermissionNeeded": "需要允许辅助功能",
+  "inputControlledTitle": "{device} 正在控制这台",
+  "@inputControlledTitle": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "inputControlledHint": "要控制别的电脑，先停止。",
+  "inputSwitchLabel": "键鼠共享",
+  "inputScreenLabel": "{device} 的屏幕，{detail}",
+  "@inputScreenLabel": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      },
+      "detail": {
+        "type": "String"
+      }
+    }
+  },
+  "inputAddLabel": "把 {device} 加入键鼠共享",
+  "@inputAddLabel": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "shellIslandFinished": "已完成",
+  "shellPaletteEmpty": "没有找到",
+  "shellLinksServiceOff": "文件服务已关闭",
+  "shellLinksServiceIdle": "没有开启的链接，服务没有运行",
+  "shellLinksFoot": "对方不用装 Whisper，在同一局域网用浏览器打开就能下载。走的是普通 HTTP，密码只防止别人随意打开。",
+  "shellLinksEmptyTitle": "还没有链接",
+  "shellLinksEmptyBody": "选一些文件，生成一个链接。对方不用装 Whisper，用浏览器打开就能下载。",
+  "shellLinksChoose": "选择文件",
+  "shellLinksNew": "新建",
+  "shellLinkOff": "已关闭",
+  "shellLinkMissing": "有些文件不在原来的位置了",
+  "shellLinkVisits": "{count} 次访问",
+  "@shellLinkVisits": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shellLinkDownloads": "{count} 次下载",
+  "@shellLinkDownloads": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shellLinkVisitsCount": "{count} 次",
+  "@shellLinkVisitsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shellLinkEnabled": "开启",
+  "shellLinkPassword": "密码",
+  "shellLinkPasswordSet": "已设置",
+  "shellLinkPasswordNone": "没有",
+  "shellLinkVisitsLabel": "访问",
+  "shellLinkDownloadsLabel": "下载",
+  "shellLinkDeleted": "链接已删除",
+  "shellMore": "更多",
+  "shellFilesCount": "{count} 项",
+  "@shellFilesCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shellFilesSendTo": "发到…",
+  "shellFilesCopyHere": "拷到这台",
+  "shellFilesAskOnDevice": "请在 {device} 上点允许",
+  "@shellFilesAskOnDevice": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "shellFilesDenied": "{device} 拒绝了",
+  "@shellFilesDenied": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "shellAppsMoving": "正在流转",
+  "shellAppsRunsOn": "运行于 {device}，显示于这台",
+  "@shellAppsRunsOn": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "shellAppsEnd": "结束",
+  "shellAppsOn": "{device} 上的应用",
+  "@shellAppsOn": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "shellSettingsAppsSelected": "{count, plural, =0{尚未选择} other{已选择 {count} 个}}",
+  "@shellSettingsAppsSelected": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shellTrayClipboard": "剪贴板",
+  "shellTrayClipboardEmpty": "剪贴板是空的",
+  "shellTrayScreenshot": "截图",
+  "shellTrayRecent": "最近的剪贴板",
+  "shellTrayOpen": "打开 Whisper",
+  "shellTrayNoDevice": "没有已连接的设备",
+  "shellTraySoundOff": "关",
+  "shellTrayFrom": "{device} · {when}",
+  "shellTrayThisDevice": "这台",
+  "@shellTrayFrom": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      },
+      "when": {
+        "type": "String"
+      }
+    }
+  },
+  "shellTrayPlaying": "正在播放 {device} 的声音",
+  "shellTrayControlled": "{device} 在控制这台",
+  "shellTrayInputOn": "已开启",
+  "@shellTrayPlaying": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "@shellTrayControlled": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "shellIslandPlayingOn": "声音放到 {devices}",
+  "shellIslandControlling": "正在控制 {device}",
+  "@shellIslandPlayingOn": {
+    "placeholders": {
+      "devices": {
+        "type": "String"
+      }
+    }
+  },
+  "@shellIslandControlling": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "shellToday": "今天",
+  "shellYesterday": "昨天",
+  "shellTraySendClipboardTo": "发送剪贴板到",
+  "shellTraySendFileTo": "发送文件到",
+  "shellTrayPlayOn": "声音放到",
+  "phoneConnectQrHint": "用另一台设备扫这个二维码",
+  "phoneConnectScanHint": "对准另一台设备上的二维码",
+  "phoneConnectCopyLink": "拷贝连接链接",
+  "phoneConnectCopied": "连接链接已拷贝",
+  "phoneConnectCopyFailed": "没拷贝成功，再试一次",
+  "phoneConnectOpenSettings": "去开启",
+  "phonePairApprove": "数字相同，配对",
+  "pickerNoDevices": "没有其他已连接的设备",
+  "pickerSendFile": "把「{name}」发到",
+  "@pickerSendFile": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "pickerSendItems": "把 {count} 项发到",
+  "@pickerSendItems": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "pickerSendText": "把这段文字发到",
+  "phoneFilesCopied": "已拷贝 {count} 项，到要放的文件夹里粘贴",
+  "@phoneFilesCopied": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "phoneConnectPort": "端口",
+  "shellLinkCreateTitle": "共享「{name}」",
+  "@shellLinkCreateTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "shellLinkCreateBody": "同一局域网的设备用浏览器打开就能下载。",
+  "shellLinkPasswordOptional": "密码（可不填）",
+  "shellAppsShownOn": "运行于这台，显示于 {device}",
+  "@shellAppsShownOn": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "shellAppsBringBack": "拿回来",
+  "shellManualConnectTitle": "输入地址连接",
+  "shellManualConnectField": "地址和端口",
+  "shellLinksChooseFolder": "选择文件夹"
 }

@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -54,7 +55,15 @@ import 'package:whisper/state/transfer_speed_meter.dart';
 import 'package:whisper/state/pairing_request.dart';
 import 'package:whisper/state/peer_endpoint.dart';
 import 'package:whisper/theme/app_theme.dart';
+import 'package:whisper/theme/whisper_ui.dart';
+import 'package:whisper/new_ui/shell/shell_device_card.dart';
+import 'package:whisper/new_ui/shell/shell_parts.dart';
+import 'package:whisper/new_ui/shell/shell_phone_device.dart';
+import 'package:whisper/remote_input/mobile_control_route.dart';
+import 'package:whisper/widget/island/island_home.dart';
+import 'package:whisper/theme/whisper_icons.dart';
 import 'package:whisper/widget/chat_composer.dart';
+import 'package:whisper/widget/measure_size.dart';
 import 'package:whisper/widget/chat_message_list.dart';
 import 'package:whisper/widget/desktop_file_drag_source.dart';
 import 'package:whisper/widget/file_message_card.dart';
@@ -100,6 +109,9 @@ void _logConversationFailure(ConversationOperationKind kind, Object error) {
 class SendMessageScreen extends StatefulWidget {
   final DeviceData device;
   final bool embedded;
+
+  /// In the redesigned shell, whose toolbar replaces this page's own header.
+  final bool chromeless;
   final VoidCallback? onBack;
   final Future<void> Function(String uid)? onDeviceDeleted;
 
@@ -107,6 +119,7 @@ class SendMessageScreen extends StatefulWidget {
     super.key,
     required this.device,
     this.embedded = false,
+    this.chromeless = false,
     this.onBack,
     this.onDeviceDeleted,
   });
@@ -177,9 +190,15 @@ class _SendMessageScreen extends State<SendMessageScreen>
   bool _isLocalhost = false;
   bool _isLoading = false; // loading file
   bool get embedded => widget.embedded;
+
+  /// Files are being dragged over the conversation.
+  bool _dropHover = false;
   bool _resumeReconnectPending = false;
   bool _pickerReconnectPending = false;
   bool _composerSendInFlight = false;
+
+  /// The floating composer, measured: a long draft pushes the messages up.
+  final _composerHeight = ValueNotifier<double?>(null);
   bool _messageSelectionActive = false;
   int _clipboardPasteGeneration = 0;
   List<ClipboardFileDraft> _pendingClipboardFiles =
@@ -268,6 +287,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
     _scrollController.dispose();
     _composerFocusNode.dispose();
     _textController.dispose();
+    _composerHeight.dispose();
     super.dispose();
   }
 
@@ -727,7 +747,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
     final activeTransfer = _activeTransferSnapshot;
     final content = Column(
       children: [
-        if (embedded) _buildEmbeddedHeader(isDark),
+        if (embedded && !widget.chromeless) _buildEmbeddedHeader(isDark),
         if (_history.loading)
           const SizedBox(
             height: 28,
@@ -745,7 +765,11 @@ class _SendMessageScreen extends State<SendMessageScreen>
             icon: const Icon(Icons.refresh_rounded, size: 18),
             label: Text(l10n.historyLoadFailed),
           ),
-        if (activeTransfer?.state == FileTransferState.verifying)
+        // In the new UI progress is on the file card and the island, not across
+        // the top of the page.
+        if (whisperNewUi)
+          const SizedBox.shrink()
+        else if (activeTransfer?.state == FileTransferState.verifying)
           LinearProgressIndicator(
             minHeight: 3,
             color: colorScheme.primary,
@@ -758,46 +782,95 @@ class _SendMessageScreen extends State<SendMessageScreen>
                 LinearProgressIndicator(value: value, color: Colors.lightGreen),
           ),
         Expanded(
-          child: ChatMessageList(
-            buildFileMessage: _buildFileMessage,
-            buildTextMessage: _buildTextMessage,
-            controller: _scrollController,
-            listKey: key,
-            messages: messageList,
-            onOpenContainingFolder: (path) => openDir(path, parent: true),
-            onOpenFile: _openMessageFile,
-            onCopyText: copyToClipboard,
-            onCopyFile: _copyMessageFile,
-            onDeleteMessage: (message, {deleteFile = false}) =>
-                _deleteMessages([message], deleteFiles: deleteFile),
-            onDeleteMessages: _deleteMessages,
-            onSelectionModeChanged: (active) {
-              if (_messageSelectionActive == active) {
-                return;
-              }
-              setState(() => _messageSelectionActive = active);
-            },
-            selfUid: self?.uid,
+          child: ValueListenableBuilder<double?>(
+            valueListenable: _composerHeight,
+            builder: (context, composerHeight, _) => ChatMessageList(
+              composerHeight: composerHeight,
+              // A card in the list says how far it is: no need for the island.
+              buildFileMessage: (message, isOpponent) => IslandHome(
+                home: IslandHomes.message(message.uuid),
+                child: _buildFileMessage(message, isOpponent),
+              ),
+              buildTextMessage: _buildTextMessage,
+              controller: _scrollController,
+              listKey: key,
+              messages: messageList,
+              onOpenContainingFolder: (path) => openDir(path, parent: true),
+              onOpenFile: _openMessageFile,
+              onCopyText: copyToClipboard,
+              onCopyFile: _copyMessageFile,
+              onDeleteMessage: (message, {deleteFile = false}) =>
+                  _deleteMessages([message], deleteFiles: deleteFile),
+              onDeleteMessages: _deleteMessages,
+              onSelectionModeChanged: (active) {
+                if (_messageSelectionActive == active) {
+                  return;
+                }
+                setState(() => _messageSelectionActive = active);
+              },
+              selfUid: self?.uid,
+            ),
           ),
         ),
-        WhisperAnimatedReveal(
-          visible: !_messageSelectionActive && _canSendCurrentDevice,
-          child: !_messageSelectionActive && _canSendCurrentDevice
-              ? Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _buildComposer(isDark),
-                    if (!embedded) const SizedBox(height: 6),
-                  ],
-                )
-              : null,
-        ),
+        if (!whisperNewUi)
+          WhisperAnimatedReveal(
+            visible: !_messageSelectionActive && _canSendCurrentDevice,
+            child: !_messageSelectionActive && _canSendCurrentDevice
+                ? Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _buildComposer(isDark),
+                      if (!embedded) const SizedBox(height: 6),
+                    ],
+                  )
+                : null,
+          ),
       ],
     );
 
+    final body = whisperNewUi
+        ? LayoutBuilder(
+            builder: (context, box) {
+              // A phone's width, not a phone: beside a sidebar it floats in the
+              // middle, as on a desktop.
+              final touch = WhisperLayout.of(context).compact && !isDesktop();
+              return Stack(
+                children: [
+                  Positioned.fill(child: content),
+                  if (!_messageSelectionActive)
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: touch ? 24 : 16,
+                      child: MeasureSize(
+                        onChange: (size) => _composerHeight.value = size.height,
+                        child: SafeArea(
+                          top: false,
+                          child: Center(
+                            child: SizedBox(
+                              width: touch
+                                  ? box.maxWidth - 36
+                                  : math.min(620, box.maxWidth - 96),
+                              child: _buildComposer(isDark),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
+          )
+        : content;
     Widget base = embedded
-        ? Material(color: Colors.transparent, child: content)
-        : Scaffold(appBar: _buildStandaloneAppBar(isDark), body: content);
+        ? Material(color: Colors.transparent, child: body)
+        : Scaffold(
+            backgroundColor: whisperNewUi ? context.wc.content : null,
+            appBar: whisperNewUi
+                ? _buildNewStandaloneBar()
+                : _buildStandaloneAppBar(isDark),
+            body: body,
+          );
 
     if (isMobile()) {
       return base;
@@ -806,6 +879,12 @@ class _SendMessageScreen extends State<SendMessageScreen>
     return DropRegion(
       formats: const [Formats.fileUri],
       hitTestBehavior: HitTestBehavior.opaque,
+      onDropEnter: (_) {
+        if (whisperNewUi) setState(() => _dropHover = true);
+      },
+      onDropLeave: (_) {
+        if (whisperNewUi) setState(() => _dropHover = false);
+      },
       onDropOver: (event) {
         final canCopy = event.session.allowedOperations.contains(
           DropOperation.copy,
@@ -820,6 +899,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
             : DropOperation.none;
       },
       onPerformDrop: (event) async {
+        if (whisperNewUi && mounted) setState(() => _dropHover = false);
         final paths = await Future.wait(
           event.session.items.map(_readDroppedFilePath),
         );
@@ -831,7 +911,12 @@ class _SendMessageScreen extends State<SendMessageScreen>
         }
         unawaited(_handleFileDrop(paths.cast<String>()));
       },
-      child: base,
+      child: whisperNewUi
+          ? Stack(
+              fit: StackFit.expand,
+              children: [base, if (_dropHover) _buildDropFrame()],
+            )
+          : base,
     );
   }
 
@@ -893,6 +978,45 @@ class _SendMessageScreen extends State<SendMessageScreen>
         showAppToast(l10n.fileDropRejected, tone: AppToastTone.error);
       }
     }
+  }
+
+  /// surfaces.md「拖放发送」: a frame inset from the content, a capsule saying where
+  /// it goes, or why it cannot.
+  Widget _buildDropFrame() {
+    final c = context.wc;
+    const type = WhisperType(touch: false);
+    return IgnorePointer(
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            border: Border.all(color: c.accent, width: 3),
+            borderRadius: BorderRadius.circular(WhisperRadius.m),
+          ),
+          child: Center(
+            child: Container(
+              height: 36,
+              padding: const EdgeInsets.symmetric(horizontal: 18),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: c.accent,
+                borderRadius: BorderRadius.circular(WhisperRadius.capsule),
+              ),
+              child: Text(
+                _canSendCurrentDevice
+                    ? l10n.shellComposerHint(device.name)
+                    : l10n.shellComposerOffline(device.name),
+                style: TextStyle(
+                  fontSize: type.body,
+                  fontWeight: FontWeight.w500,
+                  color: c.onAccent,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   /// Sends a folder as one transfer. Scanning a large tree takes a moment,
@@ -958,6 +1082,167 @@ class _SendMessageScreen extends State<SendMessageScreen>
         _isConnectedSession ||
         device.around == true ||
         device.host.isNotEmpty;
+  }
+
+  /// surfaces.md「手机」: back, the name (which opens the device's page, so a long
+  /// one has the room), control where it applies, and ⋯ to the device's page.
+  PreferredSizeWidget _buildNewStandaloneBar() {
+    final c = context.wc;
+    const type = WhisperType(touch: true);
+    void openDevice() => unawaited(_openDevicePage());
+    Widget button(
+      WhisperGlyph glyph,
+      String label,
+      VoidCallback onTap, {
+      double size = 21,
+      double weight = 1.6,
+    }) => ShellIconButton(
+      glyph: glyph,
+      iconSize: size,
+      weight: weight,
+      touch: true,
+      color: c.accent,
+      label: label,
+      onTap: onTap,
+    );
+    final canControl =
+        supportsManualRemoteInputSource() &&
+        !_isLocalhost &&
+        _isConnectedSession &&
+        socketManager.supportsManualInputFor(device.uid);
+    return PreferredSize(
+      preferredSize: const Size.fromHeight(50),
+      child: SafeArea(
+        bottom: false,
+        child: SizedBox(
+          height: 50,
+          child: Row(
+            children: [
+              button(
+                WhisperGlyph.back,
+                l10n.back,
+                () {
+                  if (widget.onBack != null) {
+                    widget.onBack!();
+                    return;
+                  }
+                  Navigator.of(context).maybePop();
+                },
+                size: 20,
+                weight: 2,
+              ),
+              Expanded(
+                child: Pressable(
+                  onTap: openDevice,
+                  radius: WhisperRadius.xs,
+                  scale: 1,
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 6),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        device.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: type.head,
+                          height: 1.25,
+                          fontWeight: FontWeight.w600,
+                          color: c.ink,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              if (canControl)
+                button(
+                  WhisperGlyph.keyboard,
+                  l10n.mobileControlTitle,
+                  () => unawaited(_openMobileControl()),
+                ),
+              button(
+                WhisperGlyph.more,
+                l10n.deviceDetailsTitle,
+                openDevice,
+                size: 22,
+                weight: 2.6,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Control (when it is a computer), files and apps: the phone's way into what
+  /// a desktop shows as tabs. They stay in place while disconnected, dimmed.
+  List<ShellDeviceEntry> _phoneEntries() {
+    final on = _isConnectedSession;
+    void push(WidgetBuilder builder) => unawaited(
+      Navigator.push<void>(context, WhisperPageRoute<void>(builder: builder)),
+    );
+    return [
+      if (supportsManualRemoteInputSource() &&
+          !_isLocalhost &&
+          (!on || socketManager.supportsManualInputFor(device.uid)))
+        ShellDeviceEntry(
+          glyph: WhisperGlyph.keyboard,
+          title: l10n.shellPhoneControl,
+          onTap: on ? () => unawaited(_openMobileControl()) : null,
+        ),
+      ShellDeviceEntry(
+        glyph: WhisperGlyph.folder,
+        title: l10n.shellTabFiles,
+        onTap: on
+            ? () => push(
+                (_) => RemoteFilesPage(
+                  peerId: device.uid,
+                  deviceName: device.name,
+                ),
+              )
+            : null,
+      ),
+      ShellDeviceEntry(
+        glyph: WhisperGlyph.apps,
+        title: l10n.shellTabApps,
+        onTap: on
+            ? () => push((_) => FlowSpacePage(focusPeerId: device.uid))
+            : null,
+      ),
+    ];
+  }
+
+  Future<void> _openDevicePage() async {
+    await Navigator.push(
+      context,
+      WhisperPageRoute<void>(
+        builder: (context) => ShellPhoneDevicePage(
+          device: device,
+          connected: _isConnectedSession,
+          entries: _phoneEntries(),
+          onSearchHistory: _openTransferAssistant,
+          onDiagnostics: () => showAppToast(
+            _isConnectedSession
+                ? l10n.connectedNow
+                : l10n.deviceFeatureNeedsConnection,
+          ),
+          onDisconnect: () => socketManager.disconnectPeer(device.uid),
+          onRemove: (uid) async {
+            final delete = widget.onDeviceDeleted;
+            if (delete == null) {
+              await socketManager.deletePeer(uid);
+            } else {
+              await delete(uid);
+            }
+            if (context.mounted) {
+              Navigator.popUntil(context, (route) => route.isFirst);
+            }
+          },
+        ),
+      ),
+    );
+    await _refreshCurrentDeviceState();
   }
 
   PreferredSizeWidget _buildStandaloneAppBar(bool isDark) {
@@ -1291,73 +1576,11 @@ class _SendMessageScreen extends State<SendMessageScreen>
     ];
   }
 
-  void _sendMobileControl(RemoteInputControlMessage control) {
-    Future<void> stopIfCurrent() async {
-      if (_remoteInputCoordinator.state.sessionId == control.sessionId) {
-        await _remoteInputCoordinator.stopLocal();
-      }
-    }
-
-    unawaited(
-      socketManager
-          .sendRemoteInputControlTo(control.sinkPeerId, control)
-          .then<void>((sent) async {
-            if (!sent) await stopIfCurrent();
-          })
-          .catchError((Object _) => stopIfCurrent()),
-    );
-  }
-
   Future<void> _openMobileControl() => Navigator.push<void>(
     context,
     MaterialPageRoute<void>(
-      builder: (_) => MobileControlScreen(
-        peerId: device.uid,
-        peerName: device.name,
-        targets: () => [
-          for (final peerId in socketManager.connectedPeerIds)
-            if (socketManager.supportsManualInputFor(peerId))
-              MobileControlTarget(
-                peerId,
-                socketManager.remoteProfileFor(peerId)!.device.name,
-                platform: socketManager
-                    .remoteProfileFor(peerId)!
-                    .device
-                    .platform,
-              ),
-        ],
-        onStart: (peerId) async {
-          final local = self ?? await LocalSetting().instance();
-          final stored = await LocalDatabase().fetchDevice(peerId);
-          final target = socketManager.remoteProfileFor(peerId)?.device;
-          if (!socketManager.isConnectedTo(peerId) || target == null) {
-            throw MobileControlStartException(l10n.connectFailed);
-          }
-          if (stored?.auth != true ||
-              !socketManager.remotePeerTrustsPeer(peerId, local.uid)) {
-            throw MobileControlStartException(
-              l10n.remoteInputRequiresMutualTrust,
-            );
-          }
-          if (!socketManager.supportsManualInputFor(peerId)) {
-            throw MobileControlStartException(l10n.remoteInputPeerUnsupported);
-          }
-          await _remoteInputCoordinator.startSharingToConnectedPeer(
-            sourcePeerId: local.uid,
-            sinkPeerId: peerId,
-            sinkHost: target.host,
-            sinkPort: target.port,
-            mode: RemoteInputMode.manual,
-            releaseHotkey: '',
-            isMutuallyTrusted: true,
-            remoteCanInject: true,
-            sendControl: _sendMobileControl,
-          );
-        },
-        onStop: () => _remoteInputCoordinator.stopSharing(
-          sendControl: _sendMobileControl,
-        ),
-      ),
+      builder: (_) =>
+          mobileControlPage(device: device, self: self, l10n: l10n),
     ),
   );
 
@@ -1498,6 +1721,12 @@ class _SendMessageScreen extends State<SendMessageScreen>
       onClearClipboardFiles: _clearPendingClipboardFiles,
       onSendClipboardImages: _sendPendingClipboardImages,
       onRemoveClipboardImage: _removePendingClipboardImage,
+      composerHint: l10n.shellComposerHint(device.name),
+      disabledHint: l10n.shellComposerOffline(device.name),
+      connectLabel: _isConnecting ? l10n.shellConnecting : l10n.shellConnect,
+      onConnect: _canToggleConnection && !_isConnecting
+          ? _toggleConnection
+          : null,
     );
   }
 
@@ -2362,6 +2591,40 @@ class _SendMessageScreen extends State<SendMessageScreen>
       var data = jsonDecode(messageData.content ?? "{}");
       content = "【${data['app']}】${data['title']}\n${data['text']}";
     }
+    if (whisperNewUi) {
+      final c = context.wc;
+      final mine = !isOpponent;
+      final body = WhisperType(touch: !isDesktop()).body;
+      final style = TextStyle(
+        fontSize: body,
+        height: 1.45,
+        color: mine ? c.onAccent : c.ink,
+      );
+      return Align(
+        alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: mine ? c.accent : c.bubble,
+            borderRadius: BorderRadius.circular(WhisperRadius.bubble),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
+            child: MessageLinkText(
+              text: content,
+              style: style,
+              linkStyle: style.copyWith(
+                color: mine ? c.onAccent : c.accent,
+                decoration: TextDecoration.underline,
+                decorationColor: mine ? c.onAccent : c.accent,
+              ),
+              linksEnabled: !_messageSelectionActive,
+              onOpen: _openMessageLink,
+              textAlign: TextAlign.left,
+            ),
+          ),
+        ),
+      );
+    }
     final colorScheme = Theme.of(context).colorScheme;
     final palette = context.whisperPalette;
     final receivedBubbleColor = palette.messageIncoming;
@@ -2526,7 +2789,10 @@ class _SendMessageScreen extends State<SendMessageScreen>
       child: FileMessageCard(
         name: message.name,
         isFolder: isFolder,
-        failed: failed,
+        // Cancelled on purpose: it says so, without the warning colour.
+        failed:
+            failed &&
+            !(whisperNewUi && transfer?.state == FileTransferState.canceled),
         active: isActiveTransfer,
         verifying: transfer?.state == FileTransferState.verifying,
         progress: transfer?.progress ?? 0,
@@ -2585,12 +2851,17 @@ class _SendMessageScreen extends State<SendMessageScreen>
       name: message.name,
       enabled: _canDragFileMessage(message, transfer),
       child: Container(
+        // No bubble behind a picture: it stands on its own.
         decoration: BoxDecoration(
-          color: cardColor,
-          borderRadius: BorderRadius.circular(14),
+          color: whisperNewUi ? null : cardColor,
+          borderRadius: BorderRadius.circular(
+            whisperNewUi ? WhisperRadius.m : 14,
+          ),
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(
+            whisperNewUi ? WhisperRadius.m : 14,
+          ),
           child: showProgress && transfer.state != FileTransferState.verifying
               ? _buildAnimatedTransferProgress(
                   value: transfer.progress,

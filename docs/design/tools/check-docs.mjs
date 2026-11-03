@@ -4,7 +4,9 @@ import { fileURLToPath } from 'node:url';
 const R = fileURLToPath(new URL('../../../', import.meta.url)).replace(/[\\/]$/, '');
 const d = readFileSync(`${R}/DESIGN.md`, 'utf8'), p = readFileSync(`${R}/docs/design/whisper-ui-language.html`, 'utf8');
 const fm = d.split('---')[1], bad = [], symbols = new Set();
-const col = {}; for (const m of fm.matchAll(/^  ([a-z0-9-]+): "(#[0-9A-Fa-f]{6})"/gm)) col[m[1]] = m[2].toLowerCase();
+// Only `colors:`: the blocks after it (settings icons, the viewfinder) are not CSS variables in the prototype.
+const colorsBlock = fm.slice(fm.indexOf('colors:'), fm.indexOf('\noverlays:'));
+const col = {}; for (const m of colorsBlock.matchAll(/^  ([a-z0-9-]+): "(#[0-9A-Fa-f]{6})"/gm)) col[m[1]] = m[2].toLowerCase();
 const block = s => { const i = p.indexOf(s), j = p.indexOf('}', i); return p.slice(i, j); };
 const light = block(':root{'), dark = block(':root[data-theme=dark]{');
 const v = (b, n) => (b.match(new RegExp(`--${n}:(#[0-9a-f]{6})`)) || [])[1];

@@ -6,6 +6,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:whisper/helper/android_document_picker.dart';
 import 'package:whisper/helper/device_form_factor.dart';
+import 'package:whisper/new_ui/phone/phone_parts.dart' show showPhoneSheet;
+import 'package:whisper/new_ui/picker/quick_send_sheet.dart';
+import 'package:whisper/theme/whisper_ui.dart' show whisperNewUi;
+import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/helper/helper.dart'
     show formatSize, platformIcon, platformLabel;
 import 'package:whisper/helper/memory_bounded_image.dart';
@@ -58,6 +62,29 @@ class QuickSendItem {
 }
 
 /// A connected, trusted device quick send can deliver to.
+/// Quick send only offers devices that are connected and trusted, by name.
+List<QuickSendTarget> connectedQuickSendTargets({
+  required Iterable<DeviceData> devices,
+  required bool Function(String peerId) isConnected,
+  required String? Function(String peerId) trustedIdentityHashFor,
+}) {
+  final targetsById = <String, QuickSendTarget>{};
+  for (final candidate in devices) {
+    if (!isConnected(candidate.uid) ||
+        trustedIdentityHashFor(candidate.uid) == null) {
+      continue;
+    }
+    targetsById[candidate.uid] = QuickSendTarget(
+      id: candidate.uid,
+      name: candidate.name,
+      platform: candidate.platform,
+    );
+  }
+  final targets = targetsById.values.toList()
+    ..sort((left, right) => left.name.compareTo(right.name));
+  return List<QuickSendTarget>.unmodifiable(targets);
+}
+
 class QuickSendTarget {
   const QuickSendTarget({
     required this.id,
@@ -80,6 +107,17 @@ Future<String?> showQuickSendSheet(
   required ValueListenable<List<QuickSendTarget>> targets,
   String? initialTargetId,
 }) {
+  if (whisperNewUi) {
+    return showPhoneSheet<String>(
+      context,
+      builder: (context) => QuickSendPicker(
+        touch: true,
+        items: items,
+        targets: targets,
+        initialTargetId: initialTargetId,
+      ),
+    );
+  }
   return showWhisperGlassBottomSheet<String>(
     context,
     builder: (context) => QuickSendChooser(
@@ -379,7 +417,7 @@ class QuickSendContentPreview extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
           ),
         ),
-      if (media.isNotEmpty) _QuickSendMediaStrip(items: media),
+      if (media.isNotEmpty) QuickSendMediaStrip(items: media),
       for (final item in others.take(maxFileRows))
         _QuickSendFileRow(item: item),
       if (others.length > maxFileRows)
@@ -404,8 +442,8 @@ class QuickSendContentPreview extends StatelessWidget {
   }
 }
 
-class _QuickSendMediaStrip extends StatelessWidget {
-  const _QuickSendMediaStrip({required this.items});
+class QuickSendMediaStrip extends StatelessWidget {
+  const QuickSendMediaStrip({super.key, required this.items});
 
   static const double _preferredTile = 72;
   static const double _gap = 8;
@@ -588,6 +626,20 @@ class _QuickSendMediaTileState extends State<_QuickSendMediaTile> {
   }
 }
 
+/// How big a file waiting in quick send is, when that can be known.
+Future<String?> quickSendFileSizeText(QuickSendItem item) {
+  final knownSize = item.size;
+  if (knownSize != null) {
+    return Future<String?>.value(formatSize(knownSize));
+  }
+  if (item.source.isEmpty || item.source.startsWith('content://')) {
+    return Future<String?>.value();
+  }
+  return File(
+    item.source,
+  ).length().then<String?>(formatSize).catchError((Object _) => null);
+}
+
 class _QuickSendFileRow extends StatefulWidget {
   const _QuickSendFileRow({required this.item});
 
@@ -609,19 +661,7 @@ class _QuickSendFileRowState extends State<_QuickSendFileRow> {
     }
   }
 
-  Future<String?> _loadSizeText() {
-    final item = widget.item;
-    final knownSize = item.size;
-    if (knownSize != null) {
-      return Future<String?>.value(formatSize(knownSize));
-    }
-    if (item.source.isEmpty || item.source.startsWith('content://')) {
-      return Future<String?>.value();
-    }
-    return File(
-      item.source,
-    ).length().then<String?>(formatSize).catchError((Object _) => null);
-  }
+  Future<String?> _loadSizeText() => quickSendFileSizeText(widget.item);
 
   @override
   Widget build(BuildContext context) {

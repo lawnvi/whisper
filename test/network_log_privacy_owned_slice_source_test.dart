@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/source_reading.dart';
+
 void main() {
   const ownedDirectories = <String>[
     'lib/page',
@@ -113,11 +115,10 @@ void main() {
   });
 
   test('server start failures never render the exception object', () {
-    final source = File('lib/page/deviceList.dart').readAsStringSync();
-    final startServer = source.substring(
-      source.indexOf('Future<void> _startServer'),
-      source.indexOf('@override\n  void onPairing'),
-    );
+    final source = deviceListSource();
+    final startServer =
+        memberSource(source, 'Future<void> _startServer') +
+        memberSource(source, 'Future<void> _recoverServerStart(');
 
     expect(startServer, isNot(contains('result.error}')));
     expect(startServer, contains('DeviceListOperationKind.serverStart'));

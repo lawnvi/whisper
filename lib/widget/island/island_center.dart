@@ -9,11 +9,11 @@ enum IslandStage { hidden, compact, expanded }
 
 enum IslandHaptic { selection, light, medium }
 
-/// Every live activity of the app on one island (phones): file copies,
-/// the speaker, this phone being streamed, windows sent here. Files sent
-/// in a conversation are not on it: the conversation shows them, and in
-/// the background so does the island over other apps (Android's
-/// IslandOverlay, fed by the transfer notification).
+/// Every live activity of the app on one island: transfers, file copies, the
+/// speaker, this phone being streamed, windows sent here. What is on screen
+/// anyway stays off it ([IslandActivity.home]): a file card with its progress in
+/// the conversation being read. In the background the island over other apps
+/// shows them (Android's IslandOverlay, fed by the transfer notification).
 ///
 /// The center decides what shows and when; the host only draws it and
 /// springs between [stage]s:
@@ -61,6 +61,7 @@ class IslandCenter extends ChangeNotifier implements IslandControls {
   final _sources = <IslandSource>[];
   final _spotlights = <IslandSource, StreamSubscription<String>>{};
   final _tracks = <String, _Track>{};
+  final _homes = <String, int>{};
   IslandSource? _adding;
 
   IslandStage _stage = IslandStage.hidden;
@@ -139,6 +140,8 @@ class IslandCenter extends ChangeNotifier implements IslandControls {
         IslandKind.copy => 60,
         IslandKind.audio => 50,
         IslandKind.offer => 100,
+        // Someone is waiting for an answer: first, whatever else is going on.
+        IslandKind.request => 110,
       },
     };
   }
@@ -257,6 +260,7 @@ class IslandCenter extends ChangeNotifier implements IslandControls {
   void _reveal(_Track track) {
     track.revealed = true;
     final activity = track.activity;
+    if (_atHome(activity)) return;
     if (activity.status.trouble) {
       _cue(track, IslandCenter.troubleOpen, IslandHaptic.medium);
     } else if (activity.arrival == IslandArrival.open) {
@@ -289,6 +293,11 @@ class IslandCenter extends ChangeNotifier implements IslandControls {
         track.reveal = null;
         _retire(track);
       }
+      return;
+    }
+    // Seen where it happened: nothing left to say when the user goes elsewhere.
+    if (_atHome(activity)) {
+      if (status.finished) _retire(track);
       return;
     }
     if (status.trouble && !before.trouble) {
@@ -469,6 +478,7 @@ class IslandCenter extends ChangeNotifier implements IslandControls {
       for (final track in _tracks.values)
         if (track.revealed &&
             !track.retired &&
+            !_atHome(track.activity) &&
             (!_quiet || _urgent(track.activity)))
           track,
     ]..sort(_order);
@@ -495,6 +505,18 @@ class IslandCenter extends ChangeNotifier implements IslandControls {
   }
 
   bool get _quiet => _immersive || _hushes > 0;
+
+  /// Its own place on screen shows it. What needs an answer is never left to a
+  /// page, and in the background nothing is on screen.
+  bool _atHome(IslandActivity activity) {
+    final home = activity.home;
+    return home != null &&
+        _foreground &&
+        !activity.urgent &&
+        activity.kind != IslandKind.request &&
+        activity.kind != IslandKind.offer &&
+        (_homes[home] ?? 0) > 0;
+  }
 
   static int _order(_Track a, _Track b) {
     final byRank = rank(b.activity).compareTo(rank(a.activity));
@@ -667,6 +689,22 @@ class IslandCenter extends ChangeNotifier implements IslandControls {
 
   /// Keeping to what needs the user (something fills the screen).
   bool get quiet => _quiet;
+
+  /// [home] is on screen. See `IslandHome`.
+  void enterHome(String home) {
+    _homes[home] = (_homes[home] ?? 0) + 1;
+    _refresh();
+  }
+
+  void leaveHome(String home) {
+    final count = (_homes[home] ?? 0) - 1;
+    if (count > 0) {
+      _homes[home] = count;
+    } else {
+      _homes.remove(home);
+    }
+    _refresh();
+  }
 
   /// Keeps the island to what needs the user until the returned callback
   /// is called (a page that fills the screen).

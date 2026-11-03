@@ -2,22 +2,14 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-void main() {
-  String methodBody(String source, String start, String next) {
-    final startIndex = source.indexOf(start);
-    expect(startIndex, isNonNegative, reason: 'Missing method $start');
-    final endIndex = source.indexOf(next, startIndex);
-    expect(endIndex, isNonNegative, reason: 'Missing next method $next');
-    return source.substring(startIndex, endIndex);
-  }
+import 'support/source_reading.dart';
 
+void main() {
   test('device list uses the shared signed pairing dialog', () {
-    final source = File('lib/page/deviceList.dart').readAsStringSync();
-    final onPairing = methodBody(
-      source,
-      'void onPairing(',
-      'void afterAuth(bool allow, DeviceData? deviceData)',
-    );
+    final source = deviceListSource();
+    final onPairing =
+        memberSource(source, 'void onPairing(') +
+        memberSource(source, 'Future<void> _presentPairingRequest(');
 
     expect(
       source,
@@ -30,11 +22,10 @@ void main() {
   });
 
   test('device list keeps post-auth navigation separate from pairing', () {
-    final source = File('lib/page/deviceList.dart').readAsStringSync();
-    final afterAuth = methodBody(
+    final source = deviceListSource();
+    final afterAuth = memberSource(
       source,
       'void afterAuth(bool allow, DeviceData? deviceData)',
-      'void onClose()',
     );
 
     expect(afterAuth, contains('db.upsertDevice(deviceData)'));

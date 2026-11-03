@@ -7,6 +7,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' hide TextInput;
+import 'package:whisper/helper/orientation_policy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
@@ -293,11 +294,7 @@ class _FlowWindowViewerPageState extends State<FlowWindowViewerPage>
     unawaited(WakelockPlus.disable().catchError((Object _) {}));
     _unhushIsland?.call();
     _unhushIsland = null;
-    if (_phone) {
-      unawaited(
-        SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]),
-      );
-    }
+    if (_phone) WhisperOrientation.release(this);
   }
 
   String get _orientationKey {
@@ -326,15 +323,14 @@ class _FlowWindowViewerPageState extends State<FlowWindowViewerPage>
 
   void _applyOrientation(bool landscape) {
     setState(() => _landscape = landscape);
-    unawaited(
-      SystemChrome.setPreferredOrientations(
-        landscape
-            ? const [
-                DeviceOrientation.landscapeRight,
-                DeviceOrientation.landscapeLeft,
-              ]
-            : const [DeviceOrientation.portraitUp],
-      ),
+    WhisperOrientation.hold(
+      this,
+      landscape
+          ? const [
+              DeviceOrientation.landscapeRight,
+              DeviceOrientation.landscapeLeft,
+            ]
+          : const [DeviceOrientation.portraitUp],
     );
   }
 

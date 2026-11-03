@@ -2,9 +2,11 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/source_reading.dart';
+
 void main() {
   test('QR pairing pins both peer id and public-key hash', () {
-    final source = File('lib/page/deviceList.dart').readAsStringSync();
+    final source = deviceListSource();
 
     expect(source, contains('showPairingQrDialog('));
     expect(source, isNot(contains('PairingQrScreen(')));
@@ -20,7 +22,7 @@ void main() {
   test(
     'unavailable local QR host does not block the manual connection tab',
     () {
-      final source = File('lib/page/deviceList.dart').readAsStringSync();
+      final source = deviceListSource();
 
       expect(
         source,

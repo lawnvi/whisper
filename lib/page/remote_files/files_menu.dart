@@ -1,3 +1,5 @@
+import 'package:whisper/theme/whisper_icons.dart';
+import 'package:whisper/theme/whisper_ui.dart';
 import 'dart:async';
 import 'dart:ui';
 
@@ -11,6 +13,7 @@ class FilesMenuItem {
   const FilesMenuItem({
     required this.label,
     this.icon,
+    this.leading,
     this.shortcut,
     this.onSelected,
     this.enabled = true,
@@ -22,6 +25,7 @@ class FilesMenuItem {
   const FilesMenuItem.separator()
     : label = '',
       icon = null,
+      leading = null,
       shortcut = null,
       onSelected = null,
       enabled = false,
@@ -32,6 +36,9 @@ class FilesMenuItem {
 
   final String label;
   final IconData? icon;
+
+  /// Instead of [icon]: tinted by the icon theme, accent until highlighted.
+  final Widget? leading;
 
   /// Shown on the right on desktops, e.g. "⌘C".
   final String? shortcut;
@@ -351,7 +358,11 @@ class _MenuPanelState extends State<_MenuPanel> {
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final radius = widget.touch ? 16.0 : 11.0;
+    final radius = whisperNewUi
+        ? WhisperRadius.m
+        : widget.touch
+        ? 16.0
+        : 11.0;
     final shape = RoundedSuperellipseBorder(
       borderRadius: BorderRadius.circular(radius),
       side: BorderSide(
@@ -367,13 +378,15 @@ class _MenuPanelState extends State<_MenuPanel> {
       child: DecoratedBox(
         decoration: ShapeDecoration(
           shape: shape,
-          shadows: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: dark ? 0.5 : 0.18),
-              blurRadius: widget.touch ? 40 : 24,
-              offset: const Offset(0, 10),
-            ),
-          ],
+          shadows: whisperNewUi
+              ? WhisperShadow.e2(Theme.of(context).brightness)
+              : [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: dark ? 0.5 : 0.18),
+                    blurRadius: widget.touch ? 40 : 24,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
         ),
         child: ClipPath(
           clipper: ShapeBorderClipper(shape: shape),
@@ -382,7 +395,9 @@ class _MenuPanelState extends State<_MenuPanel> {
             child: DecoratedBox(
               decoration: ShapeDecoration(
                 shape: shape,
-                color: dark
+                color: whisperNewUi
+                    ? context.wc.panelTint
+                    : dark
                     ? const Color(0xFF2A2A2D).withValues(alpha: 0.86)
                     : const Color(0xFFF7F7F9).withValues(alpha: 0.86),
               ),
@@ -510,16 +525,28 @@ class _Row extends StatelessWidget {
         behavior: HitTestBehavior.opaque,
         onTap: enabled ? onTap : null,
         child: Container(
-          height: 24,
-          padding: const EdgeInsets.only(left: 4, right: 9),
+          constraints: BoxConstraints(minHeight: whisperNewUi ? 30 : 24),
+          padding: whisperNewUi
+              ? const EdgeInsets.symmetric(horizontal: 9, vertical: 4)
+              : const EdgeInsets.only(left: 4, right: 9),
           decoration: BoxDecoration(
             color: highlighted ? accent : Colors.transparent,
-            borderRadius: BorderRadius.circular(6),
+            borderRadius: BorderRadius.circular(
+              whisperNewUi ? WhisperRadius.xs : 6,
+            ),
           ),
           child: Row(
             children: [
-              check,
-              if (item.icon != null) ...[
+              if (!whisperNewUi) check,
+              if (item.leading != null) ...[
+                IconTheme(
+                  data: IconThemeData(
+                    color: highlighted ? Colors.white : accent,
+                  ),
+                  child: item.leading!,
+                ),
+                const SizedBox(width: 9),
+              ] else if (item.icon != null) ...[
                 Icon(
                   item.icon,
                   size: 14,
@@ -538,9 +565,22 @@ class _Row extends StatelessWidget {
                   item.label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: fg, fontSize: 13, height: 1.2),
+                  style: TextStyle(
+                    color: fg,
+                    fontSize: whisperNewUi ? 14 : 13,
+                    height: 1.2,
+                  ),
                 ),
               ),
+              if (whisperNewUi && item.checked) ...[
+                const SizedBox(width: 9),
+                WhisperIcon(
+                  WhisperGlyph.check,
+                  size: 14,
+                  weight: 2,
+                  color: fg,
+                ),
+              ],
               if (item.shortcut != null)
                 Text(
                   item.shortcut!,

@@ -1,3 +1,6 @@
+import 'package:whisper/new_ui/shell/shell_link_create.dart';
+import 'package:whisper/new_ui/shell/shell_share_links.dart';
+import 'package:whisper/theme/whisper_ui.dart';
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -46,6 +49,16 @@ Future<ShareLink?> showShareLinkSheet(
   if (items.isEmpty) {
     return null;
   }
+  if (whisperNewUi) {
+    return showShellLinkCreate(
+      context,
+      paths: [for (final item in items) item.absolutePath],
+      name: items.length == 1
+          ? items.single.name
+          : AppLocalizations.of(context)!.shareLinkDefaultName(items.length),
+      store: store,
+    );
+  }
   final created = ValueNotifier<ShareLink?>(null);
   final result = await _push(
     context,
@@ -66,14 +79,16 @@ Future<void> showShareLinkDetails(
   BuildContext context,
   ShareLink link, {
   ShareLinkStore? store,
-}) => _push(
-  context,
-  (wide) => _ShareSheet(
-    store: store ?? ShareLinkStore.shared,
-    link: link,
-    wide: wide,
-  ),
-);
+}) => whisperNewUi
+    ? showShellLinkDetail(context, link, store ?? ShareLinkStore.shared)
+    : _push(
+        context,
+        (wide) => _ShareSheet(
+          store: store ?? ShareLinkStore.shared,
+          link: link,
+          wide: wide,
+        ),
+      );
 
 /// The file manager's way in: [items] on this device (its own paths are
 /// relative to a root) become a share link.

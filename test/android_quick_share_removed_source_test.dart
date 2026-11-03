@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/source_reading.dart';
+
 void main() {
   test('Android system share accepts text and content streams', () {
     final manifest = File(
@@ -13,7 +15,7 @@ void main() {
     final plugin = File(
       'android/app/src/main/kotlin/com/vireen/whisper/AndroidSystemSharePlugin.kt',
     ).readAsStringSync();
-    final deviceList = File('lib/page/deviceList.dart').readAsStringSync();
+    final deviceList = deviceListSource();
     final router = File(
       'lib/state/android_system_share_router.dart',
     ).readAsStringSync();

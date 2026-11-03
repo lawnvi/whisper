@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:whisper/theme/whisper_motion.dart';
 import 'package:whisper/theme/app_typography.dart';
+import 'package:whisper/theme/whisper_ui.dart';
 
 abstract final class WhisperUi {
   static const settingsMaxWidth = 760.0;
@@ -152,6 +153,34 @@ class AppTheme {
 
   static ThemeData get darkTheme => _buildTheme(_darkScheme, _darkPalette);
 
+  /// The new UI sets its own sizes and asks nothing else of the text theme:
+  /// Material's letter spacing spreads Chinese apart, and its leading sits text
+  /// off centre against the prototype's.
+  static TextTheme _textTheme(TextTheme theme) {
+    if (!whisperNewUi) return theme;
+    TextStyle? plain(TextStyle? style) => style?.copyWith(
+      letterSpacing: 0,
+      leadingDistribution: TextLeadingDistribution.even,
+    );
+    return theme.copyWith(
+      displayLarge: plain(theme.displayLarge),
+      displayMedium: plain(theme.displayMedium),
+      displaySmall: plain(theme.displaySmall),
+      headlineLarge: plain(theme.headlineLarge),
+      headlineMedium: plain(theme.headlineMedium),
+      headlineSmall: plain(theme.headlineSmall),
+      titleLarge: plain(theme.titleLarge),
+      titleMedium: plain(theme.titleMedium),
+      titleSmall: plain(theme.titleSmall),
+      bodyLarge: plain(theme.bodyLarge),
+      bodyMedium: plain(theme.bodyMedium)?.copyWith(height: 1.4),
+      bodySmall: plain(theme.bodySmall),
+      labelLarge: plain(theme.labelLarge),
+      labelMedium: plain(theme.labelMedium),
+      labelSmall: plain(theme.labelSmall),
+    );
+  }
+
   static ThemeData _buildTheme(
     ColorScheme colorScheme,
     WhisperPalette palette,
@@ -245,7 +274,13 @@ class AppTheme {
     );
 
     return base.copyWith(
-      extensions: <ThemeExtension<dynamic>>[palette],
+      extensions: <ThemeExtension<dynamic>>[
+        palette,
+        // The new UI's tokens, unused by the old pages (migration.md「怎么过渡」).
+        colorScheme.brightness == Brightness.dark
+            ? WhisperColors.dark
+            : WhisperColors.light,
+      ],
       appBarTheme: base.appBarTheme.copyWith(
         titleTextStyle: base.textTheme.titleLarge?.copyWith(
           fontSize: 22,
@@ -255,10 +290,10 @@ class AppTheme {
           color: colorScheme.onSurface,
         ),
       ),
-      textTheme: base.textTheme.apply(
+      textTheme: _textTheme(base.textTheme.apply(
         bodyColor: colorScheme.onSurface,
         displayColor: colorScheme.onSurface,
-      ),
+      )),
     );
   }
 }

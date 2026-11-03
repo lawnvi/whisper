@@ -495,14 +495,18 @@
   "currentVersion": "Versión actual {version}",
   "@currentVersion": {
     "placeholders": {
-      "version": {"type": "String"}
+      "version": {
+        "type": "String"
+      }
     }
   },
   "checkingForUpdates": "Buscando actualizaciones…",
   "updateAvailableVersion": "Actualización disponible: {version}",
   "@updateAvailableVersion": {
     "placeholders": {
-      "version": {"type": "String"}
+      "version": {
+        "type": "String"
+      }
     }
   },
   "updateUpToDate": "Ya tienes la última versión",
@@ -510,14 +514,20 @@
   "updateAvailableTitle": "La versión {version} está disponible",
   "@updateAvailableTitle": {
     "placeholders": {
-      "version": {"type": "String"}
+      "version": {
+        "type": "String"
+      }
     }
   },
   "updateAvailableBody": "Tienes la versión {currentVersion}. La versión {latestVersion} está lista. La descarga se verificará con el hash de GitHub antes de abrirse.",
   "@updateAvailableBody": {
     "placeholders": {
-      "currentVersion": {"type": "String"},
-      "latestVersion": {"type": "String"}
+      "currentVersion": {
+        "type": "String"
+      },
+      "latestVersion": {
+        "type": "String"
+      }
     }
   },
   "downloadAndInstallUpdate": "Actualizar",
@@ -525,7 +535,9 @@
   "downloadingUpdate": "Descargando {progress}%",
   "@downloadingUpdate": {
     "placeholders": {
-      "progress": {"type": "int"}
+      "progress": {
+        "type": "int"
+      }
     }
   },
   "updateInstallerOpened": "La actualización verificada está lista en el instalador del sistema",
@@ -695,7 +707,11 @@
   "quickSendNoConnectedDevices": "Aún no hay ningún dispositivo conectado. Conecta uno para enviar.",
   "quickSendMoreFiles": "{count} archivos más",
   "@quickSendMoreFiles": {
-    "placeholders": { "count": { "type": "int" } }
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   },
   "quickSendLater": "Más tarde",
   "quickSendSend": "Enviar",
@@ -742,7 +758,11 @@
   "desktopQuickSendTargetNeedsReselection": "La identidad cambió o ya no es de confianza. El contenido se conservó; vuelve a seleccionar un dispositivo",
   "chatTimestampYesterday": "Ayer {time}",
   "@chatTimestampYesterday": {
-    "placeholders": { "time": { "type": "String" } }
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
   },
   "messageLinkOpenFailed": "No se pudo abrir este enlace",
   "connectFirstDevice": "Conecta tu primer dispositivo",
@@ -1318,5 +1338,551 @@
   "islandOverlayStop": "Detener",
   "islandOverlayOpen": "Abrir Whisper",
   "islandOverlayFrom": "De {device}",
-  "islandOverlayTo": "A {device}"
+  "islandOverlayTo": "A {device}",
+  "shellRowConnecting": "Conectando…",
+  "shellRowNearbyUnpaired": "Cerca · Se puede emparejar",
+  "shellRowNearby": "Cerca",
+  "shellRowOffline": "Sin conexión",
+  "shellRowOfflineSince": "Sin conexión · {time}",
+  "@shellRowOfflineSince": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "shellRowSoundHere": "Sonando en este dispositivo",
+  "shellRowControllingThis": "Controla este dispositivo",
+  "shellRowPointerThere": "Teclado y ratón en él",
+  "shellRowPlayingOurs": "Reproduce el sonido de este dispositivo",
+  "shellRowWindows": "{count, plural, =1{1 ventana} other{{count} ventanas}}",
+  "@shellRowWindows": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shellTabChat": "Chat",
+  "shellTabFiles": "Archivos",
+  "shellTabApps": "Apps",
+  "shellDeviceInfo": "Información del dispositivo",
+  "shellSearch": "Buscar",
+  "shellAddDevice": "Conectar un dispositivo",
+  "shellSound": "Sonido",
+  "shellInput": "Teclado y ratón",
+  "shellShareLinks": "Enlaces compartidos",
+  "shellSettings": "Ajustes",
+  "shellFirstDevice": "Conecta tu primer dispositivo",
+  "shellConnectDevice": "Conectar un dispositivo",
+  "shellNotConnected": "{device} no está conectado",
+  "@shellNotConnected": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "shellNotConnectedFiles": "Conéctalo para explorar sus archivos.",
+  "shellNotConnectedApps": "Conéctalo para ver sus ventanas y apps.",
+  "shellConnect": "Conectar",
+  "shellConnecting": "Conectando…",
+  "shellNearbyTitle": "{device} está cerca",
+  "@shellNearbyTitle": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "shellPairHint": "Al conectar, ambos dispositivos muestran los mismos 6 dígitos.",
+  "shellComposerOffline": "Conecta {device} para enviar",
+  "@shellComposerOffline": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "shellSelfQrHint": "Escanea este código en otro dispositivo para conectarlo a este",
+  "shellSelfNoLan": "Este dispositivo no está en una red local y los demás no pueden encontrarlo",
+  "shellSelfAddress": "Dirección",
+  "shellSelfFingerprint": "Huella de identidad",
+  "shellEnterAddress": "Introducir una dirección…",
+  "shellDone": "Listo",
+  "shellWindowMinimize": "Minimizar",
+  "shellWindowMaximize": "Maximizar",
+  "shellWindowRestore": "Restaurar",
+  "shellWindowClose": "Cerrar",
+  "shellCardMenu": "Ficha del dispositivo",
+  "shellCardConnected": "Conectado",
+  "shellCardUnpaired": "Sin emparejar",
+  "shellCardCan": "{device} puede",
+  "@shellCardCan": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "shellCardTrust": "Conectarse sin preguntar",
+  "shellCardBrowse": "Explorar mis archivos",
+  "shellCardChange": "Modificar mis archivos",
+  "shellCardDetails": "Detalles",
+  "shellCardAddress": "Dirección",
+  "shellCardDiagnostics": "Diagnóstico de conexión",
+  "shellCardDisconnect": "Desconectar",
+  "shellCardRemove": "Quitar este dispositivo",
+  "shellCardSound": "Sonido",
+  "shellCardInput": "Control",
+  "shellCardClipboard": "Portapapeles",
+  "shellCardMount": "Montar",
+  "shellOn": "Sí",
+  "shellOff": "No",
+  "shellPhoneDevices": "Dispositivos",
+  "shellPhoneControl": "Control",
+  "shellPhoneSyncClipboard": "Sincronizar el portapapeles con {device}",
+  "@shellPhoneSyncClipboard": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "shellPhoneSearchHistory": "Buscar en el historial",
+  "shellLanDown": "La red local no está disponible",
+  "shellComposerHint": "Mensaje a {device}",
+  "@shellComposerHint": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "shellPhoneNeedsConnection": "Disponible al conectar",
+  "shellPaletteDevice": "Dispositivo",
+  "shellPaletteAction": "Acción",
+  "shellPalettePage": "Página",
+  "shellPaletteMessage": "Mensaje",
+  "shellPalettePlayOn": "Reproducir el sonido de este dispositivo en {device}",
+  "@shellPalettePlayOn": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "shellPaletteControl": "Controlar {device} con este teclado y ratón",
+  "@shellPaletteControl": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "shellSettingsGeneral": "General",
+  "shellSettingsConnection": "Conexión",
+  "shellSettingsSystem": "Sistema",
+  "shellSettingsSharing": "Compartir y permisos",
+  "shellSettingsNotifications": "Notificaciones",
+  "shellSettingsAbout": "Acerca de",
+  "shellSettingsClipboardNotifications": "Portapapeles y notificaciones",
+  "shellSettingsAppearance": "Apariencia",
+  "shellSettingsAppearanceAuto": "Auto",
+  "shellSettingsAppearanceLight": "Claro",
+  "shellSettingsAppearanceDark": "Oscuro",
+  "shellSettingsLanguage": "Idioma",
+  "shellSettingsSaveTo": "Guardar archivos en",
+  "shellSettingsChange": "Cambiar…",
+  "shellSettingsCast": "Recibir transmisión a TV",
+  "shellSettingsKeepAlive": "Mantener la conexión en segundo plano",
+  "shellSettingsScreenshotEnabled": "Activar atajo de captura",
+  "shellSettingsPressShortcut": "Pulsa un atajo…",
+  "shellSettingsAllowClipboard": "Permitir acceso al portapapeles",
+  "shellSettingsAutoClipboard": "Sincronizar el portapapeles automáticamente",
+  "shellSettingsPlaybackGain": "Ganancia del sonido de otros dispositivos",
+  "shellSettingsCopyCode": "Copiar códigos de verificación al portapapeles",
+  "shellSettingsSharingNote": "La ganancia solo afecta al sonido que reproduce este dispositivo y, si es muy alta, puede distorsionar. La velocidad de desplazamiento solo se aplica cuando este dispositivo está siendo controlado.",
+  "shellSettingsGainHint": "Si es muy alta, puede distorsionar",
+  "shellSettingsVersion": "Versión",
+  "shellSettingsVersionChecking": "Comprobando…",
+  "shellSettingsQrAndAddress": "Código QR y dirección",
+  "shellSettingsMultiplier": "{value}x",
+  "shellSettingsVersionLatest": "{version} · Actualizado",
+  "shellSettingsVersionAvailable": "Nueva versión {version}",
+  "shellSettingsVersionDownloading": "Descargando {progress}%",
+  "shellSettingsAboutVersion": "Versión {version}",
+  "shellSettingsLinksOn": "{count, plural, =1{1 activo} other{{count} activos}}",
+  "soundHeroIdleTitle": "Reproducir en otros dispositivos",
+  "soundHeroIdleBody": "Elige varios dispositivos y sonarán a la vez.",
+  "soundHeroPlaying": "{count, plural, =1{Reproduciendo en 1 dispositivo} other{Reproduciendo en {count} dispositivos}}",
+  "@soundHeroPlaying": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "soundChannelLeft": "Izq.",
+  "soundChannelRight": "Der.",
+  "soundShareThisDevice": "Compartir el sonido de este dispositivo",
+  "soundMemberStopped": "Detenido",
+  "soundMemberNotConnected": "No conectado",
+  "soundMemberFailed": "No se reprodujo · {reason}",
+  "@soundMemberFailed": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "soundMemberBusy": "Está reproduciendo otro sonido",
+  "soundMemberSoloOnly": "Solo puede sonar por separado",
+  "soundSyncNumbers": "Red {network}ms · Variación {jitter}ms · Búfer {buffer}ms · Tardíos {late}",
+  "@soundSyncNumbers": {
+    "placeholders": {
+      "network": {
+        "type": "String"
+      },
+      "jitter": {
+        "type": "String"
+      },
+      "buffer": {
+        "type": "String"
+      },
+      "late": {
+        "type": "int"
+      }
+    }
+  },
+  "soundSyncNumbersPending": "Red — · Variación — · Búfer — · Tardíos —",
+  "soundPermissionNeeded": "Necesita Grabación de pantalla y audio del sistema",
+  "soundCheckLabel": "Reproducir sonido en {device}",
+  "@soundCheckLabel": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "soundChannelLabel": "Canal de {device}: {channel}",
+  "@soundChannelLabel": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      },
+      "channel": {
+        "type": "String"
+      }
+    }
+  },
+  "soundNoDevices": "No hay dispositivos conectados",
+  "soundSinkTitle": "Reproduciendo el sonido de {device}",
+  "@soundSinkTitle": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "soundSinkHint": "Para cambiar de origen, desconecta primero",
+  "soundSinkPaused": "En pausa",
+  "soundSinkResuming": "Reanudando…",
+  "soundGain": "Ganancia",
+  "soundGainValue": "{value}x",
+  "@soundGainValue": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "soundGainLabel": "Ganancia de reproducción de este dispositivo",
+  "soundResume": "Reanudar",
+  "shareOpenSettings": "Activar",
+  "inputHintIdle": "Arrastra las pantallas para ordenarlas. El puntero pasa por los bordes que se tocan.",
+  "inputHintExit": "Pulsa {shortcut} para recuperar el teclado y el ratón",
+  "@inputHintExit": {
+    "placeholders": {
+      "shortcut": {
+        "type": "String"
+      }
+    }
+  },
+  "inputStatusWaiting": "Esperando confirmación",
+  "inputStatusNotConnected": "Sin conexión",
+  "inputSideRight": "A la derecha",
+  "inputSideLeft": "A la izquierda",
+  "inputSideAbove": "Arriba",
+  "inputSideBelow": "Abajo",
+  "inputSideElsewhere": "Junto a otra pantalla",
+  "inputScreenCount": "{count} pantallas",
+  "@inputScreenCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "inputResolution": "{width}×{height}",
+  "@inputResolution": {
+    "placeholders": {
+      "width": {
+        "type": "int"
+      },
+      "height": {
+        "type": "int"
+      }
+    }
+  },
+  "inputDetail": "{resolution} · {place}",
+  "@inputDetail": {
+    "placeholders": {
+      "resolution": {
+        "type": "String"
+      },
+      "place": {
+        "type": "String"
+      }
+    }
+  },
+  "inputRemove": "Quitar",
+  "inputReasonPeerNotTrusting": "Aún no confía en este dispositivo",
+  "inputReasonNotTrusted": "Este dispositivo aún no confía en él",
+  "inputReasonUnsupported": "Su versión no es compatible",
+  "inputReasonPeerPermission": "Aún no ha permitido que lo controlen",
+  "inputReasonBusy": "Ahora no se puede controlar",
+  "inputReasonBlocked": "Está detrás de una pantalla sin conexión",
+  "inputCandidateUnsupported": "No compatible",
+  "inputPermissionNeeded": "Necesita permiso de accesibilidad",
+  "inputControlledTitle": "{device} está controlando este dispositivo",
+  "@inputControlledTitle": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "inputControlledHint": "Para controlar otro ordenador, detén primero.",
+  "inputSwitchLabel": "Compartir teclado y ratón",
+  "inputScreenLabel": "Pantalla de {device}, {detail}",
+  "@inputScreenLabel": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      },
+      "detail": {
+        "type": "String"
+      }
+    }
+  },
+  "inputAddLabel": "Añadir {device} a compartir teclado y ratón",
+  "@inputAddLabel": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "shellIslandFinished": "Terminado",
+  "shellPaletteEmpty": "Sin resultados",
+  "shellLinksServiceOff": "El servicio de archivos está desactivado",
+  "shellLinksServiceIdle": "No hay enlaces activos, el servicio no se está ejecutando",
+  "shellLinksFoot": "No necesitan Whisper: en la misma red, un navegador puede abrirlo y descargar. Usa HTTP normal, así que la contraseña solo evita aperturas casuales.",
+  "shellLinksEmptyTitle": "Aún no hay enlaces",
+  "shellLinksEmptyBody": "Elige archivos para crear un enlace. No necesitan Whisper: un navegador puede abrirlo y descargar.",
+  "shellLinksChoose": "Elegir archivos",
+  "shellLinksNew": "Nuevo",
+  "shellLinkOff": "Desactivado",
+  "shellLinkMissing": "Algunos archivos se han movido",
+  "shellLinkVisits": "{count, plural, =1{1 visita} other{{count} visitas}}",
+  "@shellLinkVisits": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shellLinkDownloads": "{count, plural, =1{1 descarga} other{{count} descargas}}",
+  "@shellLinkDownloads": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shellLinkVisitsCount": "{count, plural, =1{1 vez} other{{count} veces}}",
+  "@shellLinkVisitsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shellLinkEnabled": "Activado",
+  "shellLinkPassword": "Contraseña",
+  "shellLinkPasswordSet": "Establecida",
+  "shellLinkPasswordNone": "Ninguna",
+  "shellLinkVisitsLabel": "Visitas",
+  "shellLinkDownloadsLabel": "Descargas",
+  "shellLinkDeleted": "Enlace eliminado",
+  "shellMore": "Más",
+  "shellFilesCount": "{count, plural, =1{1 elemento} other{{count} elementos}}",
+  "@shellFilesCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shellFilesSendTo": "Enviar a…",
+  "shellFilesCopyHere": "Copiar aquí",
+  "shellFilesAskOnDevice": "Permítelo en {device}",
+  "@shellFilesAskOnDevice": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "shellFilesDenied": "{device} lo rechazó",
+  "@shellFilesDenied": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "shellAppsMoving": "En curso",
+  "shellAppsRunsOn": "Se ejecuta en {device}, se muestra aquí",
+  "@shellAppsRunsOn": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "shellAppsEnd": "Terminar",
+  "shellAppsOn": "Apps en {device}",
+  "@shellAppsOn": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "shellSettingsAppsSelected": "{count, plural, =0{Ninguna} =1{1 seleccionada} other{{count} seleccionadas}}",
+  "shellTrayClipboard": "Portapapeles",
+  "shellTrayClipboardEmpty": "El portapapeles está vacío",
+  "shellTrayScreenshot": "Captura",
+  "shellTrayRecent": "Portapapeles reciente",
+  "shellTrayOpen": "Abrir Whisper",
+  "shellTrayNoDevice": "Ningún dispositivo conectado",
+  "shellTraySoundOff": "No",
+  "shellTrayFrom": "{device} · {when}",
+  "shellTrayThisDevice": "Este dispositivo",
+  "@shellTrayFrom": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      },
+      "when": {
+        "type": "String"
+      }
+    }
+  },
+  "shellTrayPlaying": "Reproduciendo el sonido de {device}",
+  "shellTrayControlled": "{device} controla este dispositivo",
+  "shellTrayInputOn": "Activado",
+  "@shellTrayPlaying": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "@shellTrayControlled": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "shellIslandPlayingOn": "Reproduciendo en {devices}",
+  "shellIslandControlling": "Controlando {device}",
+  "@shellIslandPlayingOn": {
+    "placeholders": {
+      "devices": {
+        "type": "String"
+      }
+    }
+  },
+  "@shellIslandControlling": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "shellToday": "Hoy",
+  "shellYesterday": "Ayer",
+  "shellTraySendClipboardTo": "Enviar el portapapeles a",
+  "shellTraySendFileTo": "Enviar archivo a",
+  "shellTrayPlayOn": "Reproducir sonido en",
+  "phoneConnectQrHint": "Escanea este código con otro dispositivo",
+  "phoneConnectScanHint": "Apunta al código de otro dispositivo",
+  "phoneConnectCopyLink": "Copiar enlace de conexión",
+  "phoneConnectCopied": "Enlace de conexión copiado",
+  "phoneConnectCopyFailed": "No se pudo copiar. Inténtalo de nuevo",
+  "phoneConnectOpenSettings": "Activar",
+  "phonePairApprove": "Los números coinciden, vincular",
+  "pickerNoDevices": "No hay otro dispositivo conectado",
+  "pickerSendFile": "Enviar «{name}» a",
+  "@pickerSendFile": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "pickerSendItems": "Enviar {count} elementos a",
+  "@pickerSendItems": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "pickerSendText": "Enviar este texto a",
+  "phoneFilesCopied": "{count} copiados. Pégalos en la carpeta que quieras",
+  "@phoneFilesCopied": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "phoneConnectPort": "Puerto",
+  "shellLinkCreateTitle": "Compartir «{name}»",
+  "@shellLinkCreateTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "shellLinkCreateBody": "Los dispositivos de la misma red pueden abrirlo en un navegador y descargar.",
+  "shellLinkPasswordOptional": "Contraseña (opcional)",
+  "shellAppsShownOn": "Se ejecuta aquí, se muestra en {device}",
+  "@shellAppsShownOn": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "shellAppsBringBack": "Recuperar",
+  "shellManualConnectTitle": "Conectar por dirección",
+  "shellManualConnectField": "Dirección y puerto",
+  "shellLinksChooseFolder": "Elegir carpeta"
 }

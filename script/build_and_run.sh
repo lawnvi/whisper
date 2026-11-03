@@ -37,6 +37,14 @@ if [[ -n "${WHISPER_UPDATE_CHANNEL:-}" ]]; then
     "--dart-define=WHISPER_UPDATE_CHANNEL=${WHISPER_UPDATE_CHANNEL}"
   )
 fi
+# The redesigned UI, while it is off by default. WHISPER_DART_DEFINES adds more,
+# separated by spaces.
+if [[ "${WHISPER_NEW_UI:-}" == "true" ]]; then
+  FLUTTER_UPDATE_ARGS+=("--dart-define=WHISPER_NEW_UI=true")
+fi
+for extra_define in ${WHISPER_DART_DEFINES:-}; do
+  FLUTTER_UPDATE_ARGS+=("--dart-define=${extra_define}")
+done
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"

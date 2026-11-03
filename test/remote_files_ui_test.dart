@@ -42,6 +42,8 @@ import 'package:whisper/remote_files/fs_placement.dart';
 import 'package:whisper/remote_files/fs_protocol.dart';
 import 'package:whisper/theme/app_theme.dart';
 
+import 'support/source_reading.dart';
+
 class _FakeClipboard extends FilesSystemClipboard {
   List<String> contents = const [];
 
@@ -906,7 +908,7 @@ void main() {
     final conversation = File('lib/page/conversation.dart').readAsStringSync();
     expect(conversation, contains('RemoteFilesPage(peerId: device.uid'));
     expect(conversation, contains('features: _deviceFeatures()'));
-    final deviceList = File('lib/page/deviceList.dart').readAsStringSync();
+    final deviceList = deviceListSource();
     expect(deviceList, isNot(contains('RemoteFilesPage()')));
     expect(canOfferRemoteFiles(), !Platform.isIOS);
     final page = File(

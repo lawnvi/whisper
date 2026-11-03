@@ -2,15 +2,17 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/source_reading.dart';
+
 void main() {
   test('device list routes desktop quick send through trusted peers', () {
-    final source = File('lib/page/deviceList.dart').readAsStringSync();
+    final source = deviceListSource();
 
     expect(source, contains('DesktopQuickSendInbox.shared'));
     expect(source, contains('DesktopQuickSendHotKeyController'));
     expect(source, contains('candidate.auth &&'));
     expect(source, contains('candidate.identityPublicKey.isNotEmpty'));
-    expect(source, contains('socketManager.isConnectedTo(candidate.uid)'));
+    expect(source, contains('isConnected: socketManager.isConnectedTo'));
     expect(source, contains('_desktopQuickSendInbox.sendPendingTo'));
     expect(
       source,
@@ -34,7 +36,7 @@ void main() {
   });
 
   test('desktop toolbar leaves quick send to native entry points', () {
-    final source = File('lib/page/deviceList.dart').readAsStringSync();
+    final source = deviceListSource();
 
     expect(source, isNot(contains('_buildDesktopQuickSendAction')));
     expect(source, isNot(contains('Icons.outbox_outlined')));
@@ -44,7 +46,7 @@ void main() {
   test(
     'ordinary startup keeps restored quick-send drafts in the background',
     () {
-      final source = File('lib/page/deviceList.dart').readAsStringSync();
+      final source = deviceListSource();
 
       expect(source, contains('takePresentationRequest()'));
       expect(source, contains('_lastPresentedDesktopQuickSendDraftId ='));
@@ -97,7 +99,7 @@ void main() {
       'lib/socket/file_transfer_engine.dart',
       'lib/socket/folder_transfer_source.dart',
     ]) {
-      final source = File(path).readAsStringSync();
+      final source = readSource(path);
       expect(source, isNot(contains('stageDirectory')), reason: path);
       expect(source, isNot(contains('ZipEncoder')), reason: path);
       expect(source, isNot(contains('package:archive')), reason: path);
@@ -111,7 +113,7 @@ void main() {
       'lib/page/deviceList.dart',
     ]) {
       expect(
-        File(path).readAsStringSync(),
+        readSource(path),
         isNot(contains('sendFolder')),
         reason: path,
       );

@@ -2,17 +2,11 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-void main() {
-  String sourceBetween(String source, String start, String end) {
-    final startIndex = source.indexOf(start);
-    expect(startIndex, isNonNegative, reason: 'Missing source marker: $start');
-    final endIndex = source.indexOf(end, startIndex);
-    expect(endIndex, isNonNegative, reason: 'Missing source marker: $end');
-    return source.substring(startIndex, endIndex);
-  }
+import 'support/source_reading.dart';
 
+void main() {
   test('desktop sidebar exposes a multi-sink audio group setup flow', () {
-    final source = File('lib/page/deviceList.dart').readAsStringSync();
+    final source = deviceListSource();
 
     expect(
         source,
@@ -34,14 +28,14 @@ void main() {
 
   test('single selected sink from the group sheet still uses group routing',
       () {
-    final source = File('lib/page/deviceList.dart').readAsStringSync();
+    final source = deviceListSource();
 
     expect(source, isNot(contains('if (sinks.length > 1)')));
     expect(source, contains('_audioGroupCoordinator.startGroup('));
   });
 
   test('one connected group-capable sink starts group playback directly', () {
-    final source = File('lib/page/deviceList.dart').readAsStringSync();
+    final source = deviceListSource();
 
     expect(source, contains('groupCandidates.length == 1'));
     expect(source, contains('groupCandidates.single.uid'));
@@ -50,21 +44,12 @@ void main() {
 
   test('active desktop audio button opens adjustment sheet before stopping',
       () {
-    final source = File('lib/page/deviceList.dart').readAsStringSync();
-    final tooltip = sourceBetween(
-      source,
-      'String _desktopAudioShareTooltip',
-      'Future<void> _toggleDesktopAudioShare',
-    );
-    final toggle = sourceBetween(
-      source,
-      'Future<void> _toggleDesktopAudioShare',
-      'Future<void> _openRemoteInputWorkspace',
-    );
-    final sheet = sourceBetween(
+    final source = deviceListSource();
+    final tooltip = memberSource(source, 'String _desktopAudioShareTooltip');
+    final toggle = memberSource(source, 'Future<void> _toggleDesktopAudioShare');
+    final sheet = memberSource(
       source,
       'Future<_AudioGroupSetupResult?> _showAudioGroupSetupSheet',
-      'String _audioGroupRoleLabel',
     );
 
     expect(tooltip, contains('l10n.audioGroupAdjust'));
@@ -85,11 +70,10 @@ void main() {
   });
 
   test('desktop audio group sheet shows synchronization evidence', () {
-    final source = File('lib/page/deviceList.dart').readAsStringSync();
-    final sheet = sourceBetween(
+    final source = deviceListSource();
+    final sheet = memberSource(
       source,
       'Future<_AudioGroupSetupResult?> _showAudioGroupSetupSheet',
-      'String _audioGroupRoleLabel',
     );
 
     expect(sheet, contains('AnimatedBuilder'));

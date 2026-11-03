@@ -1,3 +1,6 @@
+import 'package:whisper/helper/helper.dart';
+import 'package:whisper/new_ui/shell/shell_island_sources.dart';
+import 'package:whisper/theme/whisper_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:toastification/toastification.dart';
 import 'package:whisper/helper/privacy_log.dart';
@@ -38,6 +41,15 @@ void showAppToast(
   AppToastAction? action,
   Duration? duration,
 }) {
+  // A desktop says it on the island. One with a button still needs a place to
+  // keep the button until it is pressed.
+  if (whisperNewUi && isDesktop() && action == null) {
+    NoteIslandSource.shared.note(
+      message,
+      problem: tone == AppToastTone.error || tone == AppToastTone.warning,
+    );
+    return;
+  }
   final overlayState = appNavigatorKey.currentState?.overlay;
   if (overlayState == null) {
     privacyLog.event(PrivacyEvent.toastUnavailable, <PrivacyField, Object>{

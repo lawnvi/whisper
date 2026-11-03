@@ -188,6 +188,9 @@ class WindowStreamHost {
   final WindowCaptureBackend _backend;
   bool _attached = false;
   final _streams = <String, _HostStream>{};
+
+  /// Goes up whenever a window starts or stops being shown somewhere.
+  final hostedChanged = ValueNotifier<int>(0);
   final _streamByCapture = <int, _HostStream>{};
   List<RemoteWindowInfo> _lastCatalog = const [];
 
@@ -955,6 +958,7 @@ class WindowStreamHost {
             ) ==
             true;
     _streams[message.sessionId] = stream;
+    hostedChanged.value++;
     final accepted = await send(
       message.reply(
         WindowStreamControlAction.accept,
@@ -970,6 +974,7 @@ class WindowStreamHost {
     );
     if (!accepted) {
       _streams.remove(message.sessionId);
+      hostedChanged.value++;
       return;
     }
     // The viewer must dial within the token's lifetime.
@@ -1340,6 +1345,7 @@ class WindowStreamHost {
     stream.tick?.cancel();
     stream.audioEncoder?.close();
     _streams.remove(stream.sessionId);
+    hostedChanged.value++;
     final capture = stream.captureId;
     if (capture != null) {
       _streamByCapture.remove(capture);
@@ -1372,6 +1378,24 @@ class WindowStreamHost {
         in _streams.values.where((s) => s.viewerPeerId == peerId).toList()) {
       await _stop(stream, notify: false);
     }
+  }
+
+  /// This device's windows shown on [peerId] right now: what 拿回来 lists.
+  List<({String sessionId, String title})> hostedFor(String peerId) => [
+    for (final stream in _streams.values)
+      if (stream.viewerPeerId == peerId)
+        (
+          sessionId: stream.sessionId,
+          title: stream.window.title.isEmpty
+              ? stream.window.appName
+              : stream.window.title,
+        ),
+  ];
+
+  /// Takes one back: the viewer is told, and its window closes.
+  Future<void> bringBack(String sessionId) async {
+    final stream = _streams[sessionId];
+    if (stream != null) await _stop(stream, notify: true);
   }
 
   Future<void> closeAll() async {

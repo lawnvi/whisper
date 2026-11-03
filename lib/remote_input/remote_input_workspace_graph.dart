@@ -297,6 +297,10 @@ abstract final class RemoteInputWorkspaceSnapper {
     required double canvasScale,
     double threshold = defaultThreshold,
     int minimumSharedEdge = defaultMinimumSharedEdge,
+
+    /// Screens it must not land on but cannot attach to, like offline ones.
+    Iterable<RemoteInputWorkspaceNode> obstacles =
+        const <RemoteInputWorkspaceNode>[],
   }) {
     if (canvasScale <= 0 ||
         threshold < 0 ||
@@ -362,6 +366,14 @@ abstract final class RemoteInputWorkspaceSnapper {
                 anchorList.any(
                   (other) =>
                       other.peerId != anchor.peerId &&
+                      RemoteInputWorkspaceGraph._nodesOverlap(
+                        candidateNode,
+                        other,
+                      ),
+                ) ||
+                obstacles.any(
+                  (other) =>
+                      other.peerId != moving.peerId &&
                       RemoteInputWorkspaceGraph._nodesOverlap(
                         candidateNode,
                         other,

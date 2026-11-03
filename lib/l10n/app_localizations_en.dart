@@ -3644,4 +3644,851 @@ class AppLocalizationsEn extends AppLocalizations {
   String islandOverlayTo(String device) {
     return 'To $device';
   }
+
+  @override
+  String get shellRowConnecting => 'Connecting…';
+
+  @override
+  String get shellRowNearbyUnpaired => 'Nearby · Can pair';
+
+  @override
+  String get shellRowNearby => 'Nearby';
+
+  @override
+  String get shellRowOffline => 'Offline';
+
+  @override
+  String shellRowOfflineSince(String time) {
+    return 'Offline · $time';
+  }
+
+  @override
+  String get shellRowSoundHere => 'Playing on this device';
+
+  @override
+  String get shellRowControllingThis => 'Controlling this device';
+
+  @override
+  String get shellRowPointerThere => 'Keyboard & mouse are on it';
+
+  @override
+  String get shellRowPlayingOurs => 'Playing this device\'s sound';
+
+  @override
+  String shellRowWindows(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count windows',
+      one: '1 window',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get shellTabChat => 'Chat';
+
+  @override
+  String get shellTabFiles => 'Files';
+
+  @override
+  String get shellTabApps => 'Apps';
+
+  @override
+  String get shellDeviceInfo => 'Device info';
+
+  @override
+  String get shellSearch => 'Search';
+
+  @override
+  String get shellAddDevice => 'Connect a device';
+
+  @override
+  String get shellSound => 'Sound';
+
+  @override
+  String get shellInput => 'Keyboard & mouse';
+
+  @override
+  String get shellShareLinks => 'Share links';
+
+  @override
+  String get shellSettings => 'Settings';
+
+  @override
+  String get shellFirstDevice => 'Connect your first device';
+
+  @override
+  String get shellConnectDevice => 'Connect a device';
+
+  @override
+  String shellNotConnected(String device) {
+    return '$device isn\'t connected';
+  }
+
+  @override
+  String get shellNotConnectedFiles => 'Connect to browse its files.';
+
+  @override
+  String get shellNotConnectedApps => 'Connect to see its windows and apps.';
+
+  @override
+  String get shellConnect => 'Connect';
+
+  @override
+  String get shellConnecting => 'Connecting…';
+
+  @override
+  String shellNearbyTitle(String device) {
+    return '$device is nearby';
+  }
+
+  @override
+  String get shellPairHint =>
+      'Once connecting, both devices show the same 6 digits.';
+
+  @override
+  String shellComposerOffline(String device) {
+    return 'Connect $device to send';
+  }
+
+  @override
+  String get shellSelfQrHint =>
+      'Scan this code on another device to connect to this one';
+
+  @override
+  String get shellSelfNoLan =>
+      'This device isn\'t on a local network, so others can\'t find it';
+
+  @override
+  String get shellSelfAddress => 'Address';
+
+  @override
+  String get shellSelfFingerprint => 'Identity fingerprint';
+
+  @override
+  String get shellEnterAddress => 'Enter an address…';
+
+  @override
+  String get shellDone => 'Done';
+
+  @override
+  String get shellWindowMinimize => 'Minimize';
+
+  @override
+  String get shellWindowMaximize => 'Maximize';
+
+  @override
+  String get shellWindowRestore => 'Restore';
+
+  @override
+  String get shellWindowClose => 'Close';
+
+  @override
+  String get shellCardMenu => 'Device card';
+
+  @override
+  String get shellCardConnected => 'Connected';
+
+  @override
+  String get shellCardUnpaired => 'Not paired yet';
+
+  @override
+  String shellCardCan(String device) {
+    return '$device can';
+  }
+
+  @override
+  String get shellCardTrust => 'Connect without asking';
+
+  @override
+  String get shellCardBrowse => 'Browse my files';
+
+  @override
+  String get shellCardChange => 'Change my files';
+
+  @override
+  String get shellCardDetails => 'Details';
+
+  @override
+  String get shellCardAddress => 'Address';
+
+  @override
+  String get shellCardDiagnostics => 'Connection diagnostics';
+
+  @override
+  String get shellCardDisconnect => 'Disconnect';
+
+  @override
+  String get shellCardRemove => 'Remove this device';
+
+  @override
+  String get shellCardSound => 'Sound';
+
+  @override
+  String get shellCardInput => 'Input';
+
+  @override
+  String get shellCardClipboard => 'Clipboard';
+
+  @override
+  String get shellCardMount => 'Mount';
+
+  @override
+  String get shellOn => 'On';
+
+  @override
+  String get shellOff => 'Off';
+
+  @override
+  String get shellPhoneDevices => 'Devices';
+
+  @override
+  String get shellPhoneControl => 'Control';
+
+  @override
+  String shellPhoneSyncClipboard(String device) {
+    return 'Sync clipboard to $device';
+  }
+
+  @override
+  String get shellPhoneSearchHistory => 'Search chat history';
+
+  @override
+  String get shellLanDown => 'The local network is down';
+
+  @override
+  String shellComposerHint(String device) {
+    return 'Message $device';
+  }
+
+  @override
+  String get shellPhoneNeedsConnection => 'Available once connected';
+
+  @override
+  String get shellPaletteDevice => 'Device';
+
+  @override
+  String get shellPaletteAction => 'Action';
+
+  @override
+  String get shellPalettePage => 'Page';
+
+  @override
+  String get shellPaletteMessage => 'Message';
+
+  @override
+  String shellPalettePlayOn(String device) {
+    return 'Play this device\'s sound on $device';
+  }
+
+  @override
+  String shellPaletteControl(String device) {
+    return 'Control $device with this keyboard and mouse';
+  }
+
+  @override
+  String get shellSettingsGeneral => 'General';
+
+  @override
+  String get shellSettingsConnection => 'Connection';
+
+  @override
+  String get shellSettingsSystem => 'System';
+
+  @override
+  String get shellSettingsSharing => 'Sharing & Permissions';
+
+  @override
+  String get shellSettingsNotifications => 'Notifications';
+
+  @override
+  String get shellSettingsAbout => 'About';
+
+  @override
+  String get shellSettingsClipboardNotifications => 'Clipboard & Notifications';
+
+  @override
+  String get shellSettingsAppearance => 'Appearance';
+
+  @override
+  String get shellSettingsAppearanceAuto => 'Auto';
+
+  @override
+  String get shellSettingsAppearanceLight => 'Light';
+
+  @override
+  String get shellSettingsAppearanceDark => 'Dark';
+
+  @override
+  String get shellSettingsLanguage => 'Language';
+
+  @override
+  String get shellSettingsSaveTo => 'Save files to';
+
+  @override
+  String get shellSettingsChange => 'Change…';
+
+  @override
+  String get shellSettingsCast => 'Receive TV casting';
+
+  @override
+  String get shellSettingsKeepAlive => 'Stay connected in background';
+
+  @override
+  String get shellSettingsScreenshotEnabled => 'Enable screenshot shortcut';
+
+  @override
+  String get shellSettingsPressShortcut => 'Press a shortcut…';
+
+  @override
+  String get shellSettingsAllowClipboard => 'Allow clipboard access';
+
+  @override
+  String get shellSettingsAutoClipboard => 'Sync clipboard automatically';
+
+  @override
+  String get shellSettingsPlaybackGain => 'Gain for sound from other devices';
+
+  @override
+  String get shellSettingsCopyCode => 'Copy verification codes to clipboard';
+
+  @override
+  String get shellSettingsSharingNote =>
+      'Gain only affects sound played on this device, and too much can distort. Scroll speed only applies while this device is being controlled.';
+
+  @override
+  String get shellSettingsGainHint => 'Too much can distort';
+
+  @override
+  String get shellSettingsVersion => 'Version';
+
+  @override
+  String get shellSettingsVersionChecking => 'Checking…';
+
+  @override
+  String get shellSettingsQrAndAddress => 'QR code and address';
+
+  @override
+  String shellSettingsMultiplier(String value) {
+    return '${value}x';
+  }
+
+  @override
+  String shellSettingsVersionLatest(String version) {
+    return '$version · Up to date';
+  }
+
+  @override
+  String shellSettingsVersionAvailable(String version) {
+    return 'New version $version';
+  }
+
+  @override
+  String shellSettingsVersionDownloading(int progress) {
+    return 'Downloading $progress%';
+  }
+
+  @override
+  String shellSettingsAboutVersion(String version) {
+    return 'Version $version';
+  }
+
+  @override
+  String shellSettingsLinksOn(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count on',
+      one: '1 on',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get soundHeroIdleTitle => 'Play on other devices';
+
+  @override
+  String get soundHeroIdleBody => 'Pick a few devices and they play together.';
+
+  @override
+  String soundHeroPlaying(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Playing on $count devices',
+      one: 'Playing on 1 device',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get soundChannelLeft => 'Left';
+
+  @override
+  String get soundChannelRight => 'Right';
+
+  @override
+  String get soundShareThisDevice => 'Share this device\'s sound';
+
+  @override
+  String get soundMemberStopped => 'Stopped';
+
+  @override
+  String get soundMemberNotConnected => 'Not connected';
+
+  @override
+  String soundMemberFailed(String reason) {
+    return 'Didn\'t play · $reason';
+  }
+
+  @override
+  String get soundMemberBusy => 'It\'s playing other sound';
+
+  @override
+  String get soundMemberSoloOnly => 'Can only play on its own';
+
+  @override
+  String soundSyncNumbers(
+    String network,
+    String jitter,
+    String buffer,
+    int late,
+  ) {
+    return 'Network ${network}ms · Jitter ${jitter}ms · Buffer ${buffer}ms · Late $late';
+  }
+
+  @override
+  String get soundSyncNumbersPending =>
+      'Network — · Jitter — · Buffer — · Late —';
+
+  @override
+  String get soundPermissionNeeded => 'Needs Screen & System Audio Recording';
+
+  @override
+  String soundCheckLabel(String device) {
+    return 'Play sound on $device';
+  }
+
+  @override
+  String soundChannelLabel(String device, String channel) {
+    return '$device channel: $channel';
+  }
+
+  @override
+  String get soundNoDevices => 'No devices connected';
+
+  @override
+  String soundSinkTitle(String device) {
+    return 'Playing $device\'s sound';
+  }
+
+  @override
+  String get soundSinkHint => 'To change the source, disconnect first';
+
+  @override
+  String get soundSinkPaused => 'Paused';
+
+  @override
+  String get soundSinkResuming => 'Resuming…';
+
+  @override
+  String get soundGain => 'Gain';
+
+  @override
+  String soundGainValue(String value) {
+    return '${value}x';
+  }
+
+  @override
+  String get soundGainLabel => 'This device\'s playback gain';
+
+  @override
+  String get soundResume => 'Resume';
+
+  @override
+  String get shareOpenSettings => 'Turn on';
+
+  @override
+  String get inputHintIdle =>
+      'Drag screens to arrange them. The pointer crosses where edges touch.';
+
+  @override
+  String inputHintExit(String shortcut) {
+    return 'Press $shortcut to take back the keyboard and mouse';
+  }
+
+  @override
+  String get inputStatusWaiting => 'Waiting to confirm';
+
+  @override
+  String get inputStatusNotConnected => 'Not connected';
+
+  @override
+  String get inputSideRight => 'On the right';
+
+  @override
+  String get inputSideLeft => 'On the left';
+
+  @override
+  String get inputSideAbove => 'Above';
+
+  @override
+  String get inputSideBelow => 'Below';
+
+  @override
+  String get inputSideElsewhere => 'Next to another screen';
+
+  @override
+  String inputScreenCount(int count) {
+    return '$count screens';
+  }
+
+  @override
+  String inputResolution(int width, int height) {
+    return '$width×$height';
+  }
+
+  @override
+  String inputDetail(String resolution, String place) {
+    return '$resolution · $place';
+  }
+
+  @override
+  String get inputRemove => 'Remove';
+
+  @override
+  String get inputReasonPeerNotTrusting => 'It hasn\'t trusted this device yet';
+
+  @override
+  String get inputReasonNotTrusted => 'This device hasn\'t trusted it yet';
+
+  @override
+  String get inputReasonUnsupported => 'Its version doesn\'t support this';
+
+  @override
+  String get inputReasonPeerPermission =>
+      'It hasn\'t allowed being controlled yet';
+
+  @override
+  String get inputReasonBusy => 'It can\'t be controlled right now';
+
+  @override
+  String get inputReasonBlocked =>
+      'It\'s behind a screen that isn\'t connected';
+
+  @override
+  String get inputCandidateUnsupported => 'Not supported';
+
+  @override
+  String get inputPermissionNeeded => 'Needs Accessibility permission';
+
+  @override
+  String inputControlledTitle(String device) {
+    return '$device is controlling this device';
+  }
+
+  @override
+  String get inputControlledHint => 'To control another computer, stop first.';
+
+  @override
+  String get inputSwitchLabel => 'Keyboard and mouse sharing';
+
+  @override
+  String inputScreenLabel(String device, String detail) {
+    return '$device\'s screen, $detail';
+  }
+
+  @override
+  String inputAddLabel(String device) {
+    return 'Add $device to keyboard and mouse sharing';
+  }
+
+  @override
+  String get shellIslandFinished => 'Finished';
+
+  @override
+  String get shellPaletteEmpty => 'Nothing found';
+
+  @override
+  String get shellLinksServiceOff => 'File service is off';
+
+  @override
+  String get shellLinksServiceIdle =>
+      'No links are on, so the service isn\'t running';
+
+  @override
+  String get shellLinksFoot =>
+      'They don\'t need Whisper: on the same network, a browser can open it and download. It uses plain HTTP, so a password only stops casual opening.';
+
+  @override
+  String get shellLinksEmptyTitle => 'No links yet';
+
+  @override
+  String get shellLinksEmptyBody =>
+      'Pick some files to make a link. They don\'t need Whisper: a browser can open it and download.';
+
+  @override
+  String get shellLinksChoose => 'Choose files';
+
+  @override
+  String get shellLinksNew => 'New';
+
+  @override
+  String get shellLinkOff => 'Off';
+
+  @override
+  String get shellLinkMissing => 'Some files have moved';
+
+  @override
+  String shellLinkVisits(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count visits',
+      one: '1 visit',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String shellLinkDownloads(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count downloads',
+      one: '1 download',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String shellLinkVisitsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count times',
+      one: '1 time',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get shellLinkEnabled => 'On';
+
+  @override
+  String get shellLinkPassword => 'Password';
+
+  @override
+  String get shellLinkPasswordSet => 'Set';
+
+  @override
+  String get shellLinkPasswordNone => 'None';
+
+  @override
+  String get shellLinkVisitsLabel => 'Visits';
+
+  @override
+  String get shellLinkDownloadsLabel => 'Downloads';
+
+  @override
+  String get shellLinkDeleted => 'Link deleted';
+
+  @override
+  String get shellMore => 'More';
+
+  @override
+  String shellFilesCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count items',
+      one: '1 item',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get shellFilesSendTo => 'Send to…';
+
+  @override
+  String get shellFilesCopyHere => 'Copy here';
+
+  @override
+  String shellFilesAskOnDevice(String device) {
+    return 'Allow it on $device';
+  }
+
+  @override
+  String shellFilesDenied(String device) {
+    return '$device declined';
+  }
+
+  @override
+  String get shellAppsMoving => 'In flow';
+
+  @override
+  String shellAppsRunsOn(String device) {
+    return 'Runs on $device, shown here';
+  }
+
+  @override
+  String get shellAppsEnd => 'End';
+
+  @override
+  String shellAppsOn(String device) {
+    return 'Apps on $device';
+  }
+
+  @override
+  String shellSettingsAppsSelected(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count selected',
+      zero: 'None selected',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get shellTrayClipboard => 'Clipboard';
+
+  @override
+  String get shellTrayClipboardEmpty => 'Clipboard is empty';
+
+  @override
+  String get shellTrayScreenshot => 'Screenshot';
+
+  @override
+  String get shellTrayRecent => 'Recent clipboard';
+
+  @override
+  String get shellTrayOpen => 'Open Whisper';
+
+  @override
+  String get shellTrayNoDevice => 'No connected devices';
+
+  @override
+  String get shellTraySoundOff => 'Off';
+
+  @override
+  String shellTrayFrom(String device, String when) {
+    return '$device · $when';
+  }
+
+  @override
+  String get shellTrayThisDevice => 'This device';
+
+  @override
+  String shellTrayPlaying(String device) {
+    return 'Playing $device\'s sound';
+  }
+
+  @override
+  String shellTrayControlled(String device) {
+    return '$device is controlling this device';
+  }
+
+  @override
+  String get shellTrayInputOn => 'On';
+
+  @override
+  String shellIslandPlayingOn(String devices) {
+    return 'Playing on $devices';
+  }
+
+  @override
+  String shellIslandControlling(String device) {
+    return 'Controlling $device';
+  }
+
+  @override
+  String get shellToday => 'Today';
+
+  @override
+  String get shellYesterday => 'Yesterday';
+
+  @override
+  String get shellTraySendClipboardTo => 'Send clipboard to';
+
+  @override
+  String get shellTraySendFileTo => 'Send file to';
+
+  @override
+  String get shellTrayPlayOn => 'Play sound on';
+
+  @override
+  String get phoneConnectQrHint => 'Scan this code with another device';
+
+  @override
+  String get phoneConnectScanHint => 'Point at the code on another device';
+
+  @override
+  String get phoneConnectCopyLink => 'Copy connection link';
+
+  @override
+  String get phoneConnectCopied => 'Connection link copied';
+
+  @override
+  String get phoneConnectCopyFailed => 'Couldn’t copy. Try again';
+
+  @override
+  String get phoneConnectOpenSettings => 'Turn On';
+
+  @override
+  String get phonePairApprove => 'Numbers match, pair';
+
+  @override
+  String get pickerNoDevices => 'No other device is connected';
+
+  @override
+  String pickerSendFile(String name) {
+    return 'Send “$name” to';
+  }
+
+  @override
+  String pickerSendItems(int count) {
+    return 'Send $count items to';
+  }
+
+  @override
+  String get pickerSendText => 'Send this text to';
+
+  @override
+  String phoneFilesCopied(int count) {
+    return '$count copied. Paste them in the folder you want';
+  }
+
+  @override
+  String get phoneConnectPort => 'Port';
+
+  @override
+  String shellLinkCreateTitle(String name) {
+    return 'Share “$name”';
+  }
+
+  @override
+  String get shellLinkCreateBody =>
+      'Devices on the same network can open it in a browser and download.';
+
+  @override
+  String get shellLinkPasswordOptional => 'Password (optional)';
+
+  @override
+  String shellAppsShownOn(String device) {
+    return 'Runs here, shown on $device';
+  }
+
+  @override
+  String get shellAppsBringBack => 'Bring back';
+
+  @override
+  String get shellManualConnectTitle => 'Connect by address';
+
+  @override
+  String get shellManualConnectField => 'Address and port';
+
+  @override
+  String get shellLinksChooseFolder => 'Choose folder';
 }

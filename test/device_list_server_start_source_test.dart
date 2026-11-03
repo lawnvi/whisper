@@ -1,28 +1,49 @@
-import 'dart:io';
-
 import 'package:flutter_test/flutter_test.dart';
+import 'package:whisper/state/device_list_rules.dart';
+
+import 'support/source_reading.dart';
 
 void main() {
-  test('refreshing the device list starts the server only once', () {
-    final source = File('lib/page/deviceList.dart').readAsStringSync();
-    final refresh = source.substring(
-      source.indexOf('Future<void> _refreshDevice'),
-      source.indexOf('ChatSessionPreviewStrings _sessionPreviewStrings'),
-    );
+  group('refreshing the device list', () {
     // Starting the server closes every session and each close refreshes the
-    // list. Deciding from `device`, which only the end of a refresh sets,
+    // list. Deciding from the device, which only the end of a refresh sets,
     // restarted the server hundreds of times after launch.
-    final decision = refresh.indexOf(
-      'if (isFirst || _serverStartPort != temp.port) {',
+    test('starts the server once, however many refreshes follow', () {
+      final start = DeviceListServerStart();
+      expect(start.shouldStart(isFirst: true, port: 10002), isTrue);
+      for (var i = 0; i < 100; i++) {
+        expect(start.shouldStart(isFirst: false, port: 10002), isFalse);
+      }
+    });
+
+    test('restarts it when the port changes, then settles again', () {
+      final start = DeviceListServerStart();
+      start.shouldStart(isFirst: true, port: 10002);
+      expect(start.shouldStart(isFirst: false, port: 10003), isTrue);
+      expect(start.shouldStart(isFirst: false, port: 10003), isFalse);
+    });
+
+    test('a refresh before any start still starts it', () {
+      expect(
+        DeviceListServerStart().shouldStart(isFirst: false, port: 10002),
+        isTrue,
+      );
+    });
+
+    test(
+      'decides before waiting for the start, so a refresh it causes sees it',
+      () {
+        final refresh = memberSource(
+          deviceListSource(),
+          'Future<void> _refreshDevice',
+        );
+        final decision = refresh.indexOf('_serverStart.shouldStart(');
+        expect(decision, isNot(-1));
+        expect(
+          refresh.indexOf('await _startServer(port: temp.port);'),
+          greaterThan(decision),
+        );
+      },
     );
-    expect(decision, isNot(-1));
-    final remember = refresh.indexOf('_serverStartPort = temp.port;', decision);
-    final start = refresh.indexOf(
-      'await _startServer(port: temp.port);',
-      decision,
-    );
-    expect(remember, greaterThan(decision));
-    expect(start, greaterThan(remember));
-    expect(refresh, isNot(contains('device?.port != temp.port')));
   });
 }

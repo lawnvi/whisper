@@ -8,8 +8,8 @@
 |---|---|
 | 设计方向、整体布局、三个桌面平台 | 用户已定稿（2026-11-02）。没答复的细节按 `decisions.md`「待定」的默认值做 |
 | 文档、原型 | 完成 |
-| Flutter 代码 | **一行没改**，要从 [`migration.md`](migration.md) 第 0 步开始 |
-| 真实设备上的效果 | 只有 Windows 的云母在真实窗口里跑过（`windows-real-mica-light.jpg`）。其他只在无头 Chrome 里看过原型 |
+| Flutter 代码 | 第 0 到 8 步已实现，在 `--dart-define=WHISPER_NEW_UI=true` 后面，默认关闭；第 9 步（默认打开、删旧界面）等用户决定。见 [`migration.md`](migration.md)「第 2 到 8 步的结果」 |
+| 真实设备上的效果 | macOS 真实窗口实拍过大部分页面；Windows 只实拍过不碰数据的预览入口；Android 在折叠屏和平板模拟器上真实跑过，iPad 模拟器跑过预览入口，都没有上真机；Linux 只做了代码检查。逐项见 [`migration.md`](migration.md)「第 2 到 8 步的结果」「平板和折叠屏的结果」 |
 
 ## 读的顺序
 

@@ -2,16 +2,17 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/source_reading.dart';
+
 void main() {
   test('device list awaits confirmation and localizes socket close errors', () {
-    final source = File('lib/page/deviceList.dart').readAsStringSync();
-    final start = source.indexOf('void onError(String message)');
-    final end = source.indexOf('void onNotice(String message)', start);
-    expect(start, greaterThanOrEqualTo(0));
-    expect(end, greaterThan(start));
-    final section = source.substring(start, end);
+    final source = deviceListSource();
+    expect(
+      memberSource(source, 'void onError(String message)'),
+      contains('unawaited(_handleSocketError(message));'),
+    );
+    final section = memberSource(source, 'Future<void> _handleSocketError(');
 
-    expect(section, contains('unawaited(_handleSocketError(message));'));
     expect(section, contains('if (!mounted) {'));
     expect(
       section.indexOf('if (!mounted) {'),

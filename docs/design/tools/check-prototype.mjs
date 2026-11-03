@@ -328,7 +328,8 @@ await ok('phone: links in settings', await ev(`!!document.querySelector('#main [
 await click('#main [data-a=pgo][data-v=links]'); await sleep(750); await shot('41-phone-links');
 await ok('phone: links page has a plus', await ev(`!!document.querySelector('.tb-end [data-a=linkNew]')`));
 await ok('phone: says no app needed', await ev(`document.querySelector('#main').textContent.includes('不用装 Whisper')`));
-await click('.tb-end [data-a=linkNew]'); await sleep(550); await shot('41b-phone-link-new');
+await click('.tb-end [data-a=linkNew]'); await sleep(350);
+await ev(`document.querySelector('.menu button').click()`); await sleep(550); await shot('41b-phone-link-new');
 await ok('phone: new link without a device', await ev(`!!document.querySelector('form[data-form=link]')`));
 await click('.sheet [data-a=closeSheet]'); await sleep(550);
 await click('[data-a=back]'); await sleep(750);
@@ -430,7 +431,7 @@ for (const os of ['win', 'gnome', 'kde']) {
   await ok(`${os}: shortcuts are spelled out`, await ev(`document.querySelector('[data-a=palette]').title.includes('Ctrl+K')&&document.querySelector('.self [data-a=settings]').title.includes('Ctrl+,')`));
   await click('[data-a=insp]'); await sleep(700);
   await ok(`${os}: the card gives way to the buttons`, await ev(`document.querySelector('#inspIn').firstElementChild.getBoundingClientRect().top>=document.getElementById('capR').getBoundingClientRect().bottom-1`));
-  await ok(`${os}: toolbar reclaims the room when the card is open`, await ev(`parseFloat(getComputedStyle(document.getElementById('win')).getPropertyValue('--cap-r'))===0`));
+  await ok(`${os}: the toolbar keeps its room under a floating card`, await ev(`parseFloat(getComputedStyle(document.getElementById('win')).getPropertyValue('--cap-r'))>0`));
   await ok(`${os}: mount wording follows the platform`, await ev(`[...document.querySelectorAll('#inspIn [aria-label]')].some(e=>e.getAttribute('aria-label').includes(${JSON.stringify(isWin ? '文件资源管理器' : '文件管理器')}))`));
   await shot(`71-${os}-card`);
   await click('[data-a=insp]'); await sleep(500);
@@ -532,7 +533,7 @@ const cardFits = `(()=>{const c=document.getElementById('inspIn'),r=c.getBoundin
 await click('[data-a=insp]'); await sleep(700);
 let cf = await ev(cardFits);
 await ok('expanded: the card is as tall as its content', cf.free>40&&!cf.scrolls, JSON.stringify(cf));
-await ok('expanded: the card floats beside the content', await ev(`(()=>{const a=document.getElementById('inspIn').getBoundingClientRect(),m=document.getElementById('main').getBoundingClientRect();return a.left>=m.right-1&&getComputedStyle(document.getElementById('inspIn')).borderRadius==='20px'})()`));
+await ok('expanded: the card floats over the content', await ev(`(()=>{const a=document.getElementById('insp').getBoundingClientRect(),m=document.getElementById('main').getBoundingClientRect();return a.right<=m.right&&a.left>m.left&&getComputedStyle(document.getElementById('insp')).borderRadius==='20px'})()`));
 await ev(`(()=>{const t=document.createElement('style');t.id='shortWin';t.textContent='.win{height:480px!important}';document.head.append(t)})()`); await sleep(500);
 cf = await ev(cardFits);
 await ok('expanded: a short window scrolls inside the card', cf.free>=9&&cf.scrolls, JSON.stringify(cf));
@@ -545,6 +546,44 @@ cf = await ev(cardFits);
 await ok('regular: a short window scrolls inside the card', cf.free>=9&&cf.scrolls, JSON.stringify(cf));
 await ev(`document.getElementById('shortWin').remove()`); await sleep(200);
 await size(1520, 1420, false); await send('Page.navigate', { url: FILE }); await sleep(800);
+
+// 卡片：盖在内容上，有 ×，点外面、换设备都收起，内容不动
+await click('.side-list [data-dev=imac]'); await sleep(400);
+const mainW = () => ev(`document.getElementById('main').offsetWidth`);
+const cardShown = `getComputedStyle(document.getElementById('insp')).display!=='none'&&document.getElementById('insp').getBoundingClientRect().left<document.getElementById('win').getBoundingClientRect().right`;
+const before = await mainW();
+await click('.tb-end [data-a=insp]'); await sleep(700);
+await ok('card: nothing under it moves', (await mainW())===before);
+await ok('card: it has a close button', await ev(`!!document.querySelector('#inspIn .insp-x')`));
+await click('.insp-x'); await sleep(700);
+await ok('card: the close button closes it', !(await ev(cardShown)));
+await click('.tb-end [data-a=insp]'); await sleep(700);
+await ok('card: reopens', await ev(cardShown));
+await click('.tb-title'); await sleep(700);
+await ok('card: a click anywhere else closes it', !(await ev(cardShown)));
+await click('.tb-end [data-a=insp]'); await sleep(700);
+await click('.side-list [data-dev=tp]'); await sleep(700);
+await ok('card: another device closes it', !(await ev(cardShown)));
+await click('.side-list [data-dev=imac]'); await sleep(700);
+await ok('card: and it stays closed coming back', !(await ev(cardShown)));
+await click('.tb-end [data-a=insp]'); await sleep(700);
+await ev(`document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))`); await sleep(700);
+await ok('card: Esc closes it', !(await ev(cardShown)));
+
+// 灵动岛：永远在窗口正中；这件事自己的进度在屏幕上时不显示
+const islandShown = `!document.getElementById('island').hidden`;
+const islandCentred = `(()=>{const i=document.getElementById('island').getBoundingClientRect(),w=document.getElementById('win').getBoundingClientRect();return Math.abs((i.left+i.width/2)-(w.left+w.width/2))<2})()`;
+await click('[data-a=place][data-v=chat]'); await sleep(500);
+await ev(`(()=>{const s=document.querySelector('.chat-scroll');s.scrollTop=s.scrollHeight})()`); await sleep(400);
+await ok('island: quiet while the file card shows its own progress', !(await ev(islandShown)));
+await ev(`document.querySelector('.chat-scroll').scrollTop=0`); await click('[data-a=place][data-v=files]'); await sleep(700);
+await ok('island: comes back on another tab', await ev(islandShown));
+await ok('island: in the middle of the window', await ev(islandCentred));
+await click('.side-top [data-a=global][data-v=input]'); await sleep(700);
+await ok('island: and on another page', await ev(islandShown));
+await ok('island: still in the middle', await ev(islandCentred));
+await click('.side-list [data-dev=imac]'); await sleep(500);
+await click('[data-a=place][data-v=chat]'); await sleep(600);
 
 // 扫码框
 await click('[data-demo=phone]'); await sleep(600);
@@ -566,7 +605,7 @@ await ok('tablet: tabs have a full touch target', await ev(`(()=>{const b=docume
 await click('[data-a=insp]'); await sleep(650);
 await ok('tablet: device card has no entries the toolbar already has', await ev(`!document.querySelector('#inspIn .circs')`));
 await ok('tablet: device card has only what a phone can do', await ev(`!document.querySelector('#inspIn [data-a=tileAudio]')&&!document.querySelector('#inspIn [data-a=tileMount]')&&!!document.querySelector('#inspIn [data-a=tileClip]')`));
-await ok('tablet: card is beside the content', await ev(`document.getElementById('insp').offsetWidth===330&&getComputedStyle(document.getElementById('insp')).position!=='absolute'`));
+await ok('tablet: card floats over the content', await ev(`document.getElementById('insp').offsetWidth===320&&getComputedStyle(document.getElementById('insp')).position==='absolute'`));
 await shot('tablet-device-card');
 await click('[data-a=insp]'); await sleep(450);
 await click('[data-a=place][data-v=files]'); await sleep(800); await shot('tablet-files');
@@ -623,7 +662,7 @@ await click('.side-list [data-dev=imac]'); await sleep(400);
 await click('[data-fstate="2"]'); await sleep(900);
 await ok('book: the sidebar edge is on the fold', await ev(`Math.abs(document.getElementById('side').offsetWidth-452)<1`));
 await ok('book: fold drawn at the same place', await ev(`(()=>{const c=document.querySelector('#creases i.v').getBoundingClientRect(),m=document.getElementById('main').getBoundingClientRect();return Math.abs((c.left+c.width/2)-m.left)<1})()`));
-await ok('book: island stays in the content half', await ev(`(()=>{const i=document.getElementById('island');if(i.hidden)return true;const a=i.getBoundingClientRect(),m=document.getElementById('main').getBoundingClientRect();return a.left>=m.left-1})()`));
+await ok('book: island is in the middle of the window', await ev(`(()=>{const i=document.getElementById('island');if(i.hidden)return true;const a=i.getBoundingClientRect(),w=document.getElementById('win').getBoundingClientRect();return Math.abs((a.left+a.width/2)-(w.left+w.width/2))<2})()`));
 await shot('fold-book');
 await click('[data-fstate="3"]'); await sleep(900);
 await click('[data-a=pgo][data-v=control]'); await sleep(800);
@@ -658,7 +697,7 @@ await ok('back from narrow keeps the device frame', await ev(`getComputedStyle(d
 await size(1180, 760, false); await sleep(900);
 await ok('scaled frame fits the browser', await ev(`document.getElementById('devFrame').getBoundingClientRect().width<=1180`));
 await click('[data-demo=req]'); await sleep(900);
-await ok('scaled frame: island is inside the content', await ev(`(()=>{const a=document.getElementById('island').getBoundingClientRect(),m=document.getElementById('main').getBoundingClientRect();return a.left>=m.left-1&&a.right<=m.right+1})()`));
+await ok('scaled frame: island is in the middle of the window', await ev(`(()=>{const a=document.getElementById('island').getBoundingClientRect(),w=document.getElementById('win').getBoundingClientRect();return Math.abs((a.left+a.width/2)-(w.left+w.width/2))<2})()`));
 await size(1520, 1420, true); await send('Page.navigate', { url: FILE }); await sleep(800);
 await click('#darkChip'); await sleep(300);
 await form('fold', 1); await shot('fold-open-dark');

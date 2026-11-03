@@ -14,6 +14,11 @@ import 'island_activity.dart';
 import 'island_center.dart';
 import 'island_sources.dart';
 import 'island_views.dart';
+import 'package:whisper/new_ui/shell/shell_island_sources.dart'
+    show installShellIslandSources;
+import 'package:whisper/new_ui/shell/shell_window_chrome.dart'
+    show shellIslandPlacement;
+import 'package:whisper/theme/whisper_ui.dart' show whisperNewUi;
 
 /// The app's island on phones: one black capsule just under the status bar
 /// (below the system's own island, never over it) showing what is going
@@ -99,8 +104,12 @@ class _IslandHostState extends State<IslandHost> with TickerProviderStateMixin {
   void initState() {
     super.initState();
     _center = widget.center ?? IslandSetup.install(widget.navigatorKey);
+    if (whisperNewUi && widget.center == null) {
+      installShellIslandSources(_center);
+    }
     _center.haptics = _haptic;
     _center.addListener(_onCenter);
+    shellIslandPlacement.addListener(_onPlacement);
     _lifecycle = AppLifecycleListener(onStateChange: _onLifecycle);
     final state = WidgetsBinding.instance.lifecycleState;
     if (state != null) {
@@ -113,9 +122,16 @@ class _IslandHostState extends State<IslandHost> with TickerProviderStateMixin {
     });
   }
 
+  void _onPlacement() {
+    if (!mounted) return;
+    _updatePush();
+    setState(() {});
+  }
+
   @override
   void dispose() {
     _lifecycle.dispose();
+    shellIslandPlacement.removeListener(_onPlacement);
     _center.removeListener(_onCenter);
     if (_center.haptics == _haptic) {
       _center.haptics = null;
@@ -207,7 +223,15 @@ class _IslandHostState extends State<IslandHost> with TickerProviderStateMixin {
   /// island floats over it.
   void _updatePush() {
     final shown = _center.stage != IslandStage.hidden;
-    final target = shown && !_center.quiet && _immersive != true ? _band : 0.0;
+    // Beside a sidebar it sits in the toolbar's row, as on a desktop: there is
+    // room, and nothing has to move.
+    final target =
+        shown &&
+            !_center.quiet &&
+            _immersive != true &&
+            shellIslandPlacement.value == null
+        ? _band
+        : 0.0;
     if (target == _pushTarget) {
       return;
     }
@@ -293,8 +317,11 @@ class _IslandHostState extends State<IslandHost> with TickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
-    // The status bar hidden: something fills the screen.
-    final immersive = media.padding.top <= 0;
+    // The status bar hidden: something fills the screen. Not beside a sidebar:
+    // a window in the middle of the screen has no status bar either, and a page
+    // that fills the screen hushes the island itself.
+    final immersive =
+        media.padding.top <= 0 && shellIslandPlacement.value == null;
     if (immersive != _immersive) {
       _immersive = immersive;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -343,6 +370,8 @@ class _IslandHostState extends State<IslandHost> with TickerProviderStateMixin {
     _Frame frame,
   ) {
     final l10n = AppLocalizations.of(context)!;
+    // The middle of the window, always.
+    final placement = shellIslandPlacement.value;
     final left = media.padding.left;
     final area = media.size.width - left - media.padding.right;
     // Just under the status bar: Android keeps its clock, icons and its own
@@ -379,7 +408,17 @@ class _IslandHostState extends State<IslandHost> with TickerProviderStateMixin {
         final openContent = ((s - 1.55) / 0.45).clamp(0.0, 1.0);
         final splitWidth = (_circle + _gap) * split.clamp(0.0, 1.0);
         final islandLeft = left + (area - width - splitWidth) / 2;
-        final y = top + _drag.value;
+        // Beside a sidebar the small island is in the toolbar's row, or under
+        // the toolbar when it would cover the title or the controls, as on a
+        // desktop. It opens from there. The spring does not land on exactly 1.
+        var y = top;
+        if (placement != null) {
+          final clear =
+              islandLeft + width + splitWidth <= placement.controlsLeft - 10 &&
+              islandLeft >= placement.titleRight + 10;
+          y = ui.lerpDouble(media.padding.top + (clear ? 7 : 54), top, lift)!;
+        }
+        y += _drag.value;
         final circleSize = _circle * (0.55 + 0.45 * split.clamp(0.0, 1.0));
         return Stack(
           children: [

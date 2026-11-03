@@ -112,7 +112,84 @@ private let remoteInputCaptureEventMask: CGEventMask = [
   mask | remoteInputEventMask(for: type)
 }
 
+/// What the desktop shows through: the material behind the redesigned UI's
+/// sidebar. It takes no clicks, so they carry on to Flutter above it.
+final class WindowMaterialView: NSVisualEffectView {
+  override func hitTest(_ point: NSPoint) -> NSView? { nil }
+}
+
+/// The redesigned UI's tray panel: a window of its own, with its own engine,
+/// that shows the desktop through a rounded material.
+enum PanelMaterial {
+  private static var channels: [FlutterMethodChannel] = []
+
+  static func register(with controller: FlutterViewController) {
+    let channel = FlutterMethodChannel(
+      name: "com.vireen.whisper/window_theme",
+      binaryMessenger: controller.engine.binaryMessenger)
+    channel.setMethodCallHandler { [weak controller] call, result in
+      guard let controller = controller, let window = controller.view.window else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      switch call.method {
+      case "enablePanelMaterial":
+        let radius = (call.arguments as? [String: Double])?["radius"] ?? 24
+        controller.backgroundColor = .clear
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        let material = WindowMaterialView(frame: controller.view.bounds)
+        material.material = .popover
+        material.blendingMode = .behindWindow
+        material.state = .active
+        material.autoresizingMask = [.width, .height]
+        material.maskImage = roundedMask(radius: radius)
+        controller.view.addSubview(material, positioned: .below, relativeTo: nil)
+        result(true)
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+    channels.append(channel)
+  }
+
+  private static func roundedMask(radius: Double) -> NSImage {
+    let side = radius * 2 + 1
+    let image = NSImage(size: NSSize(width: side, height: side), flipped: false) { rect in
+      NSColor.black.setFill()
+      NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()
+      return true
+    }
+    image.capInsets = NSEdgeInsets(top: radius, left: radius, bottom: radius, right: radius)
+    image.resizingMode = .stretch
+    return image
+  }
+}
+
 class MainFlutterWindow: NSWindow {
+  /// AppKit keeps clicks in the title bar's band to itself, for moving the
+  /// window, even once that band is transparent and Flutter draws the toolbar
+  /// there. So with the material on, the window is not movable except while
+  /// window_manager's drag area is actually moving it. Setting this only while
+  /// a click is handled does not work: it takes effect a turn of the run loop
+  /// later.
+  override func performDrag(with event: NSEvent) {
+    guard windowMaterial != nil else {
+      super.performDrag(with: event)
+      return
+    }
+    isMovable = true
+    super.performDrag(with: event)
+    DispatchQueue.main.async { [weak self] in
+      self?.isMovable = false
+    }
+  }
+
+  var windowMaterial: WindowMaterialView?
+  private var windowResizeObservers: [NSObjectProtocol] = []
+  private var titleBarFrameObservers: [NSObjectProtocol] = []
+  private weak var watchedTitleBarContainer: NSView?
+  private var isLayingOutTrafficLights = false
   private var windowThemeChannel: FlutterMethodChannel?
   private var fileManagerChannel: FlutterMethodChannel?
   private var desktopQuickSendChannel: FlutterMethodChannel?
@@ -135,6 +212,7 @@ class MainFlutterWindow: NSWindow {
     RegisterGeneratedPlugins(registry: flutterViewController)
     FlutterMultiWindowPlugin.setOnWindowCreatedCallback { controller in
       RegisterGeneratedPlugins(registry: controller)
+      PanelMaterial.register(with: controller)
     }
     AudioSharePlugin.register(
       with: flutterViewController.registrar(forPlugin: "AudioSharePlugin"))
@@ -179,6 +257,9 @@ class MainFlutterWindow: NSWindow {
       name: "com.vireen.whisper/window_theme",
       binaryMessenger: controller.engine.binaryMessenger)
     channel.setMethodCallHandler { [weak self] call, result in
+      if self?.handleWindowMaterialCall(call, result: result) == true {
+        return
+      }
       guard call.method == "setBrightness" else {
         result(FlutterMethodNotImplemented)
         return
@@ -200,6 +281,116 @@ class MainFlutterWindow: NSWindow {
       result(nil)
     }
     windowThemeChannel = channel
+  }
+
+  /// The redesigned UI's window, asked for from Dart so the old UI's window
+  /// stays exactly as it was. Returns whether it handled [call].
+  private func handleWindowMaterialCall(
+    _ call: FlutterMethodCall, result: @escaping FlutterResult
+  ) -> Bool {
+    switch call.method {
+    case "enableWindowMaterial":
+      result(enableWindowMaterial())
+      return true
+    case "clipboardIsSensitive":
+      // Password managers mark what they copy; it must not be remembered.
+      let types = NSPasteboard.general.types ?? []
+      result(types.contains(NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType")))
+      return true
+    case "setWindowMaterialVisible":
+      windowMaterial?.isHidden = (call.arguments as? Bool) != true
+      result(nil)
+      return true
+    default:
+      return handleProbeCall(call, result: result)
+    }
+  }
+
+  /// Puts the system material under a transparent Flutter view and the traffic
+  /// lights where the sidebar wants them. Call after window_manager has hidden
+  /// the title bar.
+  private func enableWindowMaterial() -> Bool {
+    guard let flutter = contentViewController as? FlutterViewController else {
+      return false
+    }
+    if windowMaterial != nil { return true }
+    flutter.backgroundColor = .clear
+    isOpaque = false
+    backgroundColor = .clear
+    titlebarSeparatorStyle = .none
+
+    let material = WindowMaterialView(frame: flutter.view.bounds)
+    material.material = .sidebar
+    material.blendingMode = .behindWindow
+    material.state = .followsWindowActiveState
+    material.autoresizingMask = [.width, .height]
+    flutter.view.addSubview(material, positioned: .below, relativeTo: nil)
+    windowMaterial = material
+    isMovable = false
+
+    layoutTrafficLights()
+    keepTrafficLightsInPlace()
+    for name in [
+      NSWindow.didResizeNotification,
+      NSWindow.didEndLiveResizeNotification,
+      NSWindow.didExitFullScreenNotification,
+    ] {
+      windowResizeObservers.append(
+        NotificationCenter.default.addObserver(
+          forName: name, object: self, queue: .main
+        ) { [weak self] _ in
+          self?.keepTrafficLightsInPlace()
+          self?.layoutTrafficLights()
+        })
+    }
+    return true
+  }
+
+  /// AppKit puts the title bar's frames back whenever it retiles it, a change
+  /// of appearance for one, and leaves the buttons where they were: 1 pt over
+  /// the window's top edge. Rather than list what can cause that, watch them.
+  private func keepTrafficLightsInPlace() {
+    guard let titleBar = standardWindowButton(.closeButton)?.superview,
+          let container = titleBar.superview,
+          container !== watchedTitleBarContainer else { return }
+    watchedTitleBarContainer = container
+    titleBarFrameObservers.forEach(NotificationCenter.default.removeObserver)
+    titleBarFrameObservers = [container, titleBar].map { view in
+      view.postsFrameChangedNotifications = true
+      return NotificationCenter.default.addObserver(
+        forName: NSView.frameDidChangeNotification, object: view, queue: nil
+      ) { [weak self] _ in
+        self?.layoutTrafficLights()
+      }
+    }
+  }
+
+  /// DESIGN: 16 from the window's edge, on the toolbar's midline (52 tall). The
+  /// title bar's container only spans the lights, so the rest of the toolbar,
+  /// which Flutter draws under it, still gets its clicks.
+  private func layoutTrafficLights() {
+    guard !isLayingOutTrafficLights,
+          !styleMask.contains(.fullScreen),
+          let close = standardWindowButton(.closeButton),
+          let mini = standardWindowButton(.miniaturizeButton),
+          let zoom = standardWindowButton(.zoomButton),
+          let titleBar = close.superview,
+          let container = titleBar.superview else { return }
+    isLayingOutTrafficLights = true
+    defer { isLayingOutTrafficLights = false }
+    let toolbarHeight: CGFloat = 52
+    let inset: CGFloat = 16
+    let gap = mini.frame.minX - close.frame.minX
+    let width = inset * 2 + gap * 2 + zoom.frame.width
+    container.frame = NSRect(
+      x: 0, y: frame.height - toolbarHeight, width: width, height: toolbarHeight)
+    titleBar.frame = container.bounds
+    for (index, button) in [close, mini, zoom].enumerated() {
+      button.setFrameOrigin(
+        NSPoint(
+          x: inset + CGFloat(index) * gap,
+          y: (toolbarHeight - button.frame.height) / 2))
+    }
   }
 
   private func registerFileManagerChannel(with controller: FlutterViewController) {

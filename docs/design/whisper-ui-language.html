@@ -11,7 +11,7 @@
   --canvas:#f5f5f7; --content:#ffffff; --group:#ffffff; --raised:#ffffff;
   --sidebar:rgba(238,238,243,.66); --mica:rgba(243,243,243,.9); --sidebar-solid:#efeff3; --control:rgba(255,255,255,.72); --panel:rgba(246,246,249,.74); --scrim:rgba(0,0,0,.24);
   --ink:#1d1d1f; --ink2:#6e6e73; --ink3:#86868b;
-  --sep:rgba(60,60,67,.1); --fill:rgba(120,120,128,.1); --fill2:rgba(120,120,128,.18); --sel:rgba(0,0,0,.07); --side-sel:rgba(255,255,255,.62); --side-sel-shadow:0 1px 3px rgba(0,0,0,.08),0 0 0 .5px rgba(0,0,0,.05),inset 0 .5px 0 rgba(255,255,255,.8); --bubble:#e9e9eb;
+  --sep:rgba(60,60,67,.1); --fill:rgba(120,120,128,.1); --fill2:rgba(120,120,128,.18); --sel:rgba(0,0,0,.07); --side-sel:rgba(255,255,255,.62); --side-sel-shadow:0 1px 3px rgba(0,0,0,.08),0 0 0 .5px rgba(0,0,0,.05),inset 0 .5px 0 rgba(255,255,255,.8); --bubble:#f2f2f7;
   --ink2-glass:#515156;
   --accent:#007aff; --on-accent:#ffffff;
   --ok:#1f7a36; --warn:#c93400; --bad:#d70015;
@@ -97,7 +97,7 @@ code{font:12px/1.4 var(--mono)}
 .insp{flex:none;width:0;overflow:hidden;position:relative;background:var(--canvas)}
 .insp-in{width:296px;height:100%;overflow-y:auto;padding:22px 16px 24px;display:flex;flex-direction:column;gap:20px;box-shadow:inset .5px 0 0 var(--sep)}
 .insp-in,.scroll,.side-list,.sheet,.pal-list,.tray,.st-body{scrollbar-width:thin;scrollbar-color:var(--fill2) transparent}
-.win[data-size=regular] .insp{position:absolute;right:10px;top:10px;bottom:10px;width:296px;border-radius:var(--r-l);box-shadow:var(--shadow-2);z-index:6;transform-origin:top right}
+.win[data-size=regular] .insp{position:absolute;right:10px;top:56px;bottom:10px;width:296px;border-radius:var(--r-l);box-shadow:var(--shadow-2);z-index:6;transform-origin:top right}
 .win[data-size=regular] .insp-in{box-shadow:none}
 
 /* 平板和折叠屏：有侧栏，但还是触控，还是手机那一套功能 */
@@ -296,16 +296,16 @@ code{font:12px/1.4 var(--mono)}
 .ihero b{overflow-wrap:anywhere}
 
 /* 消息 */
-.chat{padding:8px 16px 84px;display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%}
+.chat{padding:8px 16px 84px;display:flex;flex-direction:column;align-items:flex-start;gap:6px;width:100%}
 .win[data-size=compact] .chat{padding:8px 12px 92px}
 .when{align-self:center;font-size:var(--t-tiny);color:var(--ink2);margin:14px 0 8px}
 .bub{align-self:flex-start;width:fit-content;max-width:min(72%,30em);padding:7px 13px;border-radius:18px;background:var(--bubble);font-size:var(--t-body);line-height:1.45;overflow-wrap:anywhere;margin-top:8px}
-.bub+.bub{margin-top:2px}
+.bub+.bub{margin-top:0}
 .win[data-size=compact] .bub{max-width:min(80%,30em)}
 .bub.me{align-self:flex-end;background:var(--accent);color:var(--on-accent)}
 .in{animation:rise .5s var(--ease-smooth) both;transform-origin:100% 100%}
 @keyframes rise{from{transform:translateY(26px) scale(.9);opacity:0}to{transform:none;opacity:1}}
-.fcard{display:flex;align-items:center;gap:11px;width:min(276px,82%);padding:10px 12px;border-radius:18px;background:var(--bubble);margin-top:8px}
+.fcard{display:flex;align-items:center;gap:11px;width:min(276px,82%);padding:10px 12px;border-radius:18px;background:var(--bubble);margin-top:6px}
 .fcard.me{align-self:flex-end}
 .fcard b{display:block;font-weight:500;font-size:var(--t-body);line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .fcard small{font-size:var(--t-note);color:var(--ink2);font-variant-numeric:tabular-nums}
@@ -503,7 +503,7 @@ kbd{font:var(--t-tiny)/1 var(--sys);padding:3px 6px;border-radius:var(--r-xs);ba
 .lks .off .tx b{color:var(--ink2)}
 .lks .tx small{display:flex;align-items:center;gap:4px}
 .lks .tx small svg{color:var(--warn)}
-.lks .more{opacity:0;margin-left:-6px;transition:opacity .15s}
+.lks .more{opacity:0;margin-right:-6px;transition:opacity .15s}
 .lks .row:hover .more,.lks .more:focus-visible{opacity:1}
 .win[data-input=touch] .lks .more{display:none}
 .li{width:28px;height:28px;border-radius:7px;display:grid;place-items:center;background:var(--fill);color:var(--ink2);flex:none;transition:background-color .2s,color .2s}
@@ -807,14 +807,15 @@ input[type=range]::-moz-range-thumb{width:var(--tw);height:18px;border:0;border-
 .win[data-size=compact] .tb{padding-right:4px}
 .win[data-os=win]{--float-top:40px;--sheet-gap:96px}
 .win[data-os=linux]{--float-top:44px;--sheet-gap:104px}
-.win[data-os=linux][data-left=true]{--float-top:10px;--sheet-gap:40px}
+.win[data-os=linux][data-left=true]{--float-top:10px;--sheet-gap:96px}
 /* 设备卡片的高度跟着内容走，放不下才在卡片里滚动。常规尺寸盖在内容上，宽屏把内容推开 */
-.win[data-size=regular] .insp{top:calc(var(--status,0px) + var(--float-top,10px));bottom:auto;max-height:calc(100% - var(--status,0px) - var(--float-top,10px) - 10px);display:flex;flex-direction:column}
-.win[data-size=regular] .insp-in{flex:0 1 auto;min-height:0;height:auto}
-.win[data-size=expanded] .insp{display:flex;align-items:flex-start;overflow:visible;box-sizing:border-box;background:var(--content);padding-block:calc(var(--status,0px) + var(--float-top,10px)) 10px;z-index:2}
-.win[data-size=expanded] .insp-in{flex:none;height:auto;max-height:100%;margin-right:10px;border-radius:var(--r-l);background:var(--canvas);box-shadow:var(--shadow-2)}
-.sheet{max-height:calc(100% - var(--sheet-gap,40px))}
-.sheet.settings{height:min(560px,calc(100% - var(--sheet-gap,40px)))}
+.win:not([data-size=compact]) .insp{position:absolute;right:10px;top:calc(var(--status,0px) + var(--float-top,10px));bottom:auto;width:var(--card-w);max-height:calc(100% - var(--status,0px) - var(--float-top,10px) - 10px);display:flex;flex-direction:column;border-radius:var(--r-l);box-shadow:var(--shadow-2);z-index:6;touch-action:pan-y}
+.win:not([data-size=compact]) .insp-in{flex:0 1 auto;min-height:0;height:auto;box-shadow:none}
+.insp-x{position:absolute;right:8px;top:8px;z-index:1}
+.win[data-input=touch] .insp-x{right:2px;top:2px;width:48px;height:48px}
+.win[data-size=compact] .insp-x{display:none}
+.sheet{max-height:calc(100% - var(--sheet-gap,96px))}
+.sheet.settings{height:min(560px,calc(100% - var(--sheet-gap,96px)))}
 .sheet.settings .lockrow{min-height:58px}
 .lockrow .tx{flex:1;min-width:0}
 .lockrow .tx small{white-space:normal;overflow:visible}
@@ -1482,6 +1483,7 @@ function placeHtml() {
 let navDir=0;
 function renderMain() {
   if (kbD&&kbD.moved) return;
+  setTimeout(renderIsland);
   win.dataset.place=S.place;
   const m = $('#main'), gl = isGlobal(), c = S.size==='compact';
   const key = (gl||PHONE_PAGES.includes(S.place)&&S.place!=='card'&&S.place!=='control'?'':S.dev)+'/'+S.place, enter = key!==lastKey; lastKey = key;
@@ -1658,12 +1660,11 @@ function linkSub(l) {
 }
 function placeLinks() {
   const on=S.shares.some(s => s.on);
-  return `<div class="scroll"><div class="pane" style="padding-top:6px">
+  return `<div class="pane" style="padding:6px 20px 12px;flex:none"><div class="group"><div class="row" style="min-height:56px"><span class="tx"><b><span>文件服务</span></b><small>${!S.svc?'链接都打不开':on?'192.168.31.8:10003':'没有开启的链接，服务没有运行'}</small></span>${swHtml('svcToggle','',S.svc,'文件服务')}</div></div></div><div class="scroll"><div class="pane" style="padding-top:0">
     ${S.shares.length?`<div class="group lks">${S.shares.map(l => { const s=linkSub(l), live=l.on&&S.svc; return `<div class="row ${live?'':'off'}" data-k="${l.id}"><span class="fic">${l.dir?folderArt(28):docArt(28)}</span>
       <button class="tx" style="text-align:left" data-a="linkOpen" data-v="${l.id}"><b><span>${esc(l.name)}</span>${l.pw?ic('lock',11):''}</b><small>${s.warn?ic('warn',12):''}<span style="overflow:hidden;text-overflow:ellipsis">${esc(s.t)}</span></small></button>
-      ${swHtml('linkToggle',l.id,l.on,`开启 ${l.name}`)}<button class="iconbtn more" data-a="linkMore" data-v="${l.id}" aria-label="更多操作" title="更多">${ic('more',15,2.4)}</button></div>`; }).join('')}</div>`:`<div class="empty" style="padding:56px 24px">${ic('link',40,1.2)}<b>还没有链接</b><p>选一些文件，生成一个链接。对方不用装 Whisper，用浏览器打开就能下载。</p><button class="btn p lg" data-a="linkNew">选择文件</button></div>`}
-    <div><div class="group"><div class="row" style="min-height:56px"><span class="tx"><b><span>文件服务</span></b><small>${!S.svc?'链接都打不开':on?'192.168.31.8:10003':'没有开启的链接，服务没有运行'}</small></span>${swHtml('svcToggle','',S.svc,'文件服务')}</div></div>
-    <p class="foot-note">对方不用装 Whisper，在同一局域网用浏览器打开就能下载。走的是普通 HTTP，密码只防止别人随意打开。</p></div>
+      <button class="iconbtn more" data-a="linkMore" data-v="${l.id}" aria-label="更多操作" title="更多">${ic('more',15,2.4)}</button>${swHtml('linkToggle',l.id,l.on,`开启 ${l.name}`)}</div>`; }).join('')}</div>`:`<div class="empty" style="padding:56px 24px">${ic('link',40,1.2)}<b>还没有链接</b><p>选一些文件，生成一个链接。对方不用装 Whisper，用浏览器打开就能下载。</p><button class="btn p lg" data-a="linkNew">选择文件</button></div>`}
+    <div>    <p class="foot-note">对方不用装 Whisper，在同一局域网用浏览器打开就能下载。走的是普通 HTTP，密码只防止别人随意打开。</p></div>
   </div></div>`;
 }
 function qrSvg(seed) {
@@ -1711,7 +1712,7 @@ function inspHtml() {
   const playing = AUD.mode==='sink'&&AUD.source===id;
   const p = PERM[id];
   const row = (k,label,dis) => `<div class="row ${dis?'dim':''}"><span>${label}</span><span class="sp"></span>${swHtml('perm',k,p[k],label,dis)}</div>`;
-  return `<div class="ihero">${art(d.kind,d.id,104)}<b>${esc(d.name)}</b><small>${on?'已连接':d.state==='near'?'还没有配对':d.state==='connecting'?'正在连接…':`离线 · ${d.seen}`}</small></div>
+  return `${full?'':`<button class="iconbtn insp-x" data-a="insp" aria-label="关闭">${ic('x',14,2)}</button>`}<div class="ihero">${art(d.kind,d.id,104)}<b>${esc(d.name)}</b><small>${on?'已连接':d.state==='near'?'还没有配对':d.state==='connecting'?'正在连接…':`离线 · ${d.seen}`}</small></div>
     ${full&&d.state!=='near'?`<div class="circs act3">${pc?circ({a:'pgo',v:'control',icon:'keyboard',title:'控制',label:`控制 ${d.name}`,cls:'act',disabled:!on}):''}${circ({a:'pgo',v:'files',icon:'folder',title:'文件',label:`${d.name} 的文件`,cls:'act',disabled:!on})}${circ({a:'pgo',v:'apps',icon:'apps',title:'应用',label:`${d.name} 的应用`,cls:'act',disabled:!on})}</div>`:''}
     ${c?(d.state==='near'?'':`<div class="group"><div class="row ${on?'':'dim'}"><span>把剪贴板同步给 ${esc(d.name)}</span><span class="sp"></span>${swHtml('tileClip',id,LK[id].clip,'把剪贴板同步给这台设备',!on)}</div></div>`):`<div class="circs">${circs}</div>`}
     ${d.state==='near'?'':`<div><div class="glabel">${esc(d.name)} 可以</div><div class="group">
@@ -1727,26 +1728,27 @@ function inspHtml() {
 const inspP = new Spring(0, M.smooth, x => paintInsp(x), .004);
 function placeIsland() {
   if (S.size==='compact') { win.style.removeProperty('--islx'); win.style.removeProperty('--isly'); return; }
-  const m=$('#main').getBoundingClientRect(), w=win.getBoundingClientRect(), iw=($('#islIn')?.offsetWidth||0)*S.zoom, cap=$('#capR'), capOn=!!cap&&cap.offsetWidth>0;
-  const center=m.left-w.left+m.width/2, capEdge=capOn?cap.getBoundingClientRect().left-w.left-10:Infinity;
-  const top=mob()?28:0; let x=center, y=9+top;
+  const w=win.getBoundingClientRect(), iw=($('#islIn')?.offsetWidth||0)*S.zoom, cap=$('#capR'), capOn=!!cap&&cap.offsetWidth>0;
+  /* 永远在窗口正中，不左右让。会盖住标题或控件时落到工具栏下面 */
+  const x=w.width/2, capEdge=capOn?cap.getBoundingClientRect().left-w.left-10:Infinity;
+  const top=mob()?28:0; let y=9+top;
   if (!islOpen) {
     const end=$('.tb-end'); let free=capEdge;
     if (end&&end.children.length) free=Math.min(free,end.getBoundingClientRect().left-w.left-10);
-    if (x+iw/2>free) x=free-iw/2;
-    /* 工具栏放不下就落到工具栏下面，不盖标题 */
-    const t=$('.tb-title b');
-    if (t) { const r=document.createRange(); r.selectNodeContents(t); if (x-iw/2<r.getBoundingClientRect().right-w.left+10) { x=center; y=58+top; } }
+    const t=$('.tb-title b'); let title=0;
+    if (t) { const r=document.createRange(); r.selectNodeContents(t); title=r.getBoundingClientRect().right-w.left; }
+    if (x+iw/2>free||x-iw/2<title+10) y=58+top;
   } else if (capOn&&x+iw/2>capEdge) y=cap.getBoundingClientRect().bottom-w.top+6;
   win.style.setProperty('--islx', x/S.zoom+'px');
   win.style.setProperty('--isly', y+'px');
 }
+let inspDrag=0;
 function paintInsp(x) {
   const el = $('#insp');
-  if (S.size==='expanded') { el.style.width = Math.max(0, x*((mob()?320:296)+10))+'px'; el.style.transform=''; el.style.opacity=''; el.style.display = x<.004?'none':''; }
-  else if (S.size==='regular') { el.style.width=''; el.style.opacity = clamp(x,0,1); el.style.transform=`scale(${.94+.06*x})`; el.style.display = x<.004?'none':''; }
-  else { el.style.width=''; el.style.display=''; }
-  capReserve(x);
+  /* 从右边滑入，盖在内容上，下面什么都不动 */
+  if (S.size==='compact') { el.style.display=''; el.style.transform=''; }
+  else { const w=(mob()?320:296)+34; el.style.transform=`translateX(${inspDrag+(1-x)*(w-inspDrag)}px)`; el.style.display = x<.004?'none':''; }
+  capReserve();
   placeIsland();
 }
 function renderInsp() {
@@ -1754,6 +1756,13 @@ function renderInsp() {
   const show = S.insp && !isGlobal() && !PHONE_PAGES.includes(S.place);
   if (show) morph($('#inspIn'), inspHtml());
   if (inspP.t!==(show?1:0)) inspP.to(show?1:0);
+}
+
+/* 触控屏：手指把卡片往右拉走，不够远就弹回 */
+{ let down=null;
+  $('#insp').addEventListener('pointerdown', e => { if (win.dataset.input==='touch'&&S.size!=='compact') down={x:e.clientX,y:e.clientY,on:false}; });
+  addEventListener('pointermove', e => { if (!down) return; const dx=e.clientX-down.x, dy=e.clientY-down.y; if (!down.on&&Math.abs(dx)>8&&Math.abs(dx)>Math.abs(dy)) down.on=true; if (down.on) { inspDrag=Math.max(0,dx/S.zoom); paintInsp(inspP.x); } });
+  addEventListener('pointerup', () => { if (!down) return; const was=down; down=null; if (!was.on) return; if (inspDrag>(mob()?320:296)*.3) { S.insp=false; renderInsp(); } else { inspDrag=0; paintInsp(inspP.x); } });
 }
 
 /* ---------- 灵动岛 ---------- */
@@ -1767,8 +1776,19 @@ function leading(m) {
   if (m.eq) return EQ;
   return ic(m.link==='audio'?'speaker':'keyboard',16);
 }
+/* 岛说的是现在看不到的事。这件事自己的进度就在屏幕上时，岛让位。要回答的、出问题的不让 */
+function onScreen(m) {
+  if (sheetFn||viewer) return false;
+  if (m.link) return S.place===m.link;
+  if (m.kind!=='transfer'||!m.msg||S.place!=='chat'||isGlobal()||S.dev!==m.dev) return false;
+  const c=$(`#main [data-bar="${m.id}"]`), v=$('.chat-scroll');
+  if (!c||!v) return false;
+  const a=c.getBoundingClientRect(), b=v.getBoundingClientRect();
+  return a.bottom>b.top&&a.top<b.bottom;
+}
+function islandMoments() { return moments().filter(m => !onScreen(m)); }
 function renderIsland() {
-  const el = $('#island'), inn = $('#islIn'), ms = moments();
+  const el = $('#island'), inn = $('#islIn'), ms = islandMoments();
   if (!ms.length) { islOpen=false; el.hidden=true; islW.jump(0); islH.jump(0); return; }
   const wasHidden = el.hidden; el.hidden=false; placeIsland();
   el.classList.toggle('open', islOpen);
@@ -1951,11 +1971,9 @@ function capButtons(names) {
 }
 /* GTK 的 gtk-decoration-layout：冒号左边放左边，右边放右边 */
 const parseLayout = s => { const [l='',r='']=s.split(':'); const ok=x => x.split(',').filter(n => ['minimize','maximize','close'].includes(n)); return {left:ok(l),right:ok(r)}; };
-function capReserve(x) {
+function capReserve() {
   const r=$('#capR'), w=r&&getComputedStyle(r).display!=='none'?r.offsetWidth:0;
-  /* 宽屏设备卡片并排时，按钮落在卡片上面，工具栏不用再让 */
-  const insp=S.size==='expanded'?Math.max(0,(x??inspP.x)*((mob()?320:296)+10)):0;
-  win.style.setProperty('--cap-r',Math.max(0,w-insp)+'px');
+  win.style.setProperty('--cap-r',w+'px');
 }
 function renderChrome() {
   const c=mob(), d=OSES[OS];
@@ -2224,6 +2242,7 @@ function selectDev(id) {
   if (viewer) closeViewer(true);
   if (!isGlobal()&&!PHONE_PAGES.includes(S.place)) S.lastPlace[S.dev] = S.place;
   if (mob()) S.pstack=[];
+  if (id!==S.dev) S.insp=false;
   S.dev = id; S.sel = null; S.path = []; S.fileLoc = null;
   const d = DEV[id];
   S.place = d.state==='near' ? 'chat' : (S.lastPlace[id] || 'chat');
@@ -2278,7 +2297,7 @@ const A = {
   winRestore() { showWin(); },
   sysApp() { if (S.winGone) showWin(); else hideWin('min'); },
   nmPick(_,el) { const i=NM[+el.dataset.v]; if (!i) return; if (i.sub) { S.nmOpen=S.nmOpen===i.id?null:i.id; renderTray(); return; } S.tray=false; S.nmOpen=null; renderTray(); i.on&&i.on(); },
-  linkNew() { linkCreate('周报.pdf'); },
+  linkNew(_,el) { showMenu(el,'',[{label:'选择文件',on:() => linkCreate('周报.pdf')},{label:'选择文件夹',on:() => linkCreate('旅行照片')}]); },
   noopHist() { note('示例','搜索聊天记录在这里'); },
   sendClip() { const c=S.clip; if (c.kind==='text') { MSG[S.dev].push({t:'b',me:1,v:c.text,fresh:1}); } else { const id=startTransfer(S.dev,'截图 17:45.png',`发到 ${DEV[S.dev].name}`,true); MSG[S.dev].push({t:'f',me:1,name:'截图 17:45.png',size:'2.4 MB',act:id,fresh:1}); } chatPin=true; renderAll(); },
   shot() { S.attach='截图 17:45.png'; renderMain(); $('#composerInput')?.focus({preventScroll:true}); },
@@ -2288,7 +2307,7 @@ const A = {
     e.preventDefault();
     showMenu(el,'',[{label:'文件…',icon:'doc',on:() => sendFile()},...(mob()?[{label:'照片…',icon:'camera',on:() => sendFile()}]:[{label:'文件夹…',icon:'folder',on:() => sendFile()}])]);
   },
-  insp() { S.insp=!S.insp; renderInsp(); $('[data-a=insp]')?.setAttribute('aria-pressed',S.insp); },
+  insp() { S.insp=!S.insp; inspDrag=0; renderInsp(); $('[data-a=insp]')?.setAttribute('aria-pressed',S.insp); },
     closeSheet() { closeSheet(); },
   palette() { openPalette(); },
   self() { S.tray=false; renderTray(); if (mob()) { S.connTab='qr'; S.place==='connect'||phoneGo('connect'); return; } openSheet('self', () => selfSheet()); },
@@ -2441,6 +2460,10 @@ document.addEventListener('click', e => {
   if (!t.closest('.menu') && !t.closest('[data-a=composeAct]') && !t.closest('[data-a=fileLoc]') && !t.closest('[data-a=fileMore]') && !t.closest('.dev') && !t.closest('[data-a=audRolePick]') && !t.closest('[data-a=prefPick]') && !t.closest('[data-a=linkMore]') && !t.closest('[data-a=fileTo]') && !t.closest('[data-a=vSend]')) closeMenus();
   if (!t.closest('#palette') && !t.closest('[data-a=palette]')) closePalette();
   if (islOpen && !t.closest('#island') && !t.closest('[data-demo]') && !reqs.length) { islOpen=false; renderIsland(); }
+  /* 点卡片外面就收起，这一下照常生效 */
+  /* 用 composedPath：点的东西可能已经被重画，离开了文档 */
+  const hit=e.composedPath();
+  if (S.insp && S.size!=='compact' && !hit.some(n => n.id==='insp'||n.id==='try'||n.id==='overlay'||n.dataset?.a==='insp')) { S.insp=false; renderInsp(); $('[data-a=insp]')?.setAttribute('aria-pressed',false); }
   if ((S.tray||S.trayMenu) && !t.closest('#trayPanel') && !t.closest('#trayMenu') && !t.closest('#trayBtn') && !t.closest('[data-demo=tray]')) { S.tray=false; S.trayMenu=null; S.nmOpen=null; S.hold=null; renderTray(); }
   if (e.detail===0) { const c=t.closest('.bchip[data-kb]'); if (c&&!c.disabled) kbAdd(c.dataset.kb); }
   const el=t.closest('[data-a]');
@@ -2485,7 +2508,7 @@ document.addEventListener('keydown', e => {
   }
   if ((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k') { e.preventDefault(); openPalette(); }
   if ((e.metaKey||e.ctrlKey)&&e.key===',') { e.preventDefault(); A.settings(); }
-  if (e.key==='Escape') { closeMenus(); closePalette(); closeSheet(); if (islOpen&&!reqs.length){islOpen=false;renderIsland();} S.tray=false; S.hold=null; renderTray(); }
+  if (e.key==='Escape') { closeMenus(); closePalette(); closeSheet(); if (S.insp&&S.size!=='compact'){S.insp=false;renderInsp();} if (islOpen&&!reqs.length){islOpen=false;renderIsland();} S.tray=false; S.hold=null; renderTray(); }
   const s=e.target.closest?.('.scr[data-node]');
   if (s) {
     const id=s.dataset.node;
@@ -2508,6 +2531,8 @@ document.addEventListener('keydown', e => {
 }, true);
 document.addEventListener('scroll', e => {
   const t=e.target; if (t.classList && t.classList.contains('scroll')) $('#main').classList.toggle('scrolled', t.scrollTop>2);
+  /* 文件卡片滚出屏幕后，岛回来说它的进度 */
+  if (t.classList && t.classList.contains('chat-scroll')) renderIsland();
 }, true);
 $('#trayBtn').addEventListener('click',() => { S.trayMenu=null; S.nmOpen=null; S.tray=!S.tray; if (!S.tray) S.hold=null; renderTray(); });
 $('#trayBtn').addEventListener('contextmenu',e => { e.preventDefault(); S.tray=false; S.nmOpen=null; S.trayMenu=isLinux()?'linux':'basic'; renderTray(); });

@@ -4,6 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/window_stream/android/window_activity.dart';
 import 'package:whisper/window_stream/core/window_input_event.dart';
 
+import 'support/source_reading.dart';
+
 void main() {
   test('the window activity\'s touches and keys become stream input', () {
     final tap = NativeWindowActivity.inputOf({
@@ -56,7 +58,7 @@ void main() {
       'lib/page/remote_files/files_model.dart',
     ).readAsStringSync();
     expect(model, contains('markOwnClipboardFiles(paths)'));
-    final deviceList = File('lib/page/deviceList.dart').readAsStringSync();
+    final deviceList = deviceListSource();
     expect(deviceList, contains('if (isOwnClipboardFiles(paths))'));
   });
 }

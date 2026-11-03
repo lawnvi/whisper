@@ -10,6 +10,7 @@ import 'package:flutter/physics.dart';
 import 'package:flutter/rendering.dart' show RenderRepaintBoundary;
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
+import 'package:whisper/helper/orientation_policy.dart';
 
 import 'flow_app_icon.dart';
 import 'flow_recents_deck.dart';
@@ -316,9 +317,7 @@ class _FlowSwitcherState extends State<FlowSwitcher>
   void dispose() {
     if (_landscape) {
       // Back to how the app is held everywhere else.
-      unawaited(
-        SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]),
-      );
+      WhisperOrientation.release(this);
     }
     _backdrop?.dispose();
     _scroll.dispose();
@@ -569,16 +568,14 @@ class _FlowSwitcherState extends State<FlowSwitcher>
   void _toggleOrientation() {
     HapticFeedback.selectionClick();
     setState(() => _landscape = !_landscape);
-    unawaited(
-      SystemChrome.setPreferredOrientations(
-        _landscape
-            ? [
-                DeviceOrientation.landscapeLeft,
-                DeviceOrientation.landscapeRight,
-              ]
-            : [DeviceOrientation.portraitUp],
-      ),
-    );
+    if (_landscape) {
+      WhisperOrientation.hold(this, const [
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+    } else {
+      WhisperOrientation.release(this);
+    }
   }
 
   // ---------------------------------------------------------------- build

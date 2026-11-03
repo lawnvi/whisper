@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/source_reading.dart';
+
 void main() {
   test(
     'foreground keep-alive notification opens the app and shows progress',
@@ -291,7 +293,7 @@ void main() {
   );
 
   test('LAN server owns Android keep alive before the first pairing', () {
-    final deviceList = File('lib/page/deviceList.dart').readAsStringSync();
+    final deviceList = deviceListSource();
     final notificationPermission = deviceList.indexOf(
       'Permission.notification.isDenied',
     );
@@ -347,7 +349,7 @@ void main() {
   );
 
   test('notification listener callback returns events to the main isolate', () {
-    final deviceList = File('lib/page/deviceList.dart').readAsStringSync();
+    final deviceList = deviceListSource();
 
     expect(
       deviceList,
@@ -431,7 +433,7 @@ void main() {
   test(
     'enabled notification forwarding resumes without prompting on startup',
     () {
-      final deviceList = File('lib/page/deviceList.dart').readAsStringSync();
+      final deviceList = deviceListSource();
 
       expect(deviceList, contains('await LocalSetting().isListenAndroid()'));
       expect(deviceList, contains('final forwardingEnabled ='));

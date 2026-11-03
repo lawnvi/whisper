@@ -5,7 +5,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_code_scanner_plus/qr_code_scanner_plus.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:whisper/new_ui/shell/shell_manual_connect.dart';
+import 'package:whisper/new_ui/shell/shell_parts.dart';
+import 'package:whisper/new_ui/shell/shell_touch.dart';
+import 'package:whisper/helper/helper.dart' show isMobile;
 import 'package:whisper/l10n/app_localizations.dart';
+import 'package:whisper/new_ui/phone/phone_connect_page.dart';
+import 'package:whisper/theme/whisper_ui.dart'
+    show WhisperPageRoute, whisperNewUi;
 import 'package:whisper/state/pairing_invite.dart';
 import 'package:whisper/state/peer_endpoint.dart';
 import 'package:whisper/widget/manual_connection_dialog.dart';
@@ -32,7 +39,44 @@ Future<PairingQrResult?> showPairingQrDialog(
   bool startWithAddress = false,
   bool startWithScanner = true,
   PairingQrDialogController? controller,
+  String localName = '',
+  String? localFingerprint,
+  Future<PairingInvite?> Function()? reloadInvite,
+  bool deeper = false,
 }) {
+  // surfaces.md「手机 · 连接设备」: a page of the stack, starting on this
+  // phone's code, whatever the caller last preferred.
+  if (whisperNewUi && (isMobile() || ShellContent.attached)) {
+    Widget page(BuildContext context) => PhoneConnectPage(
+      localInvite: localInvite,
+      localName: localName,
+      localPeerId: localPeerId,
+      fingerprint: localFingerprint,
+      startWithAddress: startWithAddress,
+      controller: controller,
+      reloadInvite: reloadInvite,
+    );
+    // In the content area, like settings. From a row of settings it is a page
+    // further in, with a way back to them.
+    if (ShellContent.attached) {
+      return deeper
+          ? ShellContent.push<PairingQrResult>(
+              WhisperPageRoute<PairingQrResult>(builder: page),
+            )
+          : ShellContent.pushTop<PairingQrResult>(page);
+    }
+    return Navigator.of(
+      context,
+      rootNavigator: true,
+    ).push<PairingQrResult>(WhisperPageRoute<PairingQrResult>(builder: page));
+  }
+  // The desktop's code is in 这台面板: what is left to ask for is an address.
+  if (whisperNewUi && startWithAddress) {
+    return showShellSheet<PairingQrResult>(
+      context,
+      builder: (context) => ShellManualConnect(localHost: localInvite?.host),
+    );
+  }
   return showWhisperDialog<PairingQrResult>(
     context,
     useSafeArea: false,
@@ -51,9 +95,10 @@ final class PairingQrDialogController {
 
   void dismiss() => _dismiss?.call();
 
-  void _attach(VoidCallback dismiss) => _dismiss = dismiss;
+  /// For whatever is showing the code: the dialog, or the phone's page.
+  void attach(VoidCallback dismiss) => _dismiss = dismiss;
 
-  void _detach(VoidCallback dismiss) {
+  void detach(VoidCallback dismiss) {
     if (identical(_dismiss, dismiss)) {
       _dismiss = null;
     }
@@ -107,7 +152,7 @@ class _PairingQrDialogState extends State<PairingQrDialog>
   @override
   void initState() {
     super.initState();
-    widget.controller?._attach(_dismissCallback);
+    widget.controller?.attach(_dismissCallback);
   }
 
   @override
@@ -146,7 +191,7 @@ class _PairingQrDialogState extends State<PairingQrDialog>
 
   @override
   void dispose() {
-    widget.controller?._detach(_dismissCallback);
+    widget.controller?.detach(_dismissCallback);
     _tabController.removeListener(_onTabChanged);
     _tabController.dispose();
     _copyResetTimer?.cancel();

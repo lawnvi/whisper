@@ -7,6 +7,7 @@ import '../../../l10n/app_localizations.dart';
 import '../../../page/remote_files/files_copy_island.dart';
 import '../../../remote_files/fs_copies.dart';
 import '../island_activity.dart';
+import '../island_home.dart';
 import '../island_views.dart';
 
 /// Where the file manager can show more about a copy, while it is open:
@@ -72,6 +73,7 @@ class CopyIslandSource extends ChangeNotifier implements IslandSource {
         kind: IslandKind.copy,
         status: islandStatusOfCopy(batch.phase),
         since: batch.started,
+        home: IslandHomes.transfers,
         presenter: CopyPresenter(batch: batch, copies: copies),
       ),
   ];

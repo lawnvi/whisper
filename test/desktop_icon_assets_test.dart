@@ -5,11 +5,13 @@ import 'dart:ui' as ui;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/helper/windows_system_theme.dart';
 
+import 'support/source_reading.dart';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test('desktop tray uses dedicated high-contrast assets', () async {
-    final source = File('lib/page/deviceList.dart').readAsStringSync();
+    final source = deviceListSource();
     final pubspec = File('pubspec.yaml').readAsStringSync();
 
     final windowsTheme = File(
@@ -45,7 +47,7 @@ void main() {
   });
 
   test('Windows has a dark tray icon for a light taskbar', () async {
-    final source = File('lib/page/deviceList.dart').readAsStringSync();
+    final source = deviceListSource();
     final pubspec = File('pubspec.yaml').readAsStringSync();
 
     // The tray icon is white and vanishes on the light taskbar of Windows.

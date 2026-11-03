@@ -2,12 +2,14 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/source_reading.dart';
+
 void main() {
   test('desktop pairing requests reveal and focus the app window', () {
     final helper = File(
       'lib/helper/desktop_window_attention.dart',
     ).readAsStringSync();
-    final deviceList = File('lib/page/deviceList.dart').readAsStringSync();
+    final deviceList = deviceListSource();
     final conversation = File('lib/page/conversation.dart').readAsStringSync();
 
     expect(helper, contains('windowManager.restore()'));
@@ -18,7 +20,7 @@ void main() {
   });
 
   test('desktop app closes resources before accepting system exit', () {
-    final deviceList = File('lib/page/deviceList.dart').readAsStringSync();
+    final deviceList = deviceListSource();
 
     expect(deviceList, contains('with WidgetsBindingObserver'));
     expect(deviceList, contains('Future<AppExitResponse> didRequestAppExit()'));
@@ -26,7 +28,7 @@ void main() {
   });
 
   test('Windows close-to-tray cancels the exit request before cleanup', () {
-    final deviceList = File('lib/page/deviceList.dart').readAsStringSync();
+    final deviceList = deviceListSource();
     final exitHandler = RegExp(
       r'Future<AppExitResponse> didRequestAppExit\(\) async \{[\s\S]*?\n  \}',
     ).firstMatch(deviceList)!.group(0)!;

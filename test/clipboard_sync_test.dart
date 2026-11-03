@@ -4,6 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/helper/clipboard_sync.dart';
 import 'package:whisper/helper/desktop_clipboard_image.dart';
 
+import 'support/source_reading.dart';
+
 void main() {
   test('skips text sync when clipboard contains copied files', () async {
     var textReads = 0;
@@ -48,11 +50,8 @@ void main() {
   });
 
   test('clipboard watcher drops stale asynchronous callbacks', () {
-    final source = File('lib/page/deviceList.dart').readAsStringSync();
-    final callback = source.substring(
-      source.indexOf('void onClipboardChanged() async'),
-      source.indexOf('\n}\n\nclass DeviceDetailsScreen'),
-    );
+    final source = deviceListSource();
+    final callback = memberSource(source, 'void onClipboardChanged() async');
 
     expect(callback, contains('final generation = ++_clipboardSyncGeneration'));
     expect(

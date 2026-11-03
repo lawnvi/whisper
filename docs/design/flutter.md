@@ -1,12 +1,11 @@
 # Flutter 实现配方
 
-这些代码在 Flutter 3.44.9 的临时工程里通过了 `flutter analyze` 和 32 项测试：弹簧改目标保留速度、液体滑块拉伸后归位、切分页不重建页面且不丢内部状态、页面第一次显示才创建、切换途中再切不跳变、减少动态效果时只淡入淡出、依次升起每次重放、回车和空格能触发、滑块命中区够大、进度满了高光停止、路由推拉、气泡贴着最长一行、设备顺序、窗口按钮、尺寸类和折叠姿态。**但还没有放到真实页面里，手感要在真机上再调。**
+这些代码已经放进 `lib/theme/whisper_ui.dart`，测试在 `test/whisper_ui_test.dart`（第 0 步），在 Flutter 3.41.7 上过了 `flutter analyze` 和测试。**以后以代码为准，这里是说明和来历。** 覆盖的行为：弹簧改目标保留速度、液体滑块拉伸后归位、切分页不重建页面且不丢内部状态、页面第一次显示才创建、切换途中再切不跳变、减少动态效果时只淡入淡出、依次升起每次重放、回车和空格能触发、滑块命中区够大、进度满了高光停止、路由推拉、气泡贴着最长一行、设备顺序、窗口按钮、尺寸类和折叠姿态。**但还没有放到真实页面里，手感要在真机上再调。**
 
-建议放进 `lib/theme/`，比如 `lib/theme/whisper_ui.dart`。文件头：
+文件头：
 
 ```dart
 import 'dart:async';
-import 'dart:io' show Platform;
 import 'dart:math' as math;
 import 'dart:ui'
     show DisplayFeature, DisplayFeatureState, DisplayFeatureType, ImageFilter;
@@ -47,6 +46,8 @@ class WhisperColors extends ThemeExtension<WhisperColors> {
     required this.selected,
     required this.sidebarSolid,
     required this.sidebarSelected,
+    required this.sidebarVeil,
+    required this.scrim,
   });
 
   static const light = WhisperColors(
@@ -54,7 +55,7 @@ class WhisperColors extends ThemeExtension<WhisperColors> {
     content: Color(0xFFFFFFFF),
     group: Color(0xFFFFFFFF),
     raised: Color(0xFFFFFFFF),
-    bubble: Color(0xFFE9E9EB),
+    bubble: Color(0xFFF2F2F7),
     ink: Color(0xFF1D1D1F),
     ink2: Color(0xFF6E6E73),
     ink3: Color(0xFF86868B),
@@ -70,6 +71,8 @@ class WhisperColors extends ThemeExtension<WhisperColors> {
     selected: Color(0x12000000),
     sidebarSolid: Color(0xFFEFEFF3),
     sidebarSelected: Color(0x9EFFFFFF),
+    sidebarVeil: Color(0x9EFFFFFF),
+    scrim: Color(0x3D000000),
   );
 
   static const dark = WhisperColors(
@@ -93,6 +96,8 @@ class WhisperColors extends ThemeExtension<WhisperColors> {
     selected: Color(0x1AFFFFFF),
     sidebarSolid: Color(0xFF252528),
     sidebarSelected: Color(0x1FFFFFFF),
+    sidebarVeil: Color(0x00FFFFFF),
+    scrim: Color(0x75000000),
   );
 
   final Color canvas, content, group, raised, bubble;
@@ -106,6 +111,12 @@ class WhisperColors extends ThemeExtension<WhisperColors> {
 
   /// The raised selection behind the current sidebar row.
   final Color sidebarSelected;
+
+  /// Over the macOS material, which goes grey on a dark wallpaper.
+  final Color sidebarVeil;
+
+  /// Behind a panel.
+  final Color scrim;
 
   @override
   WhisperColors copyWith({Color? accent}) => WhisperColors(
@@ -129,6 +140,8 @@ class WhisperColors extends ThemeExtension<WhisperColors> {
     selected: selected,
     sidebarSolid: sidebarSolid,
     sidebarSelected: sidebarSelected,
+    sidebarVeil: sidebarVeil,
+    scrim: scrim,
   );
 
   @override
@@ -156,6 +169,8 @@ class WhisperColors extends ThemeExtension<WhisperColors> {
       selected: l(selected, other.selected),
       sidebarSolid: l(sidebarSolid, other.sidebarSolid),
       sidebarSelected: l(sidebarSelected, other.sidebarSelected),
+      sidebarVeil: l(sidebarVeil, other.sidebarVeil),
+      scrim: l(scrim, other.scrim),
     );
   }
 }
@@ -165,7 +180,7 @@ extension WhisperTheme on BuildContext {
 }
 
 abstract final class WhisperRadius {
-  static const xs = 6.0, s = 10.0, m = 14.0, l = 20.0, capsule = 999.0;
+  static const xs = 6.0, s = 10.0, m = 14.0, l = 20.0, bubble = 18.0, composer = 26.0, tray = 24.0, appIcon = 12.0, thumbBar = 3.0, capsule = 999.0, sheetTop = 30.0, sheetBottom = 46.0, viewfinderMark = 12.0;
 }
 
 /// Six roles, two densities. Touch follows the platform, not the size class.
@@ -862,7 +877,7 @@ SliderThemeData whisperSliderTheme(BuildContext context, {bool touch = false}) {
     overlayColor: const Color(0x00000000),
     thumbShape: CapsuleThumbShape(width: thumb),
     overlayShape: RoundSliderOverlayShape(overlayRadius: touch ? 24 : 14),
-    trackShape: const RoundedRectSliderTrackShape(),
+    trackShape: WhisperSliderTrackShape(thumbWidth: thumb),
     tickMarkShape: SliderTickMarkShape.noTickMark,
     showValueIndicator: ShowValueIndicator.never,
     padding: EdgeInsets.symmetric(horizontal: thumb / 2),
@@ -965,8 +980,10 @@ class _WhisperProgressBarState extends State<WhisperProgressBar>
 ```dart
 enum GlassKind { sidebar, control, panel }
 
-/// Windows and Linux do not blur: the existing FlowGlass notes dropped frames.
-bool get whisperGlassBlurs => kIsWeb || !(Platform.isWindows || Platform.isLinux);
+/// Glass inside the window shows the window's own content, so it blurs on every
+/// platform (DESIGN.md「平台」). Set this false once, at startup, where the GPU
+/// cannot keep up: glass then falls back to the opaque canvas.
+bool whisperGlassBlurs = true;
 
 /// A saturation matrix, as CSS `saturate()`.
 List<double> _saturate(double s) {
@@ -1027,7 +1044,7 @@ class WhisperGlass extends StatelessWidget {
 }
 ```
 
-**玻璃要透出东西才像玻璃**。侧栏要透出桌面，需要透明窗口和系统材质，见 `migration.md` 第 1 步。没验证之前用不透明的 `canvas`。控制层和面板的顶边加高光：一层 0.5 的 `Border(top: ...)`，浅色白 80%，深色白 14%。
+**玻璃要透出东西才像玻璃**。侧栏要透出桌面，需要透明窗口和系统材质，见下面「隐藏标题栏和云母」。控制层和面板的顶边加高光：一层 0.5 的 `Border(top: ...)`，浅色白 80%，深色白 14%。
 
 ## 气泡
 
@@ -1187,6 +1204,12 @@ class WindowButtons extends StatelessWidget {
   final String Function(WindowButton button, bool maximized) label;
 
   /// How far a toolbar has to stay clear of the buttons.
+  /// Where the buttons end, from the window's top.
+  static double heightOf(WindowButtonStyle style) => switch (style) {
+    WindowButtonStyle.windows => 32.0,
+    WindowButtonStyle.gnome || WindowButtonStyle.kde => 38.0,
+  };
+
   static double widthOf(WindowButtonStyle style, int count) {
     if (count == 0) return 0;
     return switch (style) {
@@ -1414,6 +1437,18 @@ class _WindowGlyph extends CustomPainter {
 
 ## 隐藏标题栏和云母
 
+**接口在 `lib/theme/whisper_window.dart`（`WhisperWindow`），都是新界面开关打开后才调用。验证结果见 `migration.md` 第 1 步。**
+
+**拖动区放在控件后面，不要包住控件。** `DragToMoveArea` 带双击手势，包住分页胶囊时每次点按都要多等 300 毫秒。工具栏用 `Stack`：底层铺满 `DragToMoveArea`，控件放在上层，空白处自然落到底层。
+
+### macOS
+
+`enableWindowMaterial`（`macos/Runner/MainFlutterWindow.swift`）把 `NSVisualEffectView`（`.sidebar`、`.behindWindow`）放在透明的 Flutter 视图下面，并把红绿灯摆到距边 16、工具栏中线上。AppKit 重排标题栏时（切主题就会）只把容器的 frame 改回默认，按钮留在原处，红绿灯就跑到窗口顶边外。所以要监听容器的 `frameDidChangeNotification` 再摆一次，不能只在缩放时摆。
+
+**工具栏这一条的点击默认到不了 Flutter**：AppKit 把标题栏区域留给移动窗口，即使它已经透明。第 1 步实测，点 y=26 时 `hitTest` 返回 FlutterView，Flutter 却什么也收不到；只在处理点击的那一刻关掉 `isMovable` 也没用，它要等到下一轮事件循环才生效。所以开着材质时窗口一直 `isMovable = false`，只有 `performDrag` 期间打开。最上面约 4 像素留给系统缩放窗口。
+
+### Windows
+
 **这段在 Windows 11（build 26100，150% 缩放）上真实跑过**，用不带插件的 Flutter 3.44.9 release 工程。结果在 `windows-real-mica-light.jpg`、`windows-real-mica-dark.jpg`：透明的 Flutter 能透出云母，系统给的 8 圆角、细边框、阴影都在，`BackdropFilter` 能模糊窗口内部的内容。
 
 加到 `windows/runner/window_theme_plugin.cpp` 的 `SetBrightness` 里，亮暗一变就要重新设：
@@ -1443,13 +1478,16 @@ const WindowOptions(
 
 **还没验证的**（这台机器没开开发者模式，带插件的 Windows 工程建不了符号链接，所以 `window_manager` 这部分没跑）：和 `window_manager` 一起用时的顺序；上边缘能不能拖动缩放；最大化时有没有被裁掉一圈（`window_manager` 的 `adjustNCCALCSIZE` 应该处理了）；悬停最大化按钮时的贴靠布局。贴靠布局要在原生层给 `WM_NCHITTEST` 返回 `HTMAXBUTTON`，Flutter 的子窗口又会先收到鼠标，**可能做不到，做不到就告诉用户**，Win+Z 还能用。
 
-**Linux 没有编译过**，下面是读 `window_manager` 源码后的做法：
+### Linux
+
+**这台 Mac 上只对着 GTK 头文件做过语法检查（`GDK_WINDOWING_X11` 分支没有覆盖），没有真正编译和运行过。** 下面是读 `window_manager` 源码后的做法，已经写进 `linux/my_application.cc`。runner 比 Dart 先跑，看不到 `--dart-define`，所以新界面要同时设环境变量：`WHISPER_NEW_UI=1 flutter run -d linux --dart-define=WHISPER_NEW_UI=true`。不设时和旧界面完全一样。
 
 ```c
 // linux/my_application.cc
 // 现在只有 GNOME 和 Wayland 用 header bar。其他情况 window_manager 隐藏标题栏时会
 // gtk_window_set_decorated(false)，阴影和边缘缩放都没了。改成一律用 header bar，
 // 隐藏时 window_manager 只是把它设成不可见，GTK 的客户端装饰还在。
+// 只在 WHISPER_NEW_UI=1 时，其他情况保持原来的判断。
 gboolean use_header_bar = TRUE;
 
 // 读按钮布局，通过 MethodChannel 给 Dart，再喂给 WindowButtonLayout.parse。
@@ -1514,9 +1552,14 @@ class WhisperLayout {
   static const touchSidebarMin = 240.0;
   static const touchSidebarMax = 300.0;
 
+  /// For tests, and sample entries looking at the other density.
+  @visibleForTesting
+  static bool? debugTouchOverride;
+
+  /// `Platform` and not `defaultTargetPlatform`, which says android in every
+  /// `flutter test`: this agrees with `isDesktop()` on the host running it.
   static bool get touchPlatform =>
-      defaultTargetPlatform == TargetPlatform.iOS ||
-      defaultTargetPlatform == TargetPlatform.android;
+      debugTouchOverride ?? (Platform.isIOS || Platform.isAndroid);
 
   static WhisperLayout of(BuildContext context) => resolve(
     size: MediaQuery.sizeOf(context),
@@ -1586,7 +1629,11 @@ class WhisperLayout {
 
 **状态变化不重建。** 这是动效能放出来的前提。同一个控件要留在树里的同一位置，用稳定的 `key`，不要因为状态变化换 `key` 或换父节点。开关用 `SpringBuilder` 驱动滑块位置。
 
-**开关**：38×22，滑块 18（距边 2），开时 `accent`，关时 `fill2`。滑块位置走 `snappy`，按住时滑块变宽到 22。
+**开关**：`WhisperSwitch`。38×22，滑块 18（距边 2），开时 `accent`，关时 `fill2`。滑块位置走 `snappy`，按住时滑块变宽到 22。
+
+**弹层和菜单**：`WhisperModalRoute`，走 `smooth`，中途可以关。弹层从 0.94 淡入，遮罩是 `scrim`；触控是底部弹层（`bottomSheet`）；菜单（`menu`）没有遮罩，从按钮长出来：缩放 0.92、上移 6。
+
+**设置分区的彩色小图标**：`WhisperSettingsIcons`，底色从上到下压暗 22%，顶边一条 0.5 的白色高光，深浅色一样。连接用 `accent`。
 
 **圆形勾选**：22，未选 1.5 的 `ink3` 描边，选中 `accent` 底白勾。
 
@@ -1598,9 +1645,17 @@ class WhisperLayout {
 
 **页面栈**（手机）：用上面的 `WhisperPageRoute`，首页也要用它，旧页才会后退。
 
+**共享页的控件**：`lib/new_ui/share/share_parts.dart`（工具栏、开关、圆形勾选、按钮、内缩分组、菜单）。屏幕块的颜色和投影是 `WhisperScreens`，开关滑块的投影是 `whisperKnobShadow`，声波的周期是 `WhisperLoops.wave`，这些值在 `DESIGN.md` 文件头。声道分段用 `LiquidSegmented` 的 `minSegmentWidth: 42`。
+
+**手机页面的控件**：`lib/new_ui/phone/phone_parts.dart`（页面顶栏 `PhonePage`、`PhoneButton`、`PhonePopButton`、`PhoneField`、胶囊 `PhoneFloatBar`、底部弹层 `showPhoneSheet`）和 `panel_menu.dart`（`.menu`：`showPanelMenu`，`touch` 时每行 48）。`ShellButton` 触控时内边距是 13，按钮要和原型一样的 16 用 `PhoneButton`。取景框的颜色是 `WhisperViewfinder`，扫描线的周期是 `WhisperLoops.scan`，等宽字用 `WhisperMono` 和 `WhisperSizes.code`，这些值在 `DESIGN.md` 文件头。
+
+**设备选取器**：`lib/new_ui/picker/device_picker.dart` 的 `showDevicePicker`，桌面是按钮上的 `panel` 菜单，手机是底部弹层，什么都没得选时用 toast 说明。快捷发送是 `quick_send_sheet.dart` 的 `QuickSendPicker`：点设备就发，`稍后` 留到以后。
+
+**内阴影**：Flutter 没有 `inset`。把比形状大一圈的矩形挖掉形状，裁到形状里，再用 `MaskFilter.blur` 画，见 `lib/new_ui/input/shell_input_page.dart` 的 `_CanvasInset`。
+
 ## 设备图
 
-写实的设备图是质感的主要来源之一。几何在原型的 `art()` 函数里，都是简单的圆角矩形，用 `CustomPainter` 或 SVG 都行。以 100 为基准宽度：
+写实的设备图是质感的主要来源之一。代码在 `lib/theme/whisper_device_art.dart`（`DeviceArt`、`DeviceWallpaper`、`deviceKindFor`），和原型 `art()` 的对照图是 `test/goldens/new_ui/device_art_light.png`。几何以 100 为基准宽度：
 
 | 设备 | 几何 |
 |---|---|
@@ -1611,7 +1666,7 @@ class WhisperLayout {
 
 金属渐变从上到下 `#EEEEF2` 到 `#B9B9C1`。壁纸是 `DESIGN.md` 文件头的 `wallpapers`，从左上到右下的线性渐变。设备类型来自现有的 `platformIcon` 判断。
 
-**列表里用线条图标**（视口 32，描边 2，圆头圆角）：显示器 `rect(3,5,26,17,r2.5)` 加支架，笔记本 `rect(6.5,7,19,14,r2)` 加底线，手机 `rect(11,3,10,26,r2.5)` 加听筒线。
+**设备选取器用线条图标**（`DeviceGlyph`，视口 32，描边 2，圆头圆角）。设备列表不用它，用写实设备图，见 `DESIGN.md`「设备是实物」。几何：显示器 `rect(3,5,26,17,r2.5)` 加支架，笔记本 `rect(6.5,7,19,14,r2)` 加底线，手机 `rect(11,3,10,26,r2.5)` 加听筒线。
 
 ## 附：测试
 
@@ -1628,7 +1683,7 @@ import 'dart:ui'
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:whisper_ui_check/whisper_ui.dart';
+import 'package:whisper/theme/whisper_ui.dart';
 
 Widget app(Widget child, {Brightness b = Brightness.light}) => MaterialApp(
   theme: ThemeData(

@@ -116,12 +116,20 @@ class AudioGroupCoordinator extends ChangeNotifier {
   String _declinedOfferGroupId = '';
   int _lastPlaybackReportAtMicros = 0;
   double _playbackGain = 1.0;
+  AudioFailureReason? _captureFailure;
 
   AudioGroupSession? get session => _session;
 
   bool get hasLiveSession => _session?.isLive == true;
 
   bool get isPlaybackActive => _playbackStreamId.isNotEmpty;
+
+  /// Who this device is playing, while [isPlaybackActive].
+  String get playbackSourcePeerId => _playbackSourcePeerId;
+
+  /// Why this device's sound could not be captured for the running group, so
+  /// a source does not look like it is playing when nothing is heard.
+  AudioFailureReason? get captureFailure => _captureFailure;
 
   bool get canRejoinAsSink => _sinkRejoinContext != null;
 
@@ -153,6 +161,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
     _groupGeneration += 1;
     _sinkAcceptGenerations.clear();
     _captureGeneration += 1;
+    _captureFailure = null;
     final groupId = _groupIdFactory();
     final streamId = _streamIdFactory();
     var nextSession = AudioGroupSession.offering(
@@ -192,9 +201,13 @@ class AudioGroupCoordinator extends ChangeNotifier {
     return nextSession;
   }
 
+  /// With [reofferTerminal] false a sink that failed or left stays as it is,
+  /// keeping any new channel for when it comes back. Without that, changing
+  /// one member would restart a speaker somebody paused on the other device.
   Future<AudioGroupSession?> updateGroup({
     required Map<String, AudioChannelRole> sinks,
     required AudioGroupControlSender sendControl,
+    bool reofferTerminal = true,
   }) async {
     final current = _session;
     if (current == null || (!current.isLive && current.sinks.isEmpty)) {
@@ -233,7 +246,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
       final sinkPeerId = entry.key;
       final channelRole = entry.value;
       final existing = nextSinks[sinkPeerId];
-      if (existing == null || existing.isTerminal) {
+      if (existing == null || (existing.isTerminal && reofferTerminal)) {
         final sessionId = _sessionIdFactory();
         nextSinks[sinkPeerId] = AudioGroupSink(
           sinkPeerId: sinkPeerId,
@@ -264,6 +277,9 @@ class AudioGroupCoordinator extends ChangeNotifier {
         continue;
       }
       nextSinks[sinkPeerId] = existing.copyWith(channelRole: channelRole);
+      if (existing.isTerminal) {
+        continue;
+      }
       sendControl(
         sinkPeerId,
         AudioGroupControlMessage(
@@ -285,7 +301,9 @@ class AudioGroupCoordinator extends ChangeNotifier {
 
     final next = current.copyWith(
       sinks: nextSinks,
-      state: current.isLive ? null : AudioGroupState.offering,
+      state: current.isLive || nextSinks.values.every((sink) => sink.isTerminal)
+          ? null
+          : AudioGroupState.offering,
     );
     _setSession(next);
     _stopCaptureIfNoActiveSinks(next);
@@ -616,6 +634,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
     _sinkRejoinContext = null;
     _pendingSinkJoinGroupId = '';
     _lastPlaybackReportAtMicros = 0;
+    _captureFailure = null;
     _playbackPumpTimer?.cancel();
     _playbackPumpTimer = null;
     _playbackPumpRequested = false;
@@ -1233,7 +1252,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
     final AudioCodec codec;
     try {
       codec = await _codecFactory(session.format);
-    } catch (_) {
+    } catch (error) {
       if (!_isCurrentCaptureSession(
         session,
         generation,
@@ -1241,6 +1260,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
       )) {
         return;
       }
+      _noteCaptureFailure(error);
       rethrow;
     }
     if (!_isCurrentCaptureSession(session, generation, groupGeneration)) {
@@ -1293,7 +1313,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
         sessionId: session.streamId,
         format: session.format,
       );
-    } catch (_) {
+    } catch (error) {
       final shouldReport = _isCurrentCaptureSession(
             session,
             generation,
@@ -1306,9 +1326,14 @@ class AudioGroupCoordinator extends ChangeNotifier {
         await _stopCaptureSource(captureSource);
       }
       if (shouldReport) {
+        _noteCaptureFailure(error);
         rethrow;
       }
       return;
+    }
+    if (_captureFailure != null) {
+      _captureFailure = null;
+      notifyListeners();
     }
     if (!_isCurrentCaptureSession(session, generation, groupGeneration) ||
         !identical(_captureSource, captureSource)) {
@@ -1332,6 +1357,17 @@ class AudioGroupCoordinator extends ChangeNotifier {
         current?.streamId == session.streamId &&
         current?.sourcePeerId == session.sourcePeerId &&
         current!.activeSinks.isNotEmpty;
+  }
+
+  void _noteCaptureFailure(Object error) {
+    final reason = audioFailureReasonFor(
+      error,
+      context: AudioFailureContext.capture,
+    );
+    if (reason != _captureFailure) {
+      _captureFailure = reason;
+      notifyListeners();
+    }
   }
 
   Future<void> _stopCaptureSource(AudioCaptureSource? captureSource) {
@@ -1637,6 +1673,11 @@ class AudioGroupCoordinator extends ChangeNotifier {
         if (transportToken.isNotEmpty) 'token': transportToken,
       },
     );
+  }
+
+  /// Takes effect on the next audio written, while this device is playing.
+  void updatePlaybackGain(double gain) {
+    _playbackGain = _normalizePlaybackGain(gain);
   }
 
   Int16List _applyPlaybackGain(Int16List pcm) {

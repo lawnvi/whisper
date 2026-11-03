@@ -3,6 +3,7 @@ import 'dart:ui' show BoxWidthStyle;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:whisper/theme/whisper_ui.dart';
 
 class MessageLinkSegment {
   const MessageLinkSegment.text(this.text) : uri = null;
@@ -162,6 +163,10 @@ class _MessageLinkTextState extends State<MessageLinkText> {
         ? parseMessageLinks(widget.text)
         : <MessageLinkSegment>[MessageLinkSegment.text(widget.text)];
     return SelectableText.rich(
+      // Without it a wrapped bubble fills its maximum width.
+      textWidthBasis: whisperNewUi
+          ? TextWidthBasis.longestLine
+          : TextWidthBasis.parent,
       TextSpan(
         style: widget.style,
         children: segments

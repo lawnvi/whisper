@@ -1,3 +1,7 @@
+import 'package:whisper/theme/whisper_window.dart';
+import 'package:whisper/helper/helper.dart';
+import 'package:whisper/new_ui/shell/shell_parts.dart';
+import 'package:whisper/theme/whisper_ui.dart';
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
@@ -23,11 +27,15 @@ Future<T?> showWhisperDialog<T>(
 
   return Navigator.of(context, rootNavigator: useRootNavigator).push<T>(
     WhisperFrostedPageRoute<T>(
-      barrierBlurSigma: blurBackground ? whisperModalBlurSigma(context) : 0,
+      barrierBlurSigma: blurBackground && !whisperNewUi
+          ? whisperModalBlurSigma(context)
+          : 0,
       settings: routeSettings,
       barrierDismissible: barrierDismissible,
       barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
-      barrierColor: brightness == Brightness.dark
+      barrierColor: whisperNewUi
+          ? context.wc.scrim
+          : brightness == Brightness.dark
           ? Colors.black.withValues(alpha: 0.50)
           : const Color(0xFF0F172A).withValues(alpha: 0.24),
       transitionDuration: reduceMotion
@@ -123,8 +131,82 @@ class WhisperGlassDialog extends StatelessWidget {
   final Duration insetAnimationDuration;
   final bool blurBackground;
 
+  /// `.sheet`: raised, 20 inside, left-aligned, actions at the end.
+  Widget _buildNew(BuildContext context) {
+    final c = context.wc;
+    final touch = !isDesktop();
+    final type = WhisperType(touch: touch);
+    final title = this.title;
+    final content = this.content;
+    return Dialog(
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: insetPadding.horizontal / 2,
+        vertical: WhisperWindow.sheetGap / 2,
+      ),
+      insetAnimationDuration: insetAnimationDuration,
+      backgroundColor: Colors.transparent,
+      shadowColor: Colors.transparent,
+      surfaceTintColor: Colors.transparent,
+      clipBehavior: Clip.none,
+      child: ConstrainedBox(
+        constraints: constraints.copyWith(
+          maxWidth: constraints.maxWidth.clamp(0, 380),
+        ),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: c.raised,
+            borderRadius: BorderRadius.circular(WhisperRadius.l),
+            boxShadow: WhisperShadow.e3(Theme.of(context).brightness),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (title != null)
+                  DefaultTextStyle.merge(
+                    style: TextStyle(
+                      fontSize: type.head,
+                      fontWeight: FontWeight.w600,
+                      color: c.ink,
+                    ),
+                    child: title,
+                  ),
+                if (content != null) ...[
+                  if (title != null) const SizedBox(height: 14),
+                  Flexible(
+                    fit: FlexFit.loose,
+                    child: DefaultTextStyle.merge(
+                      style: TextStyle(
+                        fontSize: type.note,
+                        height: 1.5,
+                        color: c.ink2,
+                      ),
+                      child: content,
+                    ),
+                  ),
+                ],
+                if (actions.isNotEmpty) ...[
+                  const SizedBox(height: 14),
+                  Wrap(
+                    alignment: WrapAlignment.end,
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: actions,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (whisperNewUi) return _buildNew(context);
     return Dialog(
       insetPadding: insetPadding,
       insetAnimationDuration: insetAnimationDuration,
@@ -174,33 +256,40 @@ class WhisperAlertDialog extends StatelessWidget {
   final List<Widget> actions;
 
   @override
-  Widget build(BuildContext context) => WhisperGlassDialog(
-    constraints: const BoxConstraints(maxWidth: 420, maxHeight: 620),
-    borderRadius: 22,
-    titlePadding: const EdgeInsets.fromLTRB(24, 26, 24, 8),
-    contentPadding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-    actionsPadding: EdgeInsets.zero,
-    title: Text(
-      title,
-      textAlign: TextAlign.center,
-      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-        fontSize: 20,
-        height: 1.3,
-        fontWeight: FontWeight.w600,
-      ),
-    ),
-    content: SingleChildScrollView(
-      child: DefaultTextStyle.merge(
-        textAlign: TextAlign.center,
-        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-          color: context.whisperPalette.textMuted,
-          height: 1.5,
-        ),
-        child: content,
-      ),
-    ),
-    actions: actions,
-  );
+  Widget build(BuildContext context) => whisperNewUi
+      ? WhisperGlassDialog(
+          constraints: const BoxConstraints(maxWidth: 380, maxHeight: 620),
+          title: Text(title),
+          content: SingleChildScrollView(child: content),
+          actions: actions,
+        )
+      : WhisperGlassDialog(
+          constraints: const BoxConstraints(maxWidth: 420, maxHeight: 620),
+          borderRadius: 22,
+          titlePadding: const EdgeInsets.fromLTRB(24, 26, 24, 8),
+          contentPadding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+          actionsPadding: EdgeInsets.zero,
+          title: Text(
+            title,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              fontSize: 20,
+              height: 1.3,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          content: SingleChildScrollView(
+            child: DefaultTextStyle.merge(
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: context.whisperPalette.textMuted,
+                height: 1.5,
+              ),
+              child: content,
+            ),
+          ),
+          actions: actions,
+        );
 }
 
 class WhisperGlassSurface extends StatelessWidget {
@@ -403,6 +492,18 @@ class WhisperDialogButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (whisperNewUi) {
+      return ShellButton(
+        label: label,
+        touch: !isDesktop(),
+        onTap: onPressed,
+        kind: destructive
+            ? ShellButtonKind.danger
+            : prominent
+            ? ShellButtonKind.primary
+            : ShellButtonKind.normal,
+      );
+    }
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final palette = context.whisperPalette;

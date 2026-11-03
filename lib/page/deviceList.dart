@@ -5,6 +5,7 @@ import 'dart:isolate';
 import 'dart:ui';
 import 'package:bonsoir/bonsoir.dart';
 import 'package:clipboard_watcher/clipboard_watcher.dart';
+import 'package:dbus/dbus.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
@@ -16,6 +17,36 @@ import 'package:whisper/audio/audio_share_coordinator.dart';
 import 'package:whisper/cast_receiver/cast_receiver_manager.dart';
 import 'package:whisper/cast_receiver/playback_window.dart';
 import 'package:whisper/share_links/share_link_store.dart';
+import 'package:whisper/new_ui/shell/device_row_status.dart';
+import 'package:whisper/new_ui/shell/shell_data.dart';
+import 'package:whisper/new_ui/shell/shell_device_card.dart';
+import 'package:whisper/new_ui/shell/shell_island_sources.dart';
+import 'package:whisper/new_ui/shell/shell_palette.dart';
+import 'package:whisper/new_ui/shell/shell_parts.dart';
+import 'package:whisper/new_ui/shell/shell_phone_device.dart';
+import 'package:whisper/new_ui/shell/shell_touch.dart';
+import 'package:whisper/page/transfer_assistant.dart';
+import 'package:whisper/remote_input/mobile_control_route.dart';
+import 'package:whisper/widget/island/island_home.dart';
+import 'package:whisper/new_ui/shell/shell_requests.dart';
+import 'package:whisper/new_ui/shell/shell_self_panel.dart';
+import 'package:whisper/new_ui/shell/shell_share_links.dart';
+import 'package:whisper/helper/desktop_screenshot.dart';
+import 'package:whisper/new_ui/input/input_controller.dart';
+import 'package:whisper/new_ui/input/shell_input_page.dart';
+import 'package:whisper/new_ui/settings/whisper_settings.dart';
+import 'package:whisper/new_ui/sound/shell_sound_page.dart';
+import 'package:whisper/new_ui/sound/sound_controller.dart';
+import 'package:whisper/new_ui/shell/whisper_shell.dart';
+import 'package:whisper/new_ui/tray/clipboard_history.dart';
+import 'package:whisper/new_ui/tray/tray_host.dart';
+import 'package:whisper/new_ui/tray/tray_model.dart';
+import 'package:whisper/new_ui/tray/tray_panel.dart';
+import 'package:whisper/theme/whisper_device_art.dart';
+import 'package:whisper/theme/whisper_icons.dart';
+import 'package:whisper/theme/whisper_ui.dart'
+    show whisperNewUi, WhisperPageRoute, WhisperTheme;
+import 'package:whisper/window_stream/remote/remote_peer_source.dart';
 import 'package:whisper/helper/android_background.dart';
 import 'package:whisper/helper/android_document_picker.dart';
 import 'package:whisper/helper/android_system_share.dart';
@@ -54,6 +85,7 @@ import 'package:whisper/state/app_shutdown.dart';
 import 'package:whisper/state/android_system_share_inbox.dart';
 import 'package:whisper/state/android_system_share_router.dart';
 import 'package:whisper/state/chat_session_list.dart';
+import 'package:whisper/state/device_list_rules.dart';
 import 'package:whisper/state/connection_diagnostic.dart';
 import 'package:whisper/state/connection_coordinator.dart';
 import 'package:whisper/state/connection_attempt.dart';
@@ -63,6 +95,7 @@ import 'package:whisper/state/discovery_service_presence.dart';
 import 'package:whisper/state/desktop_quick_send_inbox.dart';
 import 'package:whisper/state/notification_app_registry.dart';
 import 'package:whisper/state/peer_endpoint.dart';
+import 'package:whisper/state/connection_models.dart';
 import 'package:whisper/state/pairing_invite.dart';
 import 'package:whisper/state/pairing_request.dart';
 import 'package:whisper/socket/device_identity.dart';
@@ -222,8 +255,25 @@ class _AudioGroupSetupResult {
   final Map<String, AudioChannelRole> sinks;
 }
 
+/// What a golden test shows in [DeviceListScreen] instead of starting the
+/// server, discovery, the tray and the rest of the app's services.
+@visibleForTesting
+class DeviceListPreview {
+  const DeviceListPreview({
+    required this.device,
+    required this.sessions,
+    this.selectedPeerId,
+  });
+
+  final DeviceData device;
+  final List<ChatSessionItem> sessions;
+  final String? selectedPeerId;
+}
+
 class DeviceListScreen extends StatefulWidget {
-  const DeviceListScreen({super.key});
+  const DeviceListScreen({super.key, this.debugPreview});
+
+  final DeviceListPreview? debugPreview;
 
   @override
   _DeviceListScreen createState() => _DeviceListScreen();
@@ -251,11 +301,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
   late final DesktopQuickSendHotKeyController _desktopQuickSendHotKey;
   DeviceData? device;
 
-  /// Port of the server this screen last started. Set before the start is
-  /// awaited: a start closes every session, each close refreshes the list,
-  /// and refreshes that only looked at [device] (still null until the first
-  /// refresh finishes) restarted the server again, for minutes.
-  int? _serverStartPort;
+  final DeviceListServerStart _serverStart = DeviceListServerStart();
   List<DeviceData> devices = [];
   BonsoirBroadcast? _broadcast;
   BonsoirDiscovery? _discovery;
@@ -324,6 +370,15 @@ class _DeviceListScreen extends State<DeviceListScreen>
     //     (Platform.isMacOS || Platform.isLinux || Platform.isWindows)) {
     //   initSystemTray();
     // }
+    final preview = widget.debugPreview;
+    if (preview != null) {
+      device = preview.device;
+      _sessionItems = preview.sessions;
+      devices = [for (final session in preview.sessions) session.device];
+      _selectedDesktopPeerId = preview.selectedPeerId;
+      super.initState();
+      return;
+    }
     WidgetsBinding.instance.addObserver(this);
     // A file-manager copy's message went away: previews follow.
     TransferPlacements.shared.addListener(_onCopiesChanged);
@@ -432,6 +487,10 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
   @override
   void didChangeDependencies() async {
+    if (widget.debugPreview != null) {
+      super.didChangeDependencies();
+      return;
+    }
     final isFirst = !_didBootstrapDiscovery;
     _didBootstrapDiscovery = true;
     _refreshDevice(isFirst: isFirst);
@@ -584,6 +643,10 @@ class _DeviceListScreen extends State<DeviceListScreen>
     await trayManager.setContextMenu(menu);
     trayManager.addListener(this);
     windowManager.addListener(this);
+    if (whisperNewUi && trayPanelSupported) {
+      _trayPanel = TrayPanelHost(onAction: _onTrayAction);
+      unawaited(_trayPanel!.start().then((_) => _pushTrayState()));
+    }
   }
 
   // Future<void> initSystemTray() async {
@@ -622,6 +685,14 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
   @override
   void dispose() {
+    _lanWatch?.cancel();
+    if (widget.debugPreview != null) {
+      _desktopSearchController.dispose();
+      _desktopSearchFocusNode.dispose();
+      _quickSendTargets.dispose();
+      super.dispose();
+      return;
+    }
     TransferPlacements.shared.removeListener(_onCopiesChanged);
     ++_clipboardWatcherGeneration;
     // 在这里执行一些清理操作，比如取消订阅、关闭流、释放资源等
@@ -808,6 +879,8 @@ class _DeviceListScreen extends State<DeviceListScreen>
   }
 
   void _scheduleDesktopQuickSendPresentation({bool force = false}) {
+    // Sending from the tray panel: the device is chosen already.
+    if (_traySending) return;
     if (!isDesktop() ||
         !mounted ||
         !_desktopQuickSendTargetsLoaded ||
@@ -835,41 +908,19 @@ class _DeviceListScreen extends State<DeviceListScreen>
         (candidate.auth && candidate.identityPublicKey.isNotEmpty);
   }
 
-  String? _trustedDeviceIdentityHash(String peerId) {
-    for (final candidate in devices) {
-      if (candidate.uid != peerId ||
-          !candidate.auth ||
-          candidate.identityPublicKey.isEmpty ||
-          !_isTrustedDevice(candidate)) {
-        continue;
-      }
-      try {
-        return identityPublicKeyHash(candidate.identityPublicKey);
-      } on Object {
-        return null;
-      }
-    }
-    return null;
-  }
-
-  /// Quick send only offers devices it can deliver to right now.
-  List<QuickSendTarget> _connectedQuickSendTargets() {
-    final targetsById = <String, QuickSendTarget>{};
-    for (final candidate in devices) {
-      if (!socketManager.isConnectedTo(candidate.uid) ||
-          _trustedDeviceIdentityHash(candidate.uid) == null) {
-        continue;
-      }
-      targetsById[candidate.uid] = QuickSendTarget(
-        id: candidate.uid,
-        name: candidate.name,
-        platform: candidate.platform,
+  String? _trustedDeviceIdentityHash(String peerId) =>
+      trustedDeviceIdentityHash(
+        devices: devices,
+        peerId: peerId,
+        isLocallyTrusted: _isTrustedDevice,
       );
-    }
-    final targets = targetsById.values.toList()
-      ..sort((left, right) => left.name.compareTo(right.name));
-    return List<QuickSendTarget>.unmodifiable(targets);
-  }
+
+  List<QuickSendTarget> _connectedQuickSendTargets() =>
+      connectedQuickSendTargets(
+        devices: devices,
+        isConnected: socketManager.isConnectedTo,
+        trustedIdentityHashFor: _trustedDeviceIdentityHash,
+      );
 
   Future<void> _presentDesktopQuickSend({bool force = false}) async {
     if (!mounted ||
@@ -1552,7 +1603,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
               platform: platform ?? temp?.platform ?? '',
               around: !isLost,
             );
-            final visibleDevice = _mergeStoredDeviceWithDiscovery(
+            final visibleDevice = mergeStoredDeviceWithDiscovery(
               temp,
               resolvedDevice,
             );
@@ -1634,33 +1685,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
     );
   }
 
-  DeviceData _mergeStoredDeviceWithDiscovery(
-    DeviceData? stored,
-    DeviceData discovered,
-  ) {
-    if (stored == null) {
-      return discovered;
-    }
-    return DeviceData(
-      id: stored.id,
-      uid: discovered.uid,
-      identityPublicKey: stored.identityPublicKey,
-      name: discovered.name.isNotEmpty ? discovered.name : stored.name,
-      host: discovered.host.isNotEmpty ? discovered.host : stored.host,
-      port: discovered.port,
-      password: stored.password,
-      platform: discovered.platform.isNotEmpty
-          ? discovered.platform
-          : stored.platform,
-      isServer: stored.isServer,
-      online: stored.online,
-      clipboard: stored.clipboard,
-      auth: stored.auth,
-      lastTime: discovered.lastTime,
-      around: discovered.around,
-    );
-  }
-
   void _onCopiesChanged() => unawaited(_refreshDevice());
 
   Future<void> _refreshDevice({isFirst = false}) async {
@@ -1697,7 +1721,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
       if (socketManager.isConnectedTo(item.uid)) {
         newArr.insert(
           0,
-          _mergeStoredDeviceWithDiscovery(storedDevicesByUid[item.uid], item),
+          mergeStoredDeviceWithDiscovery(storedDevicesByUid[item.uid], item),
         );
         aroundIds.add(item.uid);
         continue;
@@ -1720,8 +1744,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     var serverPortUpdate = device != null && device!.port != temp.port;
     var localProfileUpdate = device != null && device!.name != temp.name;
 
-    if (isFirst || _serverStartPort != temp.port) {
-      _serverStartPort = temp.port;
+    if (_serverStart.shouldStart(isFirst: isFirst, port: temp.port)) {
       await _startServer(port: temp.port);
     }
 
@@ -1810,6 +1833,20 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
   @override
   Widget build(BuildContext context) {
+    if (whisperNewUi) {
+      return ListenableBuilder(
+        listenable: _shellInputs,
+        builder: (context, _) {
+          _watchLan();
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _pushTrayState();
+            unawaited(_refreshLinuxTrayMenu());
+            if (mounted) _updateStatusMoments(context);
+          });
+          return WhisperShell(data: _shellData(), actions: _shellActions);
+        },
+      );
+    }
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -1825,6 +1862,1007 @@ class _DeviceListScreen extends State<DeviceListScreen>
         return _buildMobileScaffold(isDark);
       },
     );
+  }
+
+  // ---- The tray panel. Its own engine: all it knows crosses from here. ----
+
+  TrayPanelHost? _trayPanel;
+  bool _traySending = false;
+  final ClipboardHistory _clipHistory = ClipboardHistory();
+  String _lastTrayState = '';
+
+  /// The platforms where the system's mark for passwords can be read. Elsewhere
+  /// there is no history at all: a password must not end up in it.
+  static const _windowTheme = MethodChannel('com.vireen.whisper/window_theme');
+
+  Future<void> _recordClipboard() async {
+    if (!trayPanelSupported) return;
+    bool sensitive;
+    try {
+      sensitive =
+          await _windowTheme.invokeMethod<bool>('clipboardIsSensitive') ?? true;
+    } on Object {
+      return;
+    }
+    final text = (await Clipboard.getData(Clipboard.kTextPlain))?.text;
+    if (text == null || !mounted) return;
+    _clipHistory.add(
+      ClipEntry(text: text, from: '', at: DateTime.now()),
+      sensitive: sensitive,
+    );
+    _pushTrayState();
+  }
+
+  TrayDevice _trayDevice(DeviceData peer) => TrayDevice(
+    id: peer.uid,
+    name: peer.name,
+    platform: peer.platform,
+    order: peer.id,
+  );
+
+  void _pushTrayState() {
+    final panel = _trayPanel;
+    if (panel == null || !mounted) return;
+    final l10n = AppLocalizations.of(context)!;
+    final group = _audioGroupCoordinator.session;
+    String nameOf(String uid) {
+      for (final session in _sessionItems) {
+        if (session.device.uid == uid) return session.device.name;
+      }
+      return uid;
+    }
+
+    final soundMembers = group?.isLive == true
+        ? [for (final uid in group!.sinks.keys) nameOf(uid)]
+        : const <String>[];
+    final playing = _audioGroupCoordinator.isPlaybackActive
+        ? nameOf(_audioGroupCoordinator.playbackSourcePeerId)
+        : null;
+    final workspace = _remoteInputWorkspaceCoordinator.snapshot;
+    final controlled = workspace.role == RemoteInputWorkspaceRole.controlled;
+    final active = _remoteInputCoordinator.state.peerId;
+    final inputLive = switch (workspace.status) {
+      RemoteInputWorkspaceStatus.active ||
+      RemoteInputWorkspaceStatus.armed => true,
+      _ => false,
+    };
+    final moments = <TrayMoment>[
+      for (final activity in RequestIslandSource.shared.activities)
+        if (activity.presenter case final RequestPresenter ask)
+          TrayMoment(
+            id: activity.id,
+            title: ask.title,
+            detail: ask.detail,
+            answers: [for (final a in ask.answers) a.label],
+          ),
+      for (final entry in _shellTransfers.entries)
+        if (switch (entry.value.state) {
+          FileTransferState.queued ||
+          FileTransferState.negotiating ||
+          FileTransferState.transferring ||
+          FileTransferState.verifying => true,
+          _ => false,
+        })
+          TrayMoment(
+            id: entry.value.transferId,
+            title: entry.value.finalPath.split(RegExp(r'[/\\]')).last,
+            detail:
+                '${nameOf(entry.key)} · '
+                '${entry.value.size > 0 ? (entry.value.committedBytes * 100 ~/ entry.value.size).clamp(0, 100) : 0}%',
+            progress: entry.value.size > 0
+                ? (entry.value.committedBytes / entry.value.size).clamp(0, 1)
+                : 0,
+            cancelable: true,
+          ),
+    ];
+    final clips = _clipHistory.entries;
+    final state = TrayState(
+      dark: Theme.of(context).brightness == Brightness.dark,
+      locale: Localizations.localeOf(context).languageCode,
+      current: _clipHistory.current,
+      targets: [
+        for (final session in _sessionItems)
+          if (session.isConnected) _trayDevice(session.device),
+      ],
+      nearby: [
+        for (final session in _sessionItems)
+          if (!session.isConnected && session.isNearby)
+            _trayDevice(session.device),
+      ],
+      moments: moments,
+      soundOn: soundMembers.isNotEmpty || playing != null,
+      soundStatus: playing != null
+          ? l10n.shellTrayPlaying(playing)
+          : soundMembers.isEmpty
+          ? l10n.shellTraySoundOff
+          : soundMembers.join('、'),
+      inputOn: inputLive || controlled,
+      inputStatus: controlled
+          ? l10n.shellTrayControlled(nameOf(active))
+          : inputLive
+          ? l10n.shellTrayInputOn
+          : l10n.shellTraySoundOff,
+      flows: [
+        for (final session in WindowStreamCoordinator.shared.sessions)
+          if (!session.state.isTerminal)
+            TrayFlow(
+              id: session.id,
+              title: session.handle.title,
+              detail: session.handle.source.info.name,
+              action: l10n.shellAppsEnd,
+            ),
+      ],
+      clips: [
+        for (final clip in clips)
+          TrayClip(
+            text: clip.text,
+            line: clip.from.isEmpty
+                ? l10n.shellTrayFrom(
+                    l10n.shellTrayThisDevice,
+                    _formatClipTime(clip.at),
+                  )
+                : l10n.shellTrayFrom(clip.from, _formatClipTime(clip.at)),
+            image: clip.image,
+          ),
+      ],
+    );
+    final encoded = jsonEncode(state.toMap());
+    if (encoded == _lastTrayState) return;
+    _lastTrayState = encoded;
+    panel.update(state);
+  }
+
+  /// surfaces.md「Linux 只有菜单」: AppIndicator gets no left click and Wayland
+  /// cannot place a window beside the icon, so what the panel holds goes into the
+  /// menu, in the same order. Set again whenever it changes.
+  String _lastLinuxMenu = '';
+
+  Future<void> _refreshLinuxTrayMenu() async {
+    if (!whisperNewUi || !Platform.isLinux || !mounted) return;
+    final l10n = AppLocalizations.of(context)!;
+    final connected = [
+      for (final session in _sessionItems)
+        if (session.isConnected) session.device,
+    ];
+    final sound = ShellSoundController.shared;
+    final sink = sound.sinkView;
+    final input = ShellInputController.shared;
+    final asks = [
+      for (final activity in RequestIslandSource.shared.activities)
+        if (activity.presenter is RequestPresenter)
+          activity.presenter as RequestPresenter,
+    ];
+    final moving = [
+      for (final transfer in _shellTransfers.values)
+        if (switch (transfer.state) {
+          FileTransferState.queued ||
+          FileTransferState.negotiating ||
+          FileTransferState.transferring ||
+          FileTransferState.verifying => true,
+          _ => false,
+        })
+          transfer,
+    ];
+    final flows = [
+      for (final session in WindowStreamCoordinator.shared.sessions)
+        if (!session.state.isTerminal) session,
+    ];
+    final signature = jsonEncode([
+      connected.map((d) => '${d.uid}${d.name}').toList(),
+      asks.map((a) => a.title).toList(),
+      moving
+          .map(
+            (t) =>
+                '${t.transferId}:${t.size > 0 ? t.committedBytes * 20 ~/ t.size : 0}',
+          )
+          .toList(),
+      sound.selection.keys.toList(),
+      sink != null,
+      input.on,
+      input.controlledBy,
+      flows.map((f) => f.id).toList(),
+      Localizations.localeOf(context).toLanguageTag(),
+    ]);
+    if (signature == _lastLinuxMenu) return;
+    _lastLinuxMenu = signature;
+    String percent(TransferSnapshot t) => t.size > 0
+        ? '${(t.committedBytes * 100 ~/ t.size).clamp(0, 100)}%'
+        : '';
+    String nameOf(String uid) {
+      for (final session in _sessionItems) {
+        if (session.device.uid == uid) return session.device.name;
+      }
+      return uid;
+    }
+
+    Future<void> pickAndSend(String peerId) async {
+      final picked = await FilePicker.pickFiles(allowMultiple: true);
+      if (picked == null) return;
+      for (final file in picked.files) {
+        final path = file.path;
+        if (path != null) await socketManager.sendFileTo(peerId, path);
+      }
+    }
+
+    await trayManager.setContextMenu(
+      Menu(
+        items: [
+          MenuItem(
+            label: l10n.shellTrayOpen,
+            onClick: (_) => unawaited(_showMainWindow()),
+          ),
+          MenuItem.separator(),
+          for (final ask in asks)
+            MenuItem(
+              label: ask.title,
+              onClick: (_) => unawaited(_showMainWindow()),
+            ),
+          for (final transfer in moving)
+            MenuItem(
+              label:
+                  '${transfer.finalPath.split(RegExp(r'[/\\]')).last} · '
+                  '${nameOf(transfer.peerUid)} · ${percent(transfer)}',
+              disabled: true,
+            ),
+          if (asks.isNotEmpty || moving.isNotEmpty) MenuItem.separator(),
+          if (connected.isNotEmpty) ...[
+            MenuItem.submenu(
+              label: l10n.shellTraySendClipboardTo,
+              submenu: Menu(
+                items: [
+                  for (final peer in connected)
+                    MenuItem(
+                      label: peer.name,
+                      onClick: (_) => unawaited(_traySendClipboard(peer.uid)),
+                    ),
+                ],
+              ),
+            ),
+            MenuItem.submenu(
+              label: l10n.shellTraySendFileTo,
+              submenu: Menu(
+                items: [
+                  for (final peer in connected)
+                    MenuItem(
+                      label: peer.name,
+                      onClick: (_) => unawaited(pickAndSend(peer.uid)),
+                    ),
+                ],
+              ),
+            ),
+          ],
+          MenuItem(
+            label: l10n.shellTrayScreenshot,
+            onClick: (_) =>
+                unawaited(DesktopScreenshotController.shared.capture()),
+          ),
+          MenuItem.separator(),
+          if (sink != null)
+            MenuItem(
+              label: l10n.shellTrayPlaying(nameOf(sink.sourcePeerId)),
+              onClick: (_) => unawaited(_showMainWindow()),
+            )
+          else if (connected.isNotEmpty && supportsNativeSystemAudio())
+            MenuItem.submenu(
+              label: l10n.shellTrayPlayOn,
+              submenu: Menu(
+                items: [
+                  for (final peer in connected)
+                    MenuItem.checkbox(
+                      label: peer.name,
+                      checked: sound.isSelected(peer.uid),
+                      onClick: (_) => unawaited(sound.toggle(peer.uid)),
+                    ),
+                ],
+              ),
+            ),
+          if (input.controlledBy case final controller?)
+            MenuItem(
+              label: l10n.shellTrayControlled(nameOf(controller)),
+              onClick: (_) => unawaited(input.stopBeingControlled()),
+            )
+          else if (supportsNativeRemoteInput())
+            MenuItem.checkbox(
+              label: l10n.shellInput,
+              checked: input.on,
+              onClick: (_) => unawaited(input.setOn(!input.on)),
+            ),
+          if (flows.isNotEmpty)
+            MenuItem.submenu(
+              label: l10n.shellAppsMoving,
+              submenu: Menu(
+                items: [
+                  for (final session in flows)
+                    MenuItem(
+                      label: '${session.handle.title} · ${l10n.shellAppsEnd}',
+                      onClick: (_) => unawaited(
+                        WindowStreamCoordinator.shared.close(session),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          MenuItem.separator(),
+          MenuItem(
+            label: l10n.shellSettings,
+            onClick: (_) {
+              unawaited(_showMainWindow());
+              _shellActions.openSettings();
+            },
+          ),
+          MenuItem(
+            label: AppLocalizations.of(context)?.exit ?? '退出',
+            onClick: (_) => unawaited(_shutdownAndDestroyWindow()),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// A desktop with no status notifier (plain GNOME without the extension) never
+  /// shows the icon: hiding to the tray there would lose the window for good.
+  bool? _hasStatusNotifier;
+
+  Future<bool> _statusNotifierAvailable() async {
+    final known = _hasStatusNotifier;
+    if (known != null) return known;
+    if (!Platform.isLinux) return _hasStatusNotifier = true;
+    final client = DBusClient.session();
+    try {
+      final reply = await client.callMethod(
+        destination: 'org.freedesktop.DBus',
+        path: DBusObjectPath('/org/freedesktop/DBus'),
+        interface: 'org.freedesktop.DBus',
+        name: 'NameHasOwner',
+        values: [const DBusString('org.kde.StatusNotifierWatcher')],
+        replySignature: DBusSignature('b'),
+      );
+      return _hasStatusNotifier = (reply.values.first as DBusBoolean).value;
+    } on Object {
+      // Cannot tell: keep what the setting says, as before.
+      return true;
+    } finally {
+      await client.close();
+    }
+  }
+
+  String _formatClipTime(DateTime at) =>
+      _formatSessionTime(at.millisecondsSinceEpoch ~/ 1000);
+
+  Future<void> _showMainWindow() async {
+    await windowManager.show();
+    await windowManager.focus();
+  }
+
+  void _onTrayAction(String action, Object? value) {
+    final actions = _shellActions;
+    switch (action) {
+      case 'send':
+        unawaited(_traySendClipboard(value! as String));
+      case 'screenshot':
+        unawaited(DesktopScreenshotController.shared.capture());
+      case 'clipCopy':
+        _clipHistory.markCurrent(value! as String);
+        unawaited(Clipboard.setData(ClipboardData(text: value as String)));
+        _pushTrayState();
+      case 'cancel':
+        unawaited(socketManager.cancelTransfer(value! as String));
+      case 'answer':
+        final args = Map<String, dynamic>.from(value! as Map);
+        for (final activity in RequestIslandSource.shared.activities) {
+          if (activity.id == args['id'] &&
+              activity.presenter is RequestPresenter) {
+            (activity.presenter as RequestPresenter)
+                .answers[args['index'] as int]
+                .onTap();
+          }
+        }
+        _pushTrayState();
+      case 'endFlow':
+        for (final session in WindowStreamCoordinator.shared.sessions) {
+          if (session.id == value) {
+            unawaited(WindowStreamCoordinator.shared.close(session));
+          }
+        }
+      case 'connect':
+        for (final session in _sessionItems) {
+          if (session.device.uid == value) actions.connect(session.device);
+        }
+      case 'openSound':
+        unawaited(_showMainWindow());
+        actions.openSound();
+      case 'openInput':
+        unawaited(_showMainWindow());
+        actions.openInput();
+      case 'openSettings':
+        unawaited(_showMainWindow());
+        actions.openSettings();
+      case 'connectNew':
+        unawaited(_showMainWindow());
+        unawaited(actions.openPairing());
+      case 'openMain':
+        unawaited(_showMainWindow());
+    }
+  }
+
+  /// One click sends: no chooser, the device has been picked.
+  Future<void> _traySendClipboard(String peerId) async {
+    _traySending = true;
+    try {
+      final result = await _desktopQuickSendHotKey.captureClipboard(
+        revealWindow: () async {},
+      );
+      if (result.isAccepted) await _sendDesktopQuickSend(peerId);
+    } finally {
+      _traySending = false;
+    }
+  }
+
+  // ---- The redesigned shell. Everything it does comes from here. ----
+
+  /// Running or last known file transfers, by peer.
+  final Map<String, TransferSnapshot> _shellTransfers = {};
+
+  ShellPlace _shellPlace = ShellPlace.device;
+  bool _lanDown = false;
+  Timer? _lanWatch;
+
+  /// A cable or Wi-Fi going away has no event of its own here: look now and then.
+  void _watchLan() {
+    _lanWatch ??= Timer.periodic(const Duration(seconds: 10), (_) async {
+      final host = await getLocalIpAddress();
+      final down = host.isEmpty || host == '127.0.0.1';
+      if (mounted && down != _lanDown) setState(() => _lanDown = down);
+    });
+  }
+
+  void _updateStatusMoments(BuildContext context) {
+    if (!isDesktop()) return;
+    final l10n = AppLocalizations.of(context)!;
+    String nameOf(String uid) {
+      for (final session in _sessionItems) {
+        if (session.device.uid == uid) return session.device.name;
+      }
+      return uid;
+    }
+
+    final moments = <String, StatusMoment>{};
+    if (_lanDown) {
+      moments['lan'] = StatusMoment(
+        glyph: WhisperGlyph.warn,
+        warning: true,
+        title: l10n.shellLanDown,
+        detail: l10n.shellSelfNoLan,
+      );
+    }
+    final group = _audioGroupCoordinator.session;
+    if (group?.isLive == true && group!.sinks.isNotEmpty) {
+      moments['sound'] = StatusMoment(
+        glyph: WhisperGlyph.speaker,
+        title: l10n.shellIslandPlayingOn(
+          group.sinks.keys.map(nameOf).join('、'),
+        ),
+        stopLabel: l10n.cancel,
+        onStop: () => unawaited(_stopDesktopAudioShare()),
+        home: IslandHomes.sound,
+      );
+    }
+    final workspace = _remoteInputWorkspaceCoordinator.snapshot;
+    if (workspace.status == RemoteInputWorkspaceStatus.active &&
+        workspace.role == RemoteInputWorkspaceRole.controlled) {
+      moments['input'] = StatusMoment(
+        glyph: WhisperGlyph.keyboard,
+        title: l10n.shellTrayControlled(
+          nameOf(_remoteInputCoordinator.state.peerId),
+        ),
+        home: IslandHomes.input,
+      );
+    } else if (workspace.status == RemoteInputWorkspaceStatus.active &&
+        workspace.activePeerId.isNotEmpty) {
+      moments['input'] = StatusMoment(
+        glyph: WhisperGlyph.keyboard,
+        title: l10n.shellIslandControlling(nameOf(workspace.activePeerId)),
+        home: IslandHomes.input,
+      );
+    }
+    StatusIslandSource.shared.show(moments);
+  }
+
+  /// What the rows say comes from these too, not only from this screen's state.
+  late final Listenable _shellInputs = Listenable.merge([
+    ConnectionCoordinator(),
+    WindowStreamCoordinator.shared,
+    ShareLinkStore.shared,
+    RequestIslandSource.shared,
+    ShellSoundController.shared,
+    ShellInputController.shared,
+    DeviceFormFactors.shared,
+  ]);
+
+  ShellData _shellData() {
+    return ShellData(
+      self: device,
+      sessions: _sessionItems,
+      selectedPeerId: _selectedDesktopPeerId ?? _firstDesktopPeerId,
+      place: _shellPlace,
+      lanDown: _lanDown,
+      factsFor: _shellFacts,
+      isPaired: _isTrustedDevice,
+      loading: device == null,
+      soundActive:
+          ShellSoundController.shared.on ||
+          ShellSoundController.shared.sinkView != null,
+      inputActive:
+          ShellInputController.shared.on ||
+          ShellInputController.shared.controlledBy != null,
+      linksActive: ShareLinkStore.shared.serviceOn,
+      soundSupported: supportsNativeSystemAudio(),
+      inputSupported: supportsNativeRemoteInput(),
+    );
+  }
+
+  /// There is always a device to show, once there is one: beside a sidebar it
+  /// is on screen, and on a phone nothing is built until a row is tapped.
+  String? get _firstDesktopPeerId =>
+      _sessionItems.isEmpty ? null : _sessionItems.first.device.uid;
+
+  DeviceRowFacts _shellFacts(ChatSessionItem session) {
+    final uid = session.device.uid;
+    final transfer = _shellTransfers[uid];
+    final moving = switch (transfer?.state) {
+      FileTransferState.queued ||
+      FileTransferState.negotiating ||
+      FileTransferState.transferring ||
+      FileTransferState.verifying => true,
+      _ => false,
+    };
+    final activity = _inputActivityForPeer(uid);
+    final groupSink = _audioGroupCoordinator.session?.sinks.containsKey(uid);
+    final audio = _audioCoordinator.state;
+    final playingFromIt =
+        _audioGroupCoordinator.isPlaybackActive &&
+        _audioGroupCoordinator.playbackSourcePeerId == uid;
+    return DeviceRowFacts(
+      connecting: switch (ConnectionCoordinator().peer(uid)?.state) {
+        ConnectionLifecycleState.connecting ||
+        ConnectionLifecycleState.reconnecting => !session.isConnected,
+        _ => false,
+      },
+      connected: session.isConnected,
+      paired: _isTrustedDevice(session.device),
+      nearby: session.isNearby,
+      offlineSince: session.lastTimestamp > 0
+          ? _formatSessionTime(session.lastTimestamp)
+          : null,
+      transferName: moving
+          ? transfer!.finalPath.split(RegExp(r'[/\\]')).last
+          : null,
+      transferPercent: moving && transfer!.size > 0
+          ? (transfer.committedBytes * 100 ~/ transfer.size).clamp(0, 100)
+          : null,
+      soundHere:
+          playingFromIt ||
+          (audio.isForPeer(uid) && audio.role == AudioShareRuntimeRole.sink),
+      controllingThis: activity?.phase == RemoteInputPeerPhase.receiving,
+      pointerThere: activity?.phase == RemoteInputPeerPhase.controlling,
+      playingOurs:
+          groupSink == true ||
+          (audio.isForPeer(uid) && audio.role == AudioShareRuntimeRole.source),
+      flowWindows: WindowStreamCoordinator.shared.sessions
+          .where(
+            (s) =>
+                s.handle.source is RemotePeerSource &&
+                (s.handle.source as RemotePeerSource).peerId == uid,
+          )
+          .length,
+      preview: session.preview,
+    );
+  }
+
+  void _shellConnect(DeviceData target) =>
+      _connectServer(target.host, target.port, peerId: target.uid);
+
+  Future<void> _shellOpenSettings() async {
+    await showWhisperSettings(
+      context,
+      exitForUpdate: _shutdownAndDestroyWindow,
+      openPairing: () => unawaited(_openPairingQr(deeper: true)),
+      openShareLinks: _shellOpenShareLinks,
+    );
+    // Restarts the service after a port change, as it always has.
+    unawaited(_refreshDevice());
+  }
+
+  Future<void> _startInputWith(DeviceData target) async {
+    final input = ShellInputController.shared;
+    input.attach(devices: devices, self: device);
+    if (!_inputMember(target.uid)) await input.add(target.uid);
+    if (!input.on) await input.setOn(true);
+  }
+
+  /// On the arrangement, offline screens aside.
+  bool _inputMember(String uid) =>
+      ShellInputController.shared.screens.any((screen) => screen.peerId == uid);
+
+  Future<void> _toggleInputMember(DeviceData target) async {
+    final input = ShellInputController.shared;
+    // Layouts load when it attaches, which until now only its page did.
+    input.attach(devices: devices, self: device);
+    if (_inputMember(target.uid)) {
+      await input.remove(target.uid);
+    } else {
+      await input.add(target.uid);
+    }
+  }
+
+  void _shellOpenShareLinks() {
+    // A row of settings on touch, a place of its own with a pointer.
+    if (!ShellContent.attached) {
+      setState(() => _shellPlace = ShellPlace.links);
+      return;
+    }
+    unawaited(
+      ShellContent.push<void>(
+        WhisperPageRoute<void>(
+          builder: (context) => ShellPlacePage(
+            title: AppLocalizations.of(context)!.shellShareLinks,
+            end: Builder(
+              builder: (buttonContext) => ShellIconButton(
+                glyph: WhisperGlyph.plus,
+                iconSize: 20,
+                touch: true,
+                color: buttonContext.wc.accent,
+                label: AppLocalizations.of(buttonContext)!.shellLinksNew,
+                onTap: () => unawaited(showShellNewLinkMenu(buttonContext)),
+              ),
+            ),
+            child: const ShellLinksPage(touch: true),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _shellBuildPlace(
+    BuildContext context,
+    ShellPlace place,
+    double rightInset, {
+    GlobalKey? titleKey,
+    GlobalKey? controlsKey,
+  }) {
+    final l10n = AppLocalizations.of(context)!;
+    return switch (place) {
+      ShellPlace.links => ShellPlaceFrame(
+        title: l10n.shellShareLinks,
+        rightInset: rightInset,
+        titleKey: titleKey,
+        controlsKey: controlsKey,
+        end: Builder(
+          builder: (buttonContext) => ShellButton(
+            label: l10n.shellLinksNew,
+            glyph: WhisperGlyph.plus,
+            onTap: () => unawaited(showShellNewLinkMenu(buttonContext)),
+          ),
+        ),
+        child: const ShellLinksPage(),
+      ),
+      ShellPlace.sound => ShellSoundPage(
+        rightInset: rightInset,
+        titleKey: titleKey,
+        controlsKey: controlsKey,
+        selfDevice: device,
+        sessions: _sessionItems,
+      ),
+      ShellPlace.input => ShellInputPage(
+        rightInset: rightInset,
+        titleKey: titleKey,
+        controlsKey: controlsKey,
+        selfDevice: device,
+        sessions: _sessionItems,
+      ),
+      ShellPlace.device => const SizedBox.shrink(),
+    };
+  }
+
+  late final ShellActions _shellActions = ShellActions(
+    select: (uid) {
+      if (uid != null && socketManager.isConnectedTo(uid)) {
+        socketManager.selectPeer(uid);
+      }
+      setState(() {
+        _selectedDesktopPeerId = uid;
+        _shellPlace = ShellPlace.device;
+      });
+    },
+    connect: _shellConnect,
+    openPairing: ({bool startWithAddress = false}) =>
+        _openPairingQr(startWithAddress: startWithAddress),
+    removeDevice: _removeDevice,
+    contextActions: (target, {openCard}) {
+      final l10n = AppLocalizations.of(context)!;
+      return [
+        ..._buildSessionContextActions(target),
+        if (openCard != null)
+          ContextMenuActionItem(
+            label: l10n.shellCardMenu,
+            icon: Icons.info_outline_rounded,
+            onSelected: openCard,
+          ),
+      ];
+    },
+    openSound: () => setState(() => _shellPlace = ShellPlace.sound),
+    openInput: () => setState(() => _shellPlace = ShellPlace.input),
+    openShareLinks: _shellOpenShareLinks,
+    openSettings: () => unawaited(_shellOpenSettings()),
+    openDiagnostics: (_) =>
+        _showConnectionDiagnosticStage(ConnectionDiagnosticStage.service),
+    buildConversation: (context, target) => SendMessageScreen(
+      key: ValueKey('shell-chat-${target.uid}'),
+      device: target,
+      embedded: true,
+      chromeless: true,
+      onDeviceDeleted: _removeDevice,
+    ),
+    buildFiles: (context, target) => RemoteFilesPage(
+      key: ValueKey('shell-files-${target.uid}'),
+      peerId: target.uid,
+      deviceName: target.name,
+    ),
+    buildApps: (context, target) => FlowSpacePage(
+      key: ValueKey('shell-apps-${target.uid}'),
+      focusPeerId: target.uid,
+    ),
+    buildPlace: _shellBuildPlace,
+    buildSelfPanel: (context) => ShellSelfPanel(
+      self: device,
+      onEnterAddress: () => _openPairingQr(startWithAddress: true),
+    ),
+    buildCard: (context, target, close) {
+      final l10n = AppLocalizations.of(context)!;
+      final connected = socketManager.isConnectedTo(target.uid);
+      final session = _sessionItems.where((s) => s.device.uid == target.uid);
+      return ShellDeviceCard(
+        key: ValueKey('shell-card-${target.uid}'),
+        device: target,
+        connected: connected,
+        paired: _isTrustedDevice(target),
+        onClose: close,
+        statusLine: connected
+            ? l10n.shellCardConnected
+            : session.isEmpty
+            ? l10n.shellRowOffline
+            : deviceRowText(l10n, _shellFacts(session.first)),
+        onSound: supportsNativeSystemAudio()
+            ? () => unawaited(ShellSoundController.shared.toggle(target.uid))
+            : null,
+        soundOn: ShellSoundController.shared.isSelected(target.uid),
+        soundStatus: switch (ShellSoundController.shared.channelOf(
+          target.uid,
+        )) {
+          final role? => _audioGroupRoleLabel(role),
+          null => null,
+        },
+        soundEnabled: ShellSoundController.shared.sinkView == null,
+        onInput:
+            deviceKindOf(target).handheld || !supportsNativeRemoteInput()
+            ? null
+            : () => unawaited(_toggleInputMember(target)),
+        inputOn: _inputMember(target.uid),
+        onDiagnostics: () =>
+            _showConnectionDiagnosticStage(ConnectionDiagnosticStage.service),
+        onDisconnect: () => socketManager.disconnectPeer(target.uid),
+        onRemove: _removeDevice,
+      );
+    },
+    buildTouchCard: _shellBuildTouchCard,
+    canControl: _shellCanControl,
+    openControl: _shellOpenControl,
+    paletteItems: _shellPaletteItems,
+    searchMessages: _shellSearchMessages,
+  );
+
+  bool _shellCanControl(DeviceData target) =>
+      supportsManualRemoteInputSource() &&
+      target.uid != device?.uid &&
+      !deviceKindOf(target).handheld &&
+      socketManager.isConnectedTo(target.uid) &&
+      socketManager.supportsManualInputFor(target.uid);
+
+  void _shellOpenControl(DeviceData target) {
+    final l10n = AppLocalizations.of(context)!;
+    unawaited(
+      ShellContent.push<void>(
+        WhisperPageRoute<void>(
+          settings: const RouteSettings(name: ShellRoutes.control),
+          builder: (_) => mobileControlPage(
+            device: target,
+            self: device,
+            l10n: l10n,
+            deviceArt: deviceArtFor(target, size: 104),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// DESIGN.md「平板和折叠屏」: the device page in the compact size class, with
+  /// control, files and apps as its entries. Beside a sidebar it is the card,
+  /// and the toolbar has those.
+  Widget _shellBuildTouchCard(
+    BuildContext context,
+    DeviceData target, {
+    required bool page,
+    required VoidCallback onClose,
+    required ValueChanged<int> onOpenTab,
+  }) {
+    final l10n = AppLocalizations.of(context)!;
+    final connected = socketManager.isConnectedTo(target.uid);
+    final session = _sessionItems.where((s) => s.device.uid == target.uid);
+    void searchHistory() => unawaited(
+      ShellContent.push<void>(
+        WhisperPageRoute<void>(
+          builder: (_) => TransferAssistantScreen(
+            peerId: target.uid,
+            peerName: target.name,
+          ),
+        ),
+      ),
+    );
+    void diagnostics() => showAppToast(
+      connected ? l10n.connectedNow : l10n.deviceFeatureNeedsConnection,
+    );
+    Future<void> remove(String uid) async {
+      await _removeDevice(uid);
+      onClose();
+      ShellContent.showList();
+    }
+
+    if (page) {
+      return ShellPhoneDevicePage(
+        key: ValueKey('shell-device-page-${target.uid}'),
+        device: target,
+        connected: connected,
+        onBack: onClose,
+        entries: [
+          if (supportsManualRemoteInputSource() &&
+              target.uid != device?.uid &&
+              !deviceKindOf(target).handheld &&
+              (!connected ||
+                  socketManager.supportsManualInputFor(target.uid)))
+            ShellDeviceEntry(
+              glyph: WhisperGlyph.keyboard,
+              title: l10n.shellPhoneControl,
+              onTap: connected ? () => _shellOpenControl(target) : null,
+            ),
+          ShellDeviceEntry(
+            glyph: WhisperGlyph.folder,
+            title: l10n.shellTabFiles,
+            onTap: connected ? () => onOpenTab(1) : null,
+          ),
+          ShellDeviceEntry(
+            glyph: WhisperGlyph.apps,
+            title: l10n.shellTabApps,
+            onTap: connected ? () => onOpenTab(2) : null,
+          ),
+        ],
+        onSearchHistory: searchHistory,
+        onDiagnostics: diagnostics,
+        onDisconnect: () => socketManager.disconnectPeer(target.uid),
+        onRemove: remove,
+      );
+    }
+    return ShellDeviceCard(
+      key: ValueKey('shell-card-${target.uid}'),
+      device: target,
+      connected: connected,
+      paired: _isTrustedDevice(target),
+      touch: true,
+      onClose: onClose,
+      statusLine: connected
+          ? l10n.shellCardConnected
+          : session.isEmpty
+          ? l10n.shellRowOffline
+          : deviceRowText(l10n, _shellFacts(session.first)),
+      onSearchHistory: searchHistory,
+      onDiagnostics: diagnostics,
+      onDisconnect: () => socketManager.disconnectPeer(target.uid),
+      onRemove: remove,
+    );
+  }
+
+  List<PaletteItem> _shellPaletteItems(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final actions = _shellActions;
+    return [
+      for (final session in _sessionItems)
+        PaletteItem(
+          glyph: WhisperGlyph.info,
+          name: session.device.name,
+          category: l10n.shellPaletteDevice,
+          onRun: () => actions.select(session.device.uid),
+          keywords: [session.device.host],
+        ),
+      for (final session in _sessionItems)
+        if (session.isConnected) ...[
+          PaletteItem(
+            glyph: WhisperGlyph.speaker,
+            name: l10n.shellPalettePlayOn(session.device.name),
+            category: l10n.shellPaletteAction,
+            onRun: () {
+              actions.openSound();
+              if (!ShellSoundController.shared.isSelected(session.device.uid)) {
+                unawaited(
+                  ShellSoundController.shared.toggle(session.device.uid),
+                );
+              }
+            },
+          ),
+          if (!deviceKindOf(session.device).handheld)
+            PaletteItem(
+              glyph: WhisperGlyph.keyboard,
+              name: l10n.shellPaletteControl(session.device.name),
+              category: l10n.shellPaletteAction,
+              onRun: () {
+                actions.openInput();
+                unawaited(_startInputWith(session.device));
+              },
+            ),
+        ],
+      PaletteItem(
+        glyph: WhisperGlyph.speaker,
+        name: l10n.shellSound,
+        category: l10n.shellPalettePage,
+        onRun: actions.openSound,
+      ),
+      if (!isMobile())
+        PaletteItem(
+          glyph: WhisperGlyph.keyboard,
+          name: l10n.shellInput,
+          category: l10n.shellPalettePage,
+          onRun: actions.openInput,
+        ),
+      PaletteItem(
+        glyph: WhisperGlyph.link,
+        name: l10n.shellShareLinks,
+        category: l10n.shellPalettePage,
+        onRun: actions.openShareLinks,
+      ),
+      PaletteItem(
+        glyph: WhisperGlyph.gear,
+        name: l10n.shellSettings,
+        category: l10n.shellPalettePage,
+        onRun: actions.openSettings,
+      ),
+    ];
+  }
+
+  /// Chat history, device by device, opening that device's conversation.
+  Future<List<PaletteItem>> _shellSearchMessages(
+    BuildContext context,
+    String query,
+  ) async {
+    final l10n = AppLocalizations.of(context)!;
+    final found = <PaletteItem>[];
+    for (final session in _sessionItems) {
+      final results = await db.searchTextMessagesForPeer(
+        session.device.uid,
+        query: query,
+      );
+      for (final result in results.take(2)) {
+        found.add(
+          PaletteItem(
+            glyph: WhisperGlyph.chat,
+            name: result.message.content ?? '',
+            category: session.device.name.isEmpty
+                ? l10n.shellPaletteMessage
+                : session.device.name,
+            onRun: () => _shellActions.select(session.device.uid),
+          ),
+        );
+      }
+      if (found.length >= 8) break;
+    }
+    return found;
   }
 
   bool get _usesSplitWorkspace => usesSplitDeviceWorkspace(
@@ -2179,23 +3217,12 @@ class _DeviceListScreen extends State<DeviceListScreen>
     );
   }
 
-  bool get _isDesktopRemoteInputActive {
-    final snapshot = _remoteInputWorkspaceCoordinator.snapshot;
-    final legacyState = _remoteInputCoordinator.state;
-    // A stale offering/armed state can survive briefly while a peer is being
-    // disconnected. Do not leave the toolbar highlighted unless the session
-    // still has a live authenticated peer behind it.
-    final legacyLive =
-        !_remoteInputCoordinator.isManual &&
-        legacyState.status != RemoteInputRuntimeStatus.idle &&
-        legacyState.status != RemoteInputRuntimeStatus.failed &&
-        legacyState.peerId.isNotEmpty &&
-        socketManager.isConnectedTo(legacyState.peerId);
-    final workspaceLive =
-        snapshot.isControllerLive &&
-        snapshot.targets.values.any((target) => target.isConnected);
-    return workspaceLive || snapshot.isControlledLive || legacyLive;
-  }
+  bool get _isDesktopRemoteInputActive => isRemoteInputSessionLive(
+    workspace: _remoteInputWorkspaceCoordinator.snapshot,
+    legacy: _remoteInputCoordinator.state,
+    legacyIsManual: _remoteInputCoordinator.isManual,
+    isConnected: socketManager.isConnectedTo,
+  );
 
   Widget _buildDesktopRemoteInputWorkspaceAction() {
     final palette = context.whisperPalette;
@@ -2852,7 +3879,19 @@ class _DeviceListScreen extends State<DeviceListScreen>
   Future<void> _showManualConnectDialog() =>
       _openPairingQr(startWithAddress: true);
 
-  Future<void> _openPairingQr({bool startWithAddress = false}) async {
+  Future<void> _openPairingQr({
+    bool startWithAddress = false,
+    bool deeper = false,
+  }) async {
+    // surfaces.md「这台面板」: on a desktop the code lives there.
+    if (whisperNewUi && !ShellContent.attached && !startWithAddress) {
+      await showShellSheet<void>(
+        context,
+        scrolls: false,
+        builder: _shellActions.buildSelfPanel,
+      );
+      return;
+    }
     final qrController = PairingQrDialogController();
     _activePairingQrController?.dismiss();
     _activePairingQrController = qrController;
@@ -2882,6 +3921,20 @@ class _DeviceListScreen extends State<DeviceListScreen>
         startWithAddress: startWithAddress,
         startWithScanner: isMobile(),
         controller: qrController,
+        localName: localDevice.name,
+        localFingerprint: identityPublicKeyHash(identity.publicKeyBase64Url),
+        reloadInvite: () async {
+          try {
+            return PairingInvite(
+              host: await getLocalIpAddress(),
+              port: localDevice.port,
+              peerId: localDevice.uid,
+              publicKeyHash: identityPublicKeyHash(identity.publicKeyBase64Url),
+            );
+          } on PairingInviteFormatException {
+            return null;
+          }
+        },
       );
       if (!mounted || result == null) {
         return;
@@ -2921,6 +3974,10 @@ class _DeviceListScreen extends State<DeviceListScreen>
     if (socketManager.isConnectedTo(deviceItem.uid)) {
       socketManager.selectPeer(deviceItem.uid);
     }
+    if (whisperNewUi) {
+      _shellShowDevice(deviceItem.uid);
+      return;
+    }
     if (_usesSplitWorkspace ||
         (_usesTabletWorkspace &&
             _sessionItems.any((s) => s.device.uid == deviceItem.uid))) {
@@ -2929,16 +3986,25 @@ class _DeviceListScreen extends State<DeviceListScreen>
       });
       return;
     }
+    Widget page(BuildContext context) =>
+        SendMessageScreen(device: deviceItem, onDeviceDeleted: _removeDevice);
     await Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => SendMessageScreen(
-          device: deviceItem,
-          onDeviceDeleted: _removeDevice,
-        ),
-      ),
+      whisperNewUi
+          ? WhisperPageRoute<void>(builder: page)
+          : MaterialPageRoute(builder: page),
     );
     _refreshDevice();
+  }
+
+  /// A device on screen: selected beside a sidebar, the top of the stack on a
+  /// phone, whichever way the window is now.
+  void _shellShowDevice(String uid) {
+    setState(() {
+      _selectedDesktopPeerId = uid;
+      _shellPlace = ShellPlace.device;
+    });
+    ShellContent.showDevice();
   }
 
   Future<void> _confirmRemoveDevice(DeviceData target) async {
@@ -3317,7 +4383,9 @@ class _DeviceListScreen extends State<DeviceListScreen>
             !_connectionAttempts.isCurrent(targetKey, attemptGeneration)) {
           return;
         }
-        if (_usesSplitWorkspace || _usesTabletWorkspace) {
+        if (whisperNewUi) {
+          _shellShowDevice(connectedDevice.uid);
+        } else if (_usesSplitWorkspace || _usesTabletWorkspace) {
           setState(() {
             _selectedDesktopPeerId = connectedDevice.uid;
           });
@@ -3476,6 +4544,8 @@ class _DeviceListScreen extends State<DeviceListScreen>
     if (!mounted) return;
     if (recovery == ServerStartRecovery.retry) {
       await _startServer(port: port);
+    } else if (recovery == ServerStartRecovery.settings && whisperNewUi) {
+      await _shellOpenSettings();
     } else if (recovery == ServerStartRecovery.settings) {
       await Navigator.push(
         context,
@@ -3512,6 +4582,13 @@ class _DeviceListScreen extends State<DeviceListScreen>
       resolve(false);
       return;
     }
+    if (whisperNewUi && isDesktop()) {
+      askPairing(AppLocalizations.of(context)!, request, (allow) {
+        if (allow) pairingQrController?.dismiss();
+        resolve(allow);
+      });
+      return;
+    }
     await showPairingDialog(
       context,
       request: request,
@@ -3534,6 +4611,10 @@ class _DeviceListScreen extends State<DeviceListScreen>
     _pendingAutoConnectPeerId = null;
     await _refreshDevice();
     if (!mounted) {
+      return;
+    }
+    if (whisperNewUi) {
+      _shellShowDevice(deviceData.uid);
       return;
     }
     if (_usesSplitWorkspace || _usesTabletWorkspace) {
@@ -3634,11 +4715,21 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
   @override
   void onTransferUpdated(TransferSnapshot snapshot) {
+    if (whisperNewUi) {
+      setState(() => _shellTransfers[snapshot.peerUid] = snapshot);
+      TransferIslandSource.shared.update(snapshot);
+    }
     // Device list only needs to refresh high-level presence state for now.
   }
 
   @override
   void onTrayIconMouseDown() async {
+    final panel = _trayPanel;
+    if (whisperNewUi && panel != null) {
+      _pushTrayState();
+      await panel.toggle();
+      return;
+    }
     await windowManager.show();
   }
 
@@ -3673,7 +4764,12 @@ class _DeviceListScreen extends State<DeviceListScreen>
     if (_isDestroyingWindow) {
       return;
     }
-    if (await LocalSetting().isClose2Tray() &&
+    if (whisperNewUi &&
+        await LocalSetting().isClose2Tray() &&
+        !await _statusNotifierAvailable()) {
+      // No tray to come back from: minimized it can still be found.
+      await windowManager.minimize();
+    } else if (await LocalSetting().isClose2Tray() &&
         await windowManager.isPreventClose()) {
       await windowManager.hide();
     } else {
@@ -3767,6 +4863,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
   @override
   void onClipboardChanged() async {
+    if (whisperNewUi) unawaited(_recordClipboard());
     final generation = ++_clipboardSyncGeneration;
     final inputState = _remoteInputCoordinator.state;
     final workspace = _remoteInputWorkspaceCoordinator.snapshot;

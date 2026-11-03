@@ -6,6 +6,8 @@ import 'package:whisper/socket/device_identity.dart';
 import 'package:whisper/socket/peer_socket_session.dart';
 import 'package:whisper/socket/quick_send_identity_gate.dart';
 
+import 'support/source_reading.dart';
+
 void main() {
   test(
     'quick-send identity gate requires the trusted session and pin to match',
@@ -58,7 +60,7 @@ void main() {
   test(
     'desktop and Android quick-send calls forward the pinned identity hash',
     () {
-      final source = File('lib/page/deviceList.dart').readAsStringSync();
+      final source = deviceListSource();
       final inbox = File(
         'lib/state/desktop_quick_send_inbox.dart',
       ).readAsStringSync();
@@ -75,8 +77,6 @@ void main() {
     },
   );
 
-  test('discovery merging retains the durable pinned identity', () {
-    final source = File('lib/page/deviceList.dart').readAsStringSync();
-    expect(source, contains('identityPublicKey: stored.identityPublicKey'));
-  });
+  // 'discovery merging retains the durable pinned identity' is in
+  // device_list_rules_test.dart.
 }

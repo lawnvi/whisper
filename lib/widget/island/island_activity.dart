@@ -16,6 +16,9 @@ enum IslandKind {
 
   /// This device plays another device's sound.
   audio,
+
+  /// Another device asks something, and waits for the answer.
+  request,
 }
 
 /// Where an activity stands, as far as the island cares.
@@ -112,6 +115,7 @@ class IslandActivity {
     this.waitsFor,
     this.showAfter = Duration.zero,
     this.urgent = false,
+    this.home,
   });
 
   final String id;
@@ -138,6 +142,10 @@ class IslandActivity {
   /// full screen, status bar hidden).
   final bool urgent;
 
+  /// What shows this activity itself: while that is on screen the island leaves
+  /// it alone (`IslandHome`). Null: only the island shows it.
+  final String? home;
+
   IslandActivity copyWith({IslandStatus? status}) => IslandActivity(
     id: id,
     kind: kind,
@@ -149,6 +157,7 @@ class IslandActivity {
     waitsFor: waitsFor,
     showAfter: showAfter,
     urgent: urgent,
+    home: home,
   );
 
   @override

@@ -6,7 +6,7 @@ void main() {
   test('only Android forces orientation from Dart', () {
     final mainSource = File('lib/main.dart').readAsStringSync();
     final mobileOrientationBlock = RegExp(
-      r'if\s*\(\s*Platform\.isAndroid\s*\)\s*\{[\s\S]*?SystemChrome\.setPreferredOrientations\([\s\S]*?\);\s*\}',
+      r'if\s*\(\s*Platform\.isAndroid\s*&&\s*!whisperNewUi\s*\)\s*\{[\s\S]*?SystemChrome\.setPreferredOrientations\([\s\S]*?\);\s*\}',
     ).firstMatch(mainSource)?.group(0);
 
     expect(mobileOrientationBlock, isNotNull);
@@ -45,7 +45,11 @@ void main() {
         r'<activity[\s\S]*?android:name="\.MainActivity"[\s\S]*?>',
       ).firstMatch(manifest)!.group(0)!;
 
-      expect(mainActivity, contains('android:screenOrientation="portrait"'));
+      // DESIGN.md「旋转」: the window decides, from Dart, because folding changes
+      // it. A manifest cannot say that.
+      expect(mainActivity, isNot(contains('android:screenOrientation')));
+      expect(mainActivity, contains('smallestScreenSize'));
+      expect(mainActivity, contains('screenLayout'));
 
       final iosPlist = File('ios/Runner/Info.plist').readAsStringSync();
       final phoneOrientations = _plistArrayFor(

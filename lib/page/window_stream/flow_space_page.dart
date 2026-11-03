@@ -1,3 +1,11 @@
+import 'package:whisper/helper/helper.dart';
+import 'package:whisper/new_ui/apps/apps_parts.dart';
+import 'package:whisper/new_ui/apps/phone_apps.dart';
+import 'package:whisper/new_ui/phone/panel_menu.dart';
+import 'package:whisper/new_ui/phone/phone_parts.dart';
+import 'package:whisper/new_ui/shell/shell_parts.dart';
+import 'package:whisper/theme/whisper_icons.dart';
+import 'package:whisper/theme/whisper_ui.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -102,6 +110,7 @@ class _FlowSpacePageState extends State<FlowSpacePage> {
     super.initState();
     _controller.addListener(_rebuild);
     NativeWindowActivity.lastFrames.addListener(_rebuild);
+    WindowStreamHost.shared.hostedChanged.addListener(_rebuild);
     _coordinator.start().catchError((Object error) {
       if (mounted) {
         setState(() => _startError = error);
@@ -119,6 +128,7 @@ class _FlowSpacePageState extends State<FlowSpacePage> {
   @override
   void dispose() {
     NativeWindowActivity.lastFrames.removeListener(_rebuild);
+    WindowStreamHost.shared.hostedChanged.removeListener(_rebuild);
     _controller.removeListener(_rebuild);
     _controller.dispose();
     _searchController.dispose();
@@ -239,6 +249,13 @@ class _FlowSpacePageState extends State<FlowSpacePage> {
 
   @override
   Widget build(BuildContext context) {
+    if (whisperNewUi && isDesktop()) {
+      return Material(
+        type: MaterialType.transparency,
+        child: _buildNew(context),
+      );
+    }
+    if (whisperNewUi) return _buildNewPhone(context);
     final colors = FlowSpaceColors.of(context);
     // The same plain canvas as the rest of Whisper: no tinted glow.
     return RepaintBoundary(
@@ -252,6 +269,556 @@ class _FlowSpacePageState extends State<FlowSpacePage> {
                 : _buildCompact(context, constraints),
           ),
         ),
+      ),
+    );
+  }
+
+  /// surfaces.md「应用」, the prototype's `placeApps`: what is moving, this device's
+  /// apps, what can be sent there. No shelf of devices: that is the sidebar.
+  Widget _buildNew(BuildContext context) {
+    final c = context.wc;
+    const type = WhisperType(touch: false);
+    final view = _controller.selectedView;
+    final source = view?.source;
+    final peerId = source == null ? widget.focusPeerId : _sendPeerOf(source);
+    if (view == null || source == null) {
+      return const Center(child: CupertinoActivityIndicator());
+    }
+    final name = source.info.name;
+    final apps = view.apps;
+    final brightness = Theme.of(context).brightness;
+    Widget heading(String text, {Widget? end}) => Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              text,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: type.note,
+                fontWeight: FontWeight.w600,
+                color: c.ink2,
+              ),
+            ),
+          ),
+          ?end,
+        ],
+      ),
+    );
+    final sessions = _coordinator
+        .sessionsFor(source)
+        .where((session) => !session.state.isTerminal)
+        .toList();
+    final query = _query.trim().toLowerCase();
+    final visibleApps = (apps ?? const <AppEntry>[])
+        .where((app) => _showSystem || !app.system)
+        .where(
+          (app) =>
+              query.isEmpty ||
+              app.label.toLowerCase().contains(query) ||
+              app.id.toLowerCase().contains(query),
+        )
+        .toList();
+    final phoneSource = !_isLandscapeSource(source);
+    final hosted = peerId == null
+        ? const <({String sessionId, String title})>[]
+        : WindowStreamHost.shared.hostedFor(peerId);
+    Widget flowRow(
+      String title,
+      String detail,
+      String action,
+      VoidCallback onTap,
+    ) => ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 40),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: type.body,
+                      height: 1.3,
+                      color: c.ink,
+                    ),
+                  ),
+                  Text(
+                    detail,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: type.note, color: c.ink2),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            ShellButton(label: action, onTap: onTap),
+          ],
+        ),
+      ),
+    );
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 4, 20, 30),
+      children: [
+        if (sessions.isNotEmpty || hosted.isNotEmpty) ...[
+          heading(l10n.shellAppsMoving),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: c.fill,
+              borderRadius: BorderRadius.circular(WhisperRadius.m),
+            ),
+            child: Column(
+              children: [
+                for (final session in sessions)
+                  flowRow(
+                    session.handle.title,
+                    l10n.shellAppsRunsOn(name),
+                    l10n.shellAppsEnd,
+                    () => unawaited(_coordinator.close(session)),
+                  ),
+                for (final window in hosted)
+                  flowRow(
+                    window.title,
+                    l10n.shellAppsShownOn(name),
+                    l10n.shellAppsBringBack,
+                    () => unawaited(
+                      WindowStreamHost.shared.bringBack(window.sessionId),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+        ],
+        heading(
+          l10n.shellAppsOn(name),
+          end: Builder(
+            builder: (buttonContext) => ShellIconButton(
+              glyph: WhisperGlyph.more,
+              iconSize: 15,
+              weight: 2.4,
+              label: l10n.windowStreamQuality,
+              onTap: () => _openNewAppsMenu(buttonContext),
+            ),
+          ),
+        ),
+        if (phoneSource && apps != null) ...[
+          SizedBox(height: 34, child: _buildSearchField(context)),
+          const SizedBox(height: 12),
+        ],
+        if (source.state.value.failure case final notice?) ...[
+          Text(
+            _failureText(notice.reason, source),
+            style: TextStyle(fontSize: type.note, color: c.warn),
+          ),
+          const SizedBox(height: 12),
+        ],
+        if (view.tasks.isNotEmpty) ...[
+          ShellAutoGrid(
+            minWidth: 160,
+            runSpacing: 12,
+            spacing: 12,
+            children: [
+              for (final task in view.tasks)
+                ShellWindowThumb(
+                  title: task.label,
+                  picture:
+                      NativeWindowActivity
+                          .lastFrames
+                          .value[NativeWindowActivity.frameKey(
+                        source.info.id,
+                        task.id,
+                      )] ??
+                      view.snapshots[task.id],
+                  badge: _sessionOf(source, task) != null
+                      ? l10n.windowStreamStreaming
+                      : task.shownOn != null
+                      ? l10n.flowTaskOpenOn(
+                          task.shownOn!.isEmpty
+                              ? l10n.windowStreamThatDevice
+                              : task.shownOn!,
+                        )
+                      : null,
+                  onTap: (_) {
+                    if (_closingTasks.contains(_taskKey(source, task))) {
+                      return;
+                    }
+                    final session = _sessionOf(source, task);
+                    if (session != null) {
+                      _focus(session);
+                    } else {
+                      unawaited(_open(source, OpenTask(task)));
+                    }
+                  },
+                  closeLabel: l10n.windowStreamCloseWindow,
+                  onClose: () => unawaited(_closeTask(source, task)),
+                ),
+            ],
+          ),
+          const SizedBox(height: 14),
+        ],
+        if (apps == null)
+          view.failure != null
+              ? ShellDeviceState(
+                  art: const SizedBox.shrink(),
+                  title: l10n.windowStreamLoadFailed,
+                  body: _failureText(view.failure!.reason, source),
+                  action: ShellButton(
+                    label: l10n.windowStreamRetry,
+                    kind: ShellButtonKind.primary,
+                    large: true,
+                    onTap: () => unawaited(_controller.reload()),
+                  ),
+                )
+              : const Padding(
+                  padding: EdgeInsets.all(40),
+                  child: Center(child: CupertinoActivityIndicator()),
+                )
+        else if (visibleApps.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Text(
+              l10n.windowStreamNoApps,
+              style: TextStyle(fontSize: type.note, color: c.ink2),
+            ),
+          )
+        else
+          ShellAutoGrid(
+            minWidth: 76,
+            spacing: 6,
+            runSpacing: 12,
+            children: [
+              for (final app in visibleApps)
+                ShellAppIcon(
+                  label: app.label,
+                  hue: flowAppHue(app.id, brightness),
+                  icon: view.icons[app.id],
+                  busy: _opening.any(
+                    (key) => key.startsWith('${source.info.id}/${app.id}/'),
+                  ),
+                  onTap: () => unawaited(
+                    _open(source, OpenApp(app.id, label: app.label)),
+                  ),
+                ),
+            ],
+          ),
+        if (peerId != null) ...[
+          const SizedBox(height: 24),
+          heading(l10n.windowStreamSendTo(name)),
+          ShellSendWindows(
+            deviceName: name,
+            available: WsSvrManager().canOfferWindowsTo(peerId),
+            onSend: (window, from, picture) => unawaited(
+              _send(
+                cardId: source.info.id,
+                name: name,
+                hue: _hue(source),
+                peerId: peerId,
+                window: window,
+                from: from,
+                picture: picture,
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  /// surfaces.md「应用」at touch size: one list as on a desktop, with the page's
+  /// back arrow, its 更多 at the right and everything at a finger's size.
+  Widget _buildNewPhone(BuildContext context) {
+    final c = context.wc;
+    final brightness = Theme.of(context).brightness;
+    final view = _controller.selectedView;
+    final source = view?.source;
+    final target = _controller.selectedTarget;
+    final blocking = _newPhoneBlocking();
+    Widget body;
+    if (blocking != null) {
+      body = blocking;
+    } else if (view == null || source == null) {
+      body = target == null
+          ? const Center(child: CupertinoActivityIndicator())
+          : PhoneAppsView(
+              movingTitle: l10n.shellAppsMoving,
+              flows: const [],
+              sendTitle: l10n.windowStreamSendTo(target.name),
+              send: _newPhoneSend(
+                cardId: _targetCardId(target),
+                name: target.name,
+                hue: _targetHue(target),
+                peerId: target.peerId,
+              ),
+            );
+    } else {
+      final name = source.info.name;
+      final apps = view.apps;
+      final query = _query.trim().toLowerCase();
+      final runningIds = {for (final task in view.tasks) task.appId};
+      final sessions = _coordinator.sessionsFor(source);
+      final peerId = _sendPeerOf(source);
+      body = PhoneAppsView(
+        movingTitle: l10n.shellAppsMoving,
+        flows: [
+          for (final session in sessions)
+            if (!session.state.isTerminal)
+              PhoneAppsFlow(
+                title: session.handle.title,
+                detail: l10n.shellAppsRunsOn(name),
+                action: l10n.shellAppsEnd,
+                onAction: () => unawaited(_coordinator.close(session)),
+              ),
+        ],
+        appsTitle: l10n.shellAppsOn(name),
+        notice: source.state.value.failure == null
+            ? null
+            : _failureText(source.state.value.failure!.reason, source),
+        search: !_isLandscapeSource(source) && apps != null
+            ? PhoneAppsSearch(
+                controller: _searchController,
+                hint: l10n.windowStreamSearchApps,
+                onChanged: (value) => setState(() => _query = value),
+              )
+            : null,
+        closeLabel: l10n.windowStreamCloseWindow,
+        tasks: [
+          for (final task in view.tasks)
+            PhoneAppsTask(
+              title: task.label,
+              picture:
+                  NativeWindowActivity
+                      .lastFrames
+                      .value[NativeWindowActivity.frameKey(
+                    source.info.id,
+                    task.id,
+                  )] ??
+                  view.snapshots[task.id],
+              closing: _closingTasks.contains(_taskKey(source, task)),
+              badge: _closingTasks.contains(_taskKey(source, task))
+                  ? l10n.windowStreamClosing
+                  : task.streamed || _sessionOf(source, task) != null
+                  ? l10n.windowStreamStreaming
+                  : task.shownOn != null
+                  ? l10n.flowTaskOpenOn(
+                      task.shownOn!.isEmpty
+                          ? l10n.windowStreamThatDevice
+                          : task.shownOn!,
+                    )
+                  : null,
+              onTap: () {
+                if (_closingTasks.contains(_taskKey(source, task))) return;
+                final session = _sessionOf(source, task);
+                if (session != null) {
+                  _focus(session);
+                } else {
+                  unawaited(_open(source, OpenTask(task)));
+                }
+              },
+              onClose: () => unawaited(_closeTask(source, task)),
+            ),
+        ],
+        failure: apps == null && view.failure != null
+            ? PhoneAppsFailure(
+                title: l10n.windowStreamLoadFailed,
+                body: _failureText(view.failure!.reason, source),
+                retry: l10n.windowStreamRetry,
+                onRetry: () => unawaited(_controller.reload()),
+              )
+            : null,
+        loading: apps == null && view.failure == null,
+        noApps: l10n.windowStreamNoApps,
+        apps: apps == null
+            ? null
+            : [
+                for (final app in apps)
+                  if ((_showSystem || !app.system) &&
+                      (query.isEmpty ||
+                          app.label.toLowerCase().contains(query) ||
+                          app.id.toLowerCase().contains(query)))
+                    PhoneAppsEntry(
+                      label: app.label,
+                      hue: flowAppHue(app.id, brightness),
+                      icon: view.icons[app.id],
+                      busy: _opening.any(
+                        (key) => key.startsWith('${source.info.id}/${app.id}/'),
+                      ),
+                      running: runningIds.contains(app.id),
+                      openHere: sessions.any(
+                        (session) =>
+                            session.handle.target.appId == app.id &&
+                            !session.state.isTerminal,
+                      ),
+                      onTap: () => unawaited(
+                        _open(source, OpenApp(app.id, label: app.label)),
+                      ),
+                    ),
+              ],
+        sendTitle: l10n.windowStreamSendTo(name),
+        send: peerId == null
+            ? null
+            : _newPhoneSend(
+                cardId: source.info.id,
+                name: name,
+                hue: _hue(source),
+                peerId: peerId,
+              ),
+      );
+    }
+    return PhonePage(
+      title: l10n.shellTabApps,
+      background: c.content,
+      // Beside a sidebar the toolbar above has the tabs.
+      bar: WhisperLayout.of(context).compact,
+      end: blocking != null
+          ? null
+          : Builder(
+              builder: (button) => PhoneBarButton(
+                key: const ValueKey('apps-more'),
+                glyph: WhisperGlyph.more,
+                iconSize: 15,
+                weight: 2.4,
+                label: l10n.windowStreamQuality,
+                onTap: () => _openNewPhoneMenu(button),
+              ),
+            ),
+      child: body,
+    );
+  }
+
+  Widget _newPhoneSend({
+    required String cardId,
+    required String name,
+    required Color hue,
+    required String peerId,
+  }) => ShellSendWindows(
+    touch: true,
+    deviceName: name,
+    available: WsSvrManager().canOfferWindowsTo(peerId),
+    onSend: (window, from, picture) => unawaited(
+      _send(
+        cardId: cardId,
+        name: name,
+        hue: hue,
+        peerId: peerId,
+        window: window,
+        from: from,
+        picture: picture,
+      ),
+    ),
+  );
+
+  /// The phone's 更多: how sharp windows come over, whether system apps show.
+  void _openNewPhoneMenu(BuildContext button) {
+    final quality = _coordinator.quality.value;
+    final apps = _controller.selectedView?.apps ?? const <AppEntry>[];
+    unawaited(
+      showPanelMenu(
+        button,
+        anchor: panelMenuAnchor(button),
+        touch: true,
+        title: l10n.windowStreamQualityHint,
+        items: [
+          for (final option in WindowStreamQuality.values.reversed)
+            PanelMenuEntry(
+              label: _qualityName(option),
+              checked: option == quality,
+              onSelected: () => unawaited(_coordinator.setQuality(option)),
+            ),
+          if (apps.any((app) => app.system)) ...[
+            const PanelMenuEntry.separator(),
+            PanelMenuEntry(
+              label: l10n.windowStreamShowSystemApps,
+              checked: _showSystem,
+              onSelected: () => setState(() => _showSystem = !_showSystem),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// Nothing to show yet: the same cases as [_buildBlocking], in the new words
+  /// and at a finger's size.
+  Widget? _newPhoneBlocking() {
+    Widget state(String title, String body, {Widget? action}) =>
+        ShellDeviceState(
+          touch: true,
+          art: const SizedBox.shrink(),
+          title: title,
+          body: body,
+          action: action,
+        );
+    if (_startError != null || !_coordinator.supported) {
+      return state(l10n.windowStreamUnsupported, '');
+    }
+    final adbFailure = _coordinator.adbFailure;
+    final refused = _coordinator.devices.where(_isRefused).firstOrNull;
+    final nothing = _controller.sources.isEmpty && _controller.sendOnly.isEmpty;
+    if (nothing && refused != null) {
+      return state(
+        refused.adb.model.isEmpty
+            ? l10n.windowStreamNotPaired
+            : '${refused.adb.model} · ${l10n.windowStreamNotPaired}',
+        _failureText(refused.failure!.reason),
+      );
+    }
+    if (nothing && _coordinator.devices.isEmpty) {
+      return state(
+        l10n.windowStreamNoDevices,
+        _coordinator.adbSupported
+            ? (adbFailure == null
+                  ? l10n.windowStreamNoDevicesHintDesktop
+                  : _failureText(adbFailure.reason))
+            : l10n.windowStreamNoDevicesHintMobile,
+        action: adbFailure == null
+            ? null
+            : PhoneButton(
+                label: l10n.windowStreamRetry,
+                kind: PhoneButtonKind.primary,
+                large: true,
+                onTap: () => unawaited(_coordinator.retry()),
+              ),
+      );
+    }
+    return null;
+  }
+
+  /// 工具栏的更多: how sharp windows come over, and whether system apps show.
+  void _openNewAppsMenu(BuildContext buttonContext) {
+    final box = buttonContext.findRenderObject()! as RenderBox;
+    final quality = _coordinator.quality.value;
+    unawaited(
+      showFilesMenu(
+        buttonContext,
+        position: box.localToGlobal(
+          Offset(box.size.width, box.size.height + 6),
+        ),
+        alignRight: true,
+        items: [
+          FilesMenuItem(label: l10n.windowStreamQualityHint, enabled: false),
+          for (final option in WindowStreamQuality.values.reversed)
+            FilesMenuItem(
+              label: _qualityName(option),
+              checked: option == quality,
+              onSelected: () => unawaited(_coordinator.setQuality(option)),
+            ),
+          const FilesMenuItem.separator(),
+          FilesMenuItem(
+            label: l10n.windowStreamShowSystemApps,
+            checked: _showSystem,
+            onSelected: () => setState(() => _showSystem = !_showSystem),
+          ),
+        ],
       ),
     );
   }
@@ -675,7 +1242,9 @@ class _FlowSpacePageState extends State<FlowSpacePage> {
     required Uint8List? picture,
   }) async {
     final targetBox =
-        _deviceCardKeys[cardId]?.currentContext?.findRenderObject()
+        (whisperNewUi ? ShellFlyTargets.rowOf(peerId) : _deviceCardKeys[cardId])
+                ?.currentContext
+                ?.findRenderObject()
             as RenderBox?;
     final to = targetBox != null && targetBox.hasSize
         ? targetBox.localToGlobal(Offset.zero) & targetBox.size

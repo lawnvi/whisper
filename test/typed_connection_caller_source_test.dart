@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/source_reading.dart';
+
 String _section(String source, String start, String end) {
   final startIndex = source.indexOf(start);
   expect(startIndex, isNonNegative, reason: 'missing $start');
@@ -14,13 +16,9 @@ String _section(String source, String start, String end) {
 void main() {
   test('device list applies typed results only through its current generation',
       () {
-    final source = File('lib/page/deviceList.dart').readAsStringSync();
-    final connect = _section(
-      source,
-      'Future<void> _connectServerInternal(',
-      'Future<void> _attemptAutoConnect()',
-    );
-    final dispose = _section(source, 'void dispose()', 'Future<void> _stopClipboardWatcher');
+    final source = deviceListSource();
+    final connect = memberSource(source, 'Future<void> _connectServerInternal(');
+    final dispose = memberSource(source, 'void dispose()');
 
     expect(source, contains('final ConnectionAttemptTracker _connectionAttempts'));
     expect(connect, contains('ConnectionAttemptRequest('));
@@ -55,12 +53,11 @@ void main() {
   });
 
   test('connection callers show a dedicated peer rejection message', () {
-    final deviceList = File('lib/page/deviceList.dart').readAsStringSync();
+    final deviceList = deviceListSource();
     final conversation = File('lib/page/conversation.dart').readAsStringSync();
-    final deviceConnect = _section(
+    final deviceConnect = memberSource(
       deviceList,
       'Future<void> _connectServerInternal(',
-      'Future<void> _attemptAutoConnect()',
     );
     final conversationConnect = _section(
       conversation,

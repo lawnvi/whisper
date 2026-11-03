@@ -2,23 +2,13 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-void main() {
-  String methodBody(String source, String start, String next) {
-    final startIndex = source.indexOf(start);
-    expect(startIndex, isNonNegative, reason: 'Missing method $start');
-    final endIndex = source.indexOf(next, startIndex);
-    expect(endIndex, isNonNegative, reason: 'Missing next method $next');
-    return source.substring(startIndex, endIndex);
-  }
+import 'support/source_reading.dart';
 
+void main() {
   test('device list duplicate-request branch restores coordinator state '
       'before returning', () {
-    final source = File('lib/page/deviceList.dart').readAsStringSync();
-    final section = methodBody(
-      source,
-      'Future<void> _connectServerInternal(',
-      'Future<void> _attemptAutoConnect()',
-    );
+    final source = deviceListSource();
+    final section = memberSource(source, 'Future<void> _connectServerInternal(');
 
     final branchStart = section.indexOf(
       'if (result.reason == ConnectionAttemptReason.duplicateRequest) {',
@@ -43,11 +33,7 @@ void main() {
   test('conversation connect flow does not pre-mark connecting, so its '
       'duplicate-request branch needs no restore', () {
     final source = File('lib/page/conversation.dart').readAsStringSync();
-    final section = methodBody(
-      source,
-      'Future<bool> _connectServer(',
-      'Future<bool> _restoreConnectionIfNeeded()',
-    );
+    final section = memberSource(source, 'Future<bool> _connectServer(');
 
     expect(
       section,

@@ -285,6 +285,11 @@ class FileCopies extends ChangeNotifier {
   final spotlight = ValueNotifier<int>(0);
   FileCopyBatch? spotlit;
 
+  /// Whether [transferId] is part of a copy, which has its own place on the
+  /// island: it must not show up there a second time as a bare transfer.
+  bool holds(String transferId) =>
+      batches.any((batch) => batch.transfers.containsKey(transferId));
+
   Iterable<FileCopyBatch> get active =>
       batches.where((batch) => !batch.finished);
 

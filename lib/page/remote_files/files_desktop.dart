@@ -1,3 +1,8 @@
+import 'package:whisper/new_ui/picker/device_picker.dart';
+import 'package:whisper/new_ui/shell/shell_parts.dart';
+import 'package:whisper/theme/whisper_device_art.dart' as art;
+import 'package:whisper/theme/whisper_icons.dart';
+import 'package:whisper/theme/whisper_ui.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
@@ -111,6 +116,9 @@ class _FinderViewState extends State<FinderView> {
   String? _renaming;
   int _columns = 1;
 
+  /// The filter field is showing in the path row.
+  bool _filtering = false;
+
   /// Set by an item a moment before the listing sees the same click.
   bool _itemHit = false;
 
@@ -133,7 +141,10 @@ class _FinderViewState extends State<FinderView> {
   FilesController get controller => widget.controller;
   FilesActions get actions => widget.actions;
 
-  static const double _rowHeight = 26;
+  // 48 to touch: a tablet has this list and a finger.
+  static double get _rowHeight => WhisperLayout.touchPlatform
+      ? 48
+      : (whisperNewUi ? 30 : 26);
 
   /// On phones and tablets the app's island shows copies; this lends it
   /// "show all" and "show in Files" while open.
@@ -589,8 +600,491 @@ class _FinderViewState extends State<FinderView> {
 
   // ------------------------------------------------------------- build
 
+  /// surfaces.md「文件」, the prototype's `placeFiles`: no sidebar of its own, its
+  /// places are in the location menu; no lines; one toolbar row.
+  Widget _buildNew(BuildContext context) {
+    final colors = FinderColors.of(context);
+    final ready = controller.device?.browser != null && !controller.panelOpen;
+    return Stack(
+      children: [
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildPathRow(context),
+            Expanded(child: _buildContent(context, colors)),
+          ],
+        ),
+        if (ready && controller.selection.isNotEmpty)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 18,
+            child: Center(child: _buildFloatBar(context)),
+          ),
+      ],
+    );
+  }
+
+  /// `.fhead`: back, location, the path; how many, filter, more.
+  Widget _buildPathRow(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final c = context.wc;
+    final type = WhisperType(touch: WhisperLayout.touchPlatform);
+    final device = controller.device;
+    final here = controller.location;
+    final panel = controller.panelOpen;
+    final canBack = panel || controller.canGoBack;
+    final crumbs = <(String, FilesLocation)>[];
+    if (device != null && here != null && !panel && here.root.isNotEmpty) {
+      final parts = here.crumbs;
+      for (var i = 0; i <= parts.length; i++) {
+        final path = parts.sublist(0, i).join('/');
+        crumbs.add((
+          fsFolderLabel(l10n, device, here.root, path),
+          FilesLocation(here.deviceId, here.root, path),
+        ));
+      }
+    }
+    final ready = device?.browser != null && !panel;
+    final count = controller.entries.length;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 28),
+        child: Row(
+          children: [
+            Opacity(
+              opacity: canBack ? 1 : .35,
+              child: ShellIconButton(
+                touch: WhisperLayout.touchPlatform,
+                glyph: WhisperGlyph.back,
+                iconSize: 13,
+                weight: 2,
+                label: l10n.back,
+                onTap: !canBack
+                    ? null
+                    : () {
+                        if (panel) {
+                          final where = controller.location;
+                          if (where != null) {
+                            unawaited(controller.go(where, record: false));
+                          }
+                        } else {
+                          unawaited(controller.back());
+                        }
+                      },
+              ),
+            ),
+            const SizedBox(width: 2),
+            Builder(
+              builder: (buttonContext) => Pressable(
+                onTap: () => _openLocationMenu(buttonContext),
+                radius: WhisperRadius.s,
+                scale: 1,
+                child: Container(
+                  height: 28,
+                  padding: const EdgeInsets.fromLTRB(11, 0, 8, 0),
+                  decoration: BoxDecoration(
+                    color: c.fill,
+                    borderRadius: BorderRadius.circular(WhisperRadius.s),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 150),
+                        child: Text(
+                          panel
+                              ? _title(l10n)
+                              : device == null
+                              ? ''
+                              : filesDeviceName(l10n, device),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: type.note,
+                            fontWeight: FontWeight.w500,
+                            color: c.ink,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      WhisperIcon(
+                        WhisperGlyph.updown,
+                        size: 12,
+                        weight: 2,
+                        color: c.ink2,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            Expanded(
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  // A deep path keeps its end in view.
+                  reverse: true,
+                  child: Row(
+                    children: [
+                      for (final (label, where) in crumbs) ...[
+                        const SizedBox(width: 2),
+                        WhisperIcon(
+                          WhisperGlyph.right,
+                          size: 10,
+                          weight: 2,
+                          color: c.ink2,
+                        ),
+                        Pressable(
+                          onTap: () => unawaited(controller.go(where)),
+                          radius: WhisperRadius.xs,
+                          scale: 1,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 2,
+                            ),
+                            child: Text(
+                              label,
+                              style: TextStyle(
+                                fontSize: type.note,
+                                fontWeight: FontWeight.w500,
+                                color: c.ink,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            if (_filtering)
+              SizedBox(
+                width: 160,
+                height: 28,
+                child: CupertinoSearchTextField(
+                  controller: _search,
+                  focusNode: _searchFocus,
+                  autofocus: true,
+                  placeholder: l10n.remoteFilesSearch,
+                  style: TextStyle(color: c.ink, fontSize: type.note),
+                  itemSize: 13,
+                  backgroundColor: c.fill,
+                  borderRadius: BorderRadius.circular(WhisperRadius.s),
+                  padding: const EdgeInsets.fromLTRB(4, 5, 6, 5),
+                  prefixInsets: const EdgeInsetsDirectional.fromSTEB(
+                    8,
+                    0,
+                    0,
+                    1,
+                  ),
+                  onChanged: controller.setQuery,
+                  onSuffixTap: () {
+                    _search.clear();
+                    controller.setQuery('');
+                    setState(() => _filtering = false);
+                    _listFocus.requestFocus();
+                  },
+                ),
+              )
+            else if (ready)
+              Padding(
+                padding: const EdgeInsets.only(left: 12),
+                child: Text(
+                  l10n.shellFilesCount(count),
+                  style: TextStyle(fontSize: type.note, color: c.ink2),
+                ),
+              ),
+            const SizedBox(width: 2),
+            ShellIconButton(
+              touch: WhisperLayout.touchPlatform,
+              glyph: WhisperGlyph.search,
+              iconSize: 14,
+              label: l10n.remoteFilesSearch,
+              onTap: ready
+                  ? () => setState(() {
+                      _filtering = !_filtering;
+                      if (!_filtering) {
+                        _search.clear();
+                        controller.setQuery('');
+                      }
+                    })
+                  : null,
+            ),
+            Builder(
+              builder: (buttonContext) => ShellIconButton(
+                touch: WhisperLayout.touchPlatform,
+                glyph: WhisperGlyph.more,
+                iconSize: 15,
+                weight: 2.4,
+                label: l10n.remoteFilesMore,
+                onTap: ready
+                    ? () {
+                        final box =
+                            buttonContext.findRenderObject()! as RenderBox;
+                        unawaited(
+                          showFilesMenu(
+                            buttonContext,
+                            position: box.localToGlobal(
+                              Offset(box.size.width, box.size.height + 6),
+                            ),
+                            alignRight: true,
+                            items: [
+                              if (controller.canChange) ...[
+                                FilesMenuItem(
+                                  label: l10n.remoteFilesNewFolder,
+                                  shortcut: filesShortcut('N', shift: true),
+                                  onSelected: () => unawaited(_newFolder()),
+                                ),
+                                const FilesMenuItem.separator(),
+                              ],
+                              ..._folderMenuItems(l10n),
+                              const FilesMenuItem.separator(),
+                              FilesMenuItem(
+                                label: l10n.remoteFilesTransfers,
+                                onSelected: controller.openTransfers,
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+                    : null,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// This device first, then the others that can be browsed, each followed by
+  /// its favourites: what used to be a sidebar in the shell's sidebar's way.
+  void _openLocationMenu(BuildContext buttonContext) {
+    final l10n = AppLocalizations.of(context)!;
+    final box = buttonContext.findRenderObject()! as RenderBox;
+    final current = controller.location?.deviceId;
+    final items = <FilesMenuItem>[];
+    for (final device in controller.devices) {
+      if (device.state == FilesDeviceState.offline ||
+          device.state == FilesDeviceState.unsupported) {
+        continue;
+      }
+      final places = device.browser?.places ?? const <FsPlace>[];
+      items.add(
+        FilesMenuItem(
+          label: filesDeviceName(l10n, device),
+          leading: _DeviceMenuGlyph(device: device),
+          checked: device.id == current,
+          onSelected: () {
+            if (device.id == current) return;
+            if (places.isEmpty) {
+              unawaited(controller.open(device));
+            } else {
+              unawaited(
+                controller.go(
+                  FilesLocation(
+                    device.id,
+                    places.first.root,
+                    places.first.path,
+                  ),
+                ),
+              );
+            }
+          },
+        ),
+      );
+      if (device.id == current) {
+        for (final place in places) {
+          final where = FilesLocation(device.id, place.root, place.path);
+          items.add(
+            FilesMenuItem(
+              label: fsPlaceLabel(l10n, place),
+              leading: const SizedBox(width: 18),
+              onSelected: () => unawaited(controller.go(where)),
+            ),
+          );
+        }
+      }
+    }
+    unawaited(
+      showFilesMenu(
+        buttonContext,
+        position: box.localToGlobal(Offset(0, box.size.height + 6)),
+        items: items,
+      ),
+    );
+  }
+
+  /// `.float-bar`: what can be done with the selection.
+  Widget _buildFloatBar(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final items = controller.selectedItems;
+    final local = controller.location?.deviceId == FilesDevice.localId;
+    const shape = StadiumBorder();
+    Widget sendTo({required bool primary}) => Builder(
+      builder: (buttonContext) => ShellButton(
+        label: l10n.shellFilesSendTo,
+        kind: primary ? ShellButtonKind.primary : ShellButtonKind.quiet,
+        onTap: () async {
+          final targets = _copyTargets(l10n, items);
+          final picked = await showDevicePicker(
+            buttonContext,
+            title: items.length == 1
+                ? l10n.pickerSendFile(items.single.name)
+                : l10n.pickerSendItems(items.length),
+            touch: false,
+            anchor: buttonContext,
+            devices: [
+              for (final (i, target) in targets.indexed)
+                DevicePickerEntry(
+                  id: '$i',
+                  name: target.label,
+                  glyph: WhisperGlyph.folder,
+                ),
+            ],
+          );
+          if (picked != null) targets[int.parse(picked)].onSelected?.call();
+        },
+      ),
+    );
+    return DecoratedBox(
+      decoration: ShapeDecoration(
+        shape: shape,
+        shadows: WhisperShadow.e2(Theme.of(context).brightness),
+      ),
+      child: WhisperGlass(
+        kind: GlassKind.control,
+        shape: shape,
+        child: Padding(
+          padding: const EdgeInsets.all(5),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (local) ...[
+                sendTo(primary: true),
+                const SizedBox(width: 2),
+                if (shareLinksSupported())
+                  ShellButton(
+                    label: l10n.shareLinksTitle,
+                    kind: ShellButtonKind.quiet,
+                    onTap: () =>
+                        unawaited(shareFilesItems(context, controller, items)),
+                  ),
+              ] else ...[
+                ShellButton(
+                  label: l10n.shellFilesCopyHere,
+                  kind: ShellButtonKind.primary,
+                  onTap: () => unawaited(_copyToThisDevice(items)),
+                ),
+                const SizedBox(width: 2),
+                sendTo(primary: false),
+              ],
+              const SizedBox(width: 2),
+              ShellIconButton(
+                touch: WhisperLayout.touchPlatform,
+                glyph: WhisperGlyph.x,
+                iconSize: 13,
+                color: context.wc.accent,
+                label: l10n.cancel,
+                onTap: controller.clearSelection,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Into this device's first favourite: its downloads.
+  Future<void> _copyToThisDevice(List<FilesItem> items) async {
+    final local = controller.deviceById(FilesDevice.localId);
+    final places = local?.browser?.places ?? const <FsPlace>[];
+    if (local == null || places.isEmpty) return;
+    FsPlace target = places.first;
+    for (final place in places) {
+      if (place.kind == 'downloads') {
+        target = place;
+        break;
+      }
+    }
+    await actions.copy(
+      items,
+      FilesLocation(local.id, target.root, target.path),
+    );
+  }
+
+  /// What a device that cannot show files yet says, with its picture.
+  Widget? _newMessage(FilesDevice device, String name, AppLocalizations l10n) {
+    Widget state(String title, {String body = '', Widget? action}) =>
+        ShellDeviceState(
+          art: art.DeviceArt(
+            kind: art.deviceKindFor(device.platform),
+            wallpaper: device.isLocal
+                ? art.DeviceWallpaper.self
+                : art.DeviceWallpaper.forPairingOrder(device.id.hashCode.abs()),
+            size: 84,
+          ),
+          title: title,
+          body: body,
+          action: action,
+        );
+    ShellButton retry(String label, VoidCallback onTap) => ShellButton(
+      label: label,
+      kind: ShellButtonKind.primary,
+      large: true,
+      onTap: onTap,
+    );
+    return switch (device.state) {
+      FilesDeviceState.waiting => state(
+        l10n.shellFilesAskOnDevice(name),
+        action: ShellButton(
+          label: l10n.cancel,
+          large: true,
+          onTap: () => unawaited(controller.cancelOpen()),
+        ),
+      ),
+      FilesDeviceState.idle => state(
+        l10n.remoteFilesNotAsked(name),
+        action: retry(
+          l10n.remoteFilesAskAgain,
+          () => unawaited(controller.retry()),
+        ),
+      ),
+      FilesDeviceState.noAnswer => state(
+        l10n.remoteFilesNoAnswer(name),
+        body: l10n.remoteFilesNoAnswerDetail,
+        action: retry(
+          l10n.windowStreamRetry,
+          () => unawaited(controller.retry()),
+        ),
+      ),
+      FilesDeviceState.denied => state(
+        l10n.shellFilesDenied(name),
+        action: retry(
+          l10n.windowStreamRetry,
+          () => unawaited(controller.retry()),
+        ),
+      ),
+      FilesDeviceState.offline => state(
+        l10n.shellNotConnected(name),
+        body: l10n.shellNotConnectedFiles,
+        action: retry(
+          l10n.windowStreamRetry,
+          () => unawaited(controller.retry()),
+        ),
+      ),
+      FilesDeviceState.unsupported => state(l10n.remoteFilesUnsupported(name)),
+      FilesDeviceState.ready => null,
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (whisperNewUi) return _buildNew(context);
     final colors = FinderColors.of(context);
     return ColoredBox(
       color: colors.content,
@@ -812,46 +1306,48 @@ class _FinderViewState extends State<FinderView> {
       return const SizedBox.shrink();
     }
     final name = filesDeviceName(l10n, device);
-    final Widget? message = switch (device.state) {
-      FilesDeviceState.waiting => FlowEmptyState(
-        icon: CupertinoIcons.lock_shield,
-        title: l10n.remoteFilesWaitingAllow(name),
-        detail: l10n.remoteFilesWaitingDetail,
-        busy: true,
-        actionLabel: l10n.cancel,
-        onAction: () => unawaited(controller.cancelOpen()),
-      ),
-      FilesDeviceState.idle => FlowEmptyState(
-        icon: CupertinoIcons.lock_shield,
-        title: l10n.remoteFilesNotAsked(name),
-        actionLabel: l10n.remoteFilesAskAgain,
-        onAction: () => unawaited(controller.retry()),
-      ),
-      FilesDeviceState.noAnswer => FlowEmptyState(
-        icon: CupertinoIcons.clock,
-        title: l10n.remoteFilesNoAnswer(name),
-        detail: l10n.remoteFilesNoAnswerDetail,
-        actionLabel: l10n.windowStreamRetry,
-        onAction: () => unawaited(controller.retry()),
-      ),
-      FilesDeviceState.denied => FlowEmptyState(
-        icon: CupertinoIcons.hand_raised,
-        title: l10n.remoteFilesDenied(name),
-        actionLabel: l10n.remoteFilesAskAgain,
-        onAction: () => unawaited(controller.retry()),
-      ),
-      FilesDeviceState.offline => FlowEmptyState(
-        icon: CupertinoIcons.wifi_slash,
-        title: l10n.remoteFilesOffline(name),
-        actionLabel: l10n.windowStreamRetry,
-        onAction: () => unawaited(controller.retry()),
-      ),
-      FilesDeviceState.unsupported => FlowEmptyState(
-        icon: CupertinoIcons.arrow_up_circle,
-        title: l10n.remoteFilesUnsupported(name),
-      ),
-      FilesDeviceState.ready => null,
-    };
+    final Widget? message = whisperNewUi
+        ? _newMessage(device, name, l10n)
+        : switch (device.state) {
+            FilesDeviceState.waiting => FlowEmptyState(
+              icon: CupertinoIcons.lock_shield,
+              title: l10n.remoteFilesWaitingAllow(name),
+              detail: l10n.remoteFilesWaitingDetail,
+              busy: true,
+              actionLabel: l10n.cancel,
+              onAction: () => unawaited(controller.cancelOpen()),
+            ),
+            FilesDeviceState.idle => FlowEmptyState(
+              icon: CupertinoIcons.lock_shield,
+              title: l10n.remoteFilesNotAsked(name),
+              actionLabel: l10n.remoteFilesAskAgain,
+              onAction: () => unawaited(controller.retry()),
+            ),
+            FilesDeviceState.noAnswer => FlowEmptyState(
+              icon: CupertinoIcons.clock,
+              title: l10n.remoteFilesNoAnswer(name),
+              detail: l10n.remoteFilesNoAnswerDetail,
+              actionLabel: l10n.windowStreamRetry,
+              onAction: () => unawaited(controller.retry()),
+            ),
+            FilesDeviceState.denied => FlowEmptyState(
+              icon: CupertinoIcons.hand_raised,
+              title: l10n.remoteFilesDenied(name),
+              actionLabel: l10n.remoteFilesAskAgain,
+              onAction: () => unawaited(controller.retry()),
+            ),
+            FilesDeviceState.offline => FlowEmptyState(
+              icon: CupertinoIcons.wifi_slash,
+              title: l10n.remoteFilesOffline(name),
+              actionLabel: l10n.windowStreamRetry,
+              onAction: () => unawaited(controller.retry()),
+            ),
+            FilesDeviceState.unsupported => FlowEmptyState(
+              icon: CupertinoIcons.arrow_up_circle,
+              title: l10n.remoteFilesUnsupported(name),
+            ),
+            FilesDeviceState.ready => null,
+          };
     if (message != null) {
       return message;
     }
@@ -1033,32 +1529,48 @@ class _FinderViewState extends State<FinderView> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final columns = _ListColumns.forWidth(constraints.maxWidth);
+        final newColumns = _NewColumns.forWidth(constraints.maxWidth);
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _ListHeader(controller: controller, columns: columns),
+            if (whisperNewUi)
+              _NewListHeader(controller: controller, columns: newColumns)
+            else
+              _ListHeader(controller: controller, columns: columns),
             Expanded(
               child: ListView.builder(
                 controller: _scroll,
                 itemExtent: _rowHeight,
                 // Always some room below the last row, for a right click on
                 // the folder itself (New Folder, Paste…).
-                padding: const EdgeInsets.only(bottom: 56),
+                padding: EdgeInsets.only(bottom: whisperNewUi ? 72 : 56),
                 itemCount: entries.length,
                 itemBuilder: (context, index) => _item(
                   entries[index],
-                  (dropping) => _ListRow(
-                    entry: entries[index],
-                    index: index,
-                    columns: columns,
-                    selected: controller.selection.contains(
-                      entries[index].name,
-                    ),
-                    focused: _listActive,
-                    renaming: _renaming == entries[index].name,
-                    onRenamed: _finishRename,
-                    dropping: dropping,
-                  ),
+                  (dropping) => whisperNewUi
+                      ? _NewListRow(
+                          entry: entries[index],
+                          columns: newColumns,
+                          selected: controller.selection.contains(
+                            entries[index].name,
+                          ),
+                          focused: _listActive,
+                          renaming: _renaming == entries[index].name,
+                          onRenamed: _finishRename,
+                          dropping: dropping,
+                        )
+                      : _ListRow(
+                          entry: entries[index],
+                          index: index,
+                          columns: columns,
+                          selected: controller.selection.contains(
+                            entries[index].name,
+                          ),
+                          focused: _listActive,
+                          renaming: _renaming == entries[index].name,
+                          onRenamed: _finishRename,
+                          dropping: dropping,
+                        ),
                 ),
               ),
             ),
@@ -1128,6 +1640,13 @@ class _FinderViewState extends State<FinderView> {
           unawaited(controller.openEntry(entry));
         }
       },
+      onTouchOpen:
+          whisperNewUi &&
+              WhisperLayout.touchPlatform &&
+              entry.isDir &&
+              !_selecting
+          ? () => unawaited(controller.openEntry(entry))
+          : null,
       onSecondary: (position) {
         _itemHit = true;
         unawaited(_entryMenu(entry, position));
@@ -1189,7 +1708,12 @@ class _FinderViewState extends State<FinderView> {
         _columns = math.max(1, (constraints.maxWidth - 24) ~/ tile);
         return GridView.builder(
           controller: _iconScroll,
-          padding: const EdgeInsets.fromLTRB(12, _iconTop, 12, 56),
+          padding: const EdgeInsets.fromLTRB(
+            12,
+            _iconTop,
+            12,
+            whisperNewUi ? 72 : 56,
+          ),
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: _columns,
             mainAxisExtent: _iconHeight,
@@ -2217,6 +2741,239 @@ class _ListRow extends StatelessWidget {
   }
 }
 
+/// surfaces.md「文件」: icon 20, name flexing, size 84, date 76, kind 90 past 800.
+/// As the content narrows they go in that order: kind, size, date.
+class _NewColumns {
+  const _NewColumns({
+    required this.date,
+    required this.size,
+    required this.kind,
+  });
+
+  factory _NewColumns.forWidth(double width) =>
+      _NewColumns(date: width >= 360, size: width >= 460, kind: width > 800);
+
+  final bool date, size, kind;
+
+  static const double gap = 10, sizeWidth = 84, dateWidth = 76, kindWidth = 90;
+}
+
+/// `.fcols`.
+class _NewListHeader extends StatelessWidget {
+  const _NewListHeader({required this.controller, required this.columns});
+
+  final FilesController controller;
+  final _NewColumns columns;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final c = context.wc;
+    final type = WhisperType(touch: WhisperLayout.touchPlatform);
+    Widget cell(String label, FilesSort sort) {
+      final active = controller.sort == sort;
+      return GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => controller.setSort(sort),
+        child: Row(
+          children: [
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: type.tiny, color: c.ink2),
+              ),
+            ),
+            if (active) ...[
+              const SizedBox(width: 3),
+              RotatedBox(
+                quarterTurns: controller.ascending ? 3 : 1,
+                child: WhisperIcon(
+                  WhisperGlyph.right,
+                  size: 8,
+                  weight: 2,
+                  color: c.ink2,
+                ),
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(26, 0, 26, 3),
+      child: Row(
+        children: [
+          const SizedBox(width: 20 + _NewColumns.gap),
+          Expanded(child: cell(l10n.remoteFilesColumnName, FilesSort.name)),
+          if (columns.kind) ...[
+            const SizedBox(width: _NewColumns.gap),
+            SizedBox(
+              width: _NewColumns.kindWidth,
+              child: cell(l10n.remoteFilesColumnKind, FilesSort.kind),
+            ),
+          ],
+          if (columns.size) ...[
+            const SizedBox(width: _NewColumns.gap),
+            SizedBox(
+              width: _NewColumns.sizeWidth,
+              child: cell(l10n.remoteFilesColumnSize, FilesSort.size),
+            ),
+          ],
+          if (columns.date) ...[
+            const SizedBox(width: _NewColumns.gap),
+            SizedBox(
+              width: _NewColumns.dateWidth,
+              child: cell(l10n.remoteFilesColumnModified, FilesSort.modified),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// `.frow`: no lines, no stripes. Selected is solid accent with white text.
+class _NewListRow extends StatefulWidget {
+  const _NewListRow({
+    required this.entry,
+    required this.columns,
+    required this.selected,
+    required this.focused,
+    required this.renaming,
+    required this.onRenamed,
+    required this.dropping,
+  });
+
+  final FsEntry entry;
+  final _NewColumns columns;
+  final bool selected, focused, renaming, dropping;
+  final void Function(FsEntry entry, String? name) onRenamed;
+
+  @override
+  State<_NewListRow> createState() => _NewListRowState();
+}
+
+class _NewListRowState extends State<_NewListRow> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.wc;
+    final type = WhisperType(touch: WhisperLayout.touchPlatform);
+    final l10n = AppLocalizations.of(context)!;
+    final entry = widget.entry;
+    final strong = (widget.selected && widget.focused) || widget.dropping;
+    final background = strong
+        ? c.accent
+        : widget.selected
+        ? c.selected
+        : _hover
+        ? c.fill
+        : Colors.transparent;
+    final primary = strong ? c.onAccent : c.ink;
+    final second = strong ? c.onAccent : c.ink2;
+    final numbers = TextStyle(
+      fontSize: type.note,
+      color: second,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        decoration: BoxDecoration(
+          color: background,
+          borderRadius: BorderRadius.circular(WhisperRadius.xs),
+        ),
+        child: Row(
+          children: [
+            Opacity(
+              opacity: entry.hidden ? .5 : 1,
+              child: SizedBox(
+                width: 20,
+                child: Center(
+                  child: entry.isDir
+                      ? const WhisperFolderArt(size: 18)
+                      : const WhisperDocArt(size: 18),
+                ),
+              ),
+            ),
+            const SizedBox(width: _NewColumns.gap),
+            Expanded(
+              child: widget.renaming
+                  ? _RenameField(
+                      entry: entry,
+                      fontSize: type.body,
+                      onDone: (name) => widget.onRenamed(entry, name),
+                    )
+                  : Text(
+                      entry.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: type.body,
+                        color: entry.hidden
+                            ? primary.withValues(alpha: .6)
+                            : primary,
+                      ),
+                    ),
+            ),
+            if (widget.columns.kind) ...[
+              const SizedBox(width: _NewColumns.gap),
+              SizedBox(
+                width: _NewColumns.kindWidth,
+                child: Text(
+                  fsKindLabel(l10n, entry),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: numbers,
+                ),
+              ),
+            ],
+            if (widget.columns.size) ...[
+              const SizedBox(width: _NewColumns.gap),
+              SizedBox(
+                width: _NewColumns.sizeWidth,
+                child: Text(fsSizeLabel(entry), maxLines: 1, style: numbers),
+              ),
+            ],
+            if (widget.columns.date) ...[
+              const SizedBox(width: _NewColumns.gap),
+              SizedBox(
+                width: _NewColumns.dateWidth,
+                child: Text(
+                  shellShortDate(context, entry.modifiedMs),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: numbers,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DeviceMenuGlyph extends StatelessWidget {
+  const _DeviceMenuGlyph({required this.device});
+
+  final FilesDevice device;
+
+  @override
+  Widget build(BuildContext context) => art.DeviceGlyph(
+    kind: art.deviceKindFor(device.platform),
+    color: IconTheme.of(context).color ?? context.wc.accent,
+    size: 18,
+  );
+}
+
 class _IconTile extends StatefulWidget {
   const _IconTile({
     required this.controller,
@@ -2464,10 +3221,14 @@ class _ClickRegion extends StatefulWidget {
     required this.child,
     this.onTouchStart,
     this.onLongPress,
+    this.onTouchOpen,
   });
 
   /// A finger went down here (the list tells it from one on its blank).
   final VoidCallback? onTouchStart;
+
+  /// One tap opens this: a folder under a finger.
+  final VoidCallback? onTouchOpen;
 
   /// A finger held still and let go: the menu a right click opens.
   final ValueChanged<Offset>? onLongPress;
@@ -2554,6 +3315,11 @@ class _ClickRegionState extends State<_ClickRegion> {
           return;
         }
         if (_touch) {
+          // A finger has no double click to spare: one tap goes into a folder.
+          if (widget.onTouchOpen case final open?) {
+            open();
+            return;
+          }
           widget.onDown();
           if (_touchDouble) {
             widget.onDoubleClick();

@@ -2,9 +2,11 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/source_reading.dart';
+
 void main() {
   final source = File('lib/socket/svrmanager.dart').readAsStringSync();
-  final deviceListSource = File('lib/page/deviceList.dart').readAsStringSync();
+  final deviceList = deviceListSource();
 
   String section(String startMarker, String endMarker) {
     final start = source.indexOf(startMarker);
@@ -29,8 +31,8 @@ void main() {
     const reconcile = 'reconcileInterruptedTransfersOnStartup()';
     const start = 'socketManager.startServer(';
     expect(
-      deviceListSource.indexOf(reconcile),
-      lessThan(deviceListSource.indexOf(start)),
+      deviceList.indexOf(reconcile),
+      lessThan(deviceList.indexOf(start)),
     );
     expect(source, contains('Future<void> $reconcile'));
   });

@@ -2,9 +2,11 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/source_reading.dart';
+
 void main() {
   test('clipboard watcher reads text through the text-only sync guard', () {
-    final source = File('lib/page/deviceList.dart').readAsStringSync();
+    final source = deviceListSource();
 
     expect(
       source,
@@ -36,7 +38,7 @@ void main() {
   });
 
   test('remote clipboard follows connected keyboard workspace targets', () {
-    final deviceList = File('lib/page/deviceList.dart').readAsStringSync();
+    final deviceList = deviceListSource();
     final workspace = File(
       'lib/remote_input/remote_input_workspace_coordinator.dart',
     ).readAsStringSync();

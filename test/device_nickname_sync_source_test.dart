@@ -2,9 +2,11 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/source_reading.dart';
+
 void main() {
   test('Bonjour broadcast advertises the configured local nickname', () {
-    final source = File('lib/page/deviceList.dart').readAsStringSync();
+    final source = deviceListSource();
 
     expect(source, contains('final name = device?.name ?? await deviceName()'));
     expect(source, contains("'name': name"));

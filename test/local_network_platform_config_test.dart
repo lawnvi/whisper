@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/source_reading.dart';
+
 void main() {
   const pluginPath =
       'android/app/src/main/kotlin/com/vireen/whisper/LocalNetworkPermissionPlugin.kt';
@@ -151,7 +153,7 @@ void main() {
     expect(appDelegate, contains('"unavailable"'));
     expect(appDelegate, contains('"retryable"'));
 
-    final deviceList = File('lib/page/deviceList.dart').readAsStringSync();
+    final deviceList = deviceListSource();
     expect(deviceList, isNot(contains('Permission.location')));
     expect(
       deviceList,

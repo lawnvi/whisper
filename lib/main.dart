@@ -11,6 +11,7 @@ import 'package:whisper/remote_files/mount/remote_mounts.dart';
 import 'package:whisper/share_links/share_debug_hooks.dart';
 import 'package:whisper/share_links/share_link_store.dart';
 import 'package:whisper/helper/device_form_factor.dart';
+import 'package:whisper/helper/orientation_policy.dart';
 import 'package:whisper/helper/connection_request_notifications.dart';
 import 'package:whisper/helper/desktop_screenshot.dart';
 import 'package:whisper/helper/folder_transfer_stager.dart';
@@ -42,7 +43,11 @@ import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:toastification/toastification.dart';
+import 'package:whisper/new_ui/shell/shell_window_chrome.dart';
+import 'package:whisper/new_ui/tray/tray_panel.dart';
 import 'package:whisper/theme/app_theme.dart';
+import 'package:whisper/theme/whisper_ui.dart';
+import 'package:whisper/theme/whisper_window.dart';
 import 'package:whisper/theme/app_typography.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -87,6 +92,14 @@ Future<void> main(List<String> arguments) async {
     runApp(CastPlaybackWindowApp(localVideo: arguments[2] == 'video_playback'));
     return;
   }
+  if (whisperNewUi &&
+      arguments.length >= 3 &&
+      arguments[0] == 'multi_window' &&
+      arguments[2] == trayPanelArgument) {
+    WidgetsFlutterBinding.ensureInitialized();
+    runApp(const TrayPanelApp());
+    return;
+  }
   await applyImageMemoryBudget();
   // Which devices are tablets, for their icons from the first frame.
   unawaited(DeviceFormFactors.shared.load());
@@ -111,7 +124,8 @@ Future<void> main(List<String> arguments) async {
   unawaited(_removeFolderTransferLeftovers());
 
   // iOS uses the runner's phone/tablet orientation policies; iPad can multitask.
-  if (Platform.isAndroid) {
+  // In the new UI the window decides, once there is one: WhisperOrientation.
+  if (Platform.isAndroid && !whisperNewUi) {
     await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   }
 
@@ -128,17 +142,22 @@ Future<void> main(List<String> arguments) async {
     final windowBackground = AppTheme.fallbackPalette(brightness).surfaceCanvas;
     await _applyDesktopWindowTheme(themeMode);
 
-    WindowOptions windowOptions = WindowOptions(
-      size: Size(width, height),
-      center: true,
-      backgroundColor: windowBackground,
-      skipTaskbar: false,
-      titleBarStyle: TitleBarStyle.normal,
-      windowButtonVisibility: true,
-    );
+    WindowOptions windowOptions = whisperNewUi
+        ? WhisperWindow.options(Size(width, height))
+        : WindowOptions(
+            size: Size(width, height),
+            center: true,
+            backgroundColor: windowBackground,
+            skipTaskbar: false,
+            titleBarStyle: TitleBarStyle.normal,
+            windowButtonVisibility: true,
+          );
     windowManager.waitUntilReadyToShow(windowOptions, () async {
       // WindowOptions applies native frame values after the first theme sync.
       await _applyDesktopWindowTheme(themeMode);
+      if (whisperNewUi) {
+        await WhisperWindow.enableMaterial(brightness);
+      }
       if (Platform.isWindows) {
         await windowManager.setMinimizable(true);
       }
@@ -188,7 +207,11 @@ Future<void> main(List<String> arguments) async {
     registerShareDebugHooks();
   }
   runApp(MyApp());
-  if (Platform.isIOS) {
+  if (whisperNewUi) {
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => WhisperOrientation.sync(),
+    );
+  } else if (Platform.isIOS) {
     // An iPhone stays upright like the Android app; only a window being
     // viewed turns (its viewer unlocks rotation). An iPad turns freely.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -224,6 +247,10 @@ Future<void> _applyDesktopWindowTheme(ThemeMode mode) async {
 
   final brightness = _brightnessForThemeMode(mode);
   final windowBackground = AppTheme.fallbackPalette(brightness).surfaceCanvas;
+  if (whisperNewUi) {
+    await WhisperWindow.applyBrightness(brightness);
+    return;
+  }
   try {
     // On Windows the window plugin darkens the title bar only while the
     // system is dark as well. The channel below sets it from the app's own
@@ -313,6 +340,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     super.dispose();
   }
 
+  /// A fold or an unfold is a new window: rotation is decided again.
+  @override
+  void didChangeMetrics() => WhisperOrientation.sync();
+
   @override
   void didChangePlatformBrightness() {
     if (_themeMode == ThemeMode.system) {
@@ -381,6 +412,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         theme: AppTheme.lightTheme,
         darkTheme: AppTheme.darkTheme,
         themeMode: _themeMode,
+        // The new UI's right edge is what is being judged, not covered up.
+        debugShowCheckedModeBanner: !whisperNewUi,
         localizationsDelegates: const [
           AppLocalizations.delegate,
           GlobalMaterialLocalizations.delegate,
@@ -414,9 +447,15 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           }
           final content = child ?? const SizedBox.shrink();
           final shell = FileBrowsePromptHost(child: content);
-          return isDesktop()
-              ? CastPlaybackHost(child: PhoneTouchAlertHost(child: shell))
-              : IslandHost(navigatorKey: appNavigatorKey, child: shell);
+          if (isDesktop()) {
+            final desktop = CastPlaybackHost(
+              child: PhoneTouchAlertHost(child: shell),
+            );
+            return whisperNewUi
+                ? ShellWindowChrome(child: desktop)
+                : desktop;
+          }
+          return IslandHost(navigatorKey: appNavigatorKey, child: shell);
         },
         home: const DeviceListScreen(),
       ),

@@ -2,34 +2,11 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/source_reading.dart';
+
 void main() {
-  test('desktop sidebar owns the keyboard mouse workspace entry', () {
-    final source = File('lib/page/deviceList.dart').readAsStringSync();
-
-    expect(source, contains('RemoteInputWorkspaceScreen'));
-    expect(source, contains('_buildDesktopRemoteInputWorkspaceAction'));
-    expect(source, contains('Icons.keyboard_alt_outlined'));
-  });
-
-  test(
-    'remote input toolbar does not highlight disconnected stale sessions',
-    () {
-      final source = File('lib/page/deviceList.dart').readAsStringSync();
-      final active = RegExp(
-        r'bool get _isDesktopRemoteInputActive \{[\s\S]*?\n  \}',
-      ).firstMatch(source)!.group(0)!;
-      expect(
-        active,
-        contains('socketManager.isConnectedTo(legacyState.peerId)'),
-      );
-      expect(active, contains('target.isConnected'));
-      final action = RegExp(
-        r'Widget _buildDesktopRemoteInputWorkspaceAction\(\) \{[\s\S]*?\n  \}',
-      ).firstMatch(source)!.group(0)!;
-      expect(action, contains('_isDesktopRemoteInputActive'));
-      expect(action, contains('iconColor: isActive ? Colors.lightBlue'));
-    },
-  );
+  // The sidebar's entry, and when it lights up, are in
+  // device_list_behavior_test.dart and device_list_rules_test.dart.
 
   test(
     'embedded conversation no longer exposes the single peer remote input action',

@@ -11,10 +11,23 @@ import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/message.dart';
 import 'package:whisper/theme/app_theme.dart';
+import 'package:whisper/theme/whisper_ui.dart';
 import 'package:whisper/state/message_deletion.dart';
 import 'package:whisper/widget/message_deletion_dialog.dart';
 import 'package:whisper/widget/context_menu_region.dart';
 import 'package:whisper/widget/subtle_motion.dart';
+
+/// Room under the newest message: at least the usual, more when the composer is
+/// taller than one line or sits above a phone's gesture bar.
+double chatListBottomInset({
+  required double? composerHeight,
+  required bool touch,
+}) {
+  final usual = touch ? 92.0 : 84.0;
+  if (composerHeight == null) return usual;
+  final floatsAt = touch ? 24.0 : 16.0;
+  return math.max(usual, composerHeight + floatsAt + 12);
+}
 
 class ChatMessageList extends StatefulWidget {
   final Widget Function(MessageData message, bool isOpponent) buildFileMessage;
@@ -38,6 +51,10 @@ class ChatMessageList extends StatefulWidget {
   final ValueChanged<bool>? onSelectionModeChanged;
   final String? selfUid;
 
+  /// How tall the floating composer is now, with what is under it: a long draft
+  /// must not cover the newest messages. Null until it has been measured.
+  final double? composerHeight;
+
   const ChatMessageList({
     super.key,
     required this.buildFileMessage,
@@ -53,6 +70,7 @@ class ChatMessageList extends StatefulWidget {
     required this.onDeleteMessages,
     this.onSelectionModeChanged,
     required this.selfUid,
+    this.composerHeight,
   });
 
   @override
@@ -190,11 +208,23 @@ class _ChatMessageListState extends State<ChatMessageList> {
 
   @override
   Widget build(BuildContext context) {
+    final touch = !isDesktop();
     Widget messageList = AnimatedList(
       key: widget.listKey,
       controller: widget.controller,
       initialItemCount: widget.messages.length,
-      padding: const EdgeInsets.only(bottom: 12),
+      // Under the floating composer, which the last message must clear.
+      padding: whisperNewUi
+          ? EdgeInsets.fromLTRB(
+              touch ? 12 : 16,
+              8,
+              touch ? 12 : 16,
+              chatListBottomInset(
+                composerHeight: widget.composerHeight,
+                touch: touch,
+              ),
+            )
+          : const EdgeInsets.only(bottom: 12),
       reverse: true,
       shrinkWrap: true,
       itemBuilder: _buildMessage,
@@ -206,6 +236,27 @@ class _ChatMessageListState extends State<ChatMessageList> {
       );
     }
 
+    if (whisperNewUi) {
+      return Focus(
+        focusNode: _selectionFocus,
+        onKeyEvent: (_, event) => _handleSelectionKey(event),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: Align(alignment: Alignment.topCenter, child: messageList),
+            ),
+            if (_selectionMode)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom:
+                    (touch ? 24 : 16) + MediaQuery.paddingOf(context).bottom,
+                child: Center(child: _buildSelectionCapsule(context)),
+              ),
+          ],
+        ),
+      );
+    }
     return Focus(
       focusNode: _selectionFocus,
       onKeyEvent: (_, event) => _handleSelectionKey(event),
@@ -235,22 +286,39 @@ class _ChatMessageListState extends State<ChatMessageList> {
     final colorScheme = Theme.of(context).colorScheme;
     final showTimestamp = shouldShowChatTimestamp(widget.messages, index);
 
-    return FadeTransition(
-      opacity: animation,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 5, 14, 5),
+    final older = index + 1 < widget.messages.length
+        ? widget.messages[index + 1]
+        : null;
+    final sameSender = older != null && older.sender == message.sender;
+    Widget rise(Widget child) => whisperNewUi && !animation.isCompleted
+        ? _RiseFromComposer(child: child)
+        : FadeTransition(opacity: animation, child: child);
+    return rise(
+      Padding(
+        padding: whisperNewUi
+            ? EdgeInsets.only(top: sameSender ? 6 : 12)
+            : const EdgeInsets.fromLTRB(14, 5, 14, 5),
         child: Column(
           children: [
             if (showTimestamp)
               Padding(
-                padding: const EdgeInsets.only(top: 5, bottom: 10),
+                padding: whisperNewUi
+                    ? const EdgeInsets.only(top: 14, bottom: 8)
+                    : const EdgeInsets.only(top: 5, bottom: 10),
                 child: Text(
                   formatChatTimestamp(context, message.timestamp),
                   key: ValueKey<String>('message-time-${message.id}'),
-                  style: TextStyle(
-                    color: colorScheme.onSurfaceVariant.withValues(alpha: 0.72),
-                    fontSize: 12,
-                  ),
+                  style: whisperNewUi
+                      ? TextStyle(
+                          color: context.wc.ink2,
+                          fontSize: WhisperType(touch: !isDesktop()).tiny,
+                        )
+                      : TextStyle(
+                          color: colorScheme.onSurfaceVariant.withValues(
+                            alpha: 0.72,
+                          ),
+                          fontSize: 12,
+                        ),
                 ),
               ),
             Row(
@@ -295,7 +363,16 @@ class _ChatMessageListState extends State<ChatMessageList> {
                         builder: (context, constraints) => ConstrainedBox(
                           key: ValueKey('message-bubble-${message.id}'),
                           constraints: BoxConstraints(
-                            maxWidth: isFile
+                            maxWidth: whisperNewUi
+                                ? newBubbleMaxWidth(
+                                    available: constraints.maxWidth,
+                                    isFile: isFile,
+                                    compact:
+                                        !isDesktop() &&
+                                        WhisperLayout.of(context).compact,
+                                    body: WhisperType(touch: !isDesktop()).body,
+                                  )
+                                : isFile
                                 ? math.min(
                                     isDesktop() ? 300.0 : 360.0,
                                     constraints.maxWidth *
@@ -319,7 +396,9 @@ class _ChatMessageListState extends State<ChatMessageList> {
                                 : widget.buildTextMessage(
                                     message,
                                     isOpponent,
-                                    _selectionMode ||
+                                    // Copying is in the message's menu.
+                                    whisperNewUi ||
+                                            _selectionMode ||
                                             message.type != MessageEnum.Text
                                         ? null
                                         : _buildCopyButton(context, message),
@@ -456,6 +535,84 @@ class _ChatMessageListState extends State<ChatMessageList> {
     );
   }
 
+  /// Where the composer was, in the same glass: what to do with the selection.
+  Widget _buildSelectionCapsule(BuildContext context) {
+    final c = context.wc;
+    final l10n = AppLocalizations.of(context)!;
+    final type = WhisperType(touch: !isDesktop());
+    final allSelected = _selectedMessageIds.length == widget.messages.length;
+    Widget action(
+      String label,
+      VoidCallback? onTap, {
+      Color? color,
+      Key? key,
+    }) => Pressable(
+      key: key,
+      onTap: onTap,
+      radius: WhisperRadius.capsule,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(minHeight: isDesktop() ? 28 : 48),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: Center(
+            widthFactor: 1,
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: type.body,
+                color: onTap == null ? c.ink3 : (color ?? c.ink),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    return DecoratedBox(
+      key: const ValueKey('message-selection-toolbar'),
+      decoration: ShapeDecoration(
+        shape: const StadiumBorder(),
+        shadows: WhisperShadow.e2(Theme.of(context).brightness),
+      ),
+      child: WhisperGlass(
+        kind: GlassKind.control,
+        shape: const StadiumBorder(),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Text(
+                  l10n.selectedMessageCount(_selectedMessageIds.length),
+                  style: TextStyle(
+                    fontSize: type.body,
+                    fontWeight: FontWeight.w500,
+                    color: c.ink,
+                  ),
+                ),
+              ),
+              action(
+                l10n.selectAll,
+                _deleting || allSelected ? null : _selectAll,
+              ),
+              action(
+                l10n.delete,
+                _deleting ? null : _deleteSelectedMessages,
+                color: c.bad,
+                key: const ValueKey('delete-selected-messages'),
+              ),
+              action(
+                l10n.cancel,
+                _deleting ? null : () => _setSelectionMode(false),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildCopyButton(BuildContext context, MessageData message) {
     final colorScheme = Theme.of(context).colorScheme;
     final copied = _copiedMessageId == message.id;
@@ -516,6 +673,45 @@ class _ChatMessageListState extends State<ChatMessageList> {
       }
     });
   }
+}
+
+/// DESIGN: a pointer's bubble goes up to 72% and 30 characters, a phone's to
+/// 80%; a file card up to 276 and 82%.
+double newBubbleMaxWidth({
+  required double available,
+  required bool isFile,
+  required bool compact,
+  required double body,
+}) {
+  if (isFile) return math.min(276, available * .82);
+  return math.min(available * (compact ? .8 : .72), body * 30);
+}
+
+/// `.in`: a new message comes up from where the composer is, from 26 below and
+/// a little smaller, growing out of the bottom right.
+class _RiseFromComposer extends StatelessWidget {
+  const _RiseFromComposer({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => SpringBuilder(
+    from: 0,
+    value: 1,
+    spring: WhisperSprings.smooth,
+    child: child,
+    builder: (context, t, child) => Opacity(
+      opacity: t.clamp(0, 1),
+      child: Transform.translate(
+        offset: Offset(0, 26 * (1 - t)),
+        child: Transform.scale(
+          scale: .9 + .1 * t,
+          alignment: Alignment.bottomRight,
+          child: child,
+        ),
+      ),
+    ),
+  );
 }
 
 const Duration chatTimestampClusterGap = Duration(minutes: 5);

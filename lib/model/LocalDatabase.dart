@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart' as hashes;
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqlite3/sqlite3.dart';
 import 'package:sqlite3_flutter_libs/sqlite3_flutter_libs.dart';
@@ -88,9 +89,13 @@ class LocalDatabase extends _$LocalDatabase {
 
   LocalDatabase.forTesting(super.executor);
 
+  /// Stands in for the file-backed database in widget tests of whole pages.
+  @visibleForTesting
+  static LocalDatabase? debugOverride;
+
   // 工厂构造函数，返回单例实例
   factory LocalDatabase() {
-    return _singleton;
+    return debugOverride ?? _singleton;
   }
 
   @override

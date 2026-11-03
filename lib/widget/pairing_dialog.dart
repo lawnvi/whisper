@@ -2,9 +2,14 @@ import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:whisper/helper/helper.dart' show isDesktop;
 import 'package:whisper/l10n/app_localizations.dart';
+import 'package:whisper/new_ui/phone/phone_pair_page.dart';
 import 'package:whisper/state/pairing_request.dart';
+import 'package:whisper/theme/whisper_ui.dart'
+    show WhisperPageRoute, whisperNewUi;
 import 'package:whisper/widget/glass_dialog.dart';
+import 'package:whisper/new_ui/shell/shell_touch.dart';
 
 const pairingCodeKey = Key('pairing-code');
 const pairingTitleGapKey = Key('pairing-title-gap');
@@ -97,18 +102,29 @@ Future<void> showPairingDialog(
   }
   bool? decision;
   try {
-    decision = await showWhisperDialog<bool>(
-      context,
-      barrierDismissible: false,
-      builder: (context) {
-        dialogContext = context;
-        dialogRoute = ModalRoute.of(context);
-        if (cancelled) {
-          scheduleMicrotask(dismiss);
-        }
-        return PairingDialog(request: request, onResolved: dismiss);
-      },
-    );
+    Widget present(BuildContext context, {required bool page}) {
+      dialogContext = context;
+      dialogRoute = ModalRoute.of(context);
+      if (cancelled) {
+        scheduleMicrotask(dismiss);
+      }
+      return page
+          ? PhonePairPage(request: request, onResolved: dismiss)
+          : PairingDialog(request: request, onResolved: dismiss);
+    }
+
+    decision = whisperNewUi && !isDesktop()
+        ? await _pushPairPage(
+            context,
+            WhisperPageRoute<bool>(
+              builder: (context) => present(context, page: true),
+            ),
+          )
+        : await showWhisperDialog<bool>(
+            context,
+            barrierDismissible: false,
+            builder: (context) => present(context, page: false),
+          );
   } finally {
     routeOpen = false;
     removeDismissListener?.call();
@@ -269,3 +285,9 @@ class _PairingDialogState extends State<PairingDialog> {
     );
   }
 }
+
+/// In the content area when there is one: beside a sidebar the list stays.
+Future<bool?> _pushPairPage(BuildContext context, Route<bool> route) =>
+    ShellContent.attached
+    ? ShellContent.push<bool>(route)
+    : Navigator.of(context, rootNavigator: true).push<bool>(route);

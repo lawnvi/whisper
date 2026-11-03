@@ -21,6 +21,16 @@ void main() {
     expect(host, contains('old.viewerPeerId == message.viewerPeerId'));
   });
 
+  test('拿回来 ends one window and tells the viewer', () {
+    expect(host, contains('Future<void> bringBack(String sessionId)'));
+    expect(host, contains('await _stop(stream, notify: true);'));
+    final page = File(
+      'lib/page/window_stream/flow_space_page.dart',
+    ).readAsStringSync();
+    expect(page, contains('WindowStreamHost.shared.hostedFor(peerId)'));
+    expect(page, contains('WindowStreamHost.shared.bringBack('));
+  });
+
   test('window sharing can be turned off and then offers nothing', () {
     final support = File(
       'lib/window_stream/window_stream_support.dart',

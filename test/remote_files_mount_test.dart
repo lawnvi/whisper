@@ -20,6 +20,8 @@ import 'package:whisper/remote_files/mount/nfs_server.dart';
 import 'package:whisper/remote_files/mount/remote_mounts.dart';
 import 'package:whisper/socket/whisper_frame_v3.dart';
 
+import 'support/source_reading.dart';
+
 class _AllowGate extends FileBrowseGate {
   @override
   Future<FileBrowseDecision> ask(FileBrowseRequest request) async =>
@@ -1217,7 +1219,7 @@ void main() {
       'lib/remote_files/mount/remote_mounts.dart',
     ).readAsStringSync();
     expect(mounts, contains('if (!info.canRead)'));
-    final shutdown = File('lib/page/deviceList.dart').readAsStringSync();
+    final shutdown = deviceListSource();
     expect(shutdown, contains('RemoteMounts.shared.unmountAll'));
     final main = File('lib/main.dart').readAsStringSync();
     expect(main, contains('RemoteMounts.shared.cleanUpStale()'));

@@ -218,6 +218,16 @@ class LocalSetting {
     return systemLanguageCode(PlatformDispatcher.instance.locales);
   }
 
+  /// The language picked in the settings, or null when the app follows the
+  /// system. [setLocalization] with an empty string goes back to following it.
+  Future<String?> pickedLocalization() async {
+    final picked = (await _preferences()).get(_localization);
+    final known = AppLocalizations.supportedLocales.any(
+      (locale) => locale.languageCode == picked,
+    );
+    return known ? picked as String : null;
+  }
+
   Future<void> setLocalization(String local) async {
     await _setSP(_localization, local);
   }

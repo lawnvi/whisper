@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/source_reading.dart';
+
 void main() {
   test('clipboard frames are encoded before entering the socket layer', () {
     final manager = File('lib/socket/svrmanager.dart').readAsStringSync();
@@ -16,7 +18,7 @@ void main() {
 
   test('on-demand file paste requires automatic clipboard sync', () {
     final manager = File('lib/socket/svrmanager.dart').readAsStringSync();
-    final deviceList = File('lib/page/deviceList.dart').readAsStringSync();
+    final deviceList = deviceListSource();
     final publishMethod = manager.substring(
       manager.indexOf('Future<bool> publishRemoteClipboard('),
       manager.indexOf(
@@ -29,9 +31,9 @@ void main() {
       ),
       manager.indexOf('Future<void> clearRemoteClipboardSession('),
     );
-    final publishItemsMethod = deviceList.substring(
-      deviceList.indexOf('Future<void> _publishRemoteClipboardItems('),
-      deviceList.indexOf('class DeviceDetailsScreen'),
+    final publishItemsMethod = memberSource(
+      deviceList,
+      'Future<void> _publishRemoteClipboardItems(',
     );
 
     expect(publishMethod, contains('clipboardAutoSync'));

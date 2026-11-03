@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/source_reading.dart';
+
 void main() {
   test('Android received files are scanned after finalizing downloads', () {
     final helper = File('lib/helper/file.dart').readAsStringSync();
@@ -10,7 +12,7 @@ void main() {
     ).readAsStringSync();
     final manager =
         File('lib/socket/file_transfer_engine.dart').readAsStringSync();
-    final deviceList = File('lib/page/deviceList.dart').readAsStringSync();
+    final deviceList = deviceListSource();
 
     expect(dirPlugin, contains('MediaScannerConnection.scanFile'));
     expect(dirPlugin, contains('"scanFile"'));

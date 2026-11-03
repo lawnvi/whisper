@@ -5,7 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/l10n/app_localizations.dart';
+import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/widget/quick_send_chooser.dart';
+
+import 'support/source_reading.dart';
 
 void main() {
   const mac = QuickSendTarget(id: 'mac', name: 'Study iMac', platform: 'macos');
@@ -178,21 +181,56 @@ void main() {
     expect(unknown.isVisualMedia, isFalse);
   });
 
-  test('device list only offers connected, trusted devices', () {
-    final source = File('lib/page/deviceList.dart').readAsStringSync();
-    final start = source.indexOf(
-      'List<QuickSendTarget> _connectedQuickSendTargets()',
+  group('device list only offers connected, trusted devices', () {
+    DeviceData device(String uid, String name) => DeviceData(
+      id: 0,
+      uid: uid,
+      name: name,
+      host: '',
+      port: 10002,
+      platform: 'macos',
+      isServer: true,
+      online: true,
+      clipboard: false,
+      auth: true,
+      lastTime: 0,
     );
-    expect(start, greaterThanOrEqualTo(0));
-    final body = source.substring(start, source.indexOf('\n  }\n', start));
-    expect(body, contains('!socketManager.isConnectedTo(candidate.uid)'));
-    expect(body, contains('_trustedDeviceIdentityHash(candidate.uid) == null'));
-    expect(
-      source,
-      contains('_quickSendTargets.value = _connectedQuickSendTargets()'),
-    );
-    expect(source, contains('targets: _quickSendTargets'));
-    expect(source, isNot(contains('androidSystemShareOffline')));
-    expect(source, isNot(contains('RadioListTile')));
+
+    test('leaves out the ones that are offline or untrusted', () {
+      final targets = connectedQuickSendTargets(
+        devices: [
+          device('zed', 'Zed'),
+          device('offline', 'Offline'),
+          device('untrusted', 'Untrusted'),
+          device('amy', 'Amy'),
+        ],
+        isConnected: (id) => id != 'offline',
+        trustedIdentityHashFor: (id) => id == 'untrusted' ? null : 'hash-$id',
+      );
+      expect(targets.map((target) => target.id), ['amy', 'zed']);
+      expect(targets.first.name, 'Amy');
+      expect(targets.first.platform, 'macos');
+    });
+
+    test('lists a device once, and the list cannot be changed', () {
+      final targets = connectedQuickSendTargets(
+        devices: [device('a', 'A'), device('a', 'A again')],
+        isConnected: (_) => true,
+        trustedIdentityHashFor: (id) => 'hash',
+      );
+      expect(targets.map((target) => target.name), ['A again']);
+      expect(() => targets.add(targets.first), throwsUnsupportedError);
+    });
+
+    test('the chooser is fed from that rule, without an offline state', () {
+      final source = deviceListSource();
+      expect(
+        source,
+        contains('_quickSendTargets.value = _connectedQuickSendTargets()'),
+      );
+      expect(source, contains('targets: _quickSendTargets'));
+      expect(source, isNot(contains('androidSystemShareOffline')));
+      expect(source, isNot(contains('RadioListTile')));
+    });
   });
 }

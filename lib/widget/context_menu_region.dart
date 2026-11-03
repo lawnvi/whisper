@@ -1,3 +1,5 @@
+import 'package:whisper/page/remote_files/files_menu.dart';
+import 'package:whisper/theme/whisper_ui.dart';
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -37,6 +39,33 @@ Future<void> showWhisperActionMenu(
   required List<ContextMenuActionItem> items,
   bool above = false,
 }) async {
+  if (whisperNewUi) {
+    final shown = [
+      for (final item in items)
+        if (item.enabled) item,
+    ];
+    if (shown.isEmpty) return;
+    // Above the anchor when that is where there is room, as the composer's is.
+    final height = shown.length * 30.0 + 12;
+    await showFilesMenu(
+      context,
+      position: above
+          ? Offset(anchor.right - 210, anchor.top - height - 6)
+          : anchor.bottomLeft + const Offset(0, 4),
+      items: [
+        for (final (i, item) in shown.indexed) ...[
+          if (i > 0 && item.destructive != shown[i - 1].destructive)
+            const FilesMenuItem.separator(),
+          FilesMenuItem(
+            label: item.label,
+            destructive: item.destructive,
+            onSelected: item.onSelected,
+          ),
+        ],
+      ],
+    );
+    return;
+  }
   final overlay = Overlay.maybeOf(context)?.context.findRenderObject();
   if (overlay is! RenderBox) {
     return;

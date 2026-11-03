@@ -48,3 +48,6 @@ app.*.map.json
 /android/app/.cxx
 dist
 whisper-web
+
+# What a failed golden test leaves behind
+test/failures/

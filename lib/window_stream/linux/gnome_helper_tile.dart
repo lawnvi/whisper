@@ -14,9 +14,13 @@ import 'package:whisper/window_stream/linux/gnome_shell_helper.dart';
 /// coloured dot, a quiet label and the disclosure arrow). Tapping it offers
 /// the one action the state allows. Place it inside a SettingsSectionSurface.
 class GnomeHelperTile extends StatefulWidget {
-  const GnomeHelperTile({super.key, this.controller});
+  const GnomeHelperTile({super.key, this.controller, this.builder});
 
   final GnomeShellHelperController? controller;
+
+  /// Draws the row instead of the old settings' style. It keeps the state read
+  /// and following, and builds nothing where the helper does not apply.
+  final Widget Function(BuildContext, GnomeShellHelperController)? builder;
 
   @override
   State<GnomeHelperTile> createState() => _GnomeHelperTileState();
@@ -50,6 +54,13 @@ class _GnomeHelperTileState extends State<GnomeHelperTile>
   Widget build(BuildContext context) {
     final controller = _controller;
     if (!controller.supported) return const SizedBox.shrink();
+    final builder = widget.builder;
+    if (builder != null) {
+      return AnimatedBuilder(
+        animation: controller,
+        builder: (context, _) => builder(context, controller),
+      );
+    }
     final palette = context.whisperPalette;
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
@@ -158,6 +169,11 @@ class _GnomeHelperTileState extends State<GnomeHelperTile>
     );
   }
 }
+
+String gnomeHelperStateLabel(
+  BuildContext context,
+  GnomeShellHelperState state,
+) => _stateLabel(context, state);
 
 String _stateLabel(BuildContext context, GnomeShellHelperState state) {
   final l10n = AppLocalizations.of(context)!;

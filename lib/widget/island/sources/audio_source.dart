@@ -9,6 +9,7 @@ import '../../../audio/audio_share_coordinator.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../socket/svrmanager.dart';
 import '../island_activity.dart';
+import '../island_home.dart';
 import '../island_views.dart';
 
 enum IslandAudioState { starting, playing, paused, ended }
@@ -96,6 +97,7 @@ class AudioIslandSource extends ChangeNotifier implements IslandSource {
           IslandAudioState.ended => IslandStatus.ended,
         },
         since: _since,
+        home: IslandHomes.sound,
         presenter: AudioPresenter(
           id: _id,
           device: _name,

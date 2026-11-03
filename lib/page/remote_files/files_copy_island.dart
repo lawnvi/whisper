@@ -188,16 +188,20 @@ class CopyRing extends StatelessWidget {
     required this.batch,
     this.size = 20,
     this.track = const Color(0x33FFFFFF),
+    this.tint,
   });
 
   final FileCopyBatch batch;
   final double size;
   final Color track;
 
+  /// The new UI's colour for this phase; the island keeps [copyTint].
+  final Color? tint;
+
   @override
   Widget build(BuildContext context) {
     final phase = batch.phase;
-    final tint = copyTint(phase);
+    final tint = this.tint ?? copyTint(phase);
     final full =
         phase == FileCopyPhase.done ||
         phase == FileCopyPhase.failed ||
@@ -280,11 +284,13 @@ class CopyBar extends StatelessWidget {
     required this.batch,
     required this.track,
     this.height = 6,
+    this.tint,
   });
 
   final FileCopyBatch batch;
   final Color track;
   final double height;
+  final Color? tint;
 
   @override
   Widget build(BuildContext context) {
@@ -301,7 +307,7 @@ class CopyBar extends StatelessWidget {
           builder: (context, value, _) => CustomPaint(
             painter: _BarPainter(
               value: value,
-              tint: copyTint(phase),
+              tint: tint ?? copyTint(phase),
               track: track,
             ),
           ),

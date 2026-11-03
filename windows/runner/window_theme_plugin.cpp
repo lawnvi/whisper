@@ -17,6 +17,11 @@ namespace {
 
 constexpr char kWindowThemeChannel[] = "com.vireen.whisper/window_theme";
 
+// DWMWA_SYSTEMBACKDROP_TYPE and its values. MinGW and older SDKs don't name them.
+constexpr DWORD kSystemBackdropType = 38;
+constexpr int kBackdropMica = 2;
+constexpr int kBackdropAcrylic = 3;
+
 #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
 #define DWMWA_USE_IMMERSIVE_DARK_MODE 20
 #endif
@@ -28,6 +33,8 @@ constexpr char kWindowThemeChannel[] = "com.vireen.whisper/window_theme";
 constexpr wchar_t kChosenBrightnessProperty[] = L"WhisperTitleBarBrightness";
 constexpr INT_PTR kChosenLight = 1;
 constexpr INT_PTR kChosenDark = 2;
+
+bool g_next_window_is_panel = false;
 
 template <typename T>
 const T* GetMapValue(const flutter::EncodableMap& map, const char* key) {
@@ -85,7 +92,55 @@ class WindowThemePlugin : public flutter::Plugin {
       return;
     }
 
+    // Asked just before the tray panel's window is created: see RegisterPanelPlugins.
+    if (call.method_name() == "nextWindowIsPanel") {
+      g_next_window_is_panel = true;
+      result->Success();
+      return;
+    }
+
+    // The redesigned UI asks for these, the old one never does. The panel is a
+    // window of its own: acrylic goes with it, under the panel's own tint.
+    if (call.method_name() == "enableWindowMaterial" ||
+        call.method_name() == "enablePanelMaterial") {
+      backdrop_ = call.method_name() == "enableWindowMaterial" ? kBackdropMica
+                                                               : kBackdropAcrylic;
+      result->Success(flutter::EncodableValue(ApplyBackdrop()));
+      return;
+    }
+
+    // Password managers set this format on what they copy; it must not be
+    // remembered in the clipboard history.
+    if (call.method_name() == "clipboardIsSensitive") {
+      const UINT exclude = RegisterClipboardFormatW(
+          L"ExcludeClipboardContentFromMonitorProcessing");
+      result->Success(flutter::EncodableValue(
+          exclude != 0 && IsClipboardFormatAvailable(exclude) != FALSE));
+      return;
+    }
+
     result->NotImplemented();
+  }
+
+  // Flutter's transparent areas show the system's backdrop. window_manager's
+  // setTitleBarStyle resets the margins to 0, so this runs after it. Windows 10
+  // and early 11 refuse the attribute: the margins go back and Dart paints the
+  // sidebar itself.
+  bool ApplyBackdrop() {
+    if (window_ == nullptr || backdrop_ == 0) {
+      return false;
+    }
+    MARGINS margins = {-1, -1, -1, -1};
+    DwmExtendFrameIntoClientArea(window_, &margins);
+    int backdrop = backdrop_;
+    const HRESULT hr = DwmSetWindowAttribute(window_, kSystemBackdropType,
+                                             &backdrop, sizeof(backdrop));
+    if (FAILED(hr)) {
+      margins = {0, 0, 0, 0};
+      DwmExtendFrameIntoClientArea(window_, &margins);
+      return false;
+    }
+    return true;
   }
 
   void SetBrightness(const std::string& brightness,
@@ -115,13 +170,22 @@ class WindowThemePlugin : public flutter::Plugin {
                                                        : kChosenLight));
     DwmSetWindowAttribute(window_, DWMWA_USE_IMMERSIVE_DARK_MODE,
                           &enable_dark_mode, sizeof(enable_dark_mode));
+    // Set again whenever light and dark change.
+    ApplyBackdrop();
   }
 
   HWND window_ = nullptr;
+  int backdrop_ = 0;
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> channel_;
 };
 
 }  // namespace
+
+bool WindowThemeTakeNextWindowIsPanel() {
+  const bool panel = g_next_window_is_panel;
+  g_next_window_is_panel = false;
+  return panel;
+}
 
 bool WindowThemeChosenDarkMode(HWND window, BOOL* enable_dark_mode) {
   const INT_PTR chosen =

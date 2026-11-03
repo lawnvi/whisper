@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/window_stream/android/phone_trust.dart';
 
+import 'support/source_reading.dart';
+
 void main() {
   test('reads the identity a phone reports over adb', () {
     final identity = PhoneTrust.parse(
@@ -87,7 +89,7 @@ void main() {
     expect(conversation, isNot(contains('icon: const ComputerControlIcon()')));
     final settings = File('lib/page/settings.dart').readAsStringSync();
     expect(settings, contains('class DeviceFeature {'));
-    final deviceList = File('lib/page/deviceList.dart').readAsStringSync();
+    final deviceList = deviceListSource();
     expect(deviceList, isNot(contains('const FlowSpacePage()')));
     final coordinator = File(
       'lib/window_stream/window_stream_coordinator.dart',

@@ -11,6 +11,8 @@ import 'package:whisper/helper/helper.dart';
 import 'package:whisper/helper/memory_bounded_image.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/theme/app_theme.dart';
+import 'package:whisper/theme/whisper_icons.dart';
+import 'package:whisper/theme/whisper_ui.dart';
 import 'package:whisper/widget/context_menu_region.dart';
 import 'package:whisper/widget/screenshot_controls.dart';
 import 'package:whisper/widget/subtle_motion.dart';
@@ -62,6 +64,10 @@ class ChatComposer extends StatelessWidget {
   final Future<void> Function()? onSendClipboardImages;
   final ValueChanged<int>? onRemoveClipboardImage;
 
+  /// In the new UI: 发给 iMac, or 连接 iMac 后可以发送 with a button to do so.
+  final String? composerHint, disabledHint, connectLabel;
+  final VoidCallback? onConnect;
+
   const ChatComposer({
     super.key,
     required this.clipboardEnabled,
@@ -84,11 +90,30 @@ class ChatComposer extends StatelessWidget {
     this.onClearClipboardFiles,
     this.onSendClipboardImages,
     this.onRemoveClipboardImage,
+    this.composerHint,
+    this.disabledHint,
+    this.connectLabel,
+    this.onConnect,
   });
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+
+    if (whisperNewUi) {
+      return Actions(
+        actions: <Type, Action<Intent>>{
+          if (isDesktopStyle && canSend && onPasteClipboard != null)
+            PasteTextIntent: CallbackAction<PasteTextIntent>(
+              onInvoke: (_) {
+                unawaited(_handlePasteShortcut());
+                return null;
+              },
+            ),
+        },
+        child: _buildCapsule(context),
+      );
+    }
 
     if (isDesktopStyle) {
       return Actions(
@@ -235,6 +260,215 @@ class ChatComposer extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  /// surfaces.md「输入框」: one glass capsule floating over the conversation.
+  /// It shows what it sends and grows upward when there is something to preview.
+  Widget _buildCapsule(BuildContext context) {
+    final c = context.wc;
+    final touch = !isDesktopStyle;
+    final type = WhisperType(touch: touch);
+    final hasPreview =
+        _showsClipboardFilesPreview || _showsClipboardImagesPreview;
+    final disabled = !canSend;
+    final field = Focus(
+      onKeyEvent: (_, event) => _handleKeyEvent(event),
+      child: TextField(
+        key: const ValueKey('chat-composer-textfield'),
+        controller: controller,
+        focusNode: focusNode,
+        enabled: canSend,
+        keyboardType: TextInputType.multiline,
+        textInputAction: TextInputAction.newline,
+        minLines: 1,
+        maxLines: 5,
+        selectionWidthStyle: BoxWidthStyle.tight,
+        autofocus: isDesktop(),
+        autocorrect: true,
+        cursorColor: c.accent,
+        style: TextStyle(color: c.ink, fontSize: type.body, height: 1.35),
+        decoration: InputDecoration(
+          isCollapsed: true,
+          isDense: true,
+          filled: false,
+          fillColor: Colors.transparent,
+          border: InputBorder.none,
+          enabledBorder: InputBorder.none,
+          focusedBorder: InputBorder.none,
+          disabledBorder: InputBorder.none,
+          errorBorder: InputBorder.none,
+          focusedErrorBorder: InputBorder.none,
+          contentPadding: EdgeInsets.zero,
+          hintMaxLines: 1,
+          hintText: disabled ? disabledHint : composerHint,
+          hintStyle: TextStyle(
+            color: c.ink2Glass,
+            fontSize: type.body,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ),
+    );
+    final row = ConstrainedBox(
+      constraints: BoxConstraints(minHeight: touch ? 38 : 28),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          SizedBox(width: touch ? 12 : 8),
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(4, touch ? 9 : 5, 4, touch ? 9 : 5),
+              child: field,
+            ),
+          ),
+          const SizedBox(width: 4),
+          if (clipboardEnabled && !disabled)
+            _CapsuleIcon(
+              key: clipboardButtonKey,
+              glyph: WhisperGlyph.clip,
+              label: AppLocalizations.of(context)?.menuClipboard ?? '',
+              touch: touch,
+              onTap: isLoading ? null : () => unawaited(onSendClipboard()),
+            ),
+          if (isDesktop() && !disabled) ...[
+            const SizedBox(width: 4),
+            const ScreenshotButton(capsule: true),
+          ],
+          const SizedBox(width: 4),
+          if (disabled && onConnect != null)
+            Pressable(
+              onTap: onConnect,
+              radius: WhisperRadius.capsule,
+              child: Container(
+                constraints: BoxConstraints(minHeight: touch ? 38 : 28),
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: c.accent,
+                  borderRadius: BorderRadius.circular(WhisperRadius.capsule),
+                ),
+                child: Text(
+                  connectLabel ?? '',
+                  style: TextStyle(
+                    fontSize: type.note,
+                    fontWeight: FontWeight.w500,
+                    color: c.onAccent,
+                  ),
+                ),
+              ),
+            )
+          else if (!disabled)
+            _buildCapsuleSend(context, touch),
+        ],
+      ),
+    );
+    return DecoratedBox(
+      key: desktopContainerKey,
+      decoration: ShapeDecoration(
+        shape: RoundedSuperellipseBorder(
+          borderRadius: BorderRadius.circular(
+            hasPreview ? WhisperRadius.composer - 5 : WhisperRadius.composer,
+          ),
+        ),
+        shadows: WhisperShadow.e2(Theme.of(context).brightness),
+      ),
+      child: WhisperGlass(
+        kind: GlassKind.control,
+        shape: RoundedSuperellipseBorder(
+          borderRadius: BorderRadius.circular(
+            hasPreview ? WhisperRadius.composer - 5 : WhisperRadius.composer,
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(5),
+          child: AnimatedSize(
+            duration: whisperMotionDuration(context),
+            curve: Curves.easeOutCubic,
+            alignment: Alignment.bottomCenter,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (hasPreview)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+                    child: _showsClipboardFilesPreview
+                        ? _buildClipboardFilesPreview(context)
+                        : _buildClipboardImagesPreview(context),
+                  ),
+                row,
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// `+` while there is nothing to send, an arrow once there is. The icons cross
+  /// over, turning a quarter.
+  Widget _buildCapsuleSend(BuildContext context, bool touch) {
+    final c = context.wc;
+    final attach = _showsAttachmentAction;
+    final size = touch ? 38.0 : 28.0;
+    return Builder(
+      builder: (buttonContext) => Pressable(
+        key: attach ? attachmentButtonKey : sendButtonKey,
+        onTap: isLoading ? null : () => _handlePrimaryAction(buttonContext),
+        radius: WhisperRadius.capsule,
+        scale: .94,
+        label: attach
+            ? AppLocalizations.of(context)?.attachFile
+            : AppLocalizations.of(context)?.confirm,
+        child: Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            color: attach ? c.fill : c.accent,
+            shape: BoxShape.circle,
+          ),
+          child: SpringBuilder(
+            value: attach ? 0 : 1,
+            spring: WhisperSprings.snappy,
+            builder: (context, t, _) => Stack(
+              alignment: Alignment.center,
+              children: [
+                Opacity(
+                  opacity: (1 - t).clamp(0, 1),
+                  child: Transform.scale(
+                    scale: 1 - .5 * t.clamp(0, 1),
+                    child: Transform.rotate(
+                      angle: t * math.pi / 2,
+                      child: WhisperIcon(
+                        WhisperGlyph.plus,
+                        size: 16,
+                        weight: 2,
+                        color: c.ink,
+                      ),
+                    ),
+                  ),
+                ),
+                Opacity(
+                  opacity: t.clamp(0, 1),
+                  child: Transform.scale(
+                    scale: .5 + .5 * t.clamp(0, 1),
+                    child: Transform.rotate(
+                      angle: (t - 1) * math.pi / 2,
+                      child: WhisperIcon(
+                        WhisperGlyph.up,
+                        size: 15,
+                        weight: 2.2,
+                        color: c.onAccent,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -859,4 +1093,32 @@ class _ClipboardActionButtonState extends State<_ClipboardActionButton> {
       ),
     );
   }
+}
+
+class _CapsuleIcon extends StatelessWidget {
+  const _CapsuleIcon({
+    super.key,
+    required this.glyph,
+    required this.label,
+    required this.touch,
+    required this.onTap,
+  });
+
+  final WhisperGlyph glyph;
+  final String label;
+  final bool touch;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) => Pressable(
+    onTap: onTap,
+    radius: WhisperRadius.capsule,
+    label: label,
+    child: SizedBox.square(
+      dimension: touch ? 38 : 28,
+      child: Center(
+        child: WhisperIcon(glyph, size: 17, color: context.wc.ink2Glass),
+      ),
+    ),
+  );
 }

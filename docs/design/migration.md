@@ -1,6 +1,6 @@
 # 实现步骤
 
-代码还没有开始迁移。本文说明差距、顺序、每步怎么算做完、数据从哪来。规则在 [`DESIGN.md`](../../DESIGN.md)，界面规格在 [`surfaces.md`](surfaces.md)，可用的代码在 [`flutter.md`](flutter.md)。
+第 0 步做完了，第 1 步写完了代码、等真机验证（2026-11-02），现有界面还没有开始迁移。本文说明差距、顺序、每步怎么算做完、数据从哪来。规则在 [`DESIGN.md`](../../DESIGN.md)，界面规格在 [`surfaces.md`](surfaces.md)，可用的代码在 [`flutter.md`](flutter.md)。
 
 **不动协议。** 下面所有内容都用现有的协调器和协议。要改协议的两件事（接收端发起声音、按设备调音量）没有设计进来，见 `decisions.md` 待定项 7。
 
@@ -60,6 +60,14 @@
 
 **完成标准**：外观完全没变，`flutter analyze` 和 `flutter test` 通过，新 token 有测试。
 
+**结果（2026-11-02，已完成）：**
+
+- 代码在 `lib/theme/whisper_ui.dart`、`lib/theme/whisper_device_art.dart`。`test/whisper_tokens_test.dart` 直接读 `DESIGN.md` 文件头核对 token。`AppTheme` 注册了 `WhisperColors`，旧界面没有用它。
+- 旧界面的 golden 在 `test/goldens/old_ui/`，8 张，只在 macOS 上比较，别的系统文字渲染不同，自动跳过，所以 CI 不跑。改了要重新生成：`flutter test --update-goldens test/old_ui_golden_test.dart`。为了能渲染整页，加了只给测试用的入口：`DeviceListScreen.debugPreview`、`LocalDatabase.debugOverride`、`debugIsDesktopOverride`。
+- 棘轮：`test/ui_design_ratchet_test.dart`，现状 589 处裸值，61 个文件。减少后用 `UPDATE_UI_RATCHET=1` 锁定。拆文件时手动把计数挪到基线的新文件上，总数不能增加。
+- 读源码的测试：引用 `deviceList.dart` 的都改走 `test/support/source_reading.dart`，按方法名取方法体，不依赖文件布局。在副本里把 `deviceList.dart` 切成两半跑过，32 个文件 212 项全过。
+- 改成真正行为测试的：设备合并、信任身份、快速发送目标、键鼠是否在进行、服务器只启动一次（逻辑抽到 `lib/state/device_list_rules.dart`），侧栏和手机列表的行为（`test/device_list_behavior_test.dart`）。**其余 32 个文件还是读源码**，它们测的多是 Android 服务、退出顺序、认证流程这些要真实平台或连接的东西，第 2 步之后随代码重写再改。
+
 ### 1 · 技术验证
 
 这些决定质感能到什么程度，**先验证，别等到最后**：
@@ -71,6 +79,118 @@
 - 托盘：`desktop_multi_window` 当面板窗口，和主引擎怎么通信（`surfaces.md`「托盘」风险表）。
 
 **完成标准**：每项写明结果和决定，更新 `DESIGN.md`「平台」和 `decisions.md`。做不到透明窗口时退回实色 `sidebar-solid`，先告诉用户，让用户看效果再决定。
+
+**结果（2026-11-02，还没有完成）：** 探针在 `lib/new_ui/probe/`，开关打开时代替首页，用示例数据按 `surfaces.md` 排版，第 2 步删除。跑在 Apple M4、macOS 27 上。性能和面板是屏幕锁定时测的；窗口的画面 2026-11-02 晚上解锁后实拍过。
+
+| 项 | 结果 | 状态 |
+|---|---|---|
+| macOS 材质 | 实拍浅、深两种主题，桌面透过侧栏模糊出来，四角是圆的。`flutter-*.png` 只有 Flutter 这一层，侧栏 alpha 是 0，在看图软件里显示成黑色或白色，不能拿来判断材质 | 实拍过，等用户看 |
+| macOS 工具栏点击 | AppKit 默认吞掉这一条的点击，实测修好，见 `flutter.md`「macOS」。用的是 App 自己发的合成事件，不是真鼠标 | 等真机 |
+| macOS 拖动、双击、平铺、圆角 | 没有真鼠标，没测 | 等真机 |
+| macOS 红绿灯 | 距边 16，距顶 19，直径 14，圆心距 23，比设计写的 12 大，是系统画的。实拍发现切主题时 AppKit 重排标题栏，红绿灯跑到距顶 -1，已修：监听标题栏的 frame。切 4 次主题、进出全屏后都是 19 | 已量 |
+| macOS 性能 | 下表。显示器睡着，不含系统合成，帧的节奏也不能看 | 等真机 |
+| Windows 云母 + `window_manager` | 代码写好，zig 和 mingw 编过。没有用 MSVC 编，没有运行。贴靠布局没有做 | 等真机 |
+| Linux | 代码写好，对着 GTK 头文件查过语法，X11 分支没覆盖。没有编译和运行 | 等真机 |
+| Android 模糊 | profile APK 编过，没有设备，没有运行 | 等真机 |
+| 托盘面板（macOS） | 独立窗口和引擎可行。隐藏创建到能应答 1.4 到 1.9 秒（调试版），往返 p50 0.15 ms、p99 不到 0.7 ms，整份状态约 1 ms，显示 3 到 49 ms。面板的画面没看到 | 等真机 |
+| 托盘面板（Windows） | 亚克力的通道写好了，没有运行。系统圆角固定 8，做不到设计的 24 | 等真机 |
+
+**决定**：面板窗口启动时隐藏创建，不要点了才建，1.4 秒等不起。状态走 `WindowController.invokeMethod`，这个延迟不用再做缓存。
+
+M4 上 Flutter 的耗时（profile，毫秒）：
+
+| 阶段 | 帧数 | raster p50 | raster p99 | 超过 16 ms |
+|---|---|---|---|---|
+| 切分页，带模糊 | 526 | 2.9 | 10.8 | 0 |
+| 切分页，不带模糊 | 523 | 2.9 | 7.7 | 3 |
+| 第一次进分页（要建页面） | 128 | 2.8 | 81.9 | 14 |
+| 玻璃下滚动 | 221 | 2.4 | 3.6 | 帧节奏受显示器睡眠影响，不算数 |
+
+第一次进分页会卡一下（raster 最高 151 ms），要在真机上再看，可能要提前建好页面或预热。
+
+**在真机上看：**
+
+```bash
+# macOS，解锁屏幕后。结果和实拍写到 /tmp/whisper-probe
+mkdir -p /tmp/whisper-probe
+WHISPER_NEW_UI=true WHISPER_DART_DEFINES=WHISPER_PROBE_AUTORUN=true \
+  WHISPER_PROBE_OUT=/tmp/whisper-probe \
+  env -u HTTP_PROXY -u http_proxy -u HTTPS_PROXY -u https_proxy ./script/build_and_run.sh
+
+# macOS，只是手动试
+WHISPER_NEW_UI=true env -u HTTP_PROXY -u http_proxy -u HTTPS_PROXY -u https_proxy ./script/build_and_run.sh
+
+# macOS 性能。Xcode 27 下 flutter build macos --profile 过不了通用二进制检查，要这样编
+echo 'use_precompiled_binaries: true' > cargokit_options.yaml
+flutter build macos --profile --no-pub --config-only -t tool/perf/new_ui_perf.dart
+xcodebuild -workspace macos/Runner.xcworkspace -scheme Runner -configuration Profile \
+  -destination "platform=macOS,arch=arm64" -derivedDataPath /tmp/whisper-dd \
+  MACOSX_DEPLOYMENT_TARGET=12.0 ONLY_ACTIVE_ARCH=YES ARCHS=arm64 build
+rm cargokit_options.yaml
+open -n --env WHISPER_PROBE_OUT=/tmp/whisper-probe /tmp/whisper-dd/Build/Products/Profile/whisper.app
+
+# Windows 11，先确认开发者模式开着：start ms-settings:developers
+flutter pub get
+flutter run -d windows --dart-define=WHISPER_NEW_UI=true
+flutter run --profile -d windows -t tool/perf/new_ui_perf.dart
+
+# Linux，GNOME 和 KDE 各一次
+flutter pub get
+WHISPER_NEW_UI=1 flutter run -d linux --dart-define=WHISPER_NEW_UI=true
+gsettings set org.gnome.desktop.wm.preferences button-layout 'close,minimize,maximize:'
+gsettings set org.gnome.desktop.wm.preferences button-layout 'appmenu:close'
+gsettings set org.gnome.desktop.wm.preferences button-layout ':minimize,maximize,close'
+gsettings reset org.gnome.desktop.wm.preferences button-layout
+
+# Android，看输出里的 probe: 那几行，比 tabs 和 tabsNoBlur 的 over16ms
+flutter run --profile -d <设备> -t tool/perf/new_ui_perf.dart
+```
+
+| 平台 | 要看什么 |
+|---|---|
+| macOS | 侧栏透出桌面，文字清楚；窗口四角是圆的，内容没有方角；拖动工具栏空白处能移动窗口，分页和按钮不会带着窗口走；双击空白最大化；红绿灯能点，绿灯悬停的平铺菜单和「窗口」菜单的移动项还在；上边缘能缩放；深色；左键托盘图标出现面板 |
+| Windows | 侧栏是云母，失去焦点退成纯色；上边缘能缩放；最大化没有被裁掉一圈，按钮贴到屏幕右上角；在 100% 和 150% 的显示器之间拖动不糊；Win+Z 能出贴靠布局；Windows 10 上侧栏是实色；左键托盘出面板 |
+| Linux | 隐藏标题栏后阴影还在，四边能缩放，四角是否方的（方的就用方角）；三种按钮布局实时跟着变；Breeze 下的阴影协调；输出里 `trayHost` 说有没有托盘 |
+| Android | 切分页不掉帧，玻璃输入框下滚动不掉帧 |
+
+**探针还留着**：`lib/new_ui/probe/`、`tool/perf/new_ui_perf.dart` 只用来量性能，App 已经不用它们。等 Android 和 Windows 的性能量完再和 `macos/Runner/WindowProbeHooks.swift` 一起删。
+
+### 第 2 到 8 步的结果（2026-11-02，新界面仍在开关后面）
+
+代码在 `lib/new_ui/`（`shell`、`settings`、`sound`、`input`、`share`、`apps`、`tray`），业务生命周期还在 `_DeviceListScreen`，通过 `ShellData`、`ShellActions` 接到外壳。`tool/preview/new_ui_shell.dart` 用示例数据跑真实外壳，不碰数据和密钥，可以放心在别的机器上跑。
+
+| 平台 | 验证到哪 |
+|---|---|
+| macOS | 真实窗口实拍过外壳、对话、设备卡片、声音、键鼠、共享链接、设置、搜索、托盘面板、这台的文件、输入地址连接、这台面板，包括 720×480 最小窗口。创建链接、传输列表只有离屏渲染。真鼠标只由用户试过 |
+| Windows | 预览入口（示例数据）上用真鼠标测过：窗口按钮的提示、最大化、还原、最小化、拖动、四条边缩放、双击工具栏、弹层打开时的窗口按钮、拖动后第一次点击。真实入口和预览入口 MSVC 编译通过，真实入口没有运行过（从 ssh 启动会丢密钥） |
+| Linux | 只做了代码检查：`linux/my_application.cc` 用真实的 GTK 3 和 Flutter Linux 头文件过了语法检查（Homebrew 的 GTK 没有 X11 分支，X11 那几行没检查到）。没有编译成程序，没有运行，GNOME 和 KDE 的窗口按钮、托盘菜单都没见过 |
+| Android | 见下面「平板和折叠屏的结果」。手机尺寸（合上的折叠屏）和两台模拟器之间的配对、对话、文件都真实跑过，手机真机没有 |
+| iOS | 预览入口在 iPad 模拟器上跑过，状态栏和安全区正确。真实入口没有跑过，旋转、分屏没有试 |
+
+没验证的：灵动岛请求的回答，流转动画，「拿回来」，声音和键鼠连真实电脑。
+
+在 Windows 测出的问题值得记住：窗口按钮在导航器之上，那一层原本没有 `Overlay`，悬停就抛异常，发布版画成一块灰。macOS 不画这些按钮，单测也没有悬停，所以只有真鼠标才测得出。
+
+打开开关跑全部测试时有一批旧测试失败：它们断言旧界面的键、文案和尺寸，或者装的是没有 `WhisperColors` 和本地化的主题。第 9 步删旧界面时一起处理，不是新界面的行为问题。
+
+### 平板和折叠屏的结果（2026-11-03，同样在开关后面）
+
+代码在 `lib/new_ui/shell/shell_touch.dart`，判断用 `WhisperLayout`（`lib/theme/whisper_ui.dart`），旋转用 `WhisperOrientation`（`lib/helper/orientation_policy.dart`）。`usesSplitDeviceWorkspace` 和 `usesRetainedTabletWorkspace` 旧界面还在用，第 9 步一起删。
+
+在安卓 35 的折叠屏模拟器（`pixel_fold`）和平板模拟器（`pixel_tablet`）上真实跑过，两台真实配对：
+
+| 看了什么 | 结果 |
+|---|---|
+| 打开和合上，真实的 `emu fold`、`unfold` | 设备、分页、草稿都在，设备页和卡片互相变化 |
+| 书本姿态，`emu posture 2` | 侧栏的边在折痕上 |
+| 桌面姿态，旋转后半开 | 控制页折痕以上是设备，以下是触控板和按键，侧栏收起 |
+| 高度不够，`wm size 2208x1400` | 按键到触控板右边 |
+| 旋转 | 打开时能转，竖着侧栏 240 |
+| 配对、发消息、键盘顶起输入框、文件浏览、文件访问请求、拷贝大文件、灵动岛 | 都走的真实协议，灵动岛在内容正中 |
+
+后来加的（设备卡片悬浮滑出、灵动岛在窗口正中、灵动岛按 `IslandHome` 让位）也在模拟器上看过。桌面版只有几何测试，**还没有实拍**：当时显示器休眠，抓不到窗口。
+
+模拟器测不了的：这个系统镜像**没有状态栏和导航栏**，安全区只在 iPad 模拟器和组件测试里看过；它还把铰链传感器写死成所有配置都有，所以模拟的平板也报成手机，平板的设备图只在预览入口和单元测试里看过。手感和真机上的折痕要在真机上试，华为的阔折叠和三折叠按 `decisions.md` 不算支持。
 
 ### 2 · 外壳和设备页
 
@@ -172,12 +292,12 @@
 
 ## 没有验证的
 
-- 当前版本没有实际运行过。现状判断来自代码、文档和 5 月的截图。
-- 原型是 HTML，只在 Windows 上的无头 Chrome 里看过，没有在真实屏幕上看过，也没有在 Flutter 里实现过。`flutter.md` 的组件编译和测试过，但没有放到真实页面里。
-- 窗口材质：Windows 云母和窗口内玻璃在 Flutter 里跑过（`windows-real-mica-light.jpg`）。macOS 系统材质、Windows 的托盘面板、Linux 全部没有试过。质感很依赖这一项。
+- 旧界面当前版本的现状判断来自代码、文档和 5 月的截图，第 0 步的 golden 是测试环境渲染的，不是真实窗口。
+- 原型是 HTML，只在无头 Chrome 里看过，没有在真实屏幕上看过。`flutter.md` 的组件编译和测试过，放进了第 1 步的探针，但没有放到真实页面里。
+- 窗口材质：Windows 云母和窗口内玻璃在不带插件的 Flutter 工程里跑过（`windows-real-mica-light.jpg`）。其他见第 1 步的表，都还没有人看到过画面。质感很依赖这一项。
 - GNOME 和 KDE 的外观只在原型里看过，**没有在真实的 Linux 桌面上看过**，原型用的字体也不是这两个桌面的默认字体。
 - 拖动手感、弹簧参数要在 Flutter 里再调。
 - 西班牙语长文案和 200% 文字在原型里没有试过。
-- 平板和折叠屏只在原型里按估算的尺寸看过，**没有在任何真机或模拟器上跑过**。折痕和姿态只有 `WhisperLayout` 的单元测试，桌面姿态的手感要真机试。iOS 工程本身也没有验证过（`CLAUDE.md`）。
+- 平板和折叠屏在安卓模拟器和 iPad 模拟器上跑过，见上面「平板和折叠屏的结果」，**没有上过真机**。桌面姿态的手感要真机试。iOS 的真实入口没有跑过。
 - 三类划分没有做过用户测试。
 - `whisper-web/` 不在当前仓库里，产品站的配色没有核对。

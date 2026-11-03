@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:ui' show BoxWidthStyle;
+import 'dart:math' as math;
+import 'dart:ui' show BoxWidthStyle, PlatformDispatcher;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
@@ -25,6 +26,7 @@ import 'package:whisper/helper/windows_input_service.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/main.dart';
 import 'package:whisper/model/LocalDatabase.dart';
+import 'package:whisper/new_ui/settings/settings_controls.dart';
 import 'package:whisper/page/appList.dart';
 import 'package:whisper/page/window_stream/android_service/android_service_page.dart';
 import 'package:whisper/helper/macos_permissions.dart';
@@ -34,10 +36,15 @@ import 'package:whisper/page/remote_files/files_icons.dart';
 import 'package:whisper/remote_files/fs_host.dart';
 import 'package:whisper/remote_files/mount/remote_mounts.dart';
 import 'package:whisper/remote_input/remote_input_coordinator.dart';
+import 'package:whisper/share_links/share_link_store.dart';
 import 'package:whisper/socket/svrmanager.dart';
 import 'package:whisper/state/connection_coordinator.dart';
 import 'package:whisper/state/notification_app_registry.dart';
 import 'package:whisper/theme/app_theme.dart';
+import 'package:whisper/theme/whisper_device_art.dart';
+import 'package:whisper/theme/whisper_icons.dart';
+import 'package:whisper/theme/whisper_ui.dart';
+import 'package:whisper/theme/whisper_window.dart';
 import 'package:whisper/widget/app_dialogs.dart';
 import 'package:whisper/cast_receiver/cast_receiver_manager.dart';
 import 'package:whisper/widget/glass_bottom_sheet.dart';
@@ -47,7 +54,15 @@ import 'package:whisper/widget/island/island_overlay_setting.dart';
 import 'package:whisper/widget/screenshot_controls.dart';
 import 'package:whisper/widget/windows_input_service_setting.dart';
 import 'package:whisper/window_stream/linux/gnome_helper_tile.dart';
+import 'package:whisper/window_stream/linux/gnome_shell_helper.dart';
 import 'package:whisper/window_stream/remote/window_stream_host.dart';
+import 'package:whisper/new_ui/shell/shell_touch.dart' show shellPageShowsBack;
+
+part '../new_ui/settings/settings_layout.dart';
+
+/// How the settings are drawn. [classic] is the page of the old UI; the other
+/// two are docs/design/surfaces.md「设置」.
+enum SettingsLayout { classic, panel, page }
 
 typedef SettingsPresentationLoader = Future<SettingsPresentation> Function();
 
@@ -90,6 +105,8 @@ class SettingsPresentation {
     this.isDesktop = true,
     this.isMobile = false,
     this.notificationAppCount = 0,
+    this.isMacOS = false,
+    this.languageCode,
   });
 
   final DeviceData device;
@@ -110,6 +127,12 @@ class SettingsPresentation {
   final bool isDesktop;
   final bool isMobile;
   final int notificationAppCount;
+
+  /// Shows the permissions macOS asks about. Only the new layouts read it.
+  final bool isMacOS;
+
+  /// The language picked here; null follows the system.
+  final String? languageCode;
 }
 
 class SettingsSectionSurface extends StatelessWidget {
@@ -157,6 +180,14 @@ class SettingsScreen extends StatefulWidget {
     this.exitForUpdate,
     this.autoCheckForUpdates = true,
     this.windowsInputService,
+    this.layout = whisperNewUi ? SettingsLayout.page : SettingsLayout.classic,
+    this.openPairing,
+    this.openShareLinks,
+    this.macPermissions,
+    this.gnomeHelper,
+    this.screenshotController,
+    this.shareLinks,
+    this.readIslandOverlay,
   });
 
   final SettingsPresentationLoader? presentationLoader;
@@ -175,6 +206,16 @@ class SettingsScreen extends StatefulWidget {
   final Future<void> Function()? exitForUpdate;
   final bool autoCheckForUpdates;
   final WindowsInputServiceController? windowsInputService;
+  final SettingsLayout layout;
+
+  /// The two rows at the top of the phone's page.
+  final VoidCallback? openPairing, openShareLinks;
+
+  final MacPermissions? macPermissions;
+  final GnomeShellHelperController? gnomeHelper;
+  final DesktopScreenshotController? screenshotController;
+  final ShareLinkStore? shareLinks;
+  final Future<({bool needed, bool allowed})> Function()? readIslandOverlay;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -215,6 +256,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
   int _presentationLoadGeneration = 0;
   Animation<double>? _openingAnimation;
   Completer<void>? _openingTransition;
+  int _panelSection = 0;
+  bool _pageScrolled = false;
+  bool _isMacPlatform = false;
+  String? _pickedLanguage;
+
+  bool get _redesigned => widget.layout != SettingsLayout.classic;
+
+  /// For the layout in the part file, which is an extension and so cannot call
+  /// the protected method itself.
+  void _update(VoidCallback change) => setState(change);
 
   @override
   void initState() {
@@ -258,6 +309,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _initialize() async {
     unawaited(_windowsInputService.refresh());
+    if (widget.layout == SettingsLayout.page) {
+      unawaited(_shareLinks.initialize());
+    }
     await _refreshDevice(showLoading: true);
     if (widget.autoCheckForUpdates &&
         (widget.presentationLoader == null || widget.updateManager != null)) {
@@ -323,6 +377,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       isDesktop: isDesktop(),
       isMobile: isMobile(),
       notificationAppCount: notificationApps.length,
+      isMacOS: MacPermissions.supported,
+      languageCode: await LocalSetting().pickedLocalization(),
     );
   }
 
@@ -342,7 +398,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
       // Load data during the push, then lay out the settings after the slide
       // finishes instead of replacing the whole list halfway through a frame.
-      await _waitForOpeningTransition();
+      // The new layouts open on a spring and would sit empty for all of it;
+      // their data is there within the first few frames.
+      if (!_redesigned) await _waitForOpeningTransition();
       if (!mounted || generation != _presentationLoadGeneration) return;
       setState(() {
         device = presentation.device;
@@ -363,6 +421,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _isDesktopPlatform = presentation.isDesktop;
         _isMobilePlatform = presentation.isMobile;
         _notificationAppCount = presentation.notificationAppCount;
+        _isMacPlatform = presentation.isMacOS;
+        _pickedLanguage = presentation.languageCode;
         _isLoading = false;
         _loadFailed = false;
       });
@@ -379,6 +439,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_redesigned) return _buildRedesigned(context);
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final colorScheme = theme.colorScheme;
@@ -506,15 +567,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                         trailing: CupertinoSwitch(
                           value: _autoConnect,
-                          onChanged: (bool value) async {
-                            await WsSvrManager().setAutoConnectPolicy(value);
-                            if (!mounted) {
-                              return;
-                            }
-                            setState(() {
-                              _autoConnect = value;
-                            });
-                          },
+                          onChanged: _setAutoConnect,
                         ),
                       ),
                       if (_isDesktopPlatform)
@@ -583,31 +636,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             desc: l10n.launchAtStartupDesc,
                             trailing: CupertinoSwitch(
                               value: _launchAtStartup,
-                              onChanged: (bool value) async {
-                                final previous = _launchAtStartup;
-                                setState(() {
-                                  _launchAtStartup = value;
-                                });
-                                try {
-                                  await DesktopStartupManager().setEnabled(
-                                    value,
-                                  );
-                                } catch (error) {
-                                  _logSettingsFailure(
-                                    SettingsOperationKind.startupUpdate,
-                                    error,
-                                  );
-                                  if (mounted) {
-                                    setState(() {
-                                      _launchAtStartup = previous;
-                                    });
-                                  }
-                                  showAppToast(
-                                    l10n.launchAtStartupFailed,
-                                    tone: AppToastTone.error,
-                                  );
-                                }
-                              },
+                              onChanged: _setLaunchAtStartup,
                             ),
                           ),
                         if (_windowsInputService.supported)
@@ -668,12 +697,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ),
                             trailing: CupertinoSwitch(
                               value: _close2tray,
-                              onChanged: (bool value) async {
-                                await LocalSetting().updateClose2Tray(value);
-                                setState(() {
-                                  _close2tray = value;
-                                });
-                              },
+                              onChanged: _setClose2Tray,
                             ),
                           ),
                       ],
@@ -696,14 +720,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           desc: l10n.windowStreamShareSettingDesc,
                           trailing: CupertinoSwitch(
                             value: WindowStreamHost.shared.sharingAllowed,
-                            onChanged: (bool value) async {
-                              await WindowStreamHost.shared.setSharingAllowed(
-                                value,
-                              );
-                              if (mounted) {
-                                setState(() {});
-                              }
-                            },
+                            onChanged: _setWindowSharing,
                           ),
                         ),
                       if (_isMobilePlatform && _isAndroidPlatform)
@@ -736,10 +753,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                         trailing: CupertinoSwitch(
                           value: device?.clipboard ?? false,
-                          onChanged: (bool value) async {
-                            await LocalSetting().updateClipboard(value);
-                            await _refreshDevice();
-                          },
+                          onChanged: _setClipboard,
                         ),
                       ),
                       _buildSettingItem(
@@ -755,12 +769,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             : l10n.clipboardAutoSyncDesc,
                         trailing: CupertinoSwitch(
                           value: _clipboardAutoSync,
-                          onChanged: (bool value) async {
-                            await LocalSetting().updateClipboardAutoSync(value);
-                            if (mounted) {
-                              setState(() => _clipboardAutoSync = value);
-                            }
-                          },
+                          onChanged: _setClipboardAutoSync,
                         ),
                       ),
                       _buildSettingItem(
@@ -820,23 +829,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           desc: l10n.androidBackgroundKeepAliveDesc,
                           trailing: CupertinoSwitch(
                             value: _androidBackgroundKeepAlive,
-                            onChanged: (bool value) async {
-                              await LocalSetting()
-                                  .setAndroidBackgroundKeepAlive(value);
-                              setState(() {
-                                _androidBackgroundKeepAlive = value;
-                              });
-                              await AndroidBackgroundKeepAliveCoordinator.shared
-                                  .setEnabled(
-                                    value,
-                                    notification: AndroidKeepAliveNotification(
-                                      title: l10n
-                                          .androidBackgroundKeepAliveActiveTitle,
-                                      description: l10n
-                                          .androidBackgroundKeepAliveActiveDesc,
-                                    ),
-                                  );
-                            },
+                            onChanged: _setBackgroundKeepAlive,
                           ),
                         ),
                         _buildSettingItem(
@@ -923,12 +916,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                         trailing: CupertinoSwitch(
                           value: _ignoreAndroid,
-                          onChanged: (bool value) async {
-                            await LocalSetting().setAndroidNotification(value);
-                            setState(() {
-                              _ignoreAndroid = value;
-                            });
-                          },
+                          onChanged: _setIgnoreAndroid,
                         ),
                       ),
                       _buildSettingItem(
@@ -941,12 +929,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                         trailing: CupertinoSwitch(
                           value: _copyVerifyCode,
-                          onChanged: (bool value) async {
-                            await LocalSetting().setCopyVerify(value);
-                            setState(() {
-                              _copyVerifyCode = value;
-                            });
-                          },
+                          onChanged: _setCopyVerifyCode,
                         ),
                       ),
                     ],
@@ -1640,7 +1623,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (values == null) {
       return;
     }
-    final nickname = values.single.trim();
+    await _commitNickname(values.single.trim());
+  }
+
+  Future<void> _commitNickname(String nickname) async {
     final updateNickname = widget.updateNickname;
     if (updateNickname != null) {
       await updateNickname(nickname);
@@ -1681,7 +1667,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (values == null) {
       return;
     }
-    final port = int.parse(values.single);
+    await _commitServerPort(int.parse(values.single));
+  }
+
+  /// Saved here. Whoever opened the settings refreshes when they close, and
+  /// that restarts the service on the new port.
+  Future<void> _commitServerPort(int port) async {
     final updateServerPort = widget.updateServerPort;
     if (updateServerPort != null) {
       await updateServerPort(port);
@@ -1689,6 +1680,112 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await LocalSetting().updatePort(port);
     }
     await _refreshDevice();
+  }
+
+  Future<void> _setAutoConnect(bool value) async {
+    await WsSvrManager().setAutoConnectPolicy(value);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _autoConnect = value;
+    });
+  }
+
+  Future<void> _setLaunchAtStartup(bool value) async {
+    final l10n = AppLocalizations.of(context)!;
+    final previous = _launchAtStartup;
+    setState(() {
+      _launchAtStartup = value;
+    });
+    try {
+      await DesktopStartupManager().setEnabled(value);
+    } catch (error) {
+      _logSettingsFailure(SettingsOperationKind.startupUpdate, error);
+      if (mounted) {
+        setState(() {
+          _launchAtStartup = previous;
+        });
+      }
+      showAppToast(l10n.launchAtStartupFailed, tone: AppToastTone.error);
+    }
+  }
+
+  Future<void> _setClose2Tray(bool value) async {
+    await LocalSetting().updateClose2Tray(value);
+    setState(() {
+      _close2tray = value;
+    });
+  }
+
+  Future<void> _setWindowSharing(bool value) async {
+    await WindowStreamHost.shared.setSharingAllowed(value);
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  Future<void> _setClipboard(bool value) async {
+    await LocalSetting().updateClipboard(value);
+    await _refreshDevice();
+  }
+
+  Future<void> _setClipboardAutoSync(bool value) async {
+    await LocalSetting().updateClipboardAutoSync(value);
+    if (mounted) {
+      setState(() => _clipboardAutoSync = value);
+    }
+  }
+
+  Future<void> _setBackgroundKeepAlive(bool value) async {
+    final l10n = AppLocalizations.of(context)!;
+    await LocalSetting().setAndroidBackgroundKeepAlive(value);
+    setState(() {
+      _androidBackgroundKeepAlive = value;
+    });
+    await AndroidBackgroundKeepAliveCoordinator.shared.setEnabled(
+      value,
+      notification: AndroidKeepAliveNotification(
+        title: l10n.androidBackgroundKeepAliveActiveTitle,
+        description: l10n.androidBackgroundKeepAliveActiveDesc,
+      ),
+    );
+  }
+
+  Future<void> _setIgnoreAndroid(bool value) async {
+    await LocalSetting().setAndroidNotification(value);
+    setState(() {
+      _ignoreAndroid = value;
+    });
+  }
+
+  Future<void> _setCopyVerifyCode(bool value) async {
+    await LocalSetting().setCopyVerify(value);
+    setState(() {
+      _copyVerifyCode = value;
+    });
+  }
+
+  Future<void> _commitPlaybackGain(double value) async {
+    await LocalSetting().setAudioSharePlaybackGain(value);
+    AudioShareCoordinator.shared.updatePlaybackGain(value);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _audioSharePlaybackGain = value;
+    });
+  }
+
+  Future<void> _commitScrollMultiplier(double value) async {
+    await LocalSetting().setRemoteInputScrollMultiplier(value);
+    RemoteInputCoordinator.shared.updateScrollMultiplier(value);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _remoteInputScrollMultiplier = value;
+    });
   }
 
   Future<void> _pickSaveDir() async {
@@ -2087,16 +2184,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         selectedGain = value;
                       });
                     },
-                    onChangeEnd: (value) async {
-                      await LocalSetting().setAudioSharePlaybackGain(value);
-                      AudioShareCoordinator.shared.updatePlaybackGain(value);
-                      if (!mounted) {
-                        return;
-                      }
-                      setState(() {
-                        _audioSharePlaybackGain = value;
-                      });
-                    },
+                    onChangeEnd: _commitPlaybackGain,
                   ),
                   const SizedBox(height: 12),
                   Text(
@@ -2163,20 +2251,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         selectedMultiplier = value;
                       });
                     },
-                    onChangeEnd: (value) async {
-                      await LocalSetting().setRemoteInputScrollMultiplier(
-                        value,
-                      );
-                      RemoteInputCoordinator.shared.updateScrollMultiplier(
-                        value,
-                      );
-                      if (!mounted) {
-                        return;
-                      }
-                      setState(() {
-                        _remoteInputScrollMultiplier = value;
-                      });
-                    },
+                    onChangeEnd: _commitScrollMultiplier,
                   ),
                   const SizedBox(height: 12),
                   Text(

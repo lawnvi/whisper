@@ -1,3 +1,6 @@
+import 'package:whisper/helper/helper.dart';
+import 'package:whisper/new_ui/files/phone_files.dart';
+import 'package:whisper/theme/whisper_ui.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -52,6 +55,18 @@ class _RemoteFilesPageState extends State<RemoteFilesPage> {
   @override
   Widget build(BuildContext context) {
     final colors = FlowSpaceColors.of(context);
+    // Inside a tab of the new shell, which is narrower than a window: a pointer,
+    // or a touch screen with a sidebar, gets the list with columns, and the
+    // shell's own background. Same controller, so a fold keeps where it was.
+    if (whisperNewUi && (isDesktop() || !WhisperLayout.of(context).compact)) {
+      return Material(
+        type: MaterialType.transparency,
+        child: FinderView(controller: _controller, actions: _actions),
+      );
+    }
+    if (whisperNewUi && MediaQuery.sizeOf(context).width < 700) {
+      return PhoneFilesView(controller: _controller, actions: _actions);
+    }
     return Scaffold(
       backgroundColor: colors.canvas,
       body: LayoutBuilder(
@@ -264,22 +279,43 @@ class FilesActions {
 
   /// Moves to the trash, or after a confirmation deletes for good where
   /// there is none (phones).
-  Future<void> delete(List<FilesItem> items) async {
+  ///
+  /// [confirm] asks instead of the standard card, for a layout of its own.
+  Future<void> delete(
+    List<FilesItem> items, {
+    Future<bool> Function({
+      required String title,
+      required String detail,
+      required String confirmLabel,
+      required List<String> names,
+    })?
+    confirm,
+  }) async {
     if (items.isEmpty || refusedReadOnly(items.first.location)) {
       return;
     }
     var permanent = false;
     if (!controller.hasTrash) {
       final device = controller.deviceById(items.first.location.deviceId);
-      final confirmed = await showFilesConfirm(
-        context(),
-        title: l10n.remoteFilesDeleteTitle(items.length),
-        detail: device == null
-            ? l10n.remoteFilesDeleteForever(items.length)
-            : l10n.remoteFilesDeleteDetail(filesDeviceName(l10n, device)),
-        confirmLabel: l10n.remoteFilesDelete,
-        names: [for (final item in items) p.basename(item.path)],
-      );
+      final title = l10n.remoteFilesDeleteTitle(items.length);
+      final detail = device == null
+          ? l10n.remoteFilesDeleteForever(items.length)
+          : l10n.remoteFilesDeleteDetail(filesDeviceName(l10n, device));
+      final names = [for (final item in items) p.basename(item.path)];
+      final confirmed = confirm != null
+          ? await confirm(
+              title: title,
+              detail: detail,
+              confirmLabel: l10n.remoteFilesDelete,
+              names: names,
+            )
+          : await showFilesConfirm(
+              context(),
+              title: title,
+              detail: detail,
+              confirmLabel: l10n.remoteFilesDelete,
+              names: names,
+            );
       if (!confirmed) {
         return;
       }

@@ -18,6 +18,7 @@ import 'package:whisper/remote_input/mobile_touchpad.dart';
 import 'package:whisper/remote_input/remote_input_coordinator.dart';
 import 'package:whisper/remote_input/remote_input_lifecycle.dart';
 import 'package:whisper/theme/app_theme.dart';
+import 'package:whisper/theme/whisper_ui.dart';
 import 'package:whisper/widget/glass_bottom_sheet.dart';
 import 'package:whisper/widget/subtle_motion.dart';
 import 'package:whisper/widget/segmented_tabs.dart';
@@ -37,7 +38,11 @@ class MobileControlScreen extends StatefulWidget {
     this.targets,
     this.coordinator,
     this.sensor,
+    this.deviceArt,
   });
+
+  /// Over the fold in the tabletop posture, like a laptop's screen.
+  final Widget? deviceArt;
   final String peerId;
   final String peerName;
   final Future<void> Function(String peerId) onStart;
@@ -311,7 +316,11 @@ class _MobileControlScreenState extends State<MobileControlScreen>
 
   bool get _showBothControls {
     final query = MediaQuery.of(context);
-    return query.size.width >= 840 &&
+    // What this page has, beside a sidebar.
+    final room = whisperNewUi
+        ? query.size.width - WhisperLayout.of(context).sidebarWidth
+        : query.size.width;
+    return room >= 840 &&
         query.size.height - query.viewInsets.bottom >= 450 &&
         !_editingText;
   }
@@ -470,7 +479,9 @@ class _MobileControlScreenState extends State<MobileControlScreen>
                       parent: _transition,
                       curve: Curves.easeOutCubic,
                     ),
-                    child: showBothControls
+                    child: _tabletop
+                        ? _tabletopPanel()
+                        : showBothControls
                         ? Row(
                             key: const ValueKey('mobile-control-split'),
                             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -493,6 +504,60 @@ class _MobileControlScreenState extends State<MobileControlScreen>
           ),
         ),
       ),
+    );
+  }
+
+  bool get _tabletop =>
+      whisperNewUi &&
+      _tab == 0 &&
+      WhisperLayout.of(context).posture == WhisperPosture.tabletop;
+
+  /// surfaces.md「控制页」: over the fold the device, under it the touchpad and
+  /// buttons, like a laptop. 36 between them keeps clear of the fold.
+  Widget _tabletopPanel() {
+    const type = WhisperType(touch: true);
+    final foldY = WhisperLayout.of(context).foldY ?? 0;
+    final top = MediaQuery.paddingOf(context).top + kToolbarHeight;
+    final palette = context.whisperPalette;
+    return Column(
+      key: const ValueKey('mobile-control-tabletop'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(
+          height: math.max(0, foldY - top - 18),
+          child: Center(
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ?widget.deviceArt,
+                  const SizedBox(height: 10),
+                  Text(
+                    widget.peerName,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: type.head,
+                      fontWeight: FontWeight.w600,
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    _active ? l10n.mobileControlActive : l10n.mobileControlReady,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: type.note,
+                      color: palette.textMuted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 36),
+        Expanded(child: _pointerPanel()),
+      ],
     );
   }
 
@@ -705,23 +770,47 @@ class _MobileControlScreenState extends State<MobileControlScreen>
                         color: context.whisperPalette.borderSubtle,
                       ),
                     ),
-                    child: Column(
-                      children: [
-                        Expanded(
-                          child: WhisperTabPanels(
-                            key: const ValueKey('mobile-pointer-mode-content'),
-                            selected: _input.air ? 0 : 1,
-                            children: [_airSurface(), _touchpad()],
+                    child: _shortWindow
+                        // Too short for the buttons under the touchpad.
+                        ? Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Expanded(
+                                child: WhisperTabPanels(
+                                  key: const ValueKey(
+                                    'mobile-pointer-mode-content',
+                                  ),
+                                  selected: _input.air ? 0 : 1,
+                                  children: [_airSurface(), _touchpad()],
+                                ),
+                              ),
+                              VerticalDivider(
+                                width: 1,
+                                thickness: 1,
+                                color: context.whisperPalette.borderSubtle,
+                              ),
+                              SizedBox(width: 110, child: _pointerActions()),
+                            ],
+                          )
+                        : Column(
+                            children: [
+                              Expanded(
+                                child: WhisperTabPanels(
+                                  key: const ValueKey(
+                                    'mobile-pointer-mode-content',
+                                  ),
+                                  selected: _input.air ? 0 : 1,
+                                  children: [_airSurface(), _touchpad()],
+                                ),
+                              ),
+                              Divider(
+                                height: 1,
+                                thickness: 1,
+                                color: context.whisperPalette.borderSubtle,
+                              ),
+                              _pointerActions(),
+                            ],
                           ),
-                        ),
-                        Divider(
-                          height: 1,
-                          thickness: 1,
-                          color: context.whisperPalette.borderSubtle,
-                        ),
-                        _pointerActions(),
-                      ],
-                    ),
                   ),
                 ),
               ),
@@ -784,11 +873,26 @@ class _MobileControlScreenState extends State<MobileControlScreen>
     );
   }
 
+  bool get _shortWindow =>
+      whisperNewUi && WhisperLayout.of(context).shortHeight && !_tabletop;
+
   Widget _pointerActions() {
+    final short = _shortWindow;
     final buttonHeight = math.max(
       88.0,
       MediaQuery.textScalerOf(context).scale(14) * 4 + 24,
     );
+    final divider = short
+        ? Divider(
+            height: 1,
+            thickness: 1,
+            color: context.whisperPalette.borderSubtle,
+          )
+        : VerticalDivider(
+            width: 1,
+            thickness: 1,
+            color: context.whisperPalette.borderSubtle,
+          );
     Widget button(int number, String label, String shortLabel) => Expanded(
       child: _HoldArea(
         key: ValueKey(number == 0 ? 'mobile-mouse-left' : 'mobile-mouse-right'),
@@ -800,46 +904,54 @@ class _MobileControlScreenState extends State<MobileControlScreen>
         onUp: () => _input.button(number, false),
       ),
     );
+    final scroll = _HoldArea(
+      key: const ValueKey('mobile-mouse-scroll'),
+      generation: _gestureGeneration,
+      label: _input.air
+          ? l10n.mobileControlHoldScroll
+          : l10n.mobileControlScroll,
+      displayLabel: l10n.mobileControlScrollShort,
+      icon: Icons.drag_indicator_rounded,
+      enabled: _enabled,
+      active: _input.scrolling,
+      onDown: () {
+        if (_input.air) _input.holdMotion(down: true, scroll: true);
+      },
+      onMove: _input.air
+          ? null
+          : (delta) => _input.move(Offset(0, delta.dy), scroll: true),
+      onUp: () {
+        if (_input.air) _input.holdMotion(down: false, scroll: true);
+        _input.flush();
+      },
+    );
+    final left = button(0, l10n.mobileControlLeft, l10n.mobileControlLeftShort);
+    final right = button(
+      1,
+      l10n.mobileControlRight,
+      l10n.mobileControlRightShort,
+    );
+    if (short) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          left,
+          divider,
+          Expanded(child: scroll),
+          divider,
+          right,
+        ],
+      );
+    }
     return SizedBox(
       height: buttonHeight,
       child: Row(
         children: [
-          button(0, l10n.mobileControlLeft, l10n.mobileControlLeftShort),
-          VerticalDivider(
-            width: 1,
-            thickness: 1,
-            color: context.whisperPalette.borderSubtle,
-          ),
-          SizedBox(
-            width: 64,
-            child: _HoldArea(
-              key: const ValueKey('mobile-mouse-scroll'),
-              generation: _gestureGeneration,
-              label: _input.air
-                  ? l10n.mobileControlHoldScroll
-                  : l10n.mobileControlScroll,
-              displayLabel: l10n.mobileControlScrollShort,
-              icon: Icons.drag_indicator_rounded,
-              enabled: _enabled,
-              active: _input.scrolling,
-              onDown: () {
-                if (_input.air) _input.holdMotion(down: true, scroll: true);
-              },
-              onMove: _input.air
-                  ? null
-                  : (delta) => _input.move(Offset(0, delta.dy), scroll: true),
-              onUp: () {
-                if (_input.air) _input.holdMotion(down: false, scroll: true);
-                _input.flush();
-              },
-            ),
-          ),
-          VerticalDivider(
-            width: 1,
-            thickness: 1,
-            color: context.whisperPalette.borderSubtle,
-          ),
-          button(1, l10n.mobileControlRight, l10n.mobileControlRightShort),
+          left,
+          divider,
+          SizedBox(width: 64, child: scroll),
+          divider,
+          right,
         ],
       ),
     );

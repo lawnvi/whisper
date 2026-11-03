@@ -1,0 +1,120 @@
+import 'dart:async';
+import 'dart:io';
+
+import 'package:desktop_multi_window/desktop_multi_window.dart';
+import 'package:flutter/services.dart';
+import 'package:tray_manager/tray_manager.dart';
+import 'package:whisper/new_ui/tray/tray_model.dart';
+import 'package:whisper/new_ui/tray/tray_panel.dart';
+import 'package:window_manager/window_manager.dart';
+
+/// The main engine's end of the tray panel: owns the window, puts it under (or
+/// on Windows, above) the tray icon, keeps it up to date, carries out what it
+/// asks for. Created when the app starts, hidden: making the window takes over a
+/// second, which clicking the icon should not have to wait for.
+class TrayPanelHost {
+  TrayPanelHost({required this.onAction});
+
+  final void Function(String action, Object? value) onAction;
+
+  WindowController? _window;
+  bool _visible = false;
+  TrayState _state = const TrayState();
+  String? _myId;
+
+  /// The panel's engine answers: until then there is no one to send state to.
+  bool _ready = false;
+
+  Map<String, Object?> get _stateMap => {..._state.toMap(), 'host': _myId};
+
+  static const _margin = 10.0, _rightMargin = 12.0;
+
+  Future<void> start() async {
+    if (!trayPanelSupported || _window != null) return;
+    // Its engine only needs a few plugins, and on Windows must not get them all.
+    if (Platform.isWindows) {
+      try {
+        await const MethodChannel(
+          'com.vireen.whisper/window_theme',
+        ).invokeMethod<void>('nextWindowIsPanel');
+      } on Object {
+        // An older runner: it registers everything, as before.
+      }
+    }
+    final window = await WindowController.create(
+      const WindowConfiguration(
+        hiddenAtLaunch: true,
+        arguments: trayPanelArgument,
+      ),
+    );
+    _window = window;
+    final me = await WindowController.fromCurrentEngine();
+    _myId = me.windowId;
+    await me.setWindowMethodHandler(_onCall);
+    // The child's engine takes a moment; it answers once its handler is up.
+    for (var i = 0; i < 100; i++) {
+      try {
+        await window
+            .invokeMethod<Object?>('ping', 0)
+            .timeout(const Duration(milliseconds: 200));
+        break;
+      } on Object {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      }
+    }
+    _ready = true;
+    await window.invokeMethod<void>('state', _stateMap);
+  }
+
+  Future<dynamic> _onCall(MethodCall call) async {
+    if (call.method != 'trayAction') return null;
+    final args = Map<String, dynamic>.from(call.arguments as Map);
+    final action = args['action'] as String;
+    if (action == 'closed') {
+      _visible = false;
+      return null;
+    }
+    onAction(action, args['value']);
+    return null;
+  }
+
+  void update(TrayState state) {
+    _state = state;
+    if (!_ready) return;
+    unawaited(
+      _window?.invokeMethod<void>('state', _stateMap).catchError((Object _) {}),
+    );
+  }
+
+  Future<void> toggle() async {
+    final window = _window;
+    if (window == null || !_ready) return;
+    if (_visible) {
+      _visible = false;
+      await window.invokeMethod<void>('hide');
+      return;
+    }
+    final bounds = await trayManager.getBounds();
+    final screen = await windowManager.getBounds();
+    final up = Platform.isWindows;
+    const width = 340.0;
+    final centre = (bounds?.left ?? screen.right) + (bounds?.width ?? 0) / 2;
+    await window.invokeMethod<void>('showAt', {
+      'x': up
+          ? (bounds?.right ?? screen.right) - width + _rightMargin
+          : centre - width / 2,
+      'y': up
+          ? (bounds?.top ?? screen.bottom) - _margin
+          : (bounds?.bottom ?? 30) + 6,
+      'up': up,
+      'maxHeight': 800.0,
+    });
+    _visible = true;
+  }
+
+  Future<void> hide() async {
+    if (!_visible) return;
+    _visible = false;
+    await _window?.invokeMethod<void>('hide');
+  }
+}

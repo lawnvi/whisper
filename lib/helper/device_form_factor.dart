@@ -78,7 +78,9 @@ class DeviceFormFactors extends ChangeNotifier {
 }
 
 /// What this device is: an iPad by its model, an Android device by its
-/// screen (600 dp across or more, Android's own line for tablets).
+/// screen (600 dp across or more, Android's own line for tablets). A foldable is
+/// a phone however it was held when this ran: one read open and one read closed
+/// would look like two devices to everything that draws it.
 Future<String> detectLocalFormFactor() async {
   if (kIsWeb) {
     return '';
@@ -98,13 +100,26 @@ Future<String> detectLocalFormFactor() async {
     if (display == null || display.devicePixelRatio <= 0) {
       return DeviceFormFactor.phone;
     }
-    return formFactorForScreen(display.size / display.devicePixelRatio);
+    var foldable = false;
+    try {
+      final info = await DeviceInfoPlugin().androidInfo;
+      foldable = info.systemFeatures.contains(_hingeSensor);
+    } catch (_) {
+      // Unknown: the screen decides.
+    }
+    return formFactorForScreen(
+      display.size / display.devicePixelRatio,
+      foldable: foldable,
+    );
   }
   return '';
 }
 
-/// A screen at least 600 dp on its shorter side is a tablet's.
+const _hingeSensor = 'android.hardware.sensor.hinge_angle';
+
+/// A screen at least 600 dp on its shorter side is a tablet's, unless it folds.
 @visibleForTesting
-String formFactorForScreen(Size logical) => logical.shortestSide >= 600
+String formFactorForScreen(Size logical, {bool foldable = false}) =>
+    !foldable && logical.shortestSide >= 600
     ? DeviceFormFactor.tablet
     : DeviceFormFactor.phone;

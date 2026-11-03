@@ -2,9 +2,11 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/source_reading.dart';
+
 void main() {
   test('macOS close-to-tray hides the window instead of sending it behind', () {
-    final source = File('lib/page/deviceList.dart').readAsStringSync();
+    final source = deviceListSource();
     final closeHandler = RegExp(
       r'void onWindowClose\(\) async \{[\s\S]*?\n  \}',
     ).firstMatch(source)!.group(0)!;

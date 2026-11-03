@@ -12,6 +12,8 @@
 #include "screenshot_plugin.h"
 #include "single_instance.h"
 #include "window_theme_plugin.h"
+#include "screen_retriever_windows/screen_retriever_windows_plugin_c_api.h"
+#include "window_manager/window_manager_plugin.h"
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
@@ -25,6 +27,24 @@ void FlutterWindow::Shutdown() {
   }
   Destroy();
 }
+
+namespace {
+
+// The tray panel's engine gets only what the panel uses. RegisterPlugins would
+// also bring media_kit_video, which keeps one static instance and replaces the
+// top-level window procedure: registered in a second engine, the main window's
+// messages go to the wrong window's procedure, WM_PAINT never ends and one core
+// stays at 100%. The window plugin's own registration comes from the callback.
+void RegisterPanelPlugins(flutter::PluginRegistry* registry) {
+  DesktopMultiWindowPluginRegisterWithRegistrar(
+      registry->GetRegistrarForPlugin("DesktopMultiWindowPlugin"));
+  ScreenRetrieverWindowsPluginCApiRegisterWithRegistrar(
+      registry->GetRegistrarForPlugin("ScreenRetrieverWindowsPluginCApi"));
+  WindowManagerPluginRegisterWithRegistrar(
+      registry->GetRegistrarForPlugin("WindowManagerPlugin"));
+}
+
+}  // namespace
 
 bool FlutterWindow::OnCreate() {
   if (!Win32Window::OnCreate()) {
@@ -45,7 +65,16 @@ bool FlutterWindow::OnCreate() {
   DesktopMultiWindowSetWindowCreatedCallback([](void* controller) {
     auto* flutter_view_controller =
         reinterpret_cast<flutter::FlutterViewController*>(controller);
-    RegisterPlugins(flutter_view_controller->engine());
+    if (WindowThemeTakeNextWindowIsPanel()) {
+      RegisterPanelPlugins(flutter_view_controller->engine());
+    } else {
+      RegisterPlugins(flutter_view_controller->engine());
+    }
+    WindowThemePluginRegisterWithRegistrar(
+        flutter_view_controller->engine()->GetRegistrarForPlugin(
+            "WindowThemePlugin"),
+        GetAncestor(flutter_view_controller->view()->GetNativeWindow(),
+                    GA_ROOT));
   });
   AudioSharePluginRegisterWithRegistrar(
       flutter_controller_->engine()->GetRegistrarForPlugin("AudioSharePlugin"));

@@ -27,8 +27,14 @@ enum LocalOperationKind { localhostCheck, clipboardRead, filePicker }
 
 enum LocalOperationState { failed, selected, canceled }
 
+/// Lets widget tests lay out a phone or a desktop on any host. `Platform`
+/// itself cannot be overridden.
+@visibleForTesting
+bool? debugIsDesktopOverride;
+
 bool isDesktop() {
-  return Platform.isMacOS || Platform.isLinux || Platform.isWindows;
+  return debugIsDesktopOverride ??
+      (Platform.isMacOS || Platform.isLinux || Platform.isWindows);
 }
 
 bool supportsNativeSystemAudio() {
@@ -63,7 +69,8 @@ RemoteInputPlatformKind currentRemoteInputPlatformKind() {
 }
 
 bool isMobile() {
-  return Platform.isAndroid || Platform.isIOS;
+  final desktop = debugIsDesktopOverride;
+  return desktop == null ? Platform.isAndroid || Platform.isIOS : !desktop;
 }
 
 Future<String> localUUID() async {

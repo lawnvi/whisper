@@ -76,15 +76,17 @@ String _installLabel(AppLocalizations l10n, WindowsInputServiceState state) =>
     : l10n.windowsLockScreenInputRepair;
 
 /// Confirms and then runs the action the service's current state allows. A
-/// running service is uninstalled; anything else is installed over.
+/// running service is uninstalled; anything else is installed over, unless
+/// [remove] says otherwise because the button the user pressed said so.
 Future<void> changeWindowsLockScreenInput(
   BuildContext context, {
   WindowsInputServiceController? controller,
+  bool? remove,
 }) async {
   final l10n = AppLocalizations.of(context)!;
   final service = controller ?? WindowsInputServiceController.shared;
   if (service.busy) return;
-  final uninstall = service.state == WindowsInputServiceState.running;
+  final uninstall = remove ?? service.state == WindowsInputServiceState.running;
   final confirmed = await confirmAction(
     context,
     title: l10n.windowsLockScreenInput,

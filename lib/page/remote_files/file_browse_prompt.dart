@@ -1,3 +1,8 @@
+import 'package:whisper/new_ui/phone/phone_parts.dart' show PhoneSheetFrame;
+import 'package:whisper/new_ui/shell/shell_parts.dart'
+    show ShellButton, ShellButtonKind, ShellGroup, ShellRow, ShellSwitch;
+import 'package:whisper/new_ui/shell/shell_requests.dart';
+import 'package:whisper/theme/whisper_ui.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -68,6 +73,9 @@ class _FileBrowsePromptHostState extends State<FileBrowsePromptHost> {
     if (asked != null && !identical(pending, asked)) {
       // Answered in the app, or given up on: off the island too.
       unawaited(IslandAsks.shared.settle(_askId(asked)));
+      if (whisperNewUi) {
+        RequestIslandSource.shared.settle(fileBrowseAskId(asked.peerId));
+      }
     }
     if (pending != null && !identical(pending, _announced)) {
       _announced = pending;
@@ -83,6 +91,11 @@ class _FileBrowsePromptHostState extends State<FileBrowsePromptHost> {
   /// the background, put it on the island with its answers (Android), or
   /// notify.
   void _announce(FileBrowseRequest request) {
+    if (whisperNewUi && isDesktop()) {
+      final l10n = AppLocalizations.of(context);
+      if (l10n != null) askFileBrowse(l10n, request, _gate.decide);
+      return;
+    }
     if (isDesktop()) {
       windowManager.show();
       windowManager.focus();
@@ -146,6 +159,32 @@ class _FileBrowsePromptHostState extends State<FileBrowsePromptHost> {
   @override
   Widget build(BuildContext context) {
     final request = _gate.pending;
+    if (whisperNewUi && isDesktop()) return widget.child;
+    // A 弹层 that stays open through a fold: a bottom sheet in the compact size
+    // class, in the middle beside a sidebar.
+    if (whisperNewUi) {
+      return Stack(
+        children: [
+          widget.child,
+          if (request != null)
+            Positioned.fill(
+              child: Material(
+                type: MaterialType.transparency,
+                child: ColoredBox(
+                  color: context.wc.scrim,
+                  child: PhoneSheetFrame(
+                    child: _PromptCard(
+                      key: ValueKey(request),
+                      request: request,
+                      onDecide: _gate.decide,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      );
+    }
     return Stack(
       children: [
         widget.child,
@@ -218,8 +257,81 @@ class _PromptCardState extends State<_PromptCard> {
     widget.onDecide(decision);
   }
 
+  /// `.sheet`: a title, one line, the switch, the three answers.
+  Widget _buildNew(BuildContext context) {
+    final c = context.wc;
+    final l10n = AppLocalizations.of(context)!;
+    const type = WhisperType(touch: true);
+    final request = widget.request;
+    Widget answer(
+      String label,
+      FileBrowseDecision decision, {
+      ShellButtonKind kind = ShellButtonKind.normal,
+    }) => Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: ShellButton(
+        label: label,
+        kind: kind,
+        large: true,
+        touch: true,
+        onTap: () => unawaited(_decide(decision)),
+      ),
+    );
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 10),
+        Text(
+          l10n.remoteFilesPromptTitle(request.deviceName),
+          style: TextStyle(
+            fontSize: type.head,
+            height: 1.3,
+            fontWeight: FontWeight.w600,
+            color: c.ink,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          _allowChanges
+              ? l10n.remoteFilesPromptBodyPhone
+              : l10n.remoteFilesPromptBodyReadOnlyPhone,
+          style: TextStyle(fontSize: type.note, height: 1.45, color: c.ink2),
+        ),
+        const SizedBox(height: 14),
+        ShellGroup(
+          children: [
+            ShellRow(
+              touch: true,
+              label: l10n.remoteFilesPromptAllowChanges,
+              trailing: ShellSwitch(
+                touch: true,
+                label: l10n.remoteFilesPromptAllowChanges,
+                value: _allowChanges,
+                onChanged: (value) => setState(() => _allowChanges = value),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        answer(
+          l10n.remoteFilesAllowOnce,
+          FileBrowseDecision.once,
+          kind: ShellButtonKind.primary,
+        ),
+        answer(l10n.remoteFilesAllowAlways, FileBrowseDecision.always),
+        answer(
+          l10n.remoteFilesDeny,
+          FileBrowseDecision.deny,
+          kind: ShellButtonKind.quiet,
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (whisperNewUi) return _buildNew(context);
     final request = widget.request;
     final l10n = AppLocalizations.of(context)!;
     final colors = FlowSpaceColors.of(context);
