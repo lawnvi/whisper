@@ -2629,6 +2629,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     buildConversation: (context, target) => SendMessageScreen(
       key: ValueKey('shell-chat-${target.uid}'),
       device: target,
+      onMessagesDeleted: () => unawaited(_refreshDevice()),
       embedded: true,
       chromeless: true,
       onDeviceDeleted: _removeDevice,

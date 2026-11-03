@@ -736,6 +736,54 @@ void main() {
     expect(_galleryPage(tester, gallery), 2);
   });
 
+  testWidgets('two fingers pinch at once, with no double tap first', (
+    tester,
+  ) async {
+    final gallery = await _openImageGallery(tester, imageCount: 2);
+    final viewer = find
+        .byKey(const ValueKey<String>('fullscreen-image-viewer'))
+        .first;
+    final center = tester.getCenter(viewer);
+
+    final one = await tester.startGesture(center - const Offset(30, 0));
+    await tester.pump();
+    final two = await tester.startGesture(center + const Offset(30, 0));
+    await tester.pump();
+    // The gallery lets go while there are two fingers down.
+    expect(
+      tester.widget<PageView>(gallery).physics,
+      isA<NeverScrollableScrollPhysics>(),
+    );
+    for (var i = 1; i <= 8; i++) {
+      await one.moveBy(const Offset(-12, 0));
+      await two.moveBy(const Offset(12, 0));
+      await tester.pump();
+    }
+    await one.up();
+    await two.up();
+    await tester.pumpAndSettle();
+
+    final controller = tester
+        .widget<InteractiveViewer>(viewer)
+        .transformationController!;
+    expect(controller.value.getMaxScaleOnAxis(), greaterThan(1.5));
+    // Zoomed in: from here on the viewer has the fingers, the gallery does not.
+    expect(
+      tester
+          .widget<IgnorePointer>(
+            find
+                .byKey(const ValueKey<String>('fullscreen-image-gesture-gate'))
+                .first,
+          )
+          .ignoring,
+      isFalse,
+    );
+    expect(
+      tester.widget<PageView>(gallery).physics,
+      isA<NeverScrollableScrollPhysics>(),
+    );
+  });
+
   testWidgets('unzoomed image leaves one-finger gestures to the gallery', (
     tester,
   ) async {

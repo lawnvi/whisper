@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -5,13 +7,93 @@ import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/message.dart';
 import 'package:whisper/widget/chat_message_list.dart';
 
+class _Counted extends StatefulWidget {
+  const _Counted({required this.onCreated});
+
+  final VoidCallback onCreated;
+
+  @override
+  State<_Counted> createState() => _CountedState();
+}
+
+class _CountedState extends State<_Counted> {
+  @override
+  void initState() {
+    super.initState();
+    widget.onCreated();
+  }
+
+  @override
+  Widget build(BuildContext context) => const SizedBox(width: 120, height: 40);
+}
+
 void main() {
+  test('building a file message does not ask the disk every time', () {
+    final source = File('lib/page/conversation.dart').readAsStringSync();
+    final build = source.substring(
+      source.indexOf('Widget _buildFileMessage('),
+      source.indexOf('void _openMessageFile('),
+    );
+    expect(build, isNot(contains('existsSync')));
+    expect(build, isNot(contains('typeSync')));
+    expect(source, contains('_knownOnDisk.putIfAbsent'));
+  });
+
+  test('a page of history is not animated in', () {
+    final source = File('lib/page/conversation.dart').readAsStringSync();
+    final insert = source.substring(
+      source.indexOf('void _insertItems('),
+      source.indexOf('TransferSnapshot? _transferForMessage'),
+    );
+    expect(insert, contains('duration: Duration.zero'));
+  });
+
+  testWidgets('a new message does not build the others again', (tester) async {
+    final controller = ScrollController();
+    addTearDown(controller.dispose);
+    final listKey = GlobalKey<SliverAnimatedListState>();
+    final messages = [
+      _message(id: 2, content: 'b').copyWith(uuid: 'b'),
+      _message(id: 1, content: 'a').copyWith(uuid: 'a'),
+    ];
+    var created = 0;
+    Widget list() => MaterialApp(
+      home: Scaffold(
+        body: ChatMessageList(
+          buildFileMessage: (_, __) => const SizedBox.shrink(),
+          buildTextMessage: (_, __, ___) =>
+              _Counted(onCreated: () => created++),
+          controller: controller,
+          listKey: listKey,
+          messages: messages,
+          onOpenContainingFolder: (_) {},
+          onOpenFile: (_) {},
+          onCopyText: (_) {},
+          onDeleteMessage: (_, {deleteFile = false}) async {},
+          onDeleteMessages: (_, {deleteFiles = false}) async {},
+          selfUid: 'me',
+        ),
+      ),
+    );
+    await tester.pumpWidget(list());
+    await tester.pumpAndSettle();
+    expect(created, 2);
+
+    messages.insert(0, _message(id: 3, content: 'c').copyWith(uuid: 'c'));
+    listKey.currentState!.insertItem(0);
+    await tester.pumpWidget(list());
+    await tester.pumpAndSettle();
+    // Only the new one. The two already there kept what they had.
+    expect(created, 3);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('file and text bubbles use conversation width beside a sidebar', (
     tester,
   ) async {
     final controller = ScrollController();
     addTearDown(controller.dispose);
-    final listKey = GlobalKey<AnimatedListState>();
+    final listKey = GlobalKey<SliverAnimatedListState>();
     final messages = [
       _message(id: 101, content: '').copyWith(type: MessageEnum.File),
       _message(
@@ -70,7 +152,7 @@ void main() {
   });
 
   testWidgets('keeps breathing room below the newest message', (tester) async {
-    final listKey = GlobalKey<AnimatedListState>();
+    final listKey = GlobalKey<SliverAnimatedListState>();
     final controller = ScrollController();
 
     await tester.pumpWidget(
@@ -93,14 +175,14 @@ void main() {
       ),
     );
 
-    final list = tester.widget<AnimatedList>(find.byType(AnimatedList));
+    final list = tester.widget<SliverPadding>(find.byType(SliverPadding).first);
     expect(list.padding, const EdgeInsets.only(bottom: 12));
   });
 
   testWidgets('long pressing a text message opens message actions', (
     tester,
   ) async {
-    final listKey = GlobalKey<AnimatedListState>();
+    final listKey = GlobalKey<SliverAnimatedListState>();
     final controller = ScrollController();
     var copiedText = '';
 
@@ -175,7 +257,7 @@ void main() {
   testWidgets('selects multiple messages and deletes them together', (
     tester,
   ) async {
-    final listKey = GlobalKey<AnimatedListState>();
+    final listKey = GlobalKey<SliverAnimatedListState>();
     final controller = ScrollController();
     final deletedIds = <int>[];
     final selectionStates = <bool>[];
@@ -250,7 +332,7 @@ void main() {
   testWidgets('file message context menu copies the received file', (
     tester,
   ) async {
-    final listKey = GlobalKey<AnimatedListState>();
+    final listKey = GlobalKey<SliverAnimatedListState>();
     final controller = ScrollController();
     MessageData? copiedFile;
     const message = MessageData(
@@ -309,7 +391,7 @@ void main() {
   });
 
   testWidgets('copy icon morphs into a check and resets', (tester) async {
-    final listKey = GlobalKey<AnimatedListState>();
+    final listKey = GlobalKey<SliverAnimatedListState>();
     final controller = ScrollController();
     var copied = '';
     final message = _message(id: 8, content: 'copy me');

@@ -115,6 +115,9 @@ class SendMessageScreen extends StatefulWidget {
   final VoidCallback? onBack;
   final Future<void> Function(String uid)? onDeviceDeleted;
 
+  /// Messages were deleted here: the list's last line may be gone with them.
+  final VoidCallback? onMessagesDeleted;
+
   const SendMessageScreen({
     super.key,
     required this.device,
@@ -122,6 +125,7 @@ class SendMessageScreen extends StatefulWidget {
     this.chromeless = false,
     this.onBack,
     this.onDeviceDeleted,
+    this.onMessagesDeleted,
   });
 
   @override
@@ -186,7 +190,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
       <String, TransferSnapshot>{};
   String? _activeTransferId;
   final Map<String, bool> keyPressedMap = <String, bool>{};
-  final key = GlobalKey<AnimatedListState>();
+  final key = GlobalKey<SliverAnimatedListState>();
   bool _isLocalhost = false;
   bool _isLoading = false; // loading file
   bool get embedded => widget.embedded;
@@ -313,6 +317,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _knownOnDisk.clear();
     if (!Platform.isAndroid) {
       return;
     }
@@ -498,10 +503,12 @@ class _SendMessageScreen extends State<SendMessageScreen>
         .toList();
     if (items.isEmpty) return;
     messageList.insertAll(index, items);
+    // What was already there just shows. Animating a whole page of history means
+    // laying all of it out again on every frame, right as the page opens.
     key.currentState?.insertAllItems(
       index,
       items.length,
-      duration: const Duration(milliseconds: 500),
+      duration: Duration.zero,
     );
   }
 
@@ -541,9 +548,17 @@ class _SendMessageScreen extends State<SendMessageScreen>
   }
 
   /// Whether [path] is still there, as a file or as a received folder.
+  /// Asking the disk on the UI thread is slow on Android, where shared storage
+  /// goes through FUSE, and this is asked for every file message on every build.
+  /// Remembered until a transfer moves, the app comes back, or a file is opened.
+  final Map<String, bool> _knownOnDisk = {};
+
   bool _localEntityExists(String path) {
-    return path.isNotEmpty &&
-        FileSystemEntity.typeSync(path) != FileSystemEntityType.notFound;
+    if (path.isEmpty) return false;
+    return _knownOnDisk.putIfAbsent(
+      path,
+      () => FileSystemEntity.typeSync(path) != FileSystemEntityType.notFound,
+    );
   }
 
   /// A file's size, or for a folder how many files it holds and their size.
@@ -686,6 +701,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
         }
       }
     }
+    _knownOnDisk.clear();
     await _deleteItems(messages.map((message) => message.id));
   }
 
@@ -696,6 +712,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
     }
 
     await db.deleteMessages(ids);
+    widget.onMessagesDeleted?.call();
     if (!mounted) {
       return;
     }
@@ -2874,6 +2891,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
   }
 
   void _openMessageFile(MessageData message) {
+    _knownOnDisk.clear();
     final transfer = _transferForMessage(message);
     final path = _effectiveMessagePath(message, transfer);
     if (folderOfferOf(message) != null) {
@@ -2961,7 +2979,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
   bool _isMediaContentAvailable(String path, TransferSnapshot? transfer) {
     final hasLocalFile =
         path.isNotEmpty &&
-        (path.startsWith('content://') || File(path).existsSync());
+        (path.startsWith('content://') || _localEntityExists(path));
     return hasLocalFile &&
         (transfer == null ||
             transfer.direction == FileTransferDirection.outgoing ||
@@ -3099,6 +3117,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
         TransferPlacements.shared.isQuiet(snapshot.transferId)) {
       return;
     }
+    if (_isTransferTerminal(snapshot.state)) _knownOnDisk.clear();
     final now = DateTime.now().millisecondsSinceEpoch;
     if (_activeTransferId != snapshot.transferId) {
       _speedMeter.reset();

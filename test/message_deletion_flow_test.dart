@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
@@ -40,7 +41,7 @@ Future<void> _pump(
 }) async {
   final controller = ScrollController();
   addTearDown(controller.dispose);
-  final listKey = GlobalKey<AnimatedListState>();
+  final listKey = GlobalKey<SliverAnimatedListState>();
   var selecting = false;
   await tester.pumpWidget(
     MaterialApp(
@@ -410,5 +411,15 @@ void main() {
     await tester.tap(find.text('取消'));
     await tester.pumpAndSettle();
     expect(await result, isNull);
+  });
+
+  test('deleting tells the device list, whose last line may be gone', () {
+    final conversation = File('lib/page/conversation.dart').readAsStringSync();
+    final list = File('lib/page/deviceList.dart').readAsStringSync();
+    expect(conversation, contains('widget.onMessagesDeleted?.call();'));
+    expect(
+      list,
+      contains('onMessagesDeleted: () => unawaited(_refreshDevice())'),
+    );
   });
 }

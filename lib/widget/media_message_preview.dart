@@ -323,10 +323,14 @@ class _ImagePreview extends StatefulWidget {
 }
 
 class _ImagePreviewState extends State<_ImagePreview> {
+  /// The shapes of pictures already seen: back in a conversation they take their
+  /// room at once, and nothing around them moves when they arrive.
+  static final Map<String, double> _knownRatios = {};
+
   ImageStream? _stream;
   ImageStreamListener? _listener;
   Uint8List? _contentUriBytes;
-  double? _aspectRatio;
+  late double? _aspectRatio = _knownRatios[widget.path];
 
   @override
   void initState() {
@@ -340,7 +344,7 @@ class _ImagePreviewState extends State<_ImagePreview> {
     if (oldWidget.path != widget.path) {
       _removeImageListener();
       _contentUriBytes = null;
-      _aspectRatio = null;
+      _aspectRatio = _knownRatios[widget.path];
       _loadContentUriThumbnail();
     }
   }
@@ -379,6 +383,8 @@ class _ImagePreviewState extends State<_ImagePreview> {
           return;
         }
         final ratio = width / height;
+        if (_knownRatios.length >= 500) _knownRatios.clear();
+        _knownRatios[widget.path] = ratio;
         if (_aspectRatio != ratio) {
           if (synchronousCall) {
             _aspectRatio = ratio;
@@ -418,7 +424,9 @@ class _ImagePreviewState extends State<_ImagePreview> {
             : 300.0;
         final pixels = width * MediaQuery.devicePixelRatioOf(context);
         // Bucket resizes to avoid decoding another image for each dragged pixel.
-        final cacheWidth = ((pixels / 64).ceil() * 64).clamp(64, 1024);
+        // Sharp enough at this size in a list; the full picture is one tap away.
+        // Twice the pixels here is twice the upload on every frame it scrolls in.
+        final cacheWidth = ((pixels / 64).ceil() * 64).clamp(64, 720);
         return _buildPreview(context, cacheWidth);
       },
     );
@@ -459,7 +467,9 @@ class _ImagePreviewState extends State<_ImagePreview> {
             : Image(
                 image: provider,
                 fit: BoxFit.cover,
-                filterQuality: FilterQuality.medium,
+                // Already decoded at about the size it is drawn. Medium would
+                // build a mipmap chain for each picture as it scrolls in.
+                filterQuality: FilterQuality.low,
                 semanticLabel: widget.name,
                 errorBuilder: (context, error, stackTrace) => Icon(
                   Icons.broken_image_outlined,
@@ -1743,6 +1753,10 @@ class _FullscreenImageState extends State<_FullscreenImage> {
       TransformationController();
   Offset? _doubleTapPosition;
   bool _zoomed = false;
+  final Map<int, Offset> _fingers = {};
+  bool _pinching = false;
+  double _pinchDistance = 0;
+  Offset _pinchFocal = Offset.zero;
 
   @override
   void initState() {
@@ -1771,7 +1785,67 @@ class _FullscreenImageState extends State<_FullscreenImage> {
       return;
     }
     setState(() => _zoomed = zoomed);
-    widget.onZoomChanged(zoomed);
+    widget.onZoomChanged(zoomed || _pinching);
+  }
+
+  // Until the picture is zoomed in it is out of the way of the gallery, which
+  // takes one finger, so the viewer cannot see fingers either. Two fingers on an
+  // unzoomed picture are read here. Once zoomed the viewer takes over.
+  void _handlePointerDown(PointerDownEvent event) {
+    _fingers[event.pointer] = event.localPosition;
+    if (_fingers.length == 2 && !_zoomed) {
+      final points = _fingers.values.toList();
+      _pinchDistance = (points[0] - points[1]).distance;
+      _beginPinch((points[0] + points[1]) / 2);
+    }
+  }
+
+  void _handlePointerMove(PointerMoveEvent event) {
+    if (!_fingers.containsKey(event.pointer)) return;
+    _fingers[event.pointer] = event.localPosition;
+    if (!_pinching || _fingers.length < 2 || _pinchDistance <= 0) return;
+    final points = _fingers.values.toList();
+    _pinchTo(
+      (points[0] + points[1]) / 2,
+      (points[0] - points[1]).distance / _pinchDistance,
+    );
+  }
+
+  void _handlePointerGone(int pointer) {
+    _fingers.remove(pointer);
+    if (_pinching && _fingers.length < 2) _endPinch();
+  }
+
+  void _beginPinch(Offset focal) {
+    if (_zoomed) return;
+    _pinching = true;
+    _pinchFocal = focal;
+    // The gallery lets go at once, or it could take this for a swipe.
+    widget.onZoomChanged(true);
+  }
+
+  void _pinchTo(Offset focal, double ratio) {
+    if (!_pinching) return;
+    final box = context.size;
+    if (box == null) return;
+    final scale = ratio.clamp(1.0, 5.0);
+    // The point between the fingers stays between them, and no edge of the
+    // picture comes inside the window.
+    final x = (focal.dx - _pinchFocal.dx * scale)
+        .clamp(box.width * (1 - scale), 0.0)
+        .toDouble();
+    final y = (focal.dy - _pinchFocal.dy * scale)
+        .clamp(box.height * (1 - scale), 0.0)
+        .toDouble();
+    _transformationController.value = Matrix4.identity()
+      ..translateByDouble(x, y, 0, 1)
+      ..scaleByDouble(scale, scale, 1, 1);
+  }
+
+  void _endPinch() {
+    if (!_pinching) return;
+    _pinching = false;
+    widget.onZoomChanged(_zoomed);
   }
 
   void _handleDoubleTapDown(TapDownDetails details) {
@@ -1856,20 +1930,34 @@ class _FullscreenImageState extends State<_FullscreenImage> {
   }
 
   Widget _buildViewer(Widget image) {
-    return GestureDetector(
-      key: const ValueKey<String>('fullscreen-image-interaction'),
-      behavior: HitTestBehavior.opaque,
-      onDoubleTapDown: _handleDoubleTapDown,
-      onDoubleTap: _handleDoubleTap,
-      child: IgnorePointer(
-        key: const ValueKey<String>('fullscreen-image-gesture-gate'),
-        ignoring: !_zoomed,
-        child: InteractiveViewer(
-          key: const ValueKey<String>('fullscreen-image-viewer'),
-          transformationController: _transformationController,
-          minScale: 1,
-          maxScale: 5,
-          child: SizedBox.expand(child: image),
+    return Listener(
+      onPointerDown: _handlePointerDown,
+      onPointerMove: _handlePointerMove,
+      onPointerUp: (event) => _handlePointerGone(event.pointer),
+      onPointerCancel: (event) => _handlePointerGone(event.pointer),
+      // A trackpad: two fingers that only slide are a swipe, for the gallery.
+      onPointerPanZoomUpdate: (event) {
+        if (!_pinching && (event.scale - 1).abs() > .02) {
+          _beginPinch(event.localPosition);
+        }
+        _pinchTo(event.localPosition, event.scale);
+      },
+      onPointerPanZoomEnd: (_) => _endPinch(),
+      child: GestureDetector(
+        key: const ValueKey<String>('fullscreen-image-interaction'),
+        behavior: HitTestBehavior.opaque,
+        onDoubleTapDown: _handleDoubleTapDown,
+        onDoubleTap: _handleDoubleTap,
+        child: IgnorePointer(
+          key: const ValueKey<String>('fullscreen-image-gesture-gate'),
+          ignoring: !_zoomed,
+          child: InteractiveViewer(
+            key: const ValueKey<String>('fullscreen-image-viewer'),
+            transformationController: _transformationController,
+            minScale: 1,
+            maxScale: 5,
+            child: SizedBox.expand(child: image),
+          ),
         ),
       ),
     );

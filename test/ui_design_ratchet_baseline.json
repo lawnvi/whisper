@@ -5,7 +5,7 @@
   },
   "lib/page/conversation.dart": {
     "fontSize": 5,
-    "duration": 6,
+    "duration": 5,
     "radius": 1
   },
   "lib/page/deviceList.dart": {

@@ -22,7 +22,9 @@ import 'package:whisper/widget/subtle_motion.dart';
 double chatListBottomInset({
   required double? composerHeight,
   required bool touch,
+  bool hasComposer = true,
 }) {
+  if (!hasComposer) return touch ? 24.0 : 16.0;
   final usual = touch ? 92.0 : 84.0;
   if (composerHeight == null) return usual;
   final floatsAt = touch ? 24.0 : 16.0;
@@ -38,7 +40,7 @@ class ChatMessageList extends StatefulWidget {
   )
   buildTextMessage;
   final ScrollController controller;
-  final GlobalKey<AnimatedListState> listKey;
+  final GlobalKey<SliverAnimatedListState> listKey;
   final List<MessageData> messages;
   final void Function(String path) onOpenContainingFolder;
   final void Function(MessageData message) onOpenFile;
@@ -71,7 +73,11 @@ class ChatMessageList extends StatefulWidget {
     this.onSelectionModeChanged,
     required this.selfUid,
     this.composerHeight,
+    this.hasComposer = true,
   });
+
+  /// Whether a composer floats over the end of the list.
+  final bool hasComposer;
 
   @override
   State<ChatMessageList> createState() => _ChatMessageListState();
@@ -206,28 +212,58 @@ class _ChatMessageListState extends State<ChatMessageList> {
     }
   }
 
+  static const _shrinkWrapBelow = 30;
+
+  /// What stays the same for a message wherever it is in the list. Without it a
+  /// new message hands every row to the next message down, and all of them are
+  /// built again from nothing: that is a flash, and a dropped frame.
+  static Key _keyOf(MessageData message) =>
+      ValueKey<Object>(message.uuid.isNotEmpty ? message.uuid : message.id);
+
+  int? _indexOfKey(Key key) {
+    final messages = widget.messages;
+    for (var i = 0; i < messages.length; i++) {
+      if (_keyOf(messages[i]) == key) return i;
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final touch = !isDesktop();
-    Widget messageList = AnimatedList(
-      key: widget.listKey,
+    Widget messageList = CustomScrollView(
       controller: widget.controller,
-      initialItemCount: widget.messages.length,
-      // Under the floating composer, which the last message must clear.
-      padding: whisperNewUi
-          ? EdgeInsets.fromLTRB(
-              touch ? 12 : 16,
-              8,
-              touch ? 12 : 16,
-              chatListBottomInset(
-                composerHeight: widget.composerHeight,
-                touch: touch,
-              ),
-            )
-          : const EdgeInsets.only(bottom: 12),
       reverse: true,
-      shrinkWrap: true,
-      itemBuilder: _buildMessage,
+      // Pictures start decoding before they are on screen, and arrive at their
+      // size without moving what is being read.
+      cacheExtent: 800,
+      // A few messages stay at the top, under the toolbar. That takes shrink
+      // wrapping, which lays out more on every scrolled frame; a long list fills
+      // the window anyway and does not need it.
+      shrinkWrap: !whisperNewUi || widget.messages.length < _shrinkWrapBelow,
+      slivers: [
+        SliverPadding(
+          // Under the floating composer, which the last message must clear.
+          padding: whisperNewUi
+              ? EdgeInsets.fromLTRB(
+                  touch ? 12 : 16,
+                  8,
+                  touch ? 12 : 16,
+                  chatListBottomInset(
+                    composerHeight: widget.composerHeight,
+                    touch: touch,
+                    hasComposer: widget.hasComposer,
+                  ),
+                )
+              : const EdgeInsets.only(bottom: 12),
+          sliver: SliverAnimatedList(
+            key: widget.listKey,
+            initialItemCount: widget.messages.length,
+            findChildIndexCallback: _indexOfKey,
+            itemBuilder: _buildMessage,
+          ),
+        ),
+      ],
     );
     if (isDesktop()) {
       messageList = ScrollConfiguration(
@@ -290,13 +326,23 @@ class _ChatMessageListState extends State<ChatMessageList> {
         ? widget.messages[index + 1]
         : null;
     final sameSender = older != null && older.sender == message.sender;
-    Widget rise(Widget child) => whisperNewUi && !animation.isCompleted
-        ? _RiseFromComposer(child: child)
-        : FadeTransition(opacity: animation, child: child);
+    Widget rise(Widget child) => KeyedSubtree(
+      key: _keyOf(message),
+      child: whisperNewUi
+          ? _Rise(
+              // Only what arrives at the newest end: older messages loading as
+              // you scroll up do not push anything.
+              animation: index == 0
+                  ? animation
+                  : const AlwaysStoppedAnimation<double>(1),
+              child: child,
+            )
+          : FadeTransition(opacity: animation, child: child),
+    );
     return rise(
       Padding(
         padding: whisperNewUi
-            ? EdgeInsets.only(top: sameSender ? 6 : 12)
+            ? EdgeInsets.only(top: sameSender ? 8 : 16)
             : const EdgeInsets.fromLTRB(14, 5, 14, 5),
         child: Column(
           children: [
@@ -688,30 +734,53 @@ double newBubbleMaxWidth({
 }
 
 /// `.in`: a new message comes up from where the composer is, from 26 below and
-/// a little smaller, growing out of the bottom right.
-class _RiseFromComposer extends StatelessWidget {
-  const _RiseFromComposer({required this.child});
+/// a little smaller, growing out of the bottom right, while the room for it opens
+/// and the older ones slide up. A message that was already there has none of this.
+/// Decided once: changing what wraps a message later would build it again.
+class _Rise extends StatefulWidget {
+  const _Rise({required this.animation, required this.child});
 
+  final Animation<double> animation;
   final Widget child;
 
   @override
-  Widget build(BuildContext context) => SpringBuilder(
-    from: 0,
-    value: 1,
-    spring: WhisperSprings.smooth,
-    child: child,
-    builder: (context, t, child) => Opacity(
-      opacity: t.clamp(0, 1),
-      child: Transform.translate(
-        offset: Offset(0, 26 * (1 - t)),
-        child: Transform.scale(
-          scale: .9 + .1 * t,
-          alignment: Alignment.bottomRight,
-          child: child,
+  State<_Rise> createState() => _RiseState();
+}
+
+class _RiseState extends State<_Rise> {
+  late final bool _rising = !widget.animation.isCompleted;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_rising) return widget.child;
+    return AnimatedBuilder(
+      animation: widget.animation,
+      child: SpringBuilder(
+        from: 0,
+        value: 1,
+        spring: WhisperSprings.smooth,
+        child: widget.child,
+        builder: (context, t, child) => Opacity(
+          opacity: t.clamp(0, 1),
+          child: Transform.translate(
+            offset: Offset(0, 26 * (1 - t)),
+            child: Transform.scale(
+              scale: .9 + .1 * t,
+              alignment: Alignment.bottomRight,
+              child: child,
+            ),
+          ),
         ),
       ),
-    ),
-  );
+      builder: (context, child) => Align(
+        alignment: Alignment.bottomCenter,
+        heightFactor: Curves.easeOutCubic.transform(
+          widget.animation.value.clamp(0, 1),
+        ),
+        child: child,
+      ),
+    );
+  }
 }
 
 const Duration chatTimestampClusterGap = Duration(minutes: 5);
