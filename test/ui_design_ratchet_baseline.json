@@ -11,17 +11,14 @@
     "duration": 1
   },
   "lib/page/remote_files/files_confirm.dart": {
-    "color": 1,
     "fontSize": 5,
     "duration": 4,
     "radius": 2
   },
   "lib/page/remote_files/files_copy_island.dart": {
-    "color": 3,
     "duration": 2
   },
   "lib/page/remote_files/files_desktop.dart": {
-    "color": 11,
     "fontSize": 4,
     "duration": 4,
     "radius": 5
@@ -30,11 +27,9 @@
     "duration": 3
   },
   "lib/page/remote_files/files_icons.dart": {
-    "color": 16,
     "radius": 2
   },
   "lib/page/remote_files/files_menu.dart": {
-    "color": 5,
     "fontSize": 2,
     "duration": 3
   },
@@ -42,7 +37,6 @@
     "duration": 1
   },
   "lib/page/remote_files/files_shares.dart": {
-    "color": 10,
     "fontSize": 10,
     "duration": 2,
     "radius": 1
@@ -71,7 +65,6 @@
     "radius": 1
   },
   "lib/page/window_stream/flow_space_theme.dart": {
-    "color": 34,
     "duration": 3
   },
   "lib/page/window_stream/flow_space_widgets.dart": {
@@ -86,13 +79,11 @@
     "radius": 2
   },
   "lib/page/window_stream/viewer/viewer_chrome.dart": {
-    "color": 6,
     "fontSize": 3,
     "duration": 3,
     "radius": 1
   },
   "lib/page/window_stream/viewer/viewer_loading.dart": {
-    "color": 2,
     "fontSize": 1,
     "duration": 1
   },
@@ -107,7 +98,6 @@
     "radius": 1
   },
   "lib/widget/cast_playback_host.dart": {
-    "color": 2,
     "fontSize": 2,
     "duration": 1
   },
@@ -119,20 +109,17 @@
     "duration": 1
   },
   "lib/widget/glass_bottom_sheet.dart": {
-    "color": 2,
     "fontSize": 1,
     "duration": 5,
     "radius": 4
   },
   "lib/widget/glass_dialog.dart": {
-    "color": 1,
     "duration": 1
   },
   "lib/widget/island/island_center.dart": {
     "duration": 5
   },
   "lib/widget/island/island_views.dart": {
-    "color": 3,
     "fontSize": 8,
     "duration": 5
   },
@@ -144,7 +131,6 @@
     "fontSize": 1
   },
   "lib/widget/media_message_preview.dart": {
-    "color": 2,
     "fontSize": 9,
     "duration": 5,
     "radius": 2

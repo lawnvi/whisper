@@ -7,6 +7,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:whisper/theme/radix_colors.dart';
 import 'package:whisper/helper/android_document_picker.dart';
 import 'package:whisper/helper/video_thumbnail.dart';
 import 'package:whisper/widget/context_menu_region.dart';
@@ -158,10 +159,7 @@ void main() {
       const ValueKey<String>('visual-transfer-overlay'),
     );
     expect(overlay, findsOneWidget);
-    expect(
-      tester.widget<ColoredBox>(overlay).color,
-      Colors.black.withValues(alpha: 0.28),
-    );
+    expect(tester.widget<ColoredBox>(overlay).color, Radix.blackA5);
     expect(
       find.byKey(const ValueKey<String>('visual-transfer-progress')),
       findsOneWidget,

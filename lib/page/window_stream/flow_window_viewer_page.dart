@@ -1,3 +1,4 @@
+import 'package:whisper/theme/radix_colors.dart';
 import 'dart:async';
 import 'dart:math' as math;
 import 'dart:typed_data';
@@ -1068,7 +1069,7 @@ class _FlowWindowViewerPageState extends State<FlowWindowViewerPage>
           onTap: action ? () => unawaited(_coordinator.resume(_session)) : null,
           child: FlowGlass(
             radius: 0,
-            tint: Colors.black.withValues(alpha: 0.45),
+            tint: Radix.blackA6,
             child: Center(
               child: Semantics(
                 liveRegion: true,

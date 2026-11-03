@@ -37,31 +37,26 @@ export 'files_drag.dart' show FilesDragData;
 class FinderColors {
   FinderColors.of(BuildContext context)
     : flow = FlowSpaceColors.of(context),
+      _c = context.wc,
       dark = Theme.of(context).brightness == Brightness.dark;
 
   final FlowSpaceColors flow;
+  final WhisperColors _c;
   final bool dark;
 
-  Color get sidebar => dark ? const Color(0xFF2B2B2E) : const Color(0xFFF2F2F5);
-  Color get content => dark ? const Color(0xFF1E1E20) : Colors.white;
-  Color get stripe => dark ? const Color(0xFF242427) : const Color(0xFFF6F6F8);
+  Color get sidebar => _c.sidebarSolid;
+  Color get content => _c.content;
+  Color get stripe => _c.canvas;
 
   /// Toolbar groups and the search field.
-  Color get capsule => dark
-      ? Colors.white.withValues(alpha: 0.08)
-      : Colors.black.withValues(alpha: 0.045);
+  Color get capsule => _c.fill;
 
   /// The chosen segment inside a capsule.
-  Color get segment => dark ? const Color(0xFF5A5A5E) : Colors.white;
-  Color get accent => dark ? const Color(0xFF0A84FF) : const Color(0xFF007AFF);
-  Color get inactiveSelection =>
-      dark ? const Color(0xFF3A3A3D) : const Color(0xFFDCDCDF);
-  Color get sidebarSelection => dark
-      ? Colors.white.withValues(alpha: 0.1)
-      : Colors.black.withValues(alpha: 0.08);
-  Color get hover => dark
-      ? Colors.white.withValues(alpha: 0.06)
-      : Colors.black.withValues(alpha: 0.05);
+  Color get segment => _c.raised;
+  Color get accent => _c.accent;
+  Color get inactiveSelection => _c.selected;
+  Color get sidebarSelection => _c.selected;
+  Color get hover => _c.fill;
   Color get hairline => flow.hairline;
   Color get label => flow.label;
   Color get secondaryLabel => flow.secondaryLabel;
@@ -981,7 +976,7 @@ class _FinderViewState extends State<FinderView> {
                 touch: WhisperLayout.touchPlatform,
                 glyph: WhisperGlyph.x,
                 iconSize: 13,
-                color: context.wc.accent,
+                color: context.wc.accentText,
                 label: l10n.cancel,
                 onTap: controller.clearSelection,
               ),
@@ -2145,7 +2140,7 @@ class _DragFeedback extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(horizontal: 6),
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color: const Color(0xFFFF3B30),
+                      color: Radix.red9,
                       borderRadius: BorderRadius.circular(11),
                       border: Border.all(color: colors.content, width: 1.5),
                     ),

@@ -1,3 +1,5 @@
+import 'package:whisper/theme/whisper_ui.dart';
+import 'package:whisper/theme/radix_colors.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -24,9 +26,7 @@ Future<T?> showWhisperGlassBottomSheet<T>(
       settings: routeSettings,
       barrierDismissible: barrierDismissible,
       barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
-      barrierColor: isDark
-          ? Colors.black.withValues(alpha: 0.46)
-          : const Color(0xFF0F172A).withValues(alpha: 0.22),
+      barrierColor: isDark ? Radix.blackA7 : Radix.blackA4,
       transitionDuration: reduceMotion
           ? Duration.zero
           : whisperBottomSheetEnterDuration,
@@ -87,9 +87,7 @@ Future<T?> showWhisperModalBottomSheet<T>({
       barrierOnTapHint: localizations.scrimOnTapHint(
         localizations.bottomSheetLabel,
       ),
-      modalBarrierColor: isDark
-          ? Colors.black.withValues(alpha: 0.46)
-          : const Color(0xFF0F172A).withValues(alpha: 0.22),
+      modalBarrierColor: isDark ? Radix.blackA7 : Radix.blackA4,
       isScrollControlled: isScrollControlled,
       useSafeArea: useSafeArea,
       showDragHandle: showDragHandle,
@@ -123,7 +121,7 @@ class WhisperGlassActionSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final mediaQuery = MediaQuery.of(context);
     final theme = Theme.of(context);
-    final palette = context.whisperPalette;
+    final palette = context.wc;
     final isDark = theme.brightness == Brightness.dark;
     final isCompact =
         mediaQuery.size.width < 600 ||
@@ -131,9 +129,7 @@ class WhisperGlassActionSheet extends StatelessWidget {
           TargetPlatform.android || TargetPlatform.iOS => true,
           _ => false,
         };
-    final dividerColor = palette.borderSubtle.withValues(
-      alpha: isDark ? 0.70 : 0.86,
-    );
+    final dividerColor = palette.sep.withValues(alpha: isDark ? 0.70 : 0.86);
     final radius = BorderRadius.circular(14);
     final safePadding = mediaQuery.padding;
     // Leave room beyond the gesture area for devices with large screen corners.
@@ -189,7 +185,7 @@ class WhisperGlassActionSheet extends StatelessWidget {
                                 child: DefaultTextStyle.merge(
                                   textAlign: TextAlign.center,
                                   style: theme.textTheme.bodySmall?.copyWith(
-                                    color: palette.textMuted,
+                                    color: palette.ink2,
                                     fontSize: 13,
                                     fontWeight: FontWeight.w600,
                                   ),
@@ -257,9 +253,9 @@ class WhisperGlassActionSheetAction extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
-    final palette = context.whisperPalette;
+    final palette = context.wc;
     final isDark = theme.brightness == Brightness.dark;
-    final foreground = destructive ? palette.danger : colors.onSurface;
+    final foreground = destructive ? palette.bad : colors.onSurface;
 
     return SizedBox(
       width: double.infinity,
@@ -351,7 +347,7 @@ class WhisperGlassMenuButton<T> extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
-    final palette = context.whisperPalette;
+    final palette = context.wc;
     final isDark = theme.brightness == Brightness.dark;
     final currentLabel = options
         .where((option) => option.value == value)
@@ -485,7 +481,7 @@ class WhisperGlassMenuButton<T> extends StatelessWidget {
               EdgeInsets.symmetric(horizontal: 9, vertical: 4),
             ),
             foregroundColor: WidgetStatePropertyAll<Color>(
-              enabled ? colors.onSurface : palette.textMuted,
+              enabled ? colors.onSurface : palette.ink2,
             ),
             backgroundColor: WidgetStateProperty.resolveWith<Color>((states) {
               if (states.contains(WidgetState.pressed)) {
@@ -496,9 +492,7 @@ class WhisperGlassMenuButton<T> extends StatelessWidget {
                   alpha: isDark ? 0.12 : 0.065,
                 );
               }
-              return palette.surfaceMuted.withValues(
-                alpha: isDark ? 0.42 : 0.50,
-              );
+              return palette.fill.withValues(alpha: isDark ? 0.42 : 0.50);
             }),
             overlayColor: const WidgetStatePropertyAll<Color>(
               Colors.transparent,

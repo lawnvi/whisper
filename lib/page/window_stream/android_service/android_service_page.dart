@@ -1,3 +1,4 @@
+import 'package:whisper/theme/whisper_ui.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
@@ -54,12 +55,12 @@ class _AndroidWindowServicePageState extends State<AndroidWindowServicePage> {
 
   @override
   Widget build(BuildContext context) {
-    final palette = context.whisperPalette;
+    final palette = context.wc;
     final colors = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: palette.surfaceCanvas,
+      backgroundColor: palette.canvas,
       appBar: AppBar(
-        backgroundColor: palette.surfaceCanvas,
+        backgroundColor: palette.canvas,
         leading: MediaQuery.withNoTextScaling(
           child: CupertinoNavigationBarBackButton(
             previousPageTitle: '',
@@ -91,7 +92,7 @@ class _AndroidWindowServicePageState extends State<AndroidWindowServicePage> {
 
   // The same pieces as the settings page: grouped rows with a muted icon,
   // the state as a dot at the end, actions as rows rather than buttons.
-  List<Widget> _sections(WhisperPalette palette, ColorScheme colors) {
+  List<Widget> _sections(WhisperColors palette, ColorScheme colors) {
     final state = _controller.state;
     final busy = _controller.busy;
     final self = _controller.canSelfStart;
@@ -103,14 +104,14 @@ class _AndroidWindowServicePageState extends State<AndroidWindowServicePage> {
           _actionRow(
             _s.androidWindowServiceStop,
             CupertinoIcons.stop_circle,
-            palette.danger,
+            palette.bad,
             busy ? null : _stop,
           ),
         if (self && state == AndroidWindowServiceState.stopped)
           _actionRow(
             _s.androidWindowServiceStart,
             CupertinoIcons.play_circle,
-            palette.connected,
+            palette.accentText,
             busy ? null : _start,
           ),
         if (self && state != AndroidWindowServiceState.needsSetup)
@@ -135,12 +136,12 @@ class _AndroidWindowServicePageState extends State<AndroidWindowServicePage> {
   }
 
   Widget _section(String? title, List<Widget> rows, {String? footer}) {
-    final palette = context.whisperPalette;
+    final palette = context.wc;
     final caption = Theme.of(context).textTheme.labelMedium?.copyWith(
       fontSize: 13,
       height: 1.4,
       letterSpacing: 0,
-      color: palette.textMuted,
+      color: palette.ink2,
     );
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
@@ -166,27 +167,27 @@ class _AndroidWindowServicePageState extends State<AndroidWindowServicePage> {
     );
   }
 
-  Widget _statusRow(WhisperPalette palette, ColorScheme colors) {
+  Widget _statusRow(WhisperColors palette, ColorScheme colors) {
     final (title, hint, tone) = switch (_controller.state) {
       AndroidWindowServiceState.running => (
         _s.androidWindowServiceRunning,
         _s.androidWindowServiceRunningHint,
-        palette.trusted,
+        palette.ok,
       ),
       AndroidWindowServiceState.stopped => (
         _s.androidWindowServiceStopped,
         _s.androidWindowServiceStoppedHint,
-        palette.textMuted,
+        palette.ink2,
       ),
       AndroidWindowServiceState.needsSetup => (
         _s.androidWindowServiceNeedsSetup,
         _s.androidWindowServiceNeedsSetupHint,
-        palette.warning,
+        palette.warn,
       ),
       AndroidWindowServiceState.working => (
         _s.androidWindowServiceStarting,
         _s.androidWindowServiceNeedsSetupHint,
-        palette.connected,
+        palette.accentText,
       ),
     };
     return _row(
@@ -244,8 +245,8 @@ class _AndroidWindowServicePageState extends State<AndroidWindowServicePage> {
     );
   }
 
-  Widget _setupSection(WhisperPalette palette, ColorScheme colors) {
-    final chevron = Icon(Icons.chevron_right_rounded, color: palette.textMuted);
+  Widget _setupSection(WhisperColors palette, ColorScheme colors) {
+    final chevron = Icon(Icons.chevron_right_rounded, color: palette.ink2);
     return _section(_s.androidWindowServiceHowTitle, [
       _row(
         palette,
@@ -280,19 +281,19 @@ class _AndroidWindowServicePageState extends State<AndroidWindowServicePage> {
     ]);
   }
 
-  Widget _stepNumber(WhisperPalette palette, int number) {
+  Widget _stepNumber(WhisperColors palette, int number) {
     return Container(
       width: 22,
       height: 22,
       alignment: Alignment.center,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        border: Border.all(color: palette.textMuted, width: 1.5),
+        border: Border.all(color: palette.ink2, width: 1.5),
       ),
       child: Text(
         '$number',
         style: TextStyle(
-          color: palette.textMuted,
+          color: palette.ink2,
           fontSize: 12,
           fontWeight: FontWeight.w700,
         ),
@@ -300,7 +301,7 @@ class _AndroidWindowServicePageState extends State<AndroidWindowServicePage> {
     );
   }
 
-  Widget _pairingField(WhisperPalette palette, ColorScheme colors) {
+  Widget _pairingField(WhisperColors palette, ColorScheme colors) {
     final enabled = _controller.canSelfStart && !_controller.busy;
     final ready = enabled && _code.text.trim().length >= 6;
     return Padding(
@@ -317,7 +318,7 @@ class _AndroidWindowServicePageState extends State<AndroidWindowServicePage> {
               placeholder: _s.androidWindowServicePairingCode,
               style: TextStyle(color: colors.onSurface, letterSpacing: 4),
               decoration: BoxDecoration(
-                color: palette.surfaceMuted,
+                color: palette.fill,
                 borderRadius: BorderRadius.circular(10),
               ),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -333,7 +334,7 @@ class _AndroidWindowServicePageState extends State<AndroidWindowServicePage> {
                   ? _s.androidWindowServicePairing
                   : _s.androidWindowServicePair,
               style: TextStyle(
-                color: ready ? palette.connected : palette.textMuted,
+                color: ready ? palette.accentText : palette.ink2,
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
               ),
@@ -347,7 +348,7 @@ class _AndroidWindowServicePageState extends State<AndroidWindowServicePage> {
   /// One settings row: icon, title and description, an accessory at the
   /// end (a switch beside the title, anything else centred on the row).
   Widget _row(
-    WhisperPalette palette,
+    WhisperColors palette,
     ColorScheme colors, {
     IconData? icon,
     Widget? leading,
@@ -385,8 +386,7 @@ class _AndroidWindowServicePageState extends State<AndroidWindowServicePage> {
                         width: 24,
                         height: 24,
                         child: Center(
-                          child:
-                              leading ?? Icon(icon, color: palette.textMuted),
+                          child: leading ?? Icon(icon, color: palette.ink2),
                         ),
                       ),
                     ),
@@ -414,7 +414,7 @@ class _AndroidWindowServicePageState extends State<AndroidWindowServicePage> {
                               fontSize: 13,
                               height: 1.5,
                               letterSpacing: 0,
-                              color: palette.textMuted,
+                              color: palette.ink2,
                             ),
                           ),
                           ?below,

@@ -1,3 +1,4 @@
+import 'package:whisper/theme/radix_colors.dart';
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/cupertino.dart';
@@ -65,8 +66,8 @@ class ViewerGlass extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry? padding;
 
-  static const Color tint = Color(0xC72C2C2E);
-  static const Color edge = Color(0x24FFFFFF);
+  static const Color tint = Radix.blackA10;
+  static const Color edge = Radix.whiteA3;
 
   @override
   Widget build(BuildContext context) {
@@ -131,7 +132,7 @@ class ViewerGrabber extends StatelessWidget {
               height: 5,
               decoration: ShapeDecoration(
                 shape: const StadiumBorder(),
-                color: Colors.white.withValues(alpha: 0.55),
+                color: Radix.whiteA8,
               ),
             ),
           ),
@@ -171,10 +172,10 @@ class ViewerComposingChip extends StatelessWidget {
               key: const ValueKey('composing'),
               decoration: const ShapeDecoration(
                 shape: StadiumBorder(),
-                color: Color(0xE01C1C1E),
+                color: Radix.blackA11,
                 shadows: [
                   BoxShadow(
-                    color: Color(0x55000000),
+                    color: Radix.blackA5,
                     blurRadius: 12,
                     offset: Offset(0, 4),
                   ),
@@ -193,7 +194,7 @@ class ViewerComposingChip extends StatelessWidget {
                     color: Colors.white,
                     fontSize: 16,
                     decoration: TextDecoration.underline,
-                    decorationColor: Color(0xB3FFFFFF),
+                    decorationColor: Radix.whiteA9,
                   ),
                 ),
               ),
@@ -272,10 +273,7 @@ class _ViewerTextScaleRulerState extends State<ViewerTextScaleRuler> {
                   child: Stack(
                     alignment: Alignment.centerLeft,
                     children: [
-                      Container(
-                        height: 2,
-                        color: Colors.white.withValues(alpha: 0.3),
-                      ),
+                      Container(height: 2, color: Radix.whiteA5),
                       for (var i = 0; i < steps.length; i++)
                         Positioned(
                           left: i / (steps.length - 1) * (width - 6),
@@ -283,7 +281,7 @@ class _ViewerTextScaleRulerState extends State<ViewerTextScaleRuler> {
                             width: 6,
                             height: 12,
                             decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.6),
+                              color: Radix.whiteA8,
                               borderRadius: BorderRadius.circular(3),
                             ),
                           ),
@@ -301,10 +299,7 @@ class _ViewerTextScaleRulerState extends State<ViewerTextScaleRuler> {
                             color: Colors.white,
                             shape: BoxShape.circle,
                             boxShadow: [
-                              BoxShadow(
-                                color: Color(0x55000000),
-                                blurRadius: 6,
-                              ),
+                              BoxShadow(color: Radix.blackA5, blurRadius: 6),
                             ],
                           ),
                         ),

@@ -111,8 +111,7 @@ class _FilesMenuRoute extends PopupRoute<FilesMenuItem> {
   final String barrierLabel;
 
   @override
-  Color? get barrierColor =>
-      touch ? Colors.black.withValues(alpha: 0.08) : null;
+  Color? get barrierColor => touch ? Radix.blackA2 : null;
 
   @override
   bool get barrierDismissible => true;
@@ -461,12 +460,7 @@ class _MenuPanelState extends State<_MenuPanel> {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final shape = RoundedSuperellipseBorder(
       borderRadius: BorderRadius.circular(WhisperRadius.m),
-      side: BorderSide(
-        color: dark
-            ? Colors.white.withValues(alpha: 0.12)
-            : Colors.black.withValues(alpha: 0.1),
-        width: 0.5,
-      ),
+      side: BorderSide(color: dark ? Radix.whiteA2 : Radix.blackA2, width: 0.5),
     );
     return Focus(
       autofocus: widget.autofocus,
@@ -532,20 +526,13 @@ class _Separator extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (touch) {
-      return Container(
-        height: 8,
-        color: dark
-            ? Colors.black.withValues(alpha: 0.25)
-            : Colors.black.withValues(alpha: 0.06),
-      );
+      return Container(height: 8, color: dark ? Radix.blackA4 : Radix.blackA1);
     }
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4.5),
       child: Container(
         height: 0.5,
-        color: dark
-            ? Colors.white.withValues(alpha: 0.14)
-            : Colors.black.withValues(alpha: 0.12),
+        color: dark ? Radix.whiteA3 : Radix.blackA2,
       ),
     );
   }
@@ -570,12 +557,11 @@ class _Row extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final accent = dark ? const Color(0xFF0A84FF) : const Color(0xFF007AFF);
-    final red = dark ? const Color(0xFFFF453A) : const Color(0xFFFF3B30);
-    final label = dark ? Colors.white : const Color(0xFF1C1C1E);
-    final secondary = dark
-        ? Colors.white.withValues(alpha: 0.5)
-        : Colors.black.withValues(alpha: 0.45);
+    final c = context.wc;
+    final accent = c.accent;
+    final red = c.bad;
+    final label = c.ink;
+    final secondary = dark ? Radix.whiteA7 : Radix.blackA6;
     final enabled = item.selectable;
     final highlighted = active && enabled && !touch;
     final Color fg;
@@ -653,9 +639,7 @@ class _Row extends StatelessWidget {
                 Text(
                   item.shortcut!,
                   style: TextStyle(
-                    color: highlighted
-                        ? Colors.white.withValues(alpha: 0.85)
-                        : secondary,
+                    color: highlighted ? Radix.whiteA10 : secondary,
                     fontSize: 12.5,
                   ),
                 ),
@@ -709,15 +693,11 @@ class _TouchRowState extends State<_TouchRow> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
         decoration: BoxDecoration(
           color: _pressed
-              ? (widget.dark
-                    ? Colors.white.withValues(alpha: 0.08)
-                    : Colors.black.withValues(alpha: 0.07))
+              ? (widget.dark ? Radix.whiteA2 : Radix.blackA1)
               : Colors.transparent,
           border: Border(
             bottom: BorderSide(
-              color: widget.dark
-                  ? Colors.white.withValues(alpha: 0.08)
-                  : Colors.black.withValues(alpha: 0.08),
+              color: widget.dark ? Radix.whiteA2 : Radix.blackA2,
               width: 0.5,
             ),
           ),

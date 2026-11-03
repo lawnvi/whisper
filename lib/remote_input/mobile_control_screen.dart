@@ -395,11 +395,11 @@ class _MobileControlScreenState extends State<MobileControlScreen>
     _viewportSize ??= View.of(context).physicalSize;
     final state = _coordinator.state;
     final busy = _starting || _stopping || (_ownsSession && state.isBusy);
-    final palette = context.whisperPalette;
+    final palette = context.wc;
     final showBothControls = _showBothControls;
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle(
-        systemNavigationBarColor: palette.surfaceCanvas,
+        systemNavigationBarColor: palette.canvas,
         systemNavigationBarDividerColor: Colors.transparent,
         systemNavigationBarIconBrightness:
             Theme.of(context).brightness == Brightness.dark
@@ -408,9 +408,9 @@ class _MobileControlScreenState extends State<MobileControlScreen>
         systemNavigationBarContrastEnforced: false,
       ),
       child: Scaffold(
-        backgroundColor: palette.surfaceCanvas,
+        backgroundColor: palette.canvas,
         appBar: AppBar(
-          backgroundColor: palette.surfaceCanvas,
+          backgroundColor: palette.canvas,
           titleSpacing: 0,
           title: _deviceTitle(),
           actions: [
@@ -485,10 +485,7 @@ class _MobileControlScreenState extends State<MobileControlScreen>
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               Expanded(child: _pointerPanel()),
-                              VerticalDivider(
-                                width: 1,
-                                color: palette.borderSubtle,
-                              ),
+                              VerticalDivider(width: 1, color: palette.sep),
                               Expanded(child: _keyboardPanel()),
                             ],
                           )
@@ -514,7 +511,7 @@ class _MobileControlScreenState extends State<MobileControlScreen>
     const type = WhisperType(touch: true);
     final foldY = WhisperLayout.of(context).foldY ?? 0;
     final top = MediaQuery.paddingOf(context).top + kToolbarHeight;
-    final palette = context.whisperPalette;
+    final palette = context.wc;
     return Column(
       key: const ValueKey('mobile-control-tabletop'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -543,10 +540,7 @@ class _MobileControlScreenState extends State<MobileControlScreen>
                         ? l10n.mobileControlActive
                         : l10n.mobileControlReady,
                     textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: type.note,
-                      color: palette.textMuted,
-                    ),
+                    style: TextStyle(fontSize: type.note, color: palette.ink2),
                   ),
                 ],
               ),
@@ -610,9 +604,9 @@ class _MobileControlScreenState extends State<MobileControlScreen>
                     const SizedBox(height: 8),
                     Text(
                       l10n.mobileControlTargetHint,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: context.whisperPalette.textMuted,
-                      ),
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodyMedium?.copyWith(color: context.wc.ink2),
                     ),
                   ],
                 ),
@@ -673,9 +667,7 @@ class _MobileControlScreenState extends State<MobileControlScreen>
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: _active
-                  ? context.whisperPalette.trusted
-                  : context.whisperPalette.textMuted,
+              color: _active ? context.wc.ok : context.wc.ink2,
             ),
           ),
         ),
@@ -720,9 +712,7 @@ class _MobileControlScreenState extends State<MobileControlScreen>
       key: const ValueKey('mobile-control-session'),
       tooltip: stop ? l10n.mobileControlStop : l10n.mobileControlStart,
       icon: stop ? Icons.stop_rounded : Icons.play_arrow_rounded,
-      color: stop
-          ? context.whisperPalette.danger
-          : context.whisperPalette.trusted,
+      color: stop ? context.wc.bad : context.wc.ok,
       onPressed: stop ? (_stopping ? null : _stop) : (busy ? null : _start),
       pending: _starting || _stopping,
     );
@@ -761,12 +751,10 @@ class _MobileControlScreenState extends State<MobileControlScreen>
                   borderRadius: BorderRadius.circular(28),
                   child: Material(
                     key: const ValueKey('mobile-pointer-surface'),
-                    color: context.whisperPalette.surfaceElevated,
+                    color: context.wc.raised,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(28),
-                      side: BorderSide(
-                        color: context.whisperPalette.borderSubtle,
-                      ),
+                      side: BorderSide(color: context.wc.sep),
                     ),
                     child: _shortWindow
                         // Too short for the buttons under the touchpad.
@@ -785,7 +773,7 @@ class _MobileControlScreenState extends State<MobileControlScreen>
                               VerticalDivider(
                                 width: 1,
                                 thickness: 1,
-                                color: context.whisperPalette.borderSubtle,
+                                color: context.wc.sep,
                               ),
                               SizedBox(width: 110, child: _pointerActions()),
                             ],
@@ -804,7 +792,7 @@ class _MobileControlScreenState extends State<MobileControlScreen>
                               Divider(
                                 height: 1,
                                 thickness: 1,
-                                color: context.whisperPalette.borderSubtle,
+                                color: context.wc.sep,
                               ),
                               _pointerActions(),
                             ],
@@ -846,7 +834,7 @@ class _MobileControlScreenState extends State<MobileControlScreen>
                 }
               : null,
           child: CustomPaint(
-            painter: _PointerTexture(context.whisperPalette.borderSubtle),
+            painter: _PointerTexture(context.wc.sep),
             child: Padding(
               padding: const EdgeInsets.all(20),
               child: Center(
@@ -880,16 +868,8 @@ class _MobileControlScreenState extends State<MobileControlScreen>
       MediaQuery.textScalerOf(context).scale(14) * 4 + 24,
     );
     final divider = short
-        ? Divider(
-            height: 1,
-            thickness: 1,
-            color: context.whisperPalette.borderSubtle,
-          )
-        : VerticalDivider(
-            width: 1,
-            thickness: 1,
-            color: context.whisperPalette.borderSubtle,
-          );
+        ? Divider(height: 1, thickness: 1, color: context.wc.sep)
+        : VerticalDivider(width: 1, thickness: 1, color: context.wc.sep);
     Widget button(int number, String label, String shortLabel) => Expanded(
       child: _HoldArea(
         key: ValueKey(number == 0 ? 'mobile-mouse-left' : 'mobile-mouse-right'),
@@ -1065,7 +1045,7 @@ class _MobileControlScreenState extends State<MobileControlScreen>
                     _target.platform.toLowerCase().contains('linux')
                         ? l10n.mobileControlLinuxTextHint
                         : l10n.mobileControlTextHint,
-                    style: TextStyle(color: context.whisperPalette.textMuted),
+                    style: TextStyle(color: context.wc.ink2),
                   ),
                   const SizedBox(height: 8),
                   TextButton(
@@ -1103,7 +1083,7 @@ class _MobileControlScreenState extends State<MobileControlScreen>
               child: Icon(
                 Icons.info_outline_rounded,
                 size: 18,
-                color: context.whisperPalette.textMuted,
+                color: context.wc.ink2,
               ),
             ),
           ],
@@ -1127,8 +1107,8 @@ class _MobileControlScreenState extends State<MobileControlScreen>
   Widget _textPanel() => Container(
     padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
     decoration: BoxDecoration(
-      color: context.whisperPalette.surfaceElevated,
-      border: Border.all(color: context.whisperPalette.borderSubtle),
+      color: context.wc.raised,
+      border: Border.all(color: context.wc.sep),
       borderRadius: BorderRadius.circular(18),
     ),
     child: Column(
@@ -1277,17 +1257,13 @@ class _HoldAreaState extends State<_HoldArea> {
           decoration: BoxDecoration(
             color: (_pointer != null || widget.active) && widget.enabled
                 ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.12)
-                : context.whisperPalette.surfaceElevated,
+                : context.wc.raised,
           ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               if (widget.icon != null) ...[
-                Icon(
-                  widget.icon,
-                  size: 22,
-                  color: context.whisperPalette.textMuted,
-                ),
+                Icon(widget.icon, size: 22, color: context.wc.ink2),
                 const SizedBox(height: 4),
               ],
               Flexible(
@@ -1295,9 +1271,7 @@ class _HoldAreaState extends State<_HoldArea> {
                   widget.displayLabel ?? widget.label,
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    color: widget.enabled
-                        ? null
-                        : context.whisperPalette.textMuted,
+                    color: widget.enabled ? null : context.wc.ink2,
                   ),
                 ),
               ),
@@ -1323,7 +1297,7 @@ class _SurfaceLabel extends StatelessWidget {
   final bool enabled, active;
   @override
   Widget build(BuildContext context) {
-    final palette = context.whisperPalette;
+    final palette = context.wc;
     return LayoutBuilder(
       builder: (context, constraints) => Column(
         mainAxisSize: MainAxisSize.min,
@@ -1344,13 +1318,13 @@ class _SurfaceLabel extends StatelessWidget {
                       ? Theme.of(
                           context,
                         ).colorScheme.primary.withValues(alpha: .1)
-                      : palette.surfaceElevated,
-                  border: Border.all(color: palette.borderSubtle),
+                      : palette.raised,
+                  border: Border.all(color: palette.sep),
                 ),
                 child: Container(
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    border: Border.all(color: palette.borderSubtle),
+                    border: Border.all(color: palette.sep),
                   ),
                   child: Transform.rotate(
                     angle: -.15,
@@ -1359,20 +1333,20 @@ class _SurfaceLabel extends StatelessWidget {
                       size: 32,
                       color: active
                           ? Theme.of(context).colorScheme.primary
-                          : palette.textMuted,
+                          : palette.ink2,
                     ),
                   ),
                 ),
               )
             else
-              Icon(icon, size: 32, color: palette.textMuted),
+              Icon(icon, size: 32, color: palette.ink2),
             const SizedBox(height: 16),
           ],
           Text(
             label,
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.titleSmall?.copyWith(
-              color: enabled ? null : palette.textMuted,
+              color: enabled ? null : palette.ink2,
             ),
           ),
           if (subtitle != null && constraints.maxHeight >= 120) ...[
@@ -1384,7 +1358,7 @@ class _SurfaceLabel extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(
                   context,
-                ).textTheme.bodySmall?.copyWith(color: palette.textMuted),
+                ).textTheme.bodySmall?.copyWith(color: palette.ink2),
               ),
             ),
           ],

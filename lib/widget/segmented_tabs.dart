@@ -1,3 +1,4 @@
+import 'package:whisper/theme/whisper_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:whisper/theme/app_theme.dart';
 
@@ -18,10 +19,10 @@ class WhisperTabBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final palette = context.whisperPalette;
+    final palette = context.wc;
     final radius = BorderRadius.circular(999);
     return Material(
-      color: palette.surfaceMuted,
+      color: palette.fill,
       borderRadius: radius,
       clipBehavior: Clip.antiAlias,
       child: Padding(
@@ -35,7 +36,7 @@ class WhisperTabBar extends StatelessWidget {
             indicatorSize: TabBarIndicatorSize.tab,
             indicatorAnimation: TabIndicatorAnimation.elastic,
             indicator: ShapeDecoration(
-              color: palette.surfaceElevated,
+              color: palette.raised,
               shape: const StadiumBorder(),
             ),
             splashBorderRadius: radius,
@@ -51,7 +52,7 @@ class WhisperTabBar extends StatelessWidget {
               return Colors.transparent;
             }),
             labelColor: theme.colorScheme.onSurface,
-            unselectedLabelColor: palette.textMuted,
+            unselectedLabelColor: palette.ink2,
             labelStyle: theme.textTheme.labelLarge,
             labelPadding: EdgeInsets.symmetric(horizontal: scrollable ? 12 : 4),
             isScrollable: scrollable,

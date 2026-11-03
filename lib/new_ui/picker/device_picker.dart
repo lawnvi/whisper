@@ -213,7 +213,7 @@ class _DevicePickerRowState extends State<DevicePickerRow> {
                 ),
                 child: Row(
                   children: [
-                    DevicePickerGlyph(device: device, color: c.accent),
+                    DevicePickerGlyph(device: device, color: c.accentText),
                     const SizedBox(width: 9),
                     Expanded(
                       child: Text(
@@ -233,7 +233,7 @@ class _DevicePickerRowState extends State<DevicePickerRow> {
                         WhisperGlyph.check,
                         size: 13,
                         weight: 2,
-                        color: c.accent,
+                        color: c.accentText,
                       ),
                     ],
                   ],

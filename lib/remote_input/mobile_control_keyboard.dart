@@ -1,3 +1,4 @@
+import 'package:whisper/theme/whisper_ui.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
@@ -216,11 +217,11 @@ class MobileControlKeyboard extends StatelessWidget {
       foregroundColor: Theme.of(context).colorScheme.onSurface,
       backgroundColor: selected || nextPage != null
           ? Theme.of(context).colorScheme.primary.withValues(alpha: .12)
-          : context.whisperPalette.surfaceElevated,
+          : context.wc.raised,
       side: BorderSide(
         color: selected
             ? Theme.of(context).colorScheme.primary
-            : context.whisperPalette.borderSubtle,
+            : context.wc.sep,
       ),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
     );

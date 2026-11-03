@@ -333,82 +333,91 @@ class _ChatMessageListState extends State<ChatMessageList> {
                   ),
                 ),
               ),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                WhisperAnimatedReveal(
-                  axis: Axis.horizontal,
-                  visible: _selectionMode,
-                  child: _selectionMode
-                      ? SizedBox(
-                          width: 42,
-                          height: 42,
-                          child: Center(
-                            child: Checkbox(
-                              key: ValueKey('message-selection-${message.id}'),
-                              value: isSelected,
-                              shape: const CircleBorder(),
-                              side: BorderSide(color: colorScheme.outline),
-                              onChanged: _deleting
-                                  ? null
-                                  : (_) => _toggleSelection(message),
+            DecoratedBox(
+              key: ValueKey('message-row-${message.id}'),
+              decoration: BoxDecoration(
+                color: _selectionMode && isSelected ? context.wc.tint : null,
+                borderRadius: BorderRadius.circular(WhisperRadius.m),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  WhisperAnimatedReveal(
+                    axis: Axis.horizontal,
+                    visible: _selectionMode,
+                    child: _selectionMode
+                        ? SizedBox(
+                            width: 42,
+                            height: 42,
+                            child: Center(
+                              child: Checkbox(
+                                key: ValueKey(
+                                  'message-selection-${message.id}',
+                                ),
+                                value: isSelected,
+                                shape: const CircleBorder(),
+                                side: BorderSide(color: colorScheme.outline),
+                                onChanged: _deleting
+                                    ? null
+                                    : (_) => _toggleSelection(message),
+                              ),
                             ),
-                          ),
-                        )
-                      : null,
-                ),
-                Expanded(
-                  child: Container(
-                    alignment: isOpponent
-                        ? Alignment.centerLeft
-                        : Alignment.centerRight,
-                    child: ContextMenuRegion(
-                      items: _selectionMode
-                          ? const <ContextMenuActionItem>[]
-                          : _buildMessageActions(
-                              context,
-                              message,
-                              isOpponent: isOpponent,
-                              isFile: isFile,
+                          )
+                        : null,
+                  ),
+                  Expanded(
+                    child: Container(
+                      alignment: isOpponent
+                          ? Alignment.centerLeft
+                          : Alignment.centerRight,
+                      child: ContextMenuRegion(
+                        items: _selectionMode
+                            ? const <ContextMenuActionItem>[]
+                            : _buildMessageActions(
+                                context,
+                                message,
+                                isOpponent: isOpponent,
+                                isFile: isFile,
+                              ),
+                        child: LayoutBuilder(
+                          builder: (context, constraints) => ConstrainedBox(
+                            key: ValueKey('message-bubble-${message.id}'),
+                            constraints: BoxConstraints(
+                              maxWidth: newBubbleMaxWidth(
+                                available: constraints.maxWidth,
+                                isFile: isFile,
+                                compact:
+                                    !isDesktop() &&
+                                    WhisperLayout.of(context).compact,
+                                body: WhisperType(touch: !isDesktop()).body,
+                              ),
                             ),
-                      child: LayoutBuilder(
-                        builder: (context, constraints) => ConstrainedBox(
-                          key: ValueKey('message-bubble-${message.id}'),
-                          constraints: BoxConstraints(
-                            maxWidth: newBubbleMaxWidth(
-                              available: constraints.maxWidth,
-                              isFile: isFile,
-                              compact:
-                                  !isDesktop() &&
-                                  WhisperLayout.of(context).compact,
-                              body: WhisperType(touch: !isDesktop()).body,
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: () {
+                                if (_deleting) return;
+                                if (_selectionMode) {
+                                  _toggleSelection(message);
+                                } else if (isFile) {
+                                  widget.onOpenFile(message);
+                                }
+                              },
+                              child: isFile
+                                  ? widget.buildFileMessage(message, isOpponent)
+                                  : widget.buildTextMessage(
+                                      message,
+                                      isOpponent,
+                                      // Copying is in the message's menu.
+                                      null,
+                                    ),
                             ),
-                          ),
-                          child: GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onTap: () {
-                              if (_deleting) return;
-                              if (_selectionMode) {
-                                _toggleSelection(message);
-                              } else if (isFile) {
-                                widget.onOpenFile(message);
-                              }
-                            },
-                            child: isFile
-                                ? widget.buildFileMessage(message, isOpponent)
-                                : widget.buildTextMessage(
-                                    message,
-                                    isOpponent,
-                                    // Copying is in the message's menu.
-                                    null,
-                                  ),
                           ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ],
         ),

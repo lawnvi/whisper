@@ -408,23 +408,26 @@ class _DeviceRow extends StatelessWidget {
               : EdgeInsets.symmetric(horizontal: touch ? 12 : 10),
           child: Row(
             children: [
-              Container(
-                width: touch ? 44 : 36,
-                height: touch ? 44 : 36,
-                alignment: Alignment.center,
-                decoration: ShapeDecoration(
-                  color: c.fill,
-                  shape: RoundedSuperellipseBorder(
-                    borderRadius: BorderRadius.circular(
-                      touch ? WhisperRadius.m : WhisperRadius.s,
+              Tooltip(
+                message: touch ? '' : deviceSystemName(device.platform) ?? '',
+                child: Container(
+                  width: touch ? 44 : 36,
+                  height: touch ? 44 : 36,
+                  alignment: Alignment.center,
+                  decoration: ShapeDecoration(
+                    color: c.fill,
+                    shape: RoundedSuperellipseBorder(
+                      borderRadius: BorderRadius.circular(
+                        touch ? WhisperRadius.m : WhisperRadius.s,
+                      ),
                     ),
                   ),
-                ),
-                child: deviceArtFor(
-                  device,
-                  size: (deviceKindOf(device).handheld ? 24 : 26) * big,
-                  state: _artState,
-                  paired: paired,
+                  child: deviceArtFor(
+                    device,
+                    size: (deviceKindOf(device).handheld ? 24 : 26) * big,
+                    state: _artState,
+                    paired: paired,
+                  ),
                 ),
               ),
               SizedBox(
@@ -460,7 +463,7 @@ class _DeviceRow extends StatelessWidget {
                         height: 1.25,
                         fontWeight: live ? FontWeight.w500 : FontWeight.w400,
                         color: live
-                            ? c.accent
+                            ? c.accentText
                             : gone && second != c.ink2Glass
                             ? c.ink3
                             : gone

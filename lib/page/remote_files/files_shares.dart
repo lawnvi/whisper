@@ -1,3 +1,4 @@
+import 'package:whisper/theme/radix_colors.dart';
 import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
@@ -143,12 +144,11 @@ class _FilesSharesListState extends State<FilesSharesList> {
 }
 
 /// iOS system colours for the dots and the switch.
-const _green = Color(0xFF34C759);
-const _orange = Color(0xFFFF9500);
-const _red = Color(0xFFFF3B30);
+const _green = Radix.green9;
+const _orange = Radix.orange9;
+const _red = Radix.red9;
 
-Color _accent(FlowSpaceColors colors) =>
-    colors.dark ? const Color(0xFF0A84FF) : const Color(0xFF007AFF);
+Color _accent(FlowSpaceColors colors) => Radix.blue9;
 
 const _mono = TextStyle(
   fontFamily: 'Menlo',
@@ -312,7 +312,7 @@ class _ServiceRow extends StatelessWidget {
           children: [
             _Tile(
               icon: CupertinoIcons.antenna_radiowaves_left_right,
-              color: on ? const Color(0xFF30B0C7) : const Color(0xFF8E8E93),
+              color: on ? Radix.cyan9 : Radix.slate9,
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -527,9 +527,7 @@ class _LinkRowState extends State<_LinkRow> {
       '/${link.route}',
       if (link.visits > 0) text.shareLinkVisits(link.visits),
     ].join(' · ');
-    final pressed = colors.dark
-        ? Colors.white.withValues(alpha: 0.07)
-        : Colors.black.withValues(alpha: 0.05);
+    final pressed = colors.dark ? Radix.whiteA1 : Radix.blackA1;
     return Semantics(
       button: true,
       child: MouseRegion(
@@ -646,11 +644,11 @@ class _LinkRowState extends State<_LinkRow> {
   ShareLink link,
 ) {
   if (!link.enabled) {
-    return (const Color(0xFF8E8E93), text.shareLinkStatusOff);
+    return (Radix.slate9, text.shareLinkStatusOff);
   }
   return switch (store.availabilityOf(link)) {
     ShareAvailability.available => (
-      store.serviceOn ? _green : const Color(0xFF8E8E93),
+      store.serviceOn ? _green : Radix.slate9,
       text.shareLinkStatusOn,
     ),
     ShareAvailability.partlyMissing => (
@@ -683,7 +681,7 @@ class _LinkIcon extends StatelessWidget {
     }
     return const _Tile(
       icon: CupertinoIcons.square_stack_3d_up_fill,
-      color: Color(0xFF5856D6),
+      color: Radix.iris9,
     );
   }
 }

@@ -29,6 +29,18 @@ void main() {
     }
   });
 
+  test('a computer says which system it runs', () {
+    expect(deviceOsFor('macos'), DeviceOs.mac);
+    expect(deviceOsFor('Darwin'), DeviceOs.mac);
+    expect(deviceOsFor('windows'), DeviceOs.windows);
+    expect(deviceOsFor('linux'), DeviceOs.linux);
+    expect(deviceOsFor('android'), DeviceOs.other);
+    expect(deviceSystemName('macos'), 'macOS');
+    expect(deviceSystemName('windows'), 'Windows');
+    expect(deviceSystemName('linux'), 'Linux');
+    expect(deviceSystemName(''), isNull);
+  });
+
   testWidgets('measures like the prototype', (t) async {
     Future<Size> sizeOf(DeviceKind kind, double size) async {
       await t.pumpWidget(
@@ -126,6 +138,27 @@ void main() {
               ],
             ),
             const SizedBox(height: 24),
+            // Each system, large and at the size of a sidebar row.
+            for (final size in const [64.0, 26.0]) ...[
+              Wrap(
+                children: [
+                  for (final os in DeviceOs.values)
+                    for (final kind in const [
+                      DeviceKind.desktop,
+                      DeviceKind.laptop,
+                    ]) ...[
+                      DeviceArt(
+                        kind: kind,
+                        os: os,
+                        wallpaper: DeviceWallpaper.forPairingOrder(os.index),
+                        size: size,
+                      ),
+                      const SizedBox(width: 12),
+                    ],
+                ],
+              ),
+              const SizedBox(height: 12),
+            ],
             // As in the sidebar, in each state of presence.
             for (final state in DeviceArtState.values) ...[
               Row(
@@ -171,7 +204,7 @@ void main() {
     );
 
     testWidgets('light', skip: goldenSkip != null, (t) async {
-      t.view.physicalSize = const Size(1000, 620);
+      t.view.physicalSize = const Size(1000, 1100);
       t.view.devicePixelRatio = 2;
       addTearDown(t.view.reset);
       await t.pumpWidget(_host(sheet(WhisperColors.light)));
@@ -182,7 +215,7 @@ void main() {
     });
 
     testWidgets('dark', skip: goldenSkip != null, (t) async {
-      t.view.physicalSize = const Size(1000, 620);
+      t.view.physicalSize = const Size(1000, 1100);
       t.view.devicePixelRatio = 2;
       addTearDown(t.view.reset);
       await t.pumpWidget(_host(sheet(WhisperColors.dark)));

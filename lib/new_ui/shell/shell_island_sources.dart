@@ -1,3 +1,4 @@
+import 'package:whisper/theme/radix_colors.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -117,7 +118,7 @@ class _TransferPresenter extends IslandPresenter with MomentViews {
           color: Colors.white,
         )
       : status == IslandStatus.failed
-      ? const WhisperIcon(WhisperGlyph.warn, size: 16, color: Color(0xFFFFB340))
+      ? const WhisperIcon(WhisperGlyph.warn, size: 16, color: Radix.amber9)
       : SizedBox.square(
           dimension: 20,
           child: CustomPaint(painter: _RingPainter(progress ?? 0)),
@@ -166,7 +167,7 @@ class _RingPainter extends CustomPainter {
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = stroke
-        ..color = const Color(0x3DFFFFFF),
+        ..color = Radix.whiteA4,
     );
     if (value <= 0) return;
     canvas.drawArc(
@@ -265,7 +266,7 @@ class StatusPresenter extends IslandPresenter with MomentViews {
   Widget get _leading => WhisperIcon(
     moment_.glyph,
     size: 16,
-    color: moment_.warning ? const Color(0xFFFFB340) : Colors.white,
+    color: moment_.warning ? Radix.amber9 : Colors.white,
   );
 
   @override

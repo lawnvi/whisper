@@ -50,55 +50,9 @@ class WhisperColors extends ThemeExtension<WhisperColors> {
     required this.scrim,
   });
 
-  static const light = WhisperColors(
-    canvas: Color(0xFFF5F5F7),
-    content: Color(0xFFFFFFFF),
-    group: Color(0xFFFFFFFF),
-    raised: Color(0xFFFFFFFF),
-    bubble: Color(0xFFF2F2F7),
-    ink: Color(0xFF1D1D1F),
-    ink2: Color(0xFF6E6E73),
-    ink3: Color(0xFF86868B),
-    ink2Glass: Color(0xFF515156),
-    accent: Color(0xFF007AFF),
-    onAccent: Color(0xFFFFFFFF),
-    ok: Color(0xFF1F7A36),
-    warn: Color(0xFFC93400),
-    bad: Color(0xFFD70015),
-    sep: Color(0x1A3C3C43),
-    fill: Color(0x1A787880),
-    fill2: Color(0x2E787880),
-    selected: Color(0x12000000),
-    sidebarSolid: Color(0xFFEFEFF3),
-    sidebarSelected: Color(0x9EFFFFFF),
-    sidebarVeil: Color(0x9EFFFFFF),
-    scrim: Color(0x3D000000),
-  );
-
-  static const dark = WhisperColors(
-    canvas: Color(0xFF000000),
-    content: Color(0xFF1C1C1E),
-    group: Color(0xFF1C1C1E),
-    raised: Color(0xFF2C2C2E),
-    bubble: Color(0xFF2C2C2E),
-    ink: Color(0xFFF5F5F7),
-    ink2: Color(0xFFA1A1A6),
-    ink3: Color(0xFF8E8E93),
-    ink2Glass: Color(0xFFC0C0C6),
-    accent: Color(0xFF0A84FF),
-    onAccent: Color(0xFFFFFFFF),
-    ok: Color(0xFF30D158),
-    warn: Color(0xFFFFB340),
-    bad: Color(0xFFFF6961),
-    sep: Color(0x24EBEBF5),
-    fill: Color(0x3D787880),
-    fill2: Color(0x5C787880),
-    selected: Color(0x1AFFFFFF),
-    sidebarSolid: Color(0xFF252528),
-    sidebarSelected: Color(0x1FFFFFFF),
-    sidebarVeil: Color(0x00FFFFFF),
-    scrim: Color(0x75000000),
-  );
+  // 两组值都来自 Radix Colors，见 lib/theme/whisper_ui.dart 和 DESIGN.md「色彩」。
+  static const light = WhisperColors(/* … */);
+  static const dark = WhisperColors(/* … */);
 
   final Color canvas, content, group, raised, bubble;
   final Color ink, ink2, ink3, ink2Glass;

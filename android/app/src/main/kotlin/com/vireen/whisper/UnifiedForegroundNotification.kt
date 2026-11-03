@@ -33,7 +33,7 @@ object UnifiedForegroundNotification {
     private const val PREF_CHANNEL_DESCRIPTION = "channelDescription"
 
     /** 和岛一样的蓝:进度条、图标着色。 */
-    private const val TRANSFER_BLUE = 0xFF0A84FF.toInt()
+    private const val TRANSFER_BLUE = 0xFF0090FF.toInt()
     private const val PERMILLE = 1000
 
     private data class KeepAliveState(

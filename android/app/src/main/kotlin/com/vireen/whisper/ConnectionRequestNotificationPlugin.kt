@@ -342,7 +342,7 @@ class ConnectionRequestNotificationPlugin :
         private const val TAG = "WhisperPairingAlert"
         private const val TIMEOUT_MILLIS = 30_000L
         private const val SCREEN_WAKE_MILLIS = 5_000L
-        private const val BRAND_BLUE = 0xFF2563EB.toInt()
+        private const val BRAND_BLUE = 0xFF0090FF.toInt()
         private val VIBRATION_PATTERN = longArrayOf(0L, 160L, 90L, 160L)
         private val OBSOLETE_PHONE_ACCOUNTS = listOf(
             Pair(

@@ -722,9 +722,7 @@ class _FlowSpacePageState extends State<FlowSpacePage> {
       onChanged: (value) => setState(() => _query = value),
       style: TextStyle(color: colors.label, fontSize: 14.5),
       placeholderStyle: TextStyle(color: colors.secondaryLabel, fontSize: 14.5),
-      backgroundColor: colors.dark
-          ? Colors.white.withValues(alpha: 0.09)
-          : Colors.black.withValues(alpha: 0.055),
+      backgroundColor: colors.dark ? Radix.whiteA2 : Radix.blackA1,
       borderRadius: BorderRadius.circular(19),
       padding: const EdgeInsetsDirectional.fromSTEB(6, 9, 12, 9),
       prefixInsets: const EdgeInsetsDirectional.fromSTEB(12, 0, 2, 2),

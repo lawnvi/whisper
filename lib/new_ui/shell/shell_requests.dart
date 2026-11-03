@@ -1,3 +1,4 @@
+import 'package:whisper/theme/radix_colors.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -99,7 +100,7 @@ class RequestPresenter extends IslandPresenter with MomentViews {
   Widget get _leading => WhisperIcon(
     warning ? WhisperGlyph.warn : WhisperGlyph.ask,
     size: 17,
-    color: const Color(0xFFFFB340),
+    color: Radix.amber9,
   );
 
   @override
@@ -110,11 +111,7 @@ class RequestPresenter extends IslandPresenter with MomentViews {
     answers: answers,
     // A warning shows the warning, not the device's picture.
     art: warning
-        ? const WhisperIcon(
-            WhisperGlyph.warn,
-            size: 30,
-            color: Color(0xFFFFB340),
-          )
+        ? const WhisperIcon(WhisperGlyph.warn, size: 30, color: Radix.amber9)
         : art,
     code: code,
   );

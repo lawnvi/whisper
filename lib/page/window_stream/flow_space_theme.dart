@@ -1,3 +1,5 @@
+import 'package:whisper/theme/whisper_ui.dart';
+import 'package:whisper/theme/radix_colors.dart';
 import 'dart:io' show Platform;
 import 'dart:math' as math;
 import 'dart:ui';
@@ -18,16 +20,16 @@ abstract final class FlowSpaceTokens {
   static const double gutter = 24;
   static const double compactGutter = 16;
 
-  /// Device hues: Apple system colours, light and dark variants.
-  static const List<(Color light, Color dark)> deviceHues = [
-    (Color(0xFF007AFF), Color(0xFF0A84FF)), // blue
-    (Color(0xFF5856D6), Color(0xFF5E5CE6)), // indigo
-    (Color(0xFF30B0C7), Color(0xFF40C8E0)), // teal
-    (Color(0xFF34C759), Color(0xFF30D158)), // green
-    (Color(0xFFFF9500), Color(0xFFFF9F0A)), // orange
-    (Color(0xFFFF2D55), Color(0xFFFF375F)), // pink
-    (Color(0xFFAF52DE), Color(0xFFBF5AF2)), // purple
-    (Color(0xFF00C7BE), Color(0xFF63E6E2)), // mint
+  /// Device hues.
+  static const List<Color> deviceHues = [
+    Radix.blue9,
+    Radix.indigo9,
+    Radix.cyan9,
+    Radix.green9,
+    Radix.orange9,
+    Radix.pink9,
+    Radix.purple9,
+    Radix.teal9,
   ];
 
   static Color deviceHue(String deviceId, Brightness brightness) {
@@ -35,14 +37,13 @@ abstract final class FlowSpaceTokens {
     for (final unit in deviceId.codeUnits) {
       hash = (hash * 31 + unit) & 0x7fffffff;
     }
-    final pair = deviceHues[hash % deviceHues.length];
-    return brightness == Brightness.dark ? pair.$2 : pair.$1;
+    return deviceHues[hash % deviceHues.length];
   }
 
-  static const Color live = Color(0xFF34C759);
-  static const Color paused = Color(0xFFFF9F0A);
-  static const Color reconnecting = Color(0xFF0A84FF);
-  static const Color failed = Color(0xFFFF453A);
+  static const Color live = Radix.green9;
+  static const Color paused = Radix.amber9;
+  static const Color reconnecting = Radix.blue9;
+  static const Color failed = Radix.red9;
 
   /// Main motion spring (≈ SwiftUI `.spring(response: 0.42, dampingFraction: 0.82)`).
   static const SpringDescription spring = SpringDescription(
@@ -108,55 +109,41 @@ class SpringCurve extends Curve {
 class FlowSpaceColors {
   FlowSpaceColors.of(BuildContext context)
     : brightness = Theme.of(context).brightness,
-      palette = context.whisperPalette,
+      _c = context.wc,
       scheme = Theme.of(context).colorScheme;
 
   final Brightness brightness;
-  final WhisperPalette palette;
+  final WhisperColors _c;
   final ColorScheme scheme;
 
   bool get dark => brightness == Brightness.dark;
 
   /// Whisper's own page background, so Flow reads as part of the app.
-  Color get canvas => palette.surfaceCanvas;
-  Color get raised => dark ? const Color(0xFF1C1C1E) : Colors.white;
-  Color get raisedSecondary =>
-      dark ? const Color(0xFF2C2C2E) : const Color(0xFFF7F7FA);
-  Color get hairline => dark
-      ? Colors.white.withValues(alpha: 0.08)
-      : Colors.black.withValues(alpha: 0.06);
-  Color get label => dark ? Colors.white : const Color(0xFF1C1C1E);
-  Color get secondaryLabel =>
-      dark ? const Color(0x99EBEBF5) : const Color(0x993C3C43);
-  Color get tertiaryLabel =>
-      dark ? const Color(0x4DEBEBF5) : const Color(0x4D3C3C43);
-  Color get glassTint =>
-      dark ? const Color(0xB31C1C1E) : const Color(0xB3FFFFFF);
+  Color get canvas => _c.canvas;
+  Color get raised => _c.raised;
+  Color get raisedSecondary => _c.bubble;
+  Color get hairline => _c.sep;
+  Color get label => _c.ink;
+  Color get secondaryLabel => _c.ink2;
+  Color get tertiaryLabel => _c.ink3;
+  Color get glassTint => _c.panelTint;
 
   List<BoxShadow> get cardShadow => dark
       ? const [
           BoxShadow(
-            color: Color(0x66000000),
+            color: Radix.blackA6,
             blurRadius: 24,
             offset: Offset(0, 12),
           ),
-          BoxShadow(
-            color: Color(0x33000000),
-            blurRadius: 4,
-            offset: Offset(0, 1),
-          ),
+          BoxShadow(color: Radix.blackA4, blurRadius: 4, offset: Offset(0, 1)),
         ]
       : const [
           BoxShadow(
-            color: Color(0x14000000),
+            color: Radix.blackA2,
             blurRadius: 24,
             offset: Offset(0, 10),
           ),
-          BoxShadow(
-            color: Color(0x0F000000),
-            blurRadius: 3,
-            offset: Offset(0, 1),
-          ),
+          BoxShadow(color: Radix.blackA1, blurRadius: 3, offset: Offset(0, 1)),
         ];
 
   List<BoxShadow> liftedShadow(Color hue) => [

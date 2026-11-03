@@ -393,7 +393,7 @@ extension _RedesignedSettings on _SettingsScreenState {
                                   WhisperGlyph.back,
                                   size: 20,
                                   weight: 2,
-                                  color: c.accent,
+                                  color: c.ink,
                                 ),
                               ),
                             ),
@@ -459,6 +459,7 @@ extension _RedesignedSettings on _SettingsScreenState {
                 child: Center(
                   child: DeviceArt(
                     kind: deviceKindFor(self?.platform ?? 'android'),
+                    os: deviceOsFor(self?.platform ?? ''),
                     wallpaper: DeviceWallpaper.self,
                     size: 44,
                   ),
@@ -963,7 +964,7 @@ extension _RedesignedSettings on _SettingsScreenState {
       onTap: busy ? null : () => unawaited(_handleUpdateTap()),
       trailing: SettingsValue(
         value,
-        color: available && !busy ? c.accent : null,
+        color: available && !busy ? c.accentText : null,
       ),
       below: _downloadingUpdate
           ? Padding(

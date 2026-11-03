@@ -1,3 +1,4 @@
+import 'package:whisper/theme/radix_colors.dart';
 import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
@@ -103,7 +104,7 @@ class _PhoneTouchAlertHostState extends State<PhoneTouchAlertHost> {
             child: Material(
               type: MaterialType.transparency,
               child: ColoredBox(
-                color: Colors.black.withValues(alpha: 0.32),
+                color: Radix.blackA5,
                 child: Center(child: _card(context, alert)),
               ),
             ),
@@ -129,7 +130,7 @@ class _PhoneTouchAlertHostState extends State<PhoneTouchAlertHost> {
               Icon(
                 CupertinoIcons.hand_raised_slash_fill,
                 size: 34,
-                color: CupertinoColors.systemOrange,
+                color: Radix.orange9,
               ),
               const SizedBox(height: 14),
               Text(

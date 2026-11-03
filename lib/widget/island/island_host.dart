@@ -1,3 +1,4 @@
+import 'package:whisper/theme/radix_colors.dart';
 import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
@@ -581,11 +582,11 @@ class _Circle extends StatelessWidget {
             color: Colors.black,
             shape: BoxShape.circle,
             border: Border.all(color: IslandColors.hairline, width: 0.5),
-            boxShadow: [
+            boxShadow: const [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.14),
+                color: Radix.blackA3,
                 blurRadius: 10,
-                offset: const Offset(0, 3),
+                offset: Offset(0, 3),
               ),
             ],
           ),

@@ -29,6 +29,7 @@ DeviceArt deviceArtFor(
       : DeviceWallpaper.unpaired;
   return DeviceArt(
     kind: deviceKindOf(device),
+    os: deviceOsFor(device.platform),
     wallpaper: wall,
     size: size,
     state: state,
@@ -119,7 +120,7 @@ class ShellIconButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.wc;
     final dimension = touch ? 48.0 : 28.0;
-    final tint = pressed || active ? c.accent : (color ?? c.ink2);
+    final tint = pressed || active ? c.accentText : (color ?? c.ink2);
     final background = pressed ? c.fill : (selected ? c.selected : null);
     return Tooltip(
       message: label,
@@ -291,12 +292,12 @@ class ShellButton extends StatelessWidget {
       ShellButtonKind.normal => c.fill,
       ShellButtonKind.primary => c.accent,
       ShellButtonKind.quiet => Colors.transparent,
-      ShellButtonKind.danger => c.bad,
+      ShellButtonKind.danger => c.badSolid,
     };
     final foreground = switch (kind) {
       ShellButtonKind.normal => c.ink,
       ShellButtonKind.primary || ShellButtonKind.danger => c.onAccent,
-      ShellButtonKind.quiet => color ?? c.accent,
+      ShellButtonKind.quiet => color ?? c.accentText,
     };
     return Opacity(
       opacity: onTap == null ? .5 : 1,
@@ -764,7 +765,7 @@ class ShellPlacePage extends StatelessWidget {
                     iconSize: 20,
                     weight: 2,
                     touch: true,
-                    color: c.accent,
+                    color: c.ink,
                     label: context.shellL10n.back,
                     onTap: () => Navigator.of(context).maybePop(),
                   ),

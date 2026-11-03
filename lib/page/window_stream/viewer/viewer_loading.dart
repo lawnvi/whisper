@@ -1,3 +1,4 @@
+import 'package:whisper/theme/radix_colors.dart';
 import 'dart:typed_data';
 
 import 'package:flutter/cupertino.dart';
@@ -52,7 +53,7 @@ class ViewerLoadingStage extends StatelessWidget {
   /// The spinner (left out under another overlay that has its own).
   final bool spinner;
 
-  static const Color _dim = Color(0x59000000);
+  static const Color _dim = Radix.blackA5;
 
   @override
   Widget build(BuildContext context) {
@@ -122,10 +123,7 @@ class ViewerLoadingStage extends StatelessWidget {
                                   fontSize: 15,
                                   fontWeight: FontWeight.w500,
                                   shadows: [
-                                    Shadow(
-                                      color: Color(0x99000000),
-                                      blurRadius: 8,
-                                    ),
+                                    Shadow(color: Radix.blackA8, blurRadius: 8),
                                   ],
                                 ),
                               ),

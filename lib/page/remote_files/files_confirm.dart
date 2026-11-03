@@ -1,3 +1,4 @@
+import 'package:whisper/theme/radix_colors.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/cupertino.dart';
@@ -52,7 +53,7 @@ class _ConfirmRoute extends PopupRoute<bool> {
   final String barrierLabel;
 
   @override
-  Color? get barrierColor => Colors.black.withValues(alpha: 0.32);
+  Color? get barrierColor => Radix.blackA5;
 
   @override
   bool get barrierDismissible => true;
@@ -127,7 +128,7 @@ class _ConfirmCard extends StatelessWidget {
   final List<String> names;
   final IconData icon;
 
-  static const _red = Color(0xFFFF3B30);
+  static const _red = Radix.red9;
 
   @override
   Widget build(BuildContext context) {
@@ -143,9 +144,7 @@ class _ConfirmCard extends StatelessWidget {
 
     final cancel = _Button(
       label: l10n.cancel,
-      color: colors.dark
-          ? Colors.white.withValues(alpha: 0.1)
-          : Colors.black.withValues(alpha: 0.06),
+      color: colors.dark ? Radix.whiteA2 : Radix.blackA1,
       textColor: colors.label,
       onPressed: () => answer(false),
     );
@@ -169,7 +168,7 @@ class _ConfirmCard extends StatelessWidget {
           ),
           shadows: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: colors.dark ? 0.5 : 0.18),
+              color: (colors.dark ? Radix.blackA7 : Radix.blackA4),
               blurRadius: 40,
               offset: const Offset(0, 16),
             ),
@@ -220,9 +219,7 @@ class _ConfirmCard extends StatelessWidget {
                   vertical: 8,
                 ),
                 decoration: ShapeDecoration(
-                  color: colors.dark
-                      ? Colors.white.withValues(alpha: 0.06)
-                      : Colors.black.withValues(alpha: 0.035),
+                  color: colors.dark ? Radix.whiteA1 : Radix.blackA1,
                   shape: RoundedSuperellipseBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),

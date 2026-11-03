@@ -88,6 +88,7 @@ class _ShellSelfPanelState extends State<ShellSelfPanel> {
             Center(
               child: DeviceArt(
                 kind: deviceKindFor(self.platform, name: self.name),
+                os: deviceOsFor(self.platform),
                 wallpaper: DeviceWallpaper.self,
                 size: 96,
               ),

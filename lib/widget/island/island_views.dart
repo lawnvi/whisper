@@ -1,3 +1,4 @@
+import 'package:whisper/theme/radix_colors.dart';
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -10,15 +11,15 @@ import '../../page/window_stream/flow_space_theme.dart';
 /// The island's colours: it is black in light and dark alike.
 abstract final class IslandColors {
   static const white = Colors.white;
-  static final dim = Colors.white.withValues(alpha: 0.62);
-  static final faint = Colors.white.withValues(alpha: 0.14);
-  static final hairline = Colors.white.withValues(alpha: 0.1);
-  static const blue = Color(0xFF0A84FF);
+  static const dim = Radix.whiteA8;
+  static const faint = Radix.whiteA3;
+  static const hairline = Radix.whiteA2;
+  static const blue = Radix.blue9;
   static const live = FlowSpaceTokens.live;
   static const paused = FlowSpaceTokens.paused;
   static const failed = FlowSpaceTokens.failed;
-  static const gray = Color(0xFF8E8E93);
-  static const tile = Color(0xFF2C2C2E);
+  static const gray = Radix.slateDark10;
+  static const tile = Radix.slateDark4;
 }
 
 abstract final class IslandText {
@@ -594,7 +595,7 @@ class IslandCapsuleButton extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
           alignment: Alignment.center,
           decoration: ShapeDecoration(
-            color: background ?? Colors.white.withValues(alpha: 0.15),
+            color: background ?? Radix.whiteA3,
             shape: const StadiumBorder(),
           ),
           child: Text(

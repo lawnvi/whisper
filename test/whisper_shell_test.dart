@@ -232,7 +232,7 @@ void main() {
     ) async {
       await pumpShell(tester, const Size(1144, 720));
       final text = tester.widget<Text>(find.text('log.txt 59%'));
-      expect(text.style?.color, WhisperColors.light.accent);
+      expect(text.style?.color, WhisperColors.light.accentText);
     });
 
     Finder infoButton() => find.byWidgetPredicate(

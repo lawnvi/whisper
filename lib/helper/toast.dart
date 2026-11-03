@@ -1,3 +1,5 @@
+import 'package:whisper/theme/whisper_ui.dart';
+import 'package:whisper/theme/radix_colors.dart';
 import 'package:whisper/helper/helper.dart';
 import 'package:whisper/new_ui/shell/shell_island_sources.dart';
 import 'package:flutter/material.dart';
@@ -127,27 +129,22 @@ class _AppToastView extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final palette = context.whisperPalette;
+    final palette = context.wc;
     final (icon, iconColor) = switch (tone) {
       AppToastTone.info => (Icons.info_rounded, colorScheme.primary),
-      AppToastTone.success => (Icons.check_circle_rounded, palette.trusted),
-      AppToastTone.warning => (Icons.warning_rounded, palette.warning),
-      AppToastTone.error => (Icons.error_rounded, palette.danger),
+      AppToastTone.success => (Icons.check_circle_rounded, palette.ok),
+      AppToastTone.warning => (Icons.warning_rounded, palette.warn),
+      AppToastTone.error => (Icons.error_rounded, palette.bad),
     };
     final action = this.action;
     final isDark = theme.brightness == Brightness.dark;
     // A step lighter than the page in the dark theme, where the page itself
     // is black and a border alone would not lift the capsule off it.
     final surfaceColor = isDark
-        ? Color.alphaBlend(
-            Colors.white.withValues(alpha: 0.08),
-            palette.surfaceElevated,
-          )
-        : palette.surfaceElevated;
-    final borderColor = isDark
-        ? Colors.white.withValues(alpha: 0.14)
-        : palette.borderSubtle;
-    final shadowColor = isDark ? Colors.black : const Color(0xFF0F172A);
+        ? Color.alphaBlend(Radix.whiteA2, palette.raised)
+        : palette.raised;
+    final borderColor = isDark ? Radix.whiteA3 : palette.sep;
+    final shadowColor = isDark ? Colors.black : Radix.slate12;
 
     // The package hands every toast a fixed-width slot and starts it at the
     // leading edge; fill the slot so the capsule can sit in its centre.

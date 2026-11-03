@@ -1210,13 +1210,13 @@ class _SendMessageScreen extends State<SendMessageScreen>
   }
 
   Widget _buildEmbeddedHeader(bool isDark) {
-    final palette = context.whisperPalette;
+    final palette = context.wc;
     return Container(
       height: 72,
       padding: const EdgeInsets.fromLTRB(18, 10, 12, 10),
       decoration: BoxDecoration(
         color: Colors.transparent,
-        border: Border(bottom: BorderSide(color: palette.borderSubtle)),
+        border: Border(bottom: BorderSide(color: palette.sep)),
       ),
       child: Row(
         children: [
@@ -1229,7 +1229,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
 
   Widget _buildConversationTitle(bool isDark) {
     final colorScheme = Theme.of(context).colorScheme;
-    final palette = context.whisperPalette;
+    final palette = context.wc;
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1252,12 +1252,12 @@ class _SendMessageScreen extends State<SendMessageScreen>
               child: WhisperAnimatedSwitcher(
                 value: (_isConnectedSession, device.around),
                 child: _isConnectedSession
-                    ? Icon(Icons.lock_rounded, size: 14, color: palette.trusted)
+                    ? Icon(Icons.lock_rounded, size: 14, color: palette.ok)
                     : Center(
                         child: ConnectionStatusDot(
                           color: device.around == true
-                              ? Colors.green
-                              : Colors.grey,
+                              ? context.wc.ok
+                              : context.wc.ink3,
                         ),
                       ),
               ),
@@ -1271,7 +1271,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
                   _connectionDetailText(),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 12, color: palette.textMuted),
+                  style: TextStyle(fontSize: 12, color: palette.ink2),
                 ),
               ),
             ),
@@ -1282,7 +1282,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
   }
 
   List<Widget> _buildHeaderActions(bool isDark) {
-    final palette = context.whisperPalette;
+    final palette = context.wc;
     final compactActions = !isDesktop();
     final actionPadding = compactActions ? EdgeInsets.zero : null;
     final actionConstraints = compactActions
@@ -1305,13 +1305,13 @@ class _SendMessageScreen extends State<SendMessageScreen>
                 child: CircularProgressIndicator(
                   value: null,
                   strokeWidth: 2,
-                  color: palette.textMuted,
+                  color: palette.ink2,
                 ),
               ),
               const SizedBox(width: 6),
               Text(
                 l10n.fileTransferVerifying,
-                style: TextStyle(fontSize: 12, color: palette.textMuted),
+                style: TextStyle(fontSize: 12, color: palette.ink2),
               ),
             ],
           ),
@@ -1329,11 +1329,11 @@ class _SendMessageScreen extends State<SendMessageScreen>
               children: [
                 Text(
                   _speed,
-                  style: TextStyle(fontSize: 12, color: palette.textMuted),
+                  style: TextStyle(fontSize: 12, color: palette.ink2),
                 ),
                 Text(
                   "${(100 * value).toStringAsFixed(2)}%",
-                  style: TextStyle(fontSize: 12, color: palette.textMuted),
+                  style: TextStyle(fontSize: 12, color: palette.ink2),
                 ),
               ],
             ),
@@ -1429,10 +1429,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
                             ? Icons.wifi_find_rounded
                             : Icons.wifi_off_rounded),
                   color: _isConnectedSession
-                      ? Colors.lightBlue
-                      : (_canToggleConnection
-                            ? palette.textMuted
-                            : Colors.grey),
+                      ? context.wc.accentText
+                      : (_canToggleConnection ? palette.ink2 : context.wc.ink3),
                 ),
         ),
       ),
@@ -1445,7 +1443,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
         // This device's page: what it can do (流转, 文件, 设备控制, 搜索)
         // and how it is shared with.
         tooltip: l10n.deviceDetailsTitle,
-        icon: Icon(CupertinoIcons.ellipsis_circle, color: palette.textMuted),
+        icon: Icon(CupertinoIcons.ellipsis_circle, color: palette.ink2),
         onPressed: () async {
           await Navigator.push(
             context,
@@ -1575,9 +1573,9 @@ class _SendMessageScreen extends State<SendMessageScreen>
     required bool isDark,
   }) {
     if (!isActive && !isBusy) {
-      return context.whisperPalette.textMuted;
+      return context.wc.ink2;
     }
-    return Colors.lightBlue;
+    return context.wc.accentText;
   }
 
   String _audioShareTooltip(
@@ -1604,9 +1602,9 @@ class _SendMessageScreen extends State<SendMessageScreen>
     required bool isArmed,
   }) {
     if (!isActive && !isBusy && !isArmed) {
-      return context.whisperPalette.textMuted;
+      return context.wc.ink2;
     }
-    return Colors.lightBlue;
+    return context.wc.accentText;
   }
 
   String _remoteInputTooltip(
@@ -2039,7 +2037,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
               'Connection Failed',
           description: displayMessage,
           isLoading: true,
-          icon: const Icon(Icons.warning_rounded, color: Colors.red),
+          icon: Icon(Icons.warning_rounded, color: context.wc.bad),
           cancelButtonText: AppLocalizations.of(context)?.cancel ?? 'Cancel',
           onCancel: () {
             Navigator.of(context).pop();
@@ -2547,28 +2545,31 @@ class _SendMessageScreen extends State<SendMessageScreen>
     final style = TextStyle(
       fontSize: body,
       height: 1.45,
-      color: mine ? c.onAccent : c.ink,
+      color: mine ? c.onTint : c.ink,
     );
     return Align(
       alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: mine ? c.accent : c.bubble,
+          color: mine ? c.tintHover : c.bubble,
           borderRadius: BorderRadius.circular(WhisperRadius.bubble),
         ),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
-          child: MessageLinkText(
-            text: content,
-            style: style,
-            linkStyle: style.copyWith(
-              color: mine ? c.onAccent : c.accent,
-              decoration: TextDecoration.underline,
-              decorationColor: mine ? c.onAccent : c.accent,
+          child: MessageSelectionColors(
+            mine: mine,
+            child: MessageLinkText(
+              text: content,
+              style: style,
+              linkStyle: style.copyWith(
+                color: mine ? c.onTint : c.accentText,
+                decoration: TextDecoration.underline,
+                decorationColor: mine ? c.onTint : c.accentText,
+              ),
+              linksEnabled: !_messageSelectionActive,
+              onOpen: _openMessageLink,
+              textAlign: TextAlign.left,
             ),
-            linksEnabled: !_messageSelectionActive,
-            onOpen: _openMessageLink,
-            textAlign: TextAlign.left,
           ),
         ),
       ),
@@ -2633,11 +2634,9 @@ class _SendMessageScreen extends State<SendMessageScreen>
         (transfer.direction == FileTransferDirection.outgoing ||
             (transfer.state != FileTransferState.paused &&
                 transfer.state != FileTransferState.waitingReconnect));
-    final palette = context.whisperPalette;
-    final cardColor = isOpponent
-        ? palette.messageIncoming
-        : palette.messageOutgoing;
-    final cardBorderColor = palette.borderSubtle;
+    final palette = context.wc;
+    final cardColor = isOpponent ? palette.bubble : palette.tintHover;
+    final cardBorderColor = palette.sep;
     // A folder is never previewed as media, whatever its name ends in.
     final mediaKind = isFolder
         ? MediaFileKind.other

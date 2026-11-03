@@ -226,7 +226,7 @@ class _PanelMenuRowState extends State<PanelMenuRow> {
     final type = WhisperType(touch: widget.touch);
     final enabled = widget.onTap != null;
     final lit = enabled && (_hover || _down || _focused);
-    final tint = item.danger ? c.bad : c.accent;
+    final tint = item.danger ? c.badSolid : c.accent;
     final Color ink = lit
         ? c.onAccent
         : !enabled
@@ -234,7 +234,7 @@ class _PanelMenuRowState extends State<PanelMenuRow> {
         : item.danger
         ? c.bad
         : c.ink;
-    final Color mark = lit ? c.onAccent : (enabled ? c.accent : c.ink3);
+    final Color mark = lit ? c.onAccent : (enabled ? c.accentText : c.ink3);
     return Semantics(
       button: true,
       enabled: enabled,

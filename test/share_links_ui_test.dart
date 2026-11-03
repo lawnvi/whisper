@@ -9,6 +9,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
+import 'package:whisper/theme/whisper_ui.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/page/remote_files/files_share_sheet.dart';
 import 'package:whisper/page/remote_files/files_shares.dart';
@@ -166,9 +167,7 @@ void main() {
                 builder: (context) {
                   home = context;
                   return Scaffold(
-                    backgroundColor: phone
-                        ? context.whisperPalette.surfaceCanvas
-                        : null,
+                    backgroundColor: phone ? context.wc.canvas : null,
                     body: SafeArea(
                       child: FilesSharesList(store: store, grouped: phone),
                     ),

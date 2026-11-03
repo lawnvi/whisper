@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:whisper/theme/whisper_device_art.dart';
 import 'package:whisper/helper/file.dart';
 import 'package:whisper/helper/toast.dart';
 import 'package:whisper/l10n/app_localizations.dart';
@@ -231,7 +232,10 @@ class _ShellDeviceCardState extends State<ShellDeviceCard> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  widget.statusLine,
+                  [
+                    widget.statusLine,
+                    ?deviceSystemName(device.platform),
+                  ].join(' · '),
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: type.note, color: c.ink2),
                 ),
@@ -479,7 +483,7 @@ class _Circle extends StatelessWidget {
     final c = context.wc;
     final type = WhisperType(touch: touch);
     final background = on ? c.accent : (act ? c.group : c.fill);
-    final foreground = on ? c.onAccent : (act ? c.accent : c.ink);
+    final foreground = on ? c.onAccent : (act ? c.accentText : c.ink);
     return Opacity(
       opacity: onTap == null && !busy ? .45 : 1,
       child: Pressable(

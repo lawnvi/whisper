@@ -1,3 +1,4 @@
+import 'package:whisper/theme/radix_colors.dart';
 import 'dart:typed_data';
 
 import 'package:flutter/cupertino.dart';
@@ -187,15 +188,15 @@ String fsDateLabel(BuildContext context, int modifiedMs) {
 }
 
 Color _kindHue(FsKind kind) => switch (kind) {
-  FsKind.folder => const Color(0xFF3A97EA),
-  FsKind.image => const Color(0xFF30B0C7),
-  FsKind.video => const Color(0xFFAF52DE),
-  FsKind.audio => const Color(0xFFFF2D55),
-  FsKind.document => const Color(0xFF007AFF),
-  FsKind.archive => const Color(0xFFA2845E),
-  FsKind.code => const Color(0xFFFF9500),
-  FsKind.app => const Color(0xFF5856D6),
-  FsKind.other => const Color(0xFF8E8E93),
+  FsKind.folder => Radix.blue8,
+  FsKind.image => Radix.cyan9,
+  FsKind.video => Radix.purple9,
+  FsKind.audio => Radix.crimson9,
+  FsKind.document => Radix.blue9,
+  FsKind.archive => Radix.brown9,
+  FsKind.code => Radix.orange9,
+  FsKind.app => Radix.iris9,
+  FsKind.other => Radix.slate9,
 };
 
 IconData _kindGlyph(FsKind kind) => switch (kind) {
@@ -246,7 +247,7 @@ class FsFileIcon extends StatelessWidget {
               width: size * 0.34,
               height: size * 0.34,
               decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.45),
+                color: Radix.blackA6,
                 shape: BoxShape.circle,
                 border: Border.all(color: Colors.white, width: 1.2),
               ),
@@ -298,7 +299,7 @@ class _Thumbnail extends StatelessWidget {
           borderRadius: BorderRadius.circular(3),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: dark ? 0.5 : 0.18),
+              color: (dark ? Radix.blackA7 : Radix.blackA4),
               blurRadius: 3,
               offset: const Offset(0, 1),
             ),
@@ -402,7 +403,7 @@ class _SheetPainter extends CustomPainter {
     canvas.drawShadow(sheet, Colors.black, w * 0.02, false);
     canvas.drawPath(
       sheet,
-      Paint()..color = dark ? const Color(0xFFE9E9EC) : Colors.white,
+      Paint()..color = dark ? Radix.slateDark12 : Colors.white,
     );
     // A wash of the kind's colour, so small icons read at a glance.
     canvas.drawPath(sheet, Paint()..color = hue.withValues(alpha: 0.1));
@@ -411,7 +412,7 @@ class _SheetPainter extends CustomPainter {
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = w < 32 ? 0.75 : 1
-        ..color = Colors.black.withValues(alpha: dark ? 0.35 : 0.14),
+        ..color = (dark ? Radix.blackA5 : Radix.blackA3),
     );
     final corner = Path()
       ..moveTo(right - fold, top)
@@ -433,7 +434,7 @@ class _SheetPainter extends CustomPainter {
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = w < 32 ? 0.6 : 0.8
-        ..color = Colors.black.withValues(alpha: 0.12),
+        ..color = Radix.blackA2,
     );
   }
 
@@ -483,10 +484,7 @@ class _FolderPainter extends CustomPainter {
       ..lineTo(left + r, bottom)
       ..quadraticBezierTo(left, bottom, left, bottom - r)
       ..close();
-    canvas.drawPath(
-      back,
-      Paint()..color = dark ? const Color(0xFF2B80D3) : const Color(0xFF3A97EA),
-    );
+    canvas.drawPath(back, Paint()..color = dark ? Radix.blue10 : Radix.blue9);
     final front = RRect.fromLTRBR(
       left,
       h * 0.3,
@@ -501,8 +499,8 @@ class _FolderPainter extends CustomPainter {
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: dark
-              ? const [Color(0xFF5DAEF4), Color(0xFF358BDD)]
-              : const [Color(0xFF7DC2FA), Color(0xFF4BA5F2)],
+              ? const [Radix.blue8, Radix.blue10]
+              : const [Radix.blue7, Radix.blue9],
         ).createShader(front.outerRect),
     );
     // A light edge along the front's top, as on the real icon.
@@ -510,13 +508,13 @@ class _FolderPainter extends CustomPainter {
       Offset(left + r, h * 0.3 + 0.5),
       Offset(right - r, h * 0.3 + 0.5),
       Paint()
-        ..color = Colors.white.withValues(alpha: 0.45)
+        ..color = Radix.whiteA6
         ..strokeWidth = w < 32 ? 0.6 : 1,
     );
     if (onAccent) {
       final outline = Paint()
         ..style = PaintingStyle.stroke
-        ..color = Colors.white.withValues(alpha: 0.9)
+        ..color = Radix.whiteA11
         ..strokeWidth = w < 32 ? 1 : 1.5;
       canvas
         ..drawPath(back, outline)

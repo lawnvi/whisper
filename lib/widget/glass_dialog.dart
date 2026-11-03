@@ -249,7 +249,7 @@ class WhisperGlassSurface extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
-    final palette = context.whisperPalette;
+    final palette = context.wc;
     final isDark = theme.brightness == Brightness.dark;
     final highContrast = MediaQuery.highContrastOf(context);
     final isDesktop = switch (defaultTargetPlatform) {
@@ -264,10 +264,10 @@ class WhisperGlassSurface extends StatelessWidget {
         : isDark
         ? 0.84
         : 0.82;
-    final surface = palette.surfaceElevated.withValues(alpha: baseOpacity);
+    final surface = palette.raised.withValues(alpha: baseOpacity);
     final topTint = Color.alphaBlend(
       neutral
-          ? Colors.white.withValues(alpha: isDark ? 0.055 : 0.20)
+          ? (isDark ? Radix.whiteA1 : Radix.whiteA4)
           : colors.primary.withValues(alpha: isDark ? 0.08 : 0.045),
       surface,
     );
@@ -278,8 +278,10 @@ class WhisperGlassSurface extends StatelessWidget {
             surface,
           );
     final borderColor = isDark
-        ? Colors.white.withValues(alpha: highContrast ? 0.32 : 0.16)
-        : const Color(0xFFFFFFFF).withValues(alpha: highContrast ? 1 : 0.88);
+        ? (highContrast ? Radix.whiteA5 : Radix.whiteA3)
+        : highContrast
+        ? Radix.white
+        : Radix.whiteA11;
     final blurSigma = highContrast
         ? 0.0
         : isDesktop
@@ -292,14 +294,14 @@ class WhisperGlassSurface extends StatelessWidget {
         boxShadow: showShadow
             ? <BoxShadow>[
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: isDark ? 0.44 : 0.18),
+                  color: (isDark ? Radix.blackA6 : Radix.blackA4),
                   blurRadius: isDesktop ? 42 : 28,
                   spreadRadius: -8,
                   offset: shadowOffset,
                 ),
                 BoxShadow(
                   color: neutral
-                      ? Colors.black.withValues(alpha: isDark ? 0.10 : 0.035)
+                      ? (isDark ? Radix.blackA2 : Radix.blackA1)
                       : colors.primary.withValues(alpha: isDark ? 0.08 : 0.05),
                   blurRadius: 22,
                   spreadRadius: -12,
@@ -338,9 +340,7 @@ class WhisperGlassSurface extends StatelessWidget {
                           gradient: LinearGradient(
                             colors: <Color>[
                               Colors.transparent,
-                              Colors.white.withValues(
-                                alpha: isDark ? 0.22 : 0.78,
-                              ),
+                              (isDark ? Radix.whiteA4 : Radix.whiteA10),
                               Colors.transparent,
                             ],
                           ),

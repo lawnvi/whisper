@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:toastification/toastification.dart';
+import 'package:whisper/theme/whisper_ui.dart';
 import 'package:whisper/helper/toast.dart';
 import 'package:whisper/theme/app_theme.dart';
 
@@ -59,12 +60,12 @@ void main() {
 
   testWidgets('the tone picks the icon and its colour', (tester) async {
     await pumpApp(tester);
-    final palette = AppTheme.fallbackPalette(Brightness.light);
+    const palette = WhisperColors.light;
 
     for (final (tone, icon, color) in [
-      (AppToastTone.success, Icons.check_circle_rounded, palette.trusted),
-      (AppToastTone.warning, Icons.warning_rounded, palette.warning),
-      (AppToastTone.error, Icons.error_rounded, palette.danger),
+      (AppToastTone.success, Icons.check_circle_rounded, palette.ok),
+      (AppToastTone.warning, Icons.warning_rounded, palette.warn),
+      (AppToastTone.error, Icons.error_rounded, palette.bad),
     ]) {
       showAppToast('提示', tone: tone);
       await pumpToast(tester);
@@ -102,7 +103,7 @@ void main() {
     expect(text.style?.color, AppTheme.darkTheme.colorScheme.onSurface);
     expect(
       tester.widget<Icon>(find.byIcon(Icons.error_rounded)).color,
-      AppTheme.fallbackPalette(Brightness.dark).danger,
+      WhisperColors.dark.bad,
     );
 
     await clearToasts(tester);

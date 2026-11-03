@@ -328,7 +328,7 @@ class ChatComposer extends StatelessWidget {
 
   Widget _buildClipboardImagesPreview(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final palette = context.whisperPalette;
+    final palette = context.wc;
     return Align(
       alignment: Alignment.centerLeft,
       child: Wrap(
@@ -370,11 +370,11 @@ class ChatComposer extends StatelessWidget {
                         maximumSize: const Size(30, 30),
                         backgroundColor: colorScheme.surface,
                         foregroundColor: colorScheme.onSurface,
-                        side: BorderSide(color: palette.borderSubtle),
+                        side: BorderSide(color: palette.sep),
                         padding: EdgeInsets.zero,
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         elevation: 2,
-                        shadowColor: Colors.black.withValues(alpha: 0.22),
+                        shadowColor: Radix.blackA4,
                       ),
                       icon: const Icon(Icons.close_rounded, size: 18),
                     ),
@@ -424,7 +424,7 @@ class ChatComposer extends StatelessWidget {
 
   Widget _buildClipboardFilesPreview(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final palette = context.whisperPalette;
+    final palette = context.wc;
     final files = pendingClipboardFiles;
     final first = files.first;
     final totalSize = files.fold<int>(
@@ -439,9 +439,9 @@ class ChatComposer extends StatelessWidget {
       key: clipboardFilesPreviewKey,
       padding: const EdgeInsets.fromLTRB(8, 8, 6, 8),
       decoration: BoxDecoration(
-        color: palette.surfaceMuted.withValues(alpha: 0.56),
+        color: palette.fill.withValues(alpha: 0.56),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: palette.borderSubtle),
+        border: Border.all(color: palette.sep),
       ),
       child: Row(
         children: [
@@ -478,7 +478,7 @@ class ChatComposer extends StatelessWidget {
                 const SizedBox(height: 3),
                 Text(
                   '$countLabel · ${_formatBytes(totalSize)}',
-                  style: TextStyle(color: palette.textMuted, fontSize: 12),
+                  style: TextStyle(color: palette.ink2, fontSize: 12),
                 ),
               ],
             ),

@@ -1,3 +1,5 @@
+import 'package:whisper/theme/whisper_ui.dart';
+import 'package:whisper/theme/radix_colors.dart';
 import 'dart:async';
 import 'dart:collection';
 import 'dart:io';
@@ -433,7 +435,7 @@ class _ImagePreviewState extends State<_ImagePreview> {
   }
 
   Widget _buildPreview(BuildContext context, int cacheWidth) {
-    final palette = context.whisperPalette;
+    final palette = context.wc;
     final bytes = _contentUriBytes;
     final contentUri = _isAndroidContentUri(widget.path);
     final ImageProvider? provider = contentUri
@@ -453,14 +455,14 @@ class _ImagePreviewState extends State<_ImagePreview> {
       frameKey: const ValueKey<String>('image-preview-frame'),
       sourceAspectRatio: _aspectRatio ?? 4 / 3,
       child: ColoredBox(
-        color: palette.surfaceMuted,
+        color: palette.fill,
         child: provider == null
             ? Center(
                 child: bytes == null
                     ? const CircularProgressIndicator(strokeWidth: 2)
                     : Icon(
                         Icons.broken_image_outlined,
-                        color: palette.textMuted,
+                        color: palette.ink2,
                         size: 38,
                       ),
               )
@@ -473,7 +475,7 @@ class _ImagePreviewState extends State<_ImagePreview> {
                 semanticLabel: widget.name,
                 errorBuilder: (context, error, stackTrace) => Icon(
                   Icons.broken_image_outlined,
-                  color: palette.textMuted,
+                  color: palette.ink2,
                   size: 38,
                 ),
               ),
@@ -525,15 +527,15 @@ class _MediaPlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final palette = context.whisperPalette;
+    final palette = context.wc;
     final icon = kind == MediaFileKind.video
         ? Icons.movie_outlined
         : Icons.image_outlined;
     return AspectRatio(
       aspectRatio: kind == MediaFileKind.video ? 16 / 9 : 4 / 3,
       child: ColoredBox(
-        color: palette.surfaceMuted,
-        child: Center(child: Icon(icon, size: 40, color: palette.textMuted)),
+        color: palette.fill,
+        child: Center(child: Icon(icon, size: 40, color: palette.ink2)),
       ),
     );
   }
@@ -556,7 +558,7 @@ class _TransferStateOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final palette = context.whisperPalette;
+    final palette = context.wc;
     final progressValue = progress.clamp(0, 1).toDouble();
     final displayStatus = _visualTransferStatusLabel(status);
     return Semantics(
@@ -565,7 +567,7 @@ class _TransferStateOverlay extends StatelessWidget {
       value: verifying ? displayStatus : '${(progressValue * 100).round()}%',
       child: ColoredBox(
         key: const ValueKey<String>('visual-transfer-overlay'),
-        color: Colors.black.withValues(alpha: 0.28),
+        color: Radix.blackA5,
         child: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -576,7 +578,7 @@ class _TransferStateOverlay extends StatelessWidget {
                   tooltip: AppLocalizations.of(context)?.retry ?? '重试',
                   onPressed: onRetry,
                   style: IconButton.styleFrom(
-                    backgroundColor: Colors.black.withValues(alpha: 0.42),
+                    backgroundColor: Radix.blackA6,
                     foregroundColor: Colors.white,
                   ),
                   icon: const Icon(Icons.refresh_rounded, size: 26),
@@ -589,7 +591,7 @@ class _TransferStateOverlay extends StatelessWidget {
                     value: verifying ? null : progressValue,
                     strokeWidth: 3.2,
                     color: Colors.white,
-                    backgroundColor: Colors.white.withValues(alpha: 0.3),
+                    backgroundColor: Radix.whiteA5,
                   ),
                 ),
               const SizedBox(height: 10),
@@ -602,13 +604,13 @@ class _TransferStateOverlay extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    color: failed ? palette.danger : Colors.white,
+                    color: failed ? palette.bad : Colors.white,
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                     fontFeatures: const [FontFeature.tabularFigures()],
                     shadows: const [
                       Shadow(
-                        color: Color(0x99000000),
+                        color: Radix.blackA8,
                         blurRadius: 5,
                         offset: Offset(0, 1),
                       ),
@@ -649,9 +651,9 @@ class _OverlayIconButton extends StatelessWidget {
       constraints: const BoxConstraints.tightFor(width: 36, height: 36),
       padding: EdgeInsets.zero,
       style: IconButton.styleFrom(
-        backgroundColor: Colors.black.withValues(alpha: 0.46),
+        backgroundColor: Radix.blackA7,
         foregroundColor: Colors.white,
-        side: BorderSide(color: Colors.white.withValues(alpha: 0.18)),
+        side: BorderSide(color: Radix.whiteA4),
       ),
       onPressed: onPressed,
       icon: Icon(icon, size: 20),
@@ -776,15 +778,11 @@ class _VideoAttachmentPreviewState extends State<_VideoAttachmentPreview> {
     VideoThumbnail? thumbnail, {
     required bool playable,
   }) => ColoredBox(
-    color: context.whisperPalette.surfaceMuted,
+    color: context.wc.fill,
     child: thumbnail == null
         ? playable
               ? const SizedBox.shrink()
-              : Icon(
-                  Icons.movie_outlined,
-                  color: context.whisperPalette.textMuted,
-                  size: 38,
-                )
+              : Icon(Icons.movie_outlined, color: context.wc.ink2, size: 38)
         : Image(
             key: const ValueKey<String>('video-message-cover'),
             image: MemoryBoundedMemoryImage(thumbnail.bytes),
@@ -804,8 +802,8 @@ class _VideoAttachmentPreviewState extends State<_VideoAttachmentPreview> {
         height: 52,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: Colors.black.withValues(alpha: .38),
-          border: Border.all(color: Colors.white70, width: 1.5),
+          color: Radix.blackA6,
+          border: Border.all(color: Radix.whiteA9, width: 1.5),
         ),
         child: const Icon(
           Icons.play_arrow_rounded,
@@ -827,7 +825,7 @@ class _VideoAttachmentPreviewState extends State<_VideoAttachmentPreview> {
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [Colors.transparent, Color(0x99000000)],
+            colors: [Colors.transparent, Radix.blackA8],
           ),
         ),
         child: Row(
@@ -878,7 +876,7 @@ class _AudioTransferPreview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final palette = context.whisperPalette;
+    final palette = context.wc;
     final unavailable =
         progress == null && !verifying && !failed && onCancel == null;
     final indicator = SizedBox.square(
@@ -894,11 +892,7 @@ class _AudioTransferPreview extends StatelessWidget {
                 padding: EdgeInsets.zero,
                 tooltip: AppLocalizations.of(context)?.retry ?? '重试',
                 onPressed: onRetry,
-                icon: Icon(
-                  Icons.refresh_rounded,
-                  color: palette.danger,
-                  size: 22,
-                ),
+                icon: Icon(Icons.refresh_rounded, color: palette.bad, size: 22),
               )
             : unavailable
             ? Icon(
@@ -963,7 +957,7 @@ class _AudioTransferPreview extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: failed
-                          ? palette.danger
+                          ? palette.bad
                           : colorScheme.onSurfaceVariant,
                       fontSize: 12,
                       fontFeatures: const [FontFeature.tabularFigures()],
@@ -1308,7 +1302,7 @@ class _AudioMessagePlayerState extends State<AudioMessagePlayer> {
 
   Widget _buildDetailedPlayer(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final palette = context.whisperPalette;
+    final palette = context.wc;
     final progress = _duration.inMilliseconds == 0
         ? 0.0
         : (_position.inMilliseconds / _duration.inMilliseconds)
@@ -1365,7 +1359,7 @@ class _AudioMessagePlayerState extends State<AudioMessagePlayer> {
                       Text(
                         timeline,
                         style: TextStyle(
-                          color: palette.textMuted,
+                          color: palette.ink2,
                           fontSize: 11,
                           fontFeatures: const [FontFeature.tabularFigures()],
                         ),
@@ -1378,10 +1372,7 @@ class _AudioMessagePlayerState extends State<AudioMessagePlayer> {
                           widget.status,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: palette.textMuted,
-                            fontSize: 11,
-                          ),
+                          style: TextStyle(color: palette.ink2, fontSize: 11),
                         ),
                       ),
                   ],
@@ -1416,7 +1407,7 @@ class _WaveformScrubber extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final palette = context.whisperPalette;
+    final palette = context.wc;
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
@@ -1445,7 +1436,7 @@ class _WaveformScrubber extends StatelessWidget {
                   painter: _WaveformPainter(
                     progress: progress,
                     activeColor: colorScheme.primary,
-                    inactiveColor: palette.textMuted.withValues(alpha: 0.34),
+                    inactiveColor: palette.ink2.withValues(alpha: 0.34),
                   ),
                 ),
               ),
@@ -1657,7 +1648,7 @@ class _FullscreenMediaViewerState extends State<_FullscreenMediaViewer> {
                   tooltip: AppLocalizations.of(context)?.close ?? '关闭',
                   onPressed: close,
                   style: IconButton.styleFrom(
-                    backgroundColor: Colors.black.withValues(alpha: 0.46),
+                    backgroundColor: Radix.blackA7,
                     foregroundColor: Colors.white,
                   ),
                   icon: const Icon(Icons.close_rounded),
@@ -1912,7 +1903,7 @@ class _FullscreenImageState extends State<_FullscreenImage> {
           return const Center(
             child: Icon(
               Icons.broken_image_outlined,
-              color: Colors.white70,
+              color: Radix.whiteA9,
               size: 48,
             ),
           );

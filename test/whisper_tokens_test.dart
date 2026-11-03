@@ -50,7 +50,6 @@ void main() {
       'ink': c.ink,
       'ink2': c.ink2,
       'ink3': c.ink3,
-      'ink2-glass': c.ink2Glass,
       'accent': c.accent,
       'ok': c.ok,
       'warn': c.warn,
@@ -68,14 +67,16 @@ void main() {
       expect(WhisperColors.light.onAccent, _hex(colors['on-accent']!));
     });
 
-    test('there is one blue', () {
-      expect(WhisperColors.light.accent, const Color(0xFF007AFF));
-      expect(WhisperColors.dark.accent, const Color(0xFF0A84FF));
+    test('the accent is Radix blue', () {
+      expect(WhisperColors.light.accent, Radix.blue9);
+      expect(WhisperColors.dark.accent, Radix.blueDark9);
     });
 
     test('overlays', () {
       Map<String, Color> of(WhisperColors c) => {
+        'ink2-glass': c.ink2Glass,
         'sep': c.sep,
+        'border': c.border,
         'fill': c.fill,
         'fill2': c.fill2,
         'selected': c.selected,
@@ -305,14 +306,12 @@ void main() {
   });
 
   group('wiring', () {
-    test('both app themes carry the new tokens and keep the old ones', () {
+    test('both app themes carry the tokens', () {
       expect(
         AppTheme.lightTheme.extension<WhisperColors>(),
         WhisperColors.light,
       );
       expect(AppTheme.darkTheme.extension<WhisperColors>(), WhisperColors.dark);
-      expect(AppTheme.lightTheme.extension<WhisperPalette>(), isNotNull);
-      expect(AppTheme.darkTheme.extension<WhisperPalette>(), isNotNull);
     });
 
     testWidgets('glass without blur falls back to the opaque canvas', (

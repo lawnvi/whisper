@@ -1,3 +1,4 @@
+import 'package:whisper/theme/whisper_ui.dart';
 import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
@@ -212,7 +213,7 @@ class _ValidatedInputDialogState extends State<_ValidatedInputDialog> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final palette = context.whisperPalette;
+    final palette = context.wc;
     return CallbackShortcuts(
       bindings: <ShortcutActivator, VoidCallback>{
         const SingleActivator(LogicalKeyboardKey.escape): _cancel,
@@ -246,7 +247,7 @@ class _ValidatedInputDialogState extends State<_ValidatedInputDialog> {
                   widget.description!,
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: palette.textMuted,
+                    color: palette.ink2,
                     height: 1.5,
                   ),
                 ),
@@ -276,14 +277,12 @@ class _ValidatedInputDialogState extends State<_ValidatedInputDialog> {
                     fontSize: 17,
                     height: 1.4,
                   ),
-                  placeholderStyle: TextStyle(color: palette.textMuted),
+                  placeholderStyle: TextStyle(color: palette.ink2),
                   cursorColor: colorScheme.primary,
                   decoration: BoxDecoration(
-                    color: palette.surfaceElevated,
+                    color: palette.raised,
                     border: Border.all(
-                      color: _errors[index] == null
-                          ? palette.borderSubtle
-                          : palette.danger,
+                      color: _errors[index] == null ? palette.sep : palette.bad,
                     ),
                     borderRadius: BorderRadius.circular(10),
                   ),
@@ -299,7 +298,7 @@ class _ValidatedInputDialogState extends State<_ValidatedInputDialog> {
                   const SizedBox(height: 8),
                   Text(
                     error,
-                    style: TextStyle(color: palette.danger, fontSize: 12),
+                    style: TextStyle(color: palette.bad, fontSize: 12),
                   ),
                 ],
               ],

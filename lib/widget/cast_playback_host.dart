@@ -1,3 +1,4 @@
+import 'package:whisper/theme/radix_colors.dart';
 import 'package:whisper/new_ui/shell/shell_requests.dart';
 import 'dart:async';
 import 'dart:ui' show FontFeature;
@@ -283,7 +284,7 @@ class _CastPlaybackViewState extends State<CastPlaybackView>
                           gradient: LinearGradient(
                             begin: Alignment.topCenter,
                             end: Alignment.bottomCenter,
-                            colors: [Color(0xB3000000), Colors.transparent],
+                            colors: [Radix.blackA9, Colors.transparent],
                           ),
                         ),
                         padding: const EdgeInsets.fromLTRB(24, 12, 16, 28),
@@ -296,7 +297,7 @@ class _CastPlaybackViewState extends State<CastPlaybackView>
                                     ? Icons.movie_outlined
                                     : Icons.tv_rounded,
                                 size: 18,
-                                color: Colors.white70,
+                                color: Radix.whiteA9,
                               ),
                               const SizedBox(width: 10),
                               Expanded(
@@ -350,7 +351,7 @@ class _CastPlaybackViewState extends State<CastPlaybackView>
     final controller = player.videoController;
     const numbers = TextStyle(
       fontSize: 12,
-      color: Colors.white70,
+      color: Radix.whiteA9,
       fontFeatures: [FontFeature.tabularFigures()],
     );
     return Container(
@@ -358,7 +359,7 @@ class _CastPlaybackViewState extends State<CastPlaybackView>
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [Colors.transparent, Color(0xD9000000)],
+          colors: [Colors.transparent, Radix.blackA11],
         ),
       ),
       padding: const EdgeInsets.fromLTRB(24, 40, 24, 16),
@@ -373,9 +374,9 @@ class _CastPlaybackViewState extends State<CastPlaybackView>
               data: SliderTheme.of(context).copyWith(
                 trackHeight: 3,
                 activeTrackColor: Colors.white,
-                inactiveTrackColor: Colors.white24,
+                inactiveTrackColor: Radix.whiteA4,
                 thumbColor: Colors.white,
-                overlayColor: Colors.white12,
+                overlayColor: Radix.whiteA2,
                 thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),
                 overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
               ),

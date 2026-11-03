@@ -1,8 +1,12 @@
+import 'dart:math' as math;
 import 'dart:io';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:whisper/theme/whisper_ui.dart';
+import 'package:whisper/theme/app_theme.dart';
+import 'package:whisper/widget/message_link_text.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/message.dart';
@@ -323,10 +327,21 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('已选 1 条'), findsOneWidget);
+    Color? rowColor(int id) =>
+        (tester
+                    .widget<DecoratedBox>(
+                      find.byKey(ValueKey('message-row-$id')),
+                    )
+                    .decoration
+                as BoxDecoration)
+            .color;
+    expect(rowColor(1), WhisperColors.light.tint);
+    expect(rowColor(2), isNull);
 
     await tester.tap(find.text('second message'));
     await tester.pumpAndSettle();
     expect(find.text('已选 2 条'), findsOneWidget);
+    expect(rowColor(2), WhisperColors.light.tint);
 
     await tester.tap(find.byKey(const ValueKey('delete-selected-messages')));
     await tester.pumpAndSettle();
@@ -443,4 +458,57 @@ MessageData _message({
     md5: '',
     fileTimestamp: 0,
   );
+
+  group('selecting a message of mine', () {
+    for (final (name, theme, c) in [
+      ('light', AppTheme.lightTheme, WhisperColors.light),
+      ('dark', AppTheme.darkTheme, WhisperColors.dark),
+    ]) {
+      testWidgets('$name: selected text shows on its colour', (tester) async {
+        late TextSelectionThemeData selection;
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: theme,
+            home: MessageSelectionColors(
+              mine: true,
+              child: Builder(
+                builder: (context) {
+                  selection = TextSelectionTheme.of(context);
+                  return const SizedBox();
+                },
+              ),
+            ),
+          ),
+        );
+        double contrast(Color a, Color b) {
+          final x = a.computeLuminance(), y = b.computeLuminance();
+          return (math.max(x, y) + .05) / (math.min(x, y) + .05);
+        }
+
+        final highlight = selection.selectionColor!;
+        expect(highlight.a, 1);
+        expect(contrast(highlight, c.tintHover), greaterThan(1.5));
+        expect(contrast(c.onTint, highlight), greaterThan(4.5));
+      });
+    }
+
+    testWidgets('someone else\'s keeps the theme\'s selection', (tester) async {
+      late TextSelectionThemeData selection;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.lightTheme,
+          home: MessageSelectionColors(
+            mine: false,
+            child: Builder(
+              builder: (context) {
+                selection = TextSelectionTheme.of(context);
+                return const SizedBox();
+              },
+            ),
+          ),
+        ),
+      );
+      expect(selection.selectionColor, Radix.blueA5);
+    });
+  });
 }

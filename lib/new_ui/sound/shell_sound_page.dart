@@ -201,6 +201,7 @@ class _SourceView extends StatelessWidget {
             kind: self == null
                 ? DeviceKind.laptop
                 : deviceKindFor(self.platform),
+            os: deviceOsFor(self?.platform ?? ''),
             wallpaper: DeviceWallpaper.self,
             size: 96,
           ),

@@ -1,3 +1,4 @@
+import 'package:whisper/theme/whisper_ui.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -68,7 +69,7 @@ class MobilePointerSettings extends StatelessWidget {
             ),
             Text(
               l10n.mobileControlPrecisionHint,
-              style: TextStyle(color: context.whisperPalette.textMuted),
+              style: TextStyle(color: context.wc.ink2),
             ),
             const SizedBox(height: 24),
             SizedBox(

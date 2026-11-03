@@ -372,12 +372,12 @@ private class IslandOverlayView(
     private val onGone: (IslandOverlayView) -> Unit,
 ) : View(context) {
     companion object {
-        private val BLUE = Color.rgb(0x0A, 0x84, 0xFF)
-        private val GREEN = Color.rgb(0x30, 0xD1, 0x58)
-        private val ORANGE = Color.rgb(0xFF, 0x9F, 0x0A)
-        private val RED = Color.rgb(0xFF, 0x45, 0x3A)
-        private val INDIGO = Color.rgb(0x5E, 0x5C, 0xE6)
-        private val TILE = Color.rgb(0x2C, 0x2C, 0x2E)
+        private val BLUE = Color.rgb(0x00, 0x90, 0xFF)
+        private val GREEN = Color.rgb(0x30, 0xA4, 0x6C)
+        private val ORANGE = Color.rgb(0xFF, 0xC5, 0x3D)
+        private val RED = Color.rgb(0xE5, 0x48, 0x4D)
+        private val INDIGO = Color.rgb(0x5B, 0x5B, 0xD6)
+        private val TILE = Color.rgb(0x27, 0x2A, 0x2D)
         private const val COLLAPSE_AFTER_MS = 6000L
     }
 
@@ -410,7 +410,7 @@ private class IslandOverlayView(
     private val rim = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeWidth = dp(0.8f)
-        color = Color.argb(28, 255, 255, 255)
+        color = Color.argb(26, 255, 255, 255)
     }
     private val tile = Paint(Paint.ANTI_ALIAS_FLAG)
     private val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply {

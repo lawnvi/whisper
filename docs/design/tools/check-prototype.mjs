@@ -393,9 +393,9 @@ const pillOn = async () => ev(`(()=>{const p=document.querySelector('.side-sel')
 await sleep(300);
 await ok('selection sits on the current row', await pillOn());
 await ok('sidebar rows show device art', await ev(`document.querySelectorAll('.side-list .dev .g svg rect').length>=8&&!!document.querySelector('.side-list [data-dev=imac] .g [fill^="url(#w-"]')`));
-await ok('there is one blue', await ev(`(()=>{const css=[...document.styleSheets].flatMap(x=>[...x.cssRules]).map(r=>r.cssText).join('');return !/accent-(text|glass)/.test(css)&&!/#0066cc|#0056ad|#2997ff|#5eb0ff/i.test(document.documentElement.outerHTML)})()`));
+await ok('accent comes from Radix', await ev(`getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()==='#0090ff'`));
 await ok('wallpapers stay in one colour family', await ev(`[...document.querySelectorAll('svg defs linearGradient[id^="w-"] stop')].every(s=>{const c=s.getAttribute('stop-color'),r=parseInt(c.slice(1,3),16),g=parseInt(c.slice(3,5),16),b=parseInt(c.slice(5,7),16);const mx=Math.max(r,g,b),d=mx-Math.min(r,g,b);if(!d)return true;let h=mx===r?((g-b)/d)%6:mx===g?(b-r)/d+2:(r-g)/d+4;h=(h*60+360)%360;return h>=170&&h<=290})`));
-await ok('live status uses the accent', await ev(`(()=>{const s=document.querySelector('.side-list small.live');return !!s&&getComputedStyle(s).color==='rgb(0, 122, 255)'})()`));
+await ok('live status uses the accent', await ev(`(()=>{const s=document.querySelector('.side-list small.live');return !!s&&getComputedStyle(s).color==='rgb(13, 116, 206)'})()`));
 await ok('offline art fades, connected art does not', await ev(`getComputedStyle(document.querySelector('.side-list [data-dev=ubuntu] .g svg')).filter.includes('grayscale')&&getComputedStyle(document.querySelector('.side-list [data-dev=imac] .g svg')).filter==='none'&&getComputedStyle(document.querySelector('.side-list [data-dev=near] .g')).filter==='none'`));
 await ok('selection glides and keeps its element', await ev(`new Promise(res=>{const el=document.querySelector('.side-sel');el.__m=1;const y0=new DOMMatrix(getComputedStyle(el).transform).m42;document.querySelector('.side-list [data-dev=mi]').click();const target=document.querySelector('.side-list [data-dev=mi]').offsetTop;let mid=false;const s=performance.now();(function f(){const y=new DOMMatrix(getComputedStyle(document.querySelector('.side-sel')).transform).m42;if(y>y0+1&&y<target-1)mid=true;if(performance.now()-s<700)requestAnimationFrame(f);else res(document.querySelector('.side-sel').__m===1&&mid)})()})`));
 await ok('selection lands on the new row', await pillOn());
@@ -412,11 +412,11 @@ await click('[data-demo=inAudio]'); await sleep(300);
 await size(1400, 1000, false); await send('Page.navigate', { url: FILE }); await sleep(800);
 await click('[data-demo=phone]'); await sleep(700);
 const phoneBlue = `[getComputedStyle(document.querySelector('.side-list small.live')).color]`;
-await ok('phone blue is the accent', (await ev(phoneBlue)).every(c => c === 'rgb(0, 122, 255)'), JSON.stringify(await ev(phoneBlue)));
+await ok('phone blue is the accent', (await ev(phoneBlue)).every(c => c === 'rgb(13, 116, 206)'), JSON.stringify(await ev(phoneBlue)));
 await ok('phone list shows device art', await ev(`!!document.querySelector('.side-list [data-dev=imac] .g [fill^="url(#w-"]')`));
 await ok('phone separators line up with the text', await ev(`(()=>{const r=document.querySelectorAll('.side-list .dev')[1],t=r.querySelector('b').getBoundingClientRect().left-r.getBoundingClientRect().left;return Math.abs(t-parseFloat(getComputedStyle(r,'::before').left))<2})()`));
 await click('#darkChip'); await sleep(300);
-await ok('phone blue in dark', (await ev(phoneBlue)).every(c => c === 'rgb(10, 132, 255)'), JSON.stringify(await ev(phoneBlue)));
+await ok('phone blue in dark', (await ev(phoneBlue)).every(c => c === 'rgb(112, 184, 255)'), JSON.stringify(await ev(phoneBlue)));
 await click('#darkChip'); await sleep(200);
 await click('[data-demo=phone]'); await sleep(500);
 

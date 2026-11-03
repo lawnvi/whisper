@@ -1,3 +1,4 @@
+import 'package:whisper/theme/radix_colors.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/cupertino.dart';
@@ -110,10 +111,10 @@ String? copyCount(AppLocalizations l10n, FileCopyBatch batch) {
 }
 
 Color copyTint(FileCopyPhase phase) => switch (phase) {
-  FileCopyPhase.starting || FileCopyPhase.running => const Color(0xFF0A84FF),
+  FileCopyPhase.starting || FileCopyPhase.running => Radix.blue9,
   FileCopyPhase.waiting || FileCopyPhase.paused => FlowSpaceTokens.paused,
   FileCopyPhase.failed => FlowSpaceTokens.failed,
-  FileCopyPhase.canceled => const Color(0xFF8E8E93),
+  FileCopyPhase.canceled => Radix.slateDark10,
   FileCopyPhase.done => FlowSpaceTokens.live,
 };
 
@@ -184,7 +185,7 @@ class CopyRing extends StatelessWidget {
     super.key,
     required this.batch,
     this.size = 20,
-    this.track = const Color(0x33FFFFFF),
+    this.track = Radix.whiteA4,
     this.tint,
   });
 

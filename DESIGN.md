@@ -1,66 +1,83 @@
 ---
 version: 1.0
 name: Whisper 界面语言
-description: Whisper Flutter App 的界面语言：语法、质感、token、规则。新界面已实现但默认关闭，过渡规则见「怎么读这份文档」。
+description: Whisper Flutter App 的界面语言：语法、质感、token、规则。过渡规则见「怎么读这份文档」。
 status: 已定稿（2026-11-02）。新界面是唯一的界面，2026-11-03 去掉了开关、删了旧界面。接手先看 docs/design/README.md
 colors:
-  canvas: "#F5F5F7"
+  # 全部来自 Radix Colors 3.0（slate、blue、green、amber、red），各步的用途见「色彩」
+  canvas: "#F9F9FB"
   content: "#FFFFFF"
   group: "#FFFFFF"
   raised: "#FFFFFF"
-  bubble: "#F2F2F7"
-  ink: "#1D1D1F"
-  ink2: "#6E6E73"
-  ink3: "#86868B"
-  ink2-glass: "#515156"
-  accent: "#007AFF"
+  bubble: "#F0F0F3"
+  ink: "#1C2024"
+  ink2: "#60646C"
+  ink3: "#80838D"
+  accent: "#0090FF"
+  accent-text: "#0D74CE"
   on-accent: "#FFFFFF"
-  ok: "#1F7A36"
-  warn: "#C93400"
-  bad: "#D70015"
-  sidebar-solid: "#EFEFF3"
-  canvas-dark: "#000000"
-  content-dark: "#1C1C1E"
-  group-dark: "#1C1C1E"
-  raised-dark: "#2C2C2E"
-  bubble-dark: "#2C2C2E"
-  sidebar-solid-dark: "#252528"
-  ink-dark: "#F5F5F7"
-  ink2-dark: "#A1A1A6"
-  ink3-dark: "#8E8E93"
-  ink2-glass-dark: "#C0C0C6"
-  accent-dark: "#0A84FF"
-  ok-dark: "#30D158"
-  warn-dark: "#FFB340"
-  bad-dark: "#FF6961"
+  tint: "#E6F4FE"
+  tint-hover: "#D5EFFF"
+  tint-active: "#C2E5FF"
+  on-tint: "#113264"
+  ok: "#218358"
+  ok-solid: "#30A46C"
+  warn: "#AB6400"
+  warn-solid: "#FFC53D"
+  bad: "#CE2C31"
+  bad-solid: "#E5484D"
+  sidebar-solid: "#F9F9FB"
+  canvas-dark: "#111113"
+  content-dark: "#18191B"
+  group-dark: "#18191B"
+  raised-dark: "#272A2D"
+  bubble-dark: "#272A2D"
+  sidebar-solid-dark: "#18191B"
+  ink-dark: "#EDEEF0"
+  ink2-dark: "#B0B4BA"
+  ink3-dark: "#777B84"
+  accent-dark: "#0090FF"
+  accent-text-dark: "#70B8FF"
+  tint-dark: "#0D2847"
+  tint-hover-dark: "#003362"
+  tint-active-dark: "#004074"
+  on-tint-dark: "#C2E6FF"
+  ok-dark: "#3DD68C"
+  ok-solid-dark: "#30A46C"
+  warn-dark: "#FFCA16"
+  warn-solid-dark: "#FFC53D"
+  bad-dark: "#FF9592"
+  bad-solid-dark: "#E5484D"
 overlays:
-  # 浅色 / 深色
-  sep: "rgba(60,60,67,.10) / rgba(235,235,245,.14)"
-  fill: "rgba(120,120,128,.10) / rgba(120,120,128,.24)"
-  fill2: "rgba(120,120,128,.18) / rgba(120,120,128,.36)"
-  selected: "rgba(0,0,0,.07) / rgba(255,255,255,.10)"
-  sidebar-selected: "rgba(255,255,255,.62) / rgba(255,255,255,.12)，桌面侧栏的选中行，带投影和高光，像分段控件的滑块"
-  sidebar-veil: "rgba(255,255,255,.62) / rgba(255,255,255,0)，macOS 系统材质上的一层白。系统的 sidebar 材质在深色壁纸上发灰，浅色要偏白"
-  scrim: "rgba(0,0,0,.24) / rgba(0,0,0,.46)，弹层后面的遮罩"
+  # 浅色 / 深色。slate-a 透明色阶，放在玻璃上也成立
+  ink2-glass: "rgba(0,7,20,.624) / rgba(241,247,254,.71)，玻璃上的次要文字。透明色阶跟着背后的颜色走，实色在彩色壁纸上不够 4.5:1"
+  sep: "rgba(0,0,47,.149) / rgba(214,235,253,.188)"
+  border: "rgba(0,6,46,.196) / rgba(217,237,255,.251)"
+  fill: "rgba(0,0,51,.059) / rgba(221,234,248,.078)"
+  fill2: "rgba(0,0,45,.09) / rgba(211,237,248,.114)"
+  selected: "rgba(0,9,50,.122) / rgba(217,237,254,.145)"
+  sidebar-selected: "rgba(255,255,255,.6) / rgba(255,255,255,.15)，桌面侧栏的选中行，带投影和高光，像分段控件的滑块"
+  sidebar-veil: "rgba(255,255,255,.6) / rgba(255,255,255,0)，macOS 系统材质上的一层白。系统的 sidebar 材质在深色壁纸上发灰，浅色要偏白"
+  scrim: "rgba(0,0,0,.3) / rgba(0,0,0,.5)，弹层后面的遮罩"
 glass:
   # 底色 + 背景模糊 + 饱和度。窗口材质各平台不同，见「平台」
-  sidebar: "rgba(238,238,243,.66) / rgba(38,38,42,.62)，模糊 44，饱和 1.8"
-  control: "rgba(255,255,255,.72) / rgba(58,58,60,.68)，模糊 30，饱和 1.8"
-  panel: "rgba(246,246,249,.74) / rgba(36,36,40,.72)，模糊 44，饱和 1.9"
+  sidebar: "rgba(240,240,243,.66) / rgba(33,34,37,.62)，模糊 44，饱和 1.8"
+  control: "rgba(255,255,255,.7) / rgba(46,49,53,.68)，模糊 30，饱和 1.8"
+  panel: "rgba(249,249,251,.74) / rgba(33,34,37,.72)，模糊 44，饱和 1.9"
   mica: "Windows 11 的侧栏，系统画，Flutter 不画底色。原型用 rgba(243,243,243,.9) / rgba(32,32,32,.92) 模拟。失去焦点时系统退成 #F3F3F3 / #202020"
 settings-icons:
-  # 设置分区的彩色小图标（「色彩」的例外），深浅色一样。连接用 accent。从上到下压暗 22%
-  general: "#8E8E93"
-  system: "#636366"
-  sharing: "#FF375F"
-  notifications: "#FF9F0A"
-  about: "#8E8E93"
+  # 设置分区的彩色小图标（「色彩」的例外），深浅色一样。连接用 accent。都是 9 号色
+  general: "#8B8D98"
+  system: "#60646C"
+  sharing: "#E93D82"
+  notifications: "#F76B15"
+  about: "#8B8D98"
 elevation:
   # 只有这三层阴影。.5 的扩散是很细的外轮廓
-  e1: "贴在画布上的分组。0 1px 3px rgba(0,0,0,.05) / 0 1px 2px rgba(0,0,0,.3), 0 0 0 .5px rgba(255,255,255,.06)"
-  e2: "浮在内容上的控件。0 8px 28px rgba(0,0,0,.14), 0 1px 4px rgba(0,0,0,.08), 0 0 0 .5px rgba(0,0,0,.08) / 0 8px 28px rgba(0,0,0,.5), 0 1px 4px rgba(0,0,0,.4), 0 0 0 .5px rgba(255,255,255,.1)"
-  e3: "窗口、面板、托盘。0 32px 80px rgba(16,24,48,.32), 0 8px 24px rgba(16,24,48,.14), 0 0 0 .5px rgba(0,0,0,.2) / 0 32px 80px rgba(0,0,0,.62), 0 8px 24px rgba(0,0,0,.4), 0 0 0 .5px rgba(255,255,255,.14)"
-  highlight: "玻璃顶边。inset 0 .5px 0 rgba(255,255,255,.8) / rgba(255,255,255,.14)"
+  e1: "贴在画布上的分组。0 1px 3px rgba(0,0,0,.05) / 0 1px 2px rgba(0,0,0,.3), 0 0 0 .5px rgba(255,255,255,.05)"
+  e2: "浮在内容上的控件。0 8px 28px rgba(0,0,0,.15), 0 1px 4px rgba(0,0,0,.1), 0 0 0 .5px rgba(0,0,0,.1) / 0 8px 28px rgba(0,0,0,.5), 0 1px 4px rgba(0,0,0,.4), 0 0 0 .5px rgba(255,255,255,.1)"
+  e3: "窗口、面板、托盘。0 32px 80px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.15), 0 0 0 .5px rgba(0,0,0,.2) / 0 32px 80px rgba(0,0,0,.6), 0 8px 24px rgba(0,0,0,.4), 0 0 0 .5px rgba(255,255,255,.15)"
+  highlight: "玻璃顶边。inset 0 .5px 0 rgba(255,255,255,.8) / rgba(255,255,255,.15)"
 controls:
   # 开关滑块的投影，和上面三层高度无关
   knob: "0 1px 3px rgba(0,0,0,.3), 0 0 0 .5px rgba(0,0,0,.05)"
@@ -68,33 +85,33 @@ controls:
 screens:
   # 键鼠排列里的屏幕块。画的是真实的屏幕，深浅色一样
   menu-bar: "rgba(255,255,255,.4)"
-  shade-top: "rgba(0,0,0,.08)"
-  shade-bottom: "rgba(0,0,0,.26)"
+  shade-top: "rgba(0,0,0,.1)"
+  shade-bottom: "rgba(0,0,0,.3)"
   label: "rgba(255,255,255,1)"
   pointer-fill: "rgba(0,0,0,1)"
   pointer-stroke: "rgba(255,255,255,1)"
   shadow: "0 2px 8px rgba(0,0,0,.2), 0 0 0 .5px rgba(0,0,0,.2)"
-  lifted: "0 14px 22px rgba(0,0,0,.34)"
-  label-shadow: "0 1px 2px rgba(0,0,0,.35)"
+  lifted: "0 14px 22px rgba(0,0,0,.3)"
+  label-shadow: "0 1px 2px rgba(0,0,0,.3)"
   pointer-shadow: "0 1px 2px rgba(0,0,0,.5)"
-  canvas-inset: "inset 0 1px 3px rgba(0,0,0,.06)"
+  canvas-inset: "inset 0 1px 3px rgba(0,0,0,.05)"
 viewfinder:
   # 手机连接设备页的取景框和二维码。对着的是摄像头和印出来的码，深浅色一样
-  glow: "#3A4048"
-  base: "#14161A"
-  mark: "rgba(255,255,255,.92)"
-  line: "rgba(255,255,255,.75)"
-  hint: "rgba(255,255,255,.86)"
-  qr-ink: "#111111"
+  glow: "#43484E"
+  base: "#111113"
+  mark: "rgba(255,255,255,.9)"
+  line: "rgba(255,255,255,.7)"
+  hint: "rgba(255,255,255,.9)"
+  qr-ink: "#000000"
 wallpapers:
   # 设备图和屏幕块里的渐变，从左上到右下。按配对顺序循环分配，这台固定用 self，没配对的用 unpaired。
-  # 都在强调色的邻近色里（蓝、青、靛、紫），不用橙、红、绿，放在蓝色界面旁边才协调
-  self: ["#5B8CFF", "#8F7BFF"]
-  device-1: ["#2A93FF", "#3CC4E8"]
-  device-2: ["#6F86FF", "#A78BFA"]
-  device-3: ["#22AECB", "#5BD3C6"]
-  device-4: ["#7F7BFF", "#C58AF0"]
-  unpaired: ["#A9C1EE", "#7D9BDD"]
+  # Radix 的蓝、青、靛、紫，不用橙、红、绿，放在蓝色界面旁边才协调
+  self: ["#3E63DD", "#6E56CF"]
+  device-1: ["#0090FF", "#00A2C7"]
+  device-2: ["#5B5BD6", "#6E56CF"]
+  device-3: ["#00A2C7", "#12A594"]
+  device-4: ["#6E56CF", "#8E4EC6"]
+  unpaired: ["#8EC8F6", "#5EB1EF"]
 typography:
   # 指针设备 / 触控设备，单位逻辑像素
   large: [26, 32]
@@ -228,26 +245,41 @@ targets:
 ### 设备是实物
 
 - **设备列表**用小的写实设备图：桌面电脑宽 32、手机和平板高 30，手机、平板和折叠屏上放大 1.3 倍。折叠屏不单独画，都用手机的图。连着的和没配对的是原本的颜色，配对过、在附近但没连接的略淡（饱和 0.7，不透明 72%），离线的褪成灰色半透明（50%）。
-- **大尺寸**用写实的设备图：银色机身、黑色边框，屏幕里是这台设备的壁纸。设备卡片、声音列表、托盘、空状态都用它。
+- **大尺寸**用写实的设备图：屏幕里是这台设备的壁纸。设备卡片、声音列表、托盘、空状态都用它。
+- **电脑看得出系统，但不放苹果和微软的标志**（两家都不允许未授权使用）。Mac 银色机身，屏幕里有菜单栏和 Dock；Windows 深色机身带任务栏；Linux 深色机身，屏幕里是企鹅（免费可用）。设备卡片和桌面的悬停提示写系统名。手机和平板不区分，屏幕太窄。
 - **键鼠排列**里的屏幕显示壁纸和菜单栏，像系统设置的显示器排列。指针用真实的箭头。
 - 壁纸是每台设备唯一的彩色来源，界面其他地方不给设备分配颜色。
 
 ## 色彩
 
+**所有颜色都来自 [Radix Colors](https://www.radix-ui.com/colors)，用法也按它的规范。** 常量在 `lib/theme/radix_colors.dart`，不手写色值。中性色用 Slate，强调色用 Blue，语义色用 Green、Amber、Red。
+
+| 步 | 用途 | 对应的 token |
+|---|---|---|
+| 1、2 | 页面和侧栏背景 | `canvas` `sidebar-solid`，深色的 `content` `group` |
+| 3 | 控件背景 | `fill`、`bubble`，强调色的 `tint` |
+| 4 | 悬停 | `fill2`、`tint-hover`（我发的消息） |
+| 5 | 按下、选中 | `selected`、`tint-active` |
+| 6 | 分隔线、不可操作的边 | `sep` |
+| 7、8 | 控件边框、悬停的边框、焦点环 | `border` |
+| 9、10 | 实底：主按钮、开关、勾选、进度 | `accent` `ok-solid` `warn-solid` `bad-solid` |
+| 11 | 次要文字；带颜色的文字和图标 | `ink2` `accent-text` `ok` `warn` `bad` |
+| 12 | 主要文字 | `ink`、`on-tint` |
+
 | 角色 | 用在 | 不用在 |
 |---|---|---|
-| **中性色**（`canvas` `content` `group` `ink*`） | 所有大面积 | |
-| **强调色**（`accent`） | 主按钮、开关、勾选、选中的文件行、我发的消息、进度；链接、次要按钮、蓝色图标和状态文字。**只有这一种蓝，全平台一样，不另设更深的蓝色字** | 装饰 |
-| **语义色**（`ok` `warn` `bad`） | 结果和风险，总是配文字或图标 | 表示「开」 |
-| **壁纸** | 只在设备图和屏幕块里，都在强调色的邻近色里 | 界面元素 |
+| **中性色** | 所有大面积 | |
+| **强调色** | 实底用 `accent`，文字、链接和图标用 `accent-text`，淡底用 `tint`。**实底的颜色不直接当文字色** | 装饰 |
+| **语义色**（`ok` `warn` `bad`） | 结果和风险，总是配文字或图标。要实底时用 `*-solid`，`warn-solid` 上写 `ink`，不写白字 | 表示「开」 |
+| **壁纸** | 只在设备图和屏幕块里 | 界面元素 |
 
-- **强调色是鲜明的蓝，用得少。** 用户定的 `#007AFF`，深色 `#0A84FF`。不为了对比度把它压暗，暗了就闷了。
-- **浅色的中性色是冷灰。** 不用暖灰，不用偏蓝的 Slate。
-- **深色模式保留纯黑画布**，内容和分组是 `#1C1C1E`，靠高度分层。
-- **文字至少 4.5:1，图形和控件至少 3:1。** 例外是这个蓝，这是选它的代价：白底上的蓝字约 4:1，透出彩色壁纸的侧栏上约 3:1，蓝底上的白字浅色 4.0:1、深色 3.7:1。所以蓝色小字用中等字重，白字不小于 `body`（选中文件行的大小和日期是已知的例外），状态不只靠颜色表达。 `ink3` 只给图形和禁用态。对比度是底线，不是选色的方法，选色要看画面。
+- **白底可以用纯白，这是 Radix 允许的。** 浅色的内容和分组是白色，放在 `canvas` 上；深色靠 1 到 3 步分层，不用纯黑。
+- **我发的消息是 `tint-hover` 底、`on-tint` 字**（10.6:1），不是实心蓝。实心蓝上白字只有 3.3:1，长文字读着累，选中文字也看不出来。
+- **文字至少 4.5:1，图形和控件至少 3:1。** 例外是 `accent` 上的白字，3.3:1，这是 Radix Blue 的特性，所以只用在按钮这种短文字上，字重中等，不小于 `body`。`ink3` 只给图形和禁用态。对比度是底线，不是选色的方法，选色要看画面。
+- **透明度用 Radix 的透明色阶**，黑白是 `black-a`、`white-a`（5%、10%、15%、20%、30%，之后每步 10%），不写别的值。阴影也一样。
 - **图标优先用内容本身**：共享链接的图标就是文件和文件夹，不用一排相同的彩色方块。
-- **警告只给小图标着色**，文字用次要色，大片橙褐色的字显脏。
-- **两个例外**：设置分区的彩色小图标（系统设置的惯例）；App 图标自己的颜色。品牌的那圈环只出现在 App 图标和单色的托盘图标上。
+- **警告只给小图标着色**，文字用次要色，大片的 Amber 字显脏。
+- **例外，不换成 Radix：** App 图标；二维码的纯黑白、视频的黑底；系统自己的窗口按钮（红绿灯、Windows 和 KDE 的关闭悬停）；原型里模拟用户桌面的壁纸。
 
 ## 字体
 

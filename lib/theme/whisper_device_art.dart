@@ -2,6 +2,8 @@
 // geometry follows art() in docs/design/whisper-ui-language.html.
 
 import 'package:flutter/widgets.dart';
+import 'package:whisper/theme/radix_colors.dart';
+import 'package:whisper/theme/whisper_icons.dart';
 
 /// What a device looks like. Comes from its platform, see [deviceKindFor].
 enum DeviceKind {
@@ -14,6 +16,31 @@ enum DeviceKind {
   /// or a tablet cannot be controlled.
   bool get handheld => this == phone || this == tablet;
 }
+
+/// Which system a computer runs. No vendor's logo: Apple and Microsoft do not allow
+/// it, so a Mac is silver with a menu bar and a Dock, Windows is graphite with a
+/// taskbar, and Linux has the penguin, which is free to use.
+enum DeviceOs { mac, windows, linux, other }
+
+DeviceOs deviceOsFor(String platform) =>
+    switch (platform.trim().toLowerCase()) {
+      'mac' || 'macos' || 'darwin' => DeviceOs.mac,
+      'windows' || 'win32' => DeviceOs.windows,
+      'linux' => DeviceOs.linux,
+      _ => DeviceOs.other,
+    };
+
+/// The system's name, to say in words what the picture only suggests.
+String? deviceSystemName(String platform) =>
+    switch (platform.trim().toLowerCase()) {
+      'mac' || 'macos' || 'darwin' => 'macOS',
+      'windows' || 'win32' => 'Windows',
+      'linux' => 'Linux',
+      'android' => 'Android',
+      'ios' || 'iphone' => 'iOS',
+      'ipad' => 'iPadOS',
+      _ => null,
+    };
 
 /// How present a device is. Connected and unpaired devices use [normal].
 enum DeviceArtState {
@@ -36,18 +63,18 @@ class DeviceWallpaper {
   final Color from, to;
 
   /// This device.
-  static const self = DeviceWallpaper(Color(0xFF5B8CFF), Color(0xFF8F7BFF));
+  static const self = DeviceWallpaper(Radix.indigo9, Radix.violet9);
 
   /// Devices that have not been paired. Paler than a paired one's, but a colour:
   /// grey is for what is gone.
-  static const unpaired = DeviceWallpaper(Color(0xFFA9C1EE), Color(0xFF7D9BDD));
+  static const unpaired = DeviceWallpaper(Radix.blue7, Radix.blue8);
 
   /// Paired devices, handed out in pairing order and then repeating.
   static const paired = [
-    DeviceWallpaper(Color(0xFF2A93FF), Color(0xFF3CC4E8)),
-    DeviceWallpaper(Color(0xFF6F86FF), Color(0xFFA78BFA)),
-    DeviceWallpaper(Color(0xFF22AECB), Color(0xFF5BD3C6)),
-    DeviceWallpaper(Color(0xFF7F7BFF), Color(0xFFC58AF0)),
+    DeviceWallpaper(Radix.blue9, Radix.cyan9),
+    DeviceWallpaper(Radix.iris9, Radix.violet9),
+    DeviceWallpaper(Radix.cyan9, Radix.teal9),
+    DeviceWallpaper(Radix.violet9, Radix.purple9),
   ];
 
   /// The wallpaper of the device paired [order]th, counted from zero.
@@ -118,12 +145,16 @@ class DeviceArt extends StatelessWidget {
     required this.wallpaper,
     required this.size,
     this.state = DeviceArtState.normal,
+    this.os = DeviceOs.other,
   });
 
   final DeviceKind kind;
   final DeviceWallpaper wallpaper;
   final double size;
   final DeviceArtState state;
+
+  /// Only a computer shows it: a phone's screen is too narrow to say anything.
+  final DeviceOs os;
 
   // CSS filter: saturate(.7) and grayscale(1), for sRGB luminance.
   static List<double> _saturate(double s) {
@@ -152,7 +183,7 @@ class DeviceArt extends StatelessWidget {
       child: CustomPaint(
         size: art,
         isComplex: false,
-        painter: _DeviceArtPainter(kind, wallpaper),
+        painter: _DeviceArtPainter(kind, wallpaper, os),
       ),
     );
     if (state == DeviceArtState.normal) return painted;
@@ -167,22 +198,32 @@ class DeviceArt extends StatelessWidget {
 }
 
 class _DeviceArtPainter extends CustomPainter {
-  const _DeviceArtPainter(this.kind, this.wallpaper);
+  const _DeviceArtPainter(this.kind, this.wallpaper, this.os);
 
   final DeviceKind kind;
   final DeviceWallpaper wallpaper;
+  final DeviceOs os;
+
+  bool get _graphite => os == DeviceOs.windows || os == DeviceOs.linux;
 
   static const _metal = LinearGradient(
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
-    colors: [Color(0xFFEEEEF2), Color(0xFFB9B9C1)],
+    colors: [Radix.slate3, Radix.slate8],
   );
-  static const _bezel = Color(0xFF1B1B1E);
-  static const _phoneBody = Color(0xFF2B2B2E);
-  static const _phoneEdge = Color(0xFF6A6A70);
-  static const _phoneIsland = Color(0xFF000000);
-  static const _monitorFoot = Color(0xFFA9A9B2);
-  static const _laptopNotch = Color(0xFF9A9AA3);
+  static const _bezel = Radix.slate12;
+  static const _phoneBody = Radix.slateDark4;
+  static const _phoneEdge = Radix.slateDark9;
+  static const _phoneIsland = Radix.black;
+  static const _monitorFoot = Radix.slate8;
+  static const _graphiteBody = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [Radix.slate11, Radix.slateDark5],
+  );
+  static const _graphiteFoot = Radix.slate11;
+  static const _graphiteNotch = Radix.slate9;
+  static const _laptopNotch = Radix.slate9;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -207,7 +248,101 @@ class _DeviceArtPainter extends CustomPainter {
   Paint _wall(Rect bounds) =>
       Paint()..shader = wallpaper.gradient.createShader(bounds);
   Paint _metalOver(Rect bounds) =>
-      Paint()..shader = _metal.createShader(bounds);
+      Paint()
+        ..shader = (_graphite ? _graphiteBody : _metal).createShader(bounds);
+
+  /// What the system puts on the screen.
+  void _system(Canvas canvas, RRect screen) {
+    final s = screen.outerRect;
+    canvas.save();
+    canvas.clipRRect(screen);
+    switch (os) {
+      case DeviceOs.mac:
+        canvas.drawRect(
+          Rect.fromLTWH(s.left, s.top, s.width, s.height * .11),
+          Paint()..color = Radix.whiteA8,
+        );
+        final w = s.width * .54, h = s.height * .17;
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            Rect.fromLTWH(
+              s.center.dx - w / 2,
+              s.bottom - h - s.height * .07,
+              w,
+              h,
+            ),
+            Radius.circular(h * .32),
+          ),
+          Paint()..color = Radix.whiteA9,
+        );
+      case DeviceOs.windows:
+        final h = s.height * .18;
+        canvas.drawRect(
+          Rect.fromLTWH(s.left, s.bottom - h, s.width, h),
+          Paint()..color = Radix.whiteA10,
+        );
+        final d = h * .52;
+        for (var i = -1; i <= 1; i++) {
+          canvas.drawRRect(
+            RRect.fromRectAndRadius(
+              Rect.fromCenter(
+                center: Offset(s.center.dx + i * d * 1.6, s.bottom - h / 2),
+                width: d,
+                height: d,
+              ),
+              Radius.circular(d * .2),
+            ),
+            Paint()..color = Radix.slate11,
+          );
+        }
+      case DeviceOs.linux:
+        _penguin(canvas, s.center, s.height * .68);
+      case DeviceOs.other:
+        break;
+    }
+    canvas.restore();
+  }
+
+  void _penguin(Canvas canvas, Offset center, double side) {
+    canvas.save();
+    canvas.translate(center.dx - side / 2, center.dy - side / 2);
+    canvas.scale(side / 24);
+    canvas.drawPath(
+      whisperSvgPath(_penguinBelly),
+      Paint()..color = Radix.white,
+    );
+    canvas.drawPath(
+      Path()
+        ..fillType = PathFillType.evenOdd
+        ..addPath(whisperSvgPath(_penguinBody), Offset.zero)
+        ..addPath(whisperSvgPath(_penguinBelly), Offset.zero),
+      Paint()..color = Radix.slate12,
+    );
+    final amber = Paint()..color = Radix.amber9;
+    canvas.drawPath(whisperSvgPath(_penguinBeak), amber);
+    canvas.drawOval(
+      Rect.fromCenter(center: const Offset(7.4, 21.6), width: 7.2, height: 3.4),
+      amber,
+    );
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: const Offset(16.6, 21.6),
+        width: 7.2,
+        height: 3.4,
+      ),
+      amber,
+    );
+    canvas.restore();
+  }
+
+  static const _penguinBody =
+      'M12 .8C9 .8 7.4 3 7.4 5.8c0 1.5.3 2.5-.3 3.7C6.2 11.2 4.2 13.5 4.2 16.8'
+      'c0 1.8.6 3.2 1.6 4.2h12.4c1-1 1.6-2.4 1.6-4.2 0-3.3-2-5.6-2.9-7.3'
+      '-.6-1.2-.3-2.2-.3-3.7C16.6 3 15 .8 12 .8z';
+  static const _penguinBelly =
+      'M12 9.4c-2.3 0-3.9 3.2-3.9 6.3 0 2.5 1.7 4.4 3.9 4.4s3.9-1.9 3.9-4.4'
+      'c0-3.1-1.6-6.3-3.9-6.3z';
+  static const _penguinBeak = 'M10.2 6.6h3.6L12 8.6z';
 
   void _desktop(Canvas canvas, Size size) {
     canvas.save();
@@ -219,12 +354,20 @@ class _DeviceArtPainter extends CustomPainter {
       ..lineTo(37.5, 79)
       ..close();
     canvas.drawPath(stand, _metalOver(stand.getBounds()));
-    canvas.drawRRect(_r(31, 78, 38, 3, 1.5), Paint()..color = _monitorFoot);
+    canvas.drawRRect(
+      _r(31, 78, 38, 3, 1.5),
+      Paint()..color = _graphite ? _graphiteFoot : _monitorFoot,
+    );
     final chin = _r(2, 2, 96, 66, 5);
     canvas.drawRRect(chin, _metalOver(chin.outerRect));
     canvas.drawRRect(_r(2, 2, 96, 55, 5), Paint()..color = _bezel);
-    final screen = _r(4.5, 4.5, 91, 50, 2.5);
+    // A PC monitor is the same all the way round; an iMac has its chin.
+    if (_graphite) canvas.drawRRect(chin, Paint()..color = _bezel);
+    final screen = _graphite
+        ? _r(4.5, 4.5, 91, 61, 2.5)
+        : _r(4.5, 4.5, 91, 50, 2.5);
     canvas.drawRRect(screen, _wall(screen.outerRect));
+    _system(canvas, screen);
     canvas.restore();
   }
 
@@ -234,6 +377,7 @@ class _DeviceArtPainter extends CustomPainter {
     canvas.drawRRect(_r(13, 2, 74, 51, 4), Paint()..color = _bezel);
     final screen = _r(15.5, 4.5, 69, 46, 2);
     canvas.drawRRect(screen, _wall(screen.outerRect));
+    _system(canvas, screen);
     // M3 54h94l-3 6a3 3 0 0 1-2.7 2H8.7A3 3 0 0 1 6 60z
     final base = Path()
       ..moveTo(3, 54)
@@ -244,7 +388,10 @@ class _DeviceArtPainter extends CustomPainter {
       ..arcToPoint(const Offset(6, 60), radius: const Radius.circular(3))
       ..close();
     canvas.drawPath(base, _metalOver(base.getBounds()));
-    canvas.drawRRect(_r(42, 54, 16, 2.5, 1.25), Paint()..color = _laptopNotch);
+    canvas.drawRRect(
+      _r(42, 54, 16, 2.5, 1.25),
+      Paint()..color = _graphite ? _graphiteNotch : _laptopNotch,
+    );
     canvas.restore();
   }
 
@@ -283,7 +430,7 @@ class _DeviceArtPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_DeviceArtPainter old) =>
-      old.kind != kind || old.wallpaper != wallpaper;
+      old.kind != kind || old.wallpaper != wallpaper || old.os != os;
 }
 
 /// A one-color line icon of a device, for the device picker. [size] is the

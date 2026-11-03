@@ -126,7 +126,7 @@ class _ShellDevicePageBodyState extends State<_ShellDevicePageBody> {
       touch: page.touch,
       weight: 1.8,
       busy: busy,
-      color: connected ? c.bad : c.accent,
+      color: connected ? c.bad : c.accentText,
       label: connected
           ? l10n.shellCardDisconnect
           : busy

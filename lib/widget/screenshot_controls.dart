@@ -54,7 +54,7 @@ class ScreenshotButton extends StatelessWidget {
             : () => unawaited(controller.capture()),
         icon: const Icon(Icons.crop_free_rounded, size: 18),
         style: IconButton.styleFrom(
-          foregroundColor: context.whisperPalette.textMuted,
+          foregroundColor: context.wc.ink2,
           minimumSize: const Size(36, 36),
           padding: const EdgeInsets.all(8),
         ),

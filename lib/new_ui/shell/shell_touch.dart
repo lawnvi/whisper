@@ -432,7 +432,7 @@ class _ShellTouchState extends State<ShellTouch> with TickerProviderStateMixin {
                           boxShadow: compact && !covered
                               ? const [
                                   BoxShadow(
-                                    color: Color(0x1A000000),
+                                    color: Radix.blackA2,
                                     blurRadius: 32,
                                     offset: Offset(-12, 0),
                                   ),

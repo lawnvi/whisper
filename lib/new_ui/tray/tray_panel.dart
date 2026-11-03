@@ -309,10 +309,7 @@ class _TrayPanelBodyState extends State<TrayPanelBody> {
                                     decoration: BoxDecoration(
                                       borderRadius: BorderRadius.circular(5),
                                       gradient: const LinearGradient(
-                                        colors: [
-                                          Color(0xFF5B8CFF),
-                                          Color(0xFF8F7BFF),
-                                        ],
+                                        colors: [Radix.indigo9, Radix.violet9],
                                       ),
                                     ),
                                   )
@@ -490,7 +487,7 @@ class _TrayPanelBodyState extends State<TrayPanelBody> {
                                           WhisperGlyph.check,
                                           size: 14,
                                           weight: 2.2,
-                                          color: c.accent,
+                                          color: c.accentText,
                                         )
                                       : WhisperIcon(
                                           WhisperGlyph.copy,
@@ -643,6 +640,7 @@ class _Target extends StatelessWidget {
                 child: Center(
                   child: DeviceArt(
                     kind: kind,
+                    os: deviceOsFor(device.platform),
                     wallpaper: DeviceWallpaper.forPairingOrder(device.order),
                     size: kind.handheld ? 38 : 48,
                   ),
@@ -946,7 +944,7 @@ class _TextButton extends StatelessWidget {
             style: TextStyle(
               fontSize: const WhisperType(touch: false).note,
               fontWeight: FontWeight.w500,
-              color: context.wc.accent,
+              color: context.wc.accentText,
             ),
           ),
         ],

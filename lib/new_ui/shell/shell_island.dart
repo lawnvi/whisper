@@ -178,7 +178,7 @@ class IslandAskCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final type = WhisperType(touch: touch);
     final m = moment;
-    final faint = Colors.white.withValues(alpha: .14);
+    const faint = Radix.whiteA3;
     final height = touch ? 44.0 : 34.0;
     return Padding(
       padding: const EdgeInsets.fromLTRB(7, 12, 7, 7),
@@ -212,7 +212,7 @@ class IslandAskCard extends StatelessWidget {
               style: TextStyle(
                 fontSize: type.note,
                 height: 1.4,
-                color: Colors.white.withValues(alpha: .62),
+                color: Radix.whiteA8,
               ),
             ),
           ],
@@ -481,7 +481,7 @@ class _ShellIslandState extends State<ShellIsland> implements IslandControls {
               style: TextStyle(
                 fontSize: type.note,
                 fontWeight: FontWeight.w500,
-                color: Colors.white.withValues(alpha: .62),
+                color: Radix.whiteA8,
                 fontFeatures: const [FontFeature.tabularFigures()],
               ),
             ),
@@ -494,7 +494,7 @@ class _ShellIslandState extends State<ShellIsland> implements IslandControls {
               padding: const EdgeInsets.symmetric(horizontal: 4),
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: .18),
+                color: Radix.whiteA4,
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
@@ -566,7 +566,7 @@ class _Moment extends StatelessWidget {
     const type = WhisperType(touch: false);
     final m = moment;
     if (m.answers.isNotEmpty) return IslandAskCard(moment: m);
-    final faint = Colors.white.withValues(alpha: .14);
+    const faint = Radix.whiteA3;
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -604,7 +604,7 @@ class _Moment extends StatelessWidget {
                         style: TextStyle(
                           fontSize: type.tiny,
                           height: 1.35,
-                          color: Colors.white.withValues(alpha: .62),
+                          color: Radix.whiteA8,
                           fontFeatures: const [FontFeature.tabularFigures()],
                         ),
                       ),

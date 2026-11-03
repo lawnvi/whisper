@@ -1,3 +1,5 @@
+import 'package:whisper/theme/whisper_ui.dart';
+import 'package:whisper/theme/radix_colors.dart';
 import 'dart:typed_data';
 
 import 'package:flutter/cupertino.dart';
@@ -14,11 +16,12 @@ import 'package:whisper/theme/app_theme.dart';
 typedef AppListLoader = Future<AppListPresentation> Function();
 typedef AppListPermissionRequester = Future<bool> Function();
 
-typedef AppSelectionWriter = Future<void> Function({
-  required List<String> packages,
-  required bool add,
-  bool clear,
-});
+typedef AppSelectionWriter =
+    Future<void> Function({
+      required List<String> packages,
+      required bool add,
+      bool clear,
+    });
 
 @immutable
 class AppListPresentation {
@@ -71,14 +74,8 @@ class _AppListScreenState extends State<AppListScreen> {
 
   Future<List<AppInfo>> _loadVisibleApps() async {
     final results = await Future.wait<List<AppInfo>>(<Future<List<AppInfo>>>[
-      InstalledApps.getInstalledApps(
-        excludeSystemApps: true,
-        withIcon: true,
-      ),
-      InstalledApps.getInstalledApps(
-        excludeSystemApps: false,
-        withIcon: false,
-      ),
+      InstalledApps.getInstalledApps(excludeSystemApps: true, withIcon: true),
+      InstalledApps.getInstalledApps(excludeSystemApps: false, withIcon: false),
     ]);
     final userApps = results[0];
     final allAppsWithoutIcons = results[1];
@@ -132,10 +129,12 @@ class _AppListScreenState extends State<AppListScreen> {
     if (normalizedQuery.isEmpty) {
       return source;
     }
-    return source.where((app) {
-      return app.name.toLowerCase().contains(normalizedQuery) ||
-          app.packageName.toLowerCase().contains(normalizedQuery);
-    }).toList(growable: false);
+    return source
+        .where((app) {
+          return app.name.toLowerCase().contains(normalizedQuery) ||
+              app.packageName.toLowerCase().contains(normalizedQuery);
+        })
+        .toList(growable: false);
   }
 
   Future<void> loadApps() async {
@@ -144,14 +143,15 @@ class _AppListScreenState extends State<AppListScreen> {
       _loadFailed = false;
     });
     try {
-      final hasPermission = await (widget.permissionRequester ??
-              AndroidPrivacyPermission.requestInstalledApps)
-          .call();
+      final hasPermission =
+          await (widget.permissionRequester ??
+                  AndroidPrivacyPermission.requestInstalledApps)
+              .call();
       if (!hasPermission) {
         throw StateError('Installed apps permission was not granted');
       }
-      final presentation =
-          await (widget.loader ?? _loadDefaultPresentation).call();
+      final presentation = await (widget.loader ?? _loadDefaultPresentation)
+          .call();
       if (!mounted) {
         return;
       }
@@ -252,7 +252,7 @@ class _AppListScreenState extends State<AppListScreen> {
     final packages = apps.map((app) => app.packageName).toList(growable: false);
     final nextSelection = selectAll
         ? (Map<String, bool>.of(checkedApps)
-          ..addEntries(packages.map((package) => MapEntry(package, true))))
+            ..addEntries(packages.map((package) => MapEntry(package, true))))
         : <String, bool>{};
     await _commitSelection(
       nextSelection: nextSelection,
@@ -267,10 +267,9 @@ class _AppListScreenState extends State<AppListScreen> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final colorScheme = theme.colorScheme;
-    final palette = context.whisperPalette;
+    final palette = context.wc;
     final l10n = AppLocalizations.of(context)!;
-    final navigationTextColor =
-        isDark ? palette.textMuted : colorScheme.onSurface;
+    final navigationTextColor = isDark ? palette.ink2 : colorScheme.onSurface;
 
     return CupertinoPageScaffold(
       backgroundColor: colorScheme.surface,
@@ -278,9 +277,7 @@ class _AppListScreenState extends State<AppListScreen> {
         backgroundColor: colorScheme.surface,
         automaticBackgroundVisibility: false,
         enableBackgroundFilterBlur: false,
-        border: Border(
-          bottom: BorderSide(color: palette.borderSubtle),
-        ),
+        border: Border(bottom: BorderSide(color: palette.sep)),
         middle: Text(
           l10n.selectNotifyApp,
           maxLines: 1,
@@ -290,10 +287,7 @@ class _AppListScreenState extends State<AppListScreen> {
         leading: CupertinoButton(
           padding: EdgeInsets.zero,
           onPressed: () => Navigator.pop(context),
-          child: Text(
-            l10n.back,
-            style: TextStyle(color: navigationTextColor),
-          ),
+          child: Text(l10n.back, style: TextStyle(color: navigationTextColor)),
         ),
         trailing: CupertinoButton(
           padding: EdgeInsets.zero,
@@ -302,7 +296,7 @@ class _AppListScreenState extends State<AppListScreen> {
             l10n.selectAll,
             style: TextStyle(
               color: isLoading || apps.isEmpty || _isSaving
-                  ? palette.textMuted
+                  ? palette.ink2
                   : navigationTextColor,
             ),
           ),
@@ -439,7 +433,7 @@ class AppListTile extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 14,
-                        color: isDark ? Colors.white70 : Colors.black87,
+                        color: isDark ? Radix.whiteA9 : Radix.blackA11,
                         decoration: TextDecoration.none,
                       ),
                     ),
@@ -450,7 +444,7 @@ class AppListTile extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontSize: 12,
-                        color: CupertinoColors.systemGrey,
+                        color: Radix.slate9,
                         decoration: TextDecoration.none,
                       ),
                     ),

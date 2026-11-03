@@ -295,7 +295,7 @@ class ShellAppIcon extends StatelessWidget {
                   width: 5,
                   height: 5,
                   decoration: BoxDecoration(
-                    color: openHere ? c.accent : c.ink3,
+                    color: openHere ? c.accentText : c.ink3,
                     shape: BoxShape.circle,
                   ),
                 ),

@@ -978,7 +978,7 @@ void main() {
       await t.tap(find.text('版本'));
       await t.pumpAndSettle();
       final text = t.widget<Text>(find.text('有新版本 0.0.59'));
-      expect(text.style!.color, WhisperColors.light.accent);
+      expect(text.style!.color, WhisperColors.light.accentText);
     });
 
     testWidgets('the about panel has what the spec lists', (t) async {

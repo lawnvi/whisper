@@ -196,12 +196,12 @@ class PhoneButton extends StatelessWidget {
       PhoneButtonKind.normal => c.fill,
       PhoneButtonKind.primary => c.accent,
       PhoneButtonKind.quiet => Colors.transparent,
-      PhoneButtonKind.danger => c.bad,
+      PhoneButtonKind.danger => c.badSolid,
     };
     final foreground = switch (kind) {
       PhoneButtonKind.normal => color ?? c.ink,
       PhoneButtonKind.primary || PhoneButtonKind.danger => c.onAccent,
-      PhoneButtonKind.quiet => color ?? c.accent,
+      PhoneButtonKind.quiet => color ?? c.accentText,
     };
     return Opacity(
       opacity: onTap == null ? .5 : 1,

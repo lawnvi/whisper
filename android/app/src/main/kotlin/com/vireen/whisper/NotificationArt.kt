@@ -10,7 +10,7 @@ import android.os.Build
 
 /** 通知上用的图:对方设备的头像。 */
 object NotificationArt {
-    private const val BRAND_BLUE = 0xFF2563EB.toInt()
+    private const val BRAND_BLUE = 0xFF0090FF.toInt()
 
     /**
      * HyperOS 的超级岛把实时更新的短文字放在挖孔右边那一格;别家的状态栏

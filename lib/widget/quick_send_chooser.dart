@@ -1,3 +1,5 @@
+import 'package:whisper/theme/whisper_ui.dart';
+import 'package:whisper/theme/radix_colors.dart';
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
@@ -125,7 +127,7 @@ class QuickSendContentPreview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final palette = context.whisperPalette;
+    final palette = context.wc;
     final text = items
         .where((item) => item.isText)
         .map((item) => item.text.trim())
@@ -144,7 +146,7 @@ class QuickSendContentPreview extends StatelessWidget {
           key: const ValueKey<String>('quick-send-text'),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
-            color: palette.surfaceMuted,
+            color: palette.fill,
             borderRadius: BorderRadius.circular(14),
           ),
           child: Text(
@@ -162,7 +164,7 @@ class QuickSendContentPreview extends StatelessWidget {
           padding: const EdgeInsets.only(left: 4),
           child: Text(
             l10n.quickSendMoreFiles(others.length - maxFileRows),
-            style: TextStyle(fontSize: 12, color: palette.textMuted),
+            style: TextStyle(fontSize: 12, color: palette.ink2),
           ),
         ),
     ];
@@ -279,13 +281,13 @@ class _QuickSendMediaTileState extends State<_QuickSendMediaTile> {
 
   @override
   Widget build(BuildContext context) {
-    final palette = context.whisperPalette;
+    final palette = context.wc;
     final item = widget.item;
     final isVideo = item.kind == MediaFileKind.video;
     final placeholder = Center(
       child: Icon(
         isVideo ? Icons.videocam_outlined : Icons.image_outlined,
-        color: palette.textMuted,
+        color: palette.ink2,
         size: 24,
       ),
     );
@@ -324,7 +326,7 @@ class _QuickSendMediaTileState extends State<_QuickSendMediaTile> {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          ColoredBox(color: palette.surfaceMuted, child: image),
+          ColoredBox(color: palette.fill, child: image),
           if (isVideo)
             Positioned(
               left: 6,
@@ -333,7 +335,7 @@ class _QuickSendMediaTileState extends State<_QuickSendMediaTile> {
                 width: 22,
                 height: 22,
                 decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.45),
+                  color: Radix.blackA6,
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
@@ -345,7 +347,7 @@ class _QuickSendMediaTileState extends State<_QuickSendMediaTile> {
             ),
           if (widget.hiddenCount > 0)
             ColoredBox(
-              color: Colors.black.withValues(alpha: 0.45),
+              color: Radix.blackA6,
               child: Center(
                 child: Text(
                   '+${widget.hiddenCount}',
@@ -404,11 +406,11 @@ class _QuickSendFileRowState extends State<_QuickSendFileRow> {
   Widget build(BuildContext context) {
     final item = widget.item;
     final colors = Theme.of(context).colorScheme;
-    final palette = context.whisperPalette;
+    final palette = context.wc;
     return Container(
       padding: const EdgeInsets.fromLTRB(10, 10, 14, 10),
       decoration: BoxDecoration(
-        color: palette.surfaceMuted,
+        color: palette.fill,
         borderRadius: BorderRadius.circular(14),
       ),
       child: Row(
@@ -443,7 +445,7 @@ class _QuickSendFileRowState extends State<_QuickSendFileRow> {
                     }
                     return Text(
                       value,
-                      style: TextStyle(fontSize: 12, color: palette.textMuted),
+                      style: TextStyle(fontSize: 12, color: palette.ink2),
                     );
                   },
                 ),

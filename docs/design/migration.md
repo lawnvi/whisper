@@ -10,7 +10,7 @@
 
 | 项 | 现在 | 目标 |
 |---|---|---|
-| 颜色 token 体系 | 4 套（`WhisperPalette`、`FlowSpaceColors`、`FinderColors`、`IslandColors`） | 1 套 |
+| 颜色 token 体系 | 4 套（WhisperPalette、`FlowSpaceColors`、`FinderColors`、`IslandColors`） | 1 套 |
 | 字号 | 18 种 | 6 个角色 |
 | 圆角 | 19 种 | 4 级加胶囊 |
 | 动画时长 | 38 种 | 4 个弹簧 |
@@ -242,7 +242,7 @@ flutter run --profile -d <设备> -t tool/perf/new_ui_perf.dart
 
 没做，要用户决定：
 
-- **旧 token 还不能删。** 还有 23 个文件在用 `palette`，最多的是 `mobile_control_screen.dart`（22 处）和 `media_message_preview.dart`（8 处）。这些页面重做之前，`WhisperPalette`、`FinderColors`、`FlowSpaceColors` 都得留着。
+- **旧 token 已删。** 所有颜色换成 Radix Colors 时一起删了（见「色彩」）；`FinderColors`、`FlowSpaceColors` 只是转接到 `WhisperColors`。
 - **共享元素动画**没有做。
 - **`docs/user-guide*.md` 和 README 的截图**还是旧界面。
 - `lib/new_ui/` 现在是唯一的界面，名字没改，改名只是机械替换。

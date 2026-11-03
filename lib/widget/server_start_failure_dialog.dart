@@ -1,3 +1,4 @@
+import 'package:whisper/theme/whisper_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/state/server_start_failure.dart';
@@ -16,7 +17,7 @@ Future<ServerStartRecovery?> showServerStartFailureDialog(
     builder: (context) {
       final l10n = AppLocalizations.of(context)!;
       final theme = Theme.of(context);
-      final palette = context.whisperPalette;
+      final palette = context.wc;
       final description = switch (classifyServerStartFailure(error)) {
         ServerStartFailure.addressInUse => l10n.serverPortInUse(port),
         ServerStartFailure.permissionDenied => l10n.serverPermissionDenied,
@@ -25,7 +26,7 @@ Future<ServerStartRecovery?> showServerStartFailureDialog(
       return AlertDialog(
         constraints: const BoxConstraints(minWidth: 280, maxWidth: 420),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        backgroundColor: palette.surfaceElevated,
+        backgroundColor: palette.raised,
         surfaceTintColor: Colors.transparent,
         elevation: 6,
         scrollable: true,
@@ -39,14 +40,14 @@ Future<ServerStartRecovery?> showServerStartFailureDialog(
           fontWeight: FontWeight.w600,
         ),
         contentTextStyle: theme.textTheme.bodyMedium?.copyWith(
-          color: palette.textMuted,
+          color: palette.ink2,
           height: 1.5,
         ),
         title: Text(l10n.startServerFailed),
         content: Text(description),
         actions: [
           TextButton(
-            style: TextButton.styleFrom(foregroundColor: palette.textMuted),
+            style: TextButton.styleFrom(foregroundColor: palette.ink2),
             onPressed: () => Navigator.pop(context),
             child: Text(l10n.cancel),
           ),

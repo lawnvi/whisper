@@ -2466,7 +2466,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
                 glyph: WhisperGlyph.plus,
                 iconSize: 20,
                 touch: true,
-                color: buttonContext.wc.accent,
+                color: buttonContext.wc.ink,
                 label: AppLocalizations.of(buttonContext)!.shellLinksNew,
                 onTap: () => unawaited(showShellNewLinkMenu(buttonContext)),
               ),

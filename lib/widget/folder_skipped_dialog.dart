@@ -1,3 +1,4 @@
+import 'package:whisper/theme/whisper_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:whisper/helper/folder_transfer_store.dart';
 import 'package:whisper/l10n/app_localizations.dart';
@@ -51,7 +52,7 @@ class FolderSkippedDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final theme = Theme.of(context);
-    final palette = context.whisperPalette;
+    final palette = context.wc;
     final elsewhere = skippedCount - entries.length;
     return WhisperAlertDialog(
       title: l10n.folderSkippedTitle,
@@ -77,7 +78,7 @@ class FolderSkippedDialog extends StatelessWidget {
                     folderSkipReasonLabel(l10n, entry.reason),
                     textAlign: TextAlign.start,
                     style: theme.textTheme.bodySmall?.copyWith(
-                      color: palette.textMuted,
+                      color: palette.ink2,
                       height: 1.35,
                     ),
                   ),
@@ -91,7 +92,7 @@ class FolderSkippedDialog extends StatelessWidget {
                 l10n.folderSkippedMore(elsewhere),
                 textAlign: entries.isEmpty ? TextAlign.center : TextAlign.start,
                 style: theme.textTheme.bodySmall?.copyWith(
-                  color: palette.textMuted,
+                  color: palette.ink2,
                   height: 1.4,
                 ),
               ),

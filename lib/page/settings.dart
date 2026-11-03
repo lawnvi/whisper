@@ -1062,16 +1062,16 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final palette = context.whisperPalette;
+    final palette = context.wc;
     final l10n = AppLocalizations.of(context)!;
     final isConnected =
         widget.isConnected ?? WsSvrManager().isConnectedTo(device.uid);
     final horizontalPagePadding = isMobile() ? 10.0 : 14.0;
 
     final page = Scaffold(
-      backgroundColor: palette.surfaceCanvas,
+      backgroundColor: palette.canvas,
       appBar: AppBar(
-        backgroundColor: palette.surfaceCanvas,
+        backgroundColor: palette.canvas,
         leading: MediaQuery.withNoTextScaling(
           child: CupertinoNavigationBarBackButton(
             previousPageTitle: '',
@@ -1109,13 +1109,10 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
                     if (widget.onSearchHistory != null)
                       _DeviceSettingTile(
                         title: l10n.transferAssistantTitle,
-                        icon: Icon(
-                          Icons.search_rounded,
-                          color: palette.textMuted,
-                        ),
+                        icon: Icon(Icons.search_rounded, color: palette.ink2),
                         trailing: Icon(
                           Icons.chevron_right_rounded,
-                          color: palette.textMuted,
+                          color: palette.ink2,
                         ),
                         onTap: widget.onSearchHistory,
                       ),
@@ -1126,7 +1123,7 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
                   [
                     _DeviceSettingTile(
                       title: l10n.trust,
-                      icon: Icon(Icons.wifi_rounded, color: palette.textMuted),
+                      icon: Icon(Icons.wifi_rounded, color: palette.ink2),
                       trailing: CupertinoSwitch(
                         value: device.auth,
                         onChanged: (bool value) async {
@@ -1138,7 +1135,7 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
                     ),
                     _DeviceSettingTile(
                       title: l10n.writeClipboard,
-                      icon: Icon(Icons.copy, color: palette.textMuted),
+                      icon: Icon(Icons.copy, color: palette.ink2),
                       trailing: CupertinoSwitch(
                         value: device.clipboard,
                         onChanged: (bool value) async {
@@ -1153,10 +1150,7 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
                     if (_filesAlwaysAllowed case final allowed?)
                       _DeviceSettingTile(
                         title: l10n.deviceFilesAlwaysAllowed,
-                        icon: Icon(
-                          Icons.folder_outlined,
-                          color: palette.textMuted,
-                        ),
+                        icon: Icon(Icons.folder_outlined, color: palette.ink2),
                         trailing: CupertinoSwitch(
                           value: allowed,
                           onChanged: (value) =>
@@ -1168,7 +1162,7 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
                         title: l10n.deviceFilesAllowChanges,
                         icon: Icon(
                           Icons.edit_note_rounded,
-                          color: palette.textMuted,
+                          color: palette.ink2,
                         ),
                         trailing: CupertinoSwitch(
                           value: allowed,
@@ -1183,7 +1177,7 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
                           title: l10n.deviceMountHere,
                           icon: Icon(
                             Icons.drive_file_move_outline,
-                            color: palette.textMuted,
+                            color: palette.ink2,
                           ),
                           trailing: RemoteMounts.shared.isMounting(device.uid)
                               ? const CupertinoActivityIndicator(radius: 9)
@@ -1203,10 +1197,7 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
                     [
                       _DeviceSettingTile(
                         title: l10n.deleteDevice,
-                        icon: Icon(
-                          Icons.delete_rounded,
-                          color: CupertinoColors.destructiveRed,
-                        ),
+                        icon: Icon(Icons.delete_rounded, color: context.wc.bad),
                         onTap: () async {
                           final confirmed = await confirmAction(
                             context,
@@ -1245,19 +1236,16 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
     );
   }
 
-  Widget _featureTile(DeviceFeature feature, WhisperPalette palette) {
+  Widget _featureTile(DeviceFeature feature, WhisperColors palette) {
     final reason = feature.unavailable;
     return Opacity(
       opacity: reason == null ? 1 : 0.5,
       child: _DeviceSettingTile(
         title: feature.title,
-        icon: Icon(feature.icon, color: palette.textMuted),
+        icon: Icon(feature.icon, color: palette.ink2),
         trailing: reason == null
-            ? Icon(Icons.chevron_right_rounded, color: palette.textMuted)
-            : Text(
-                reason,
-                style: TextStyle(fontSize: 13, color: palette.textMuted),
-              ),
+            ? Icon(Icons.chevron_right_rounded, color: palette.ink2)
+            : Text(reason, style: TextStyle(fontSize: 13, color: palette.ink2)),
         onTap: reason == null ? feature.onOpen : null,
       ),
     );

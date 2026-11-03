@@ -1,3 +1,4 @@
+import 'package:whisper/theme/whisper_ui.dart';
 import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
@@ -61,7 +62,7 @@ class _GnomeHelperTileState extends State<GnomeHelperTile>
         builder: (context, _) => builder(context, controller),
       );
     }
-    final palette = context.whisperPalette;
+    final palette = context.wc;
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     return AnimatedBuilder(
@@ -116,9 +117,7 @@ class _GnomeHelperTileState extends State<GnomeHelperTile>
                             padding: const EdgeInsets.only(top: 2),
                             child: Icon(
                               Icons.picture_in_picture_alt_outlined,
-                              color: isDark
-                                  ? Colors.grey[400]
-                                  : CupertinoColors.systemGrey,
+                              color: isDark ? Radix.slate8 : Radix.slate9,
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -147,7 +146,7 @@ class _GnomeHelperTileState extends State<GnomeHelperTile>
                                     fontSize: 13,
                                     height: 1.5,
                                     letterSpacing: 0,
-                                    color: palette.textMuted,
+                                    color: palette.ink2,
                                     fontWeight: FontWeight.w400,
                                   ),
                                 ),
@@ -196,15 +195,15 @@ class GnomeHelperStatus extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final palette = context.whisperPalette;
+    final palette = context.wc;
     final state = controller.state;
     final color = switch (state) {
-      GnomeShellHelperState.ready => palette.trusted,
+      GnomeShellHelperState.ready => palette.ok,
       GnomeShellHelperState.needsRelogin ||
       GnomeShellHelperState.outdated ||
       GnomeShellHelperState.disabled ||
-      GnomeShellHelperState.extensionsOff => palette.warning,
-      _ => palette.textMuted.withValues(alpha: 0.5),
+      GnomeShellHelperState.extensionsOff => palette.warn,
+      _ => palette.ink2.withValues(alpha: 0.5),
     };
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -227,12 +226,12 @@ class GnomeHelperStatus extends StatelessWidget {
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               fontSize: 14,
               letterSpacing: 0,
-              color: palette.textMuted,
+              color: palette.ink2,
             ),
           ),
         ),
         const SizedBox(width: 6),
-        Icon(Icons.arrow_forward_ios, size: 14, color: palette.textMuted),
+        Icon(Icons.arrow_forward_ios, size: 14, color: palette.ink2),
       ],
     );
   }

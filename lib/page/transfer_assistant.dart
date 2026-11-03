@@ -1,3 +1,4 @@
+import 'package:whisper/theme/whisper_ui.dart';
 import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' show BoxWidthStyle;
@@ -250,11 +251,11 @@ class _TransferAssistantScreenState extends State<TransferAssistantScreen> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final theme = Theme.of(context);
-    final palette = context.whisperPalette;
+    final palette = context.wc;
     return Scaffold(
-      backgroundColor: palette.surfaceCanvas,
+      backgroundColor: palette.canvas,
       appBar: AppBar(
-        backgroundColor: palette.surfaceCanvas,
+        backgroundColor: palette.canvas,
         leading: MediaQuery.withNoTextScaling(
           child: CupertinoNavigationBarBackButton(
             previousPageTitle: '',
@@ -284,9 +285,7 @@ class _TransferAssistantScreenState extends State<TransferAssistantScreen> {
                 widget.peerName,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: palette.textMuted,
-                ),
+                style: theme.textTheme.bodySmall?.copyWith(color: palette.ink2),
               ),
           ],
         ),
@@ -314,11 +313,11 @@ class _TransferAssistantScreenState extends State<TransferAssistantScreen> {
                     style: theme.textTheme.bodyLarge,
                     decoration: InputDecoration(
                       hintText: l10n.transferAssistantSearchHint,
-                      hintStyle: TextStyle(color: palette.textMuted),
+                      hintStyle: TextStyle(color: palette.ink2),
                       prefixIcon: Icon(
                         CupertinoIcons.search,
                         size: 20,
-                        color: palette.textMuted,
+                        color: palette.ink2,
                       ),
                       suffixIcon: _searchController.text.isEmpty
                           ? null
@@ -329,10 +328,10 @@ class _TransferAssistantScreenState extends State<TransferAssistantScreen> {
                                 CupertinoIcons.xmark_circle_fill,
                                 size: 19,
                               ),
-                              color: palette.textMuted,
+                              color: palette.ink2,
                             ),
                       filled: true,
-                      fillColor: palette.surfaceElevated,
+                      fillColor: palette.raised,
                       contentPadding: const EdgeInsets.symmetric(vertical: 14),
                       border: _searchBorder(),
                       enabledBorder: _searchBorder(),
@@ -356,7 +355,7 @@ class _TransferAssistantScreenState extends State<TransferAssistantScreen> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.labelLarge?.copyWith(
-                            color: palette.textMuted,
+                            color: palette.ink2,
                           ),
                         ),
                       ),
@@ -378,19 +377,19 @@ class _TransferAssistantScreenState extends State<TransferAssistantScreen> {
                               size: 16,
                               color: _favoritesOnly
                                   ? theme.colorScheme.primary
-                                  : palette.textMuted,
+                                  : palette.ink2,
                             ),
                             selected: _favoritesOnly,
                             showCheckmark: false,
                             onSelected: _setFavoritesOnly,
-                            backgroundColor: palette.surfaceElevated,
+                            backgroundColor: palette.raised,
                             selectedColor: theme.colorScheme.primary.withValues(
                               alpha: 0.1,
                             ),
                             labelStyle: theme.textTheme.labelLarge?.copyWith(
                               color: _favoritesOnly
                                   ? theme.colorScheme.primary
-                                  : palette.textMuted,
+                                  : palette.ink2,
                             ),
                             side: BorderSide.none,
                             materialTapTargetSize: MaterialTapTargetSize.padded,
@@ -492,7 +491,7 @@ class _TransferAssistantScreenState extends State<TransferAssistantScreen> {
                 ? favorites[index].sourceMessageId
                 : messages[index].message.id,
           ),
-          color: context.whisperPalette.surfaceElevated,
+          color: context.wc.raised,
           borderRadius: radius,
           clipBehavior: Clip.antiAlias,
           child: Column(
@@ -506,9 +505,7 @@ class _TransferAssistantScreenState extends State<TransferAssistantScreen> {
                   height: 1,
                   indent: 16,
                   endIndent: 16,
-                  color: context.whisperPalette.borderSubtle.withValues(
-                    alpha: 0.6,
-                  ),
+                  color: context.wc.sep.withValues(alpha: 0.6),
                 ),
             ],
           ),
@@ -691,7 +688,7 @@ class _HistoryTextTileState extends State<_HistoryTextTile> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final palette = context.whisperPalette;
+    final palette = context.wc;
     final l10n = AppLocalizations.of(context)!;
     final style = theme.textTheme.bodyLarge!.copyWith(height: 1.4);
     return Padding(
@@ -762,7 +759,7 @@ class _HistoryTextTileState extends State<_HistoryTextTile> {
                         minHeight: 48,
                       ),
                       iconSize: 18,
-                      color: palette.textMuted,
+                      color: palette.ink2,
                       icon: AnimatedRotation(
                         turns: _expanded ? 0.5 : 0,
                         duration: MediaQuery.disableAnimationsOf(context)
@@ -782,7 +779,7 @@ class _HistoryTextTileState extends State<_HistoryTextTile> {
                 child: Text(
                   widget.metadata,
                   style: theme.textTheme.bodySmall?.copyWith(
-                    color: palette.textMuted,
+                    color: palette.ink2,
                   ),
                 ),
               ),
@@ -801,14 +798,14 @@ class _HistoryTextTileState extends State<_HistoryTextTile> {
                 iconSize: 20,
                 color: widget.isFavorite
                     ? theme.colorScheme.primary
-                    : palette.textMuted,
+                    : palette.ink2,
                 icon: _AnimatedHistoryIcon(
                   icon: widget.isFavorite
                       ? Icons.star_rounded
                       : Icons.star_border_rounded,
                   color: widget.isFavorite
                       ? theme.colorScheme.primary
-                      : palette.textMuted,
+                      : palette.ink2,
                 ),
               ),
             ],
@@ -916,7 +913,7 @@ class _AnimatedCopyButtonState extends State<_AnimatedCopyButton> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final colorScheme = Theme.of(context).colorScheme;
-    final palette = context.whisperPalette;
+    final palette = context.wc;
     final tooltip = _copied
         ? l10n.transferAssistantCopied
         : _copyFailed
@@ -931,7 +928,7 @@ class _AnimatedCopyButtonState extends State<_AnimatedCopyButton> {
           key: widget.buttonKey,
           tooltip: tooltip,
           onPressed: _copying ? null : _handleCopy,
-          style: IconButton.styleFrom(foregroundColor: palette.textMuted),
+          style: IconButton.styleFrom(foregroundColor: palette.ink2),
           icon: _AnimatedHistoryIcon(
             icon: _copied
                 ? Icons.check_rounded
@@ -939,10 +936,10 @@ class _AnimatedCopyButtonState extends State<_AnimatedCopyButton> {
                 ? Icons.error_outline_rounded
                 : Icons.content_copy_rounded,
             color: _copied
-                ? palette.trusted
+                ? palette.ok
                 : _copyFailed
                 ? colorScheme.error
-                : palette.textMuted,
+                : palette.ink2,
           ),
         ),
       ),
@@ -966,7 +963,7 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final palette = context.whisperPalette;
+    final palette = context.wc;
     return LayoutBuilder(
       builder: (context, constraints) => SingleChildScrollView(
         child: ConstrainedBox(
@@ -976,14 +973,14 @@ class _EmptyState extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: <Widget>[
-                Icon(icon, size: 36, color: palette.textMuted),
+                Icon(icon, size: 36, color: palette.ink2),
                 const SizedBox(height: 16),
                 Text(
                   message,
                   textAlign: TextAlign.center,
                   style: Theme.of(
                     context,
-                  ).textTheme.bodyMedium?.copyWith(color: palette.textMuted),
+                  ).textTheme.bodyMedium?.copyWith(color: palette.ink2),
                 ),
                 if (actionLabel != null) ...<Widget>[
                   const SizedBox(height: 8),

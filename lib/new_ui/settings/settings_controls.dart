@@ -1545,7 +1545,7 @@ class SettingsTile extends StatelessWidget {
     dimension: 22,
     child: DecoratedBox(
       decoration: BoxDecoration(
-        gradient: WhisperSettingsIcons.gradient(color),
+        color: color,
         borderRadius: BorderRadius.circular(WhisperRadius.xs),
       ),
       child: CustomPaint(

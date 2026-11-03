@@ -3,6 +3,7 @@ import 'dart:ui' show BoxWidthStyle;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:whisper/theme/whisper_ui.dart';
 
 class MessageLinkSegment {
   const MessageLinkSegment.text(this.text) : uri = null;
@@ -115,6 +116,33 @@ Uri? _messageLinkUri(String value) {
     return null;
   }
   return uri;
+}
+
+/// Selected text you can see on a message's own colour: the theme's selection is
+/// blue, the same as the background of a message of yours.
+class MessageSelectionColors extends StatelessWidget {
+  const MessageSelectionColors({
+    super.key,
+    required this.mine,
+    required this.child,
+  });
+
+  final bool mine;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!mine) return child;
+    final c = context.wc;
+    return TextSelectionTheme(
+      data: TextSelectionTheme.of(context).copyWith(
+        selectionColor: c.tintSelection,
+        cursorColor: c.onTint,
+        selectionHandleColor: c.onTint,
+      ),
+      child: child,
+    );
+  }
 }
 
 class MessageLinkText extends StatefulWidget {

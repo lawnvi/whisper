@@ -11,6 +11,9 @@ import 'dart:ui'
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
+import 'package:whisper/theme/radix_colors.dart';
+
+export 'package:whisper/theme/radix_colors.dart';
 
 /// All colors of the design language. Values come from DESIGN.md.
 @immutable
@@ -26,11 +29,21 @@ class WhisperColors extends ThemeExtension<WhisperColors> {
     required this.ink3,
     required this.ink2Glass,
     required this.accent,
+    required this.accentText,
     required this.onAccent,
+    required this.tint,
+    required this.tintHover,
+    required this.tintActive,
+    required this.onTint,
+    required this.tintSelection,
     required this.ok,
+    required this.okSolid,
     required this.warn,
+    required this.warnSolid,
     required this.bad,
+    required this.badSolid,
     required this.sep,
+    required this.border,
     required this.fill,
     required this.fill2,
     required this.selected,
@@ -41,60 +54,93 @@ class WhisperColors extends ThemeExtension<WhisperColors> {
   });
 
   static const light = WhisperColors(
-    canvas: Color(0xFFF5F5F7),
-    content: Color(0xFFFFFFFF),
-    group: Color(0xFFFFFFFF),
-    raised: Color(0xFFFFFFFF),
-    bubble: Color(0xFFF2F2F7),
-    ink: Color(0xFF1D1D1F),
-    ink2: Color(0xFF6E6E73),
-    ink3: Color(0xFF86868B),
-    ink2Glass: Color(0xFF515156),
-    accent: Color(0xFF007AFF),
-    onAccent: Color(0xFFFFFFFF),
-    ok: Color(0xFF1F7A36),
-    warn: Color(0xFFC93400),
-    bad: Color(0xFFD70015),
-    sep: Color(0x1A3C3C43),
-    fill: Color(0x1A787880),
-    fill2: Color(0x2E787880),
-    selected: Color(0x12000000),
-    sidebarSolid: Color(0xFFEFEFF3),
-    sidebarSelected: Color(0x9EFFFFFF),
-    sidebarVeil: Color(0x9EFFFFFF),
-    scrim: Color(0x3D000000),
+    canvas: Radix.slate2,
+    content: Radix.white,
+    group: Radix.white,
+    raised: Radix.white,
+    bubble: Radix.slate3,
+    ink: Radix.slate12,
+    ink2: Radix.slate11,
+    ink3: Radix.slate10,
+    ink2Glass: Radix.slateA11,
+    accent: Radix.blue9,
+    accentText: Radix.blue11,
+    onAccent: Radix.white,
+    tint: Radix.blue3,
+    tintHover: Radix.blue4,
+    tintActive: Radix.blue5,
+    onTint: Radix.blue12,
+    tintSelection: Radix.blue7,
+    ok: Radix.green11,
+    okSolid: Radix.green9,
+    warn: Radix.amber11,
+    warnSolid: Radix.amber9,
+    bad: Radix.red11,
+    badSolid: Radix.red9,
+    sep: Radix.slateA6,
+    border: Radix.slateA7,
+    fill: Radix.slateA3,
+    fill2: Radix.slateA4,
+    selected: Radix.slateA5,
+    sidebarSolid: Radix.slate2,
+    sidebarSelected: Radix.whiteA8,
+    sidebarVeil: Radix.whiteA8,
+    scrim: Radix.blackA5,
   );
 
   static const dark = WhisperColors(
-    canvas: Color(0xFF000000),
-    content: Color(0xFF1C1C1E),
-    group: Color(0xFF1C1C1E),
-    raised: Color(0xFF2C2C2E),
-    bubble: Color(0xFF2C2C2E),
-    ink: Color(0xFFF5F5F7),
-    ink2: Color(0xFFA1A1A6),
-    ink3: Color(0xFF8E8E93),
-    ink2Glass: Color(0xFFC0C0C6),
-    accent: Color(0xFF0A84FF),
-    onAccent: Color(0xFFFFFFFF),
-    ok: Color(0xFF30D158),
-    warn: Color(0xFFFFB340),
-    bad: Color(0xFFFF6961),
-    sep: Color(0x24EBEBF5),
-    fill: Color(0x3D787880),
-    fill2: Color(0x5C787880),
-    selected: Color(0x1AFFFFFF),
-    sidebarSolid: Color(0xFF252528),
-    sidebarSelected: Color(0x1FFFFFFF),
-    sidebarVeil: Color(0x00FFFFFF),
-    scrim: Color(0x75000000),
+    canvas: Radix.slateDark1,
+    content: Radix.slateDark2,
+    group: Radix.slateDark2,
+    raised: Radix.slateDark4,
+    bubble: Radix.slateDark4,
+    ink: Radix.slateDark12,
+    ink2: Radix.slateDark11,
+    ink3: Radix.slateDark10,
+    ink2Glass: Radix.slateDarkA11,
+    accent: Radix.blueDark9,
+    accentText: Radix.blueDark11,
+    onAccent: Radix.white,
+    tint: Radix.blueDark3,
+    tintHover: Radix.blueDark4,
+    tintActive: Radix.blueDark5,
+    onTint: Radix.blueDark12,
+    tintSelection: Radix.blueDark7,
+    ok: Radix.greenDark11,
+    okSolid: Radix.greenDark9,
+    warn: Radix.amberDark11,
+    warnSolid: Radix.amberDark9,
+    bad: Radix.redDark11,
+    badSolid: Radix.redDark9,
+    sep: Radix.slateDarkA6,
+    border: Radix.slateDarkA7,
+    fill: Radix.slateDarkA3,
+    fill2: Radix.slateDarkA4,
+    selected: Radix.slateDarkA5,
+    sidebarSolid: Radix.slateDark2,
+    sidebarSelected: Radix.whiteA3,
+    sidebarVeil: Radix.whiteA0,
+    scrim: Radix.blackA7,
   );
 
   final Color canvas, content, group, raised, bubble;
   final Color ink, ink2, ink3, ink2Glass;
-  final Color accent, onAccent;
+
+  /// A solid fill, and what is written in the accent colour.
+  final Color accent, accentText, onAccent;
+
+  /// The accent as a background: at rest, hovered, pressed or selected, and the
+  /// text on them. Own messages are [tintHover] with [onTint].
+  final Color tint, tintHover, tintActive, onTint;
+
+  /// Selected text on [tintHover]: the theme's selection is the same blue, and
+  /// could not be seen there.
+  final Color tintSelection;
+
+  /// Text and icons. The solid ones are fills; on [warnSolid] write in `ink`.
   final Color ok, warn, bad;
-  final Color sep, fill, fill2, selected;
+  final Color okSolid, warnSolid, badSolid;
+  final Color sep, border, fill, fill2, selected;
 
   /// The sidebar where the system gives no material: Linux and Windows 10.
   final Color sidebarSolid;
@@ -107,13 +153,12 @@ class WhisperColors extends ThemeExtension<WhisperColors> {
 
   /// `panel`'s tint, for what draws its own blur: the file menu.
   Color get panelTint => this == WhisperColors.dark
-      ? const Color(0xB8242428)
-      : const Color(0xBDF6F6F9);
+      ? const Color(0xB8212225)
+      : const Color(0xBDF9F9FB);
 
   /// `control` without its blur: for blocks on glass that is blurred already.
-  Color get controlTint => this == WhisperColors.dark
-      ? const Color(0xAD3A3A3C)
-      : const Color(0xB8FFFFFF);
+  Color get controlTint =>
+      this == WhisperColors.dark ? const Color(0xAD2E3135) : Radix.whiteA9;
 
   /// Behind a panel.
   final Color scrim;
@@ -130,11 +175,21 @@ class WhisperColors extends ThemeExtension<WhisperColors> {
     ink3: ink3,
     ink2Glass: ink2Glass,
     accent: accent ?? this.accent,
+    accentText: accentText,
     onAccent: onAccent,
+    tint: tint,
+    tintHover: tintHover,
+    tintActive: tintActive,
+    onTint: onTint,
+    tintSelection: tintSelection,
     ok: ok,
+    okSolid: okSolid,
     warn: warn,
+    warnSolid: warnSolid,
     bad: bad,
+    badSolid: badSolid,
     sep: sep,
+    border: border,
     fill: fill,
     fill2: fill2,
     selected: selected,
@@ -159,11 +214,21 @@ class WhisperColors extends ThemeExtension<WhisperColors> {
       ink3: l(ink3, other.ink3),
       ink2Glass: l(ink2Glass, other.ink2Glass),
       accent: l(accent, other.accent),
+      accentText: l(accentText, other.accentText),
       onAccent: l(onAccent, other.onAccent),
+      tint: l(tint, other.tint),
+      tintHover: l(tintHover, other.tintHover),
+      tintActive: l(tintActive, other.tintActive),
+      onTint: l(onTint, other.onTint),
+      tintSelection: l(tintSelection, other.tintSelection),
       ok: l(ok, other.ok),
+      okSolid: l(okSolid, other.okSolid),
       warn: l(warn, other.warn),
+      warnSolid: l(warnSolid, other.warnSolid),
       bad: l(bad, other.bad),
+      badSolid: l(badSolid, other.badSolid),
       sep: l(sep, other.sep),
+      border: l(border, other.border),
       fill: l(fill, other.fill),
       fill2: l(fill2, other.fill2),
       selected: l(selected, other.selected),
@@ -191,21 +256,14 @@ extension WhisperTheme on BuildContext {
 /// colours an icon for its own sake (DESIGN.md「色彩」). The same in both themes;
 /// 连接 uses `accent`, the one blue.
 abstract final class WhisperSettingsIcons {
-  static const general = Color(0xFF8E8E93);
-  static const system = Color(0xFF636366);
-  static const sharing = Color(0xFFFF375F);
-  static const notifications = Color(0xFFFF9F0A);
-  static const about = Color(0xFF8E8E93);
+  static const general = Radix.slate9;
+  static const system = Radix.slate11;
+  static const sharing = Radix.crimson9;
+  static const notifications = Radix.orange9;
+  static const about = Radix.slate9;
 
   /// The hairline along the top of a tile.
-  static const highlight = Color(0x59FFFFFF);
-
-  /// A tile is its colour at the top and 22% darker at the bottom.
-  static LinearGradient gradient(Color color) => LinearGradient(
-    begin: Alignment.topCenter,
-    end: Alignment.bottomCenter,
-    colors: [color, Color.lerp(color, const Color(0xFF000000), .22)!],
-  );
+  static const highlight = Radix.whiteA5;
 }
 
 abstract final class WhisperRadius {
@@ -260,14 +318,14 @@ abstract final class WhisperMono {
 /// They are about a camera and a printed code, so both themes are the same.
 abstract final class WhisperViewfinder {
   /// The gradient behind the camera until it has a picture.
-  static const glow = Color(0xFF3A4048);
-  static const base = Color(0xFF14161A);
-  static const mark = Color(0xEBFFFFFF);
-  static const line = Color(0xBFFFFFFF);
-  static const hint = Color(0xDBFFFFFF);
+  static const glow = Radix.slateDark7;
+  static const base = Radix.slateDark1;
+  static const mark = Radix.whiteA11;
+  static const line = Radix.whiteA9;
+  static const hint = Radix.whiteA11;
 
   /// The dark modules of a QR code, always on white.
-  static const qrInk = Color(0xFF111111);
+  static const qrInk = Radix.black;
 }
 
 /// A box shadow as CSS draws it, only outside the box. Flutter paints a
@@ -310,154 +368,114 @@ abstract final class WhisperShadow {
   /// The selection behind a sidebar row: like a segmented control's thumb.
   static List<BoxShadow> sidebarSelected(Brightness b) => b == Brightness.light
       ? const [
-          BoxShadow(
-            color: Color(0x14000000),
-            blurRadius: 3,
-            offset: Offset(0, 1),
-          ),
-          BoxShadow(color: Color(0x0D000000), spreadRadius: .5),
+          BoxShadow(color: Radix.blackA2, blurRadius: 3, offset: Offset(0, 1)),
+          BoxShadow(color: Radix.blackA1, spreadRadius: .5),
         ]
       : const [
-          BoxShadow(
-            color: Color(0x4D000000),
-            blurRadius: 3,
-            offset: Offset(0, 1),
-          ),
+          BoxShadow(color: Radix.blackA5, blurRadius: 3, offset: Offset(0, 1)),
         ];
 
   /// An app's icon: 0 1px 3px.
   static const appIcon = [
-    BoxShadow(color: Color(0x33000000), blurRadius: 3, offset: Offset(0, 1)),
+    BoxShadow(color: Radix.blackA4, blurRadius: 3, offset: Offset(0, 1)),
   ];
 
   /// The hairline along the top of an app's icon.
-  static const appIconHighlight = Color(0x66FFFFFF);
+  static const appIconHighlight = Radix.whiteA6;
 
   /// The island: 0 4px 16px, and 0 16px 44px opened.
   static const islandClosed = [
-    BoxShadow(color: Color(0x47000000), blurRadius: 16, offset: Offset(0, 4)),
+    BoxShadow(color: Radix.blackA5, blurRadius: 16, offset: Offset(0, 4)),
   ];
   static const islandOpen = [
-    BoxShadow(color: Color(0x6B000000), blurRadius: 44, offset: Offset(0, 16)),
+    BoxShadow(color: Radix.blackA6, blurRadius: 44, offset: Offset(0, 16)),
   ];
 
   /// A switch's knob.
   static const knob = [
-    BoxShadow(color: Color(0x4D000000), blurRadius: 3, offset: Offset(0, 1)),
-    BoxShadow(color: Color(0x0D000000), spreadRadius: .5),
+    BoxShadow(color: Radix.blackA5, blurRadius: 3, offset: Offset(0, 1)),
+    BoxShadow(color: Radix.blackA1, spreadRadius: .5),
   ];
 
   /// The hairline along the top of raised glass.
   static Color highlight(Brightness b) =>
-      b == Brightness.light ? const Color(0xCCFFFFFF) : const Color(0x24FFFFFF);
+      b == Brightness.light ? Radix.whiteA10 : Radix.whiteA3;
 
   static List<BoxShadow> e1(Brightness b) => b == Brightness.light
       ? const [
-          BoxShadow(
-            color: Color(0x0D000000),
-            blurRadius: 3,
-            offset: Offset(0, 1),
-          ),
+          BoxShadow(color: Radix.blackA1, blurRadius: 3, offset: Offset(0, 1)),
         ]
       : const [
-          BoxShadow(
-            color: Color(0x4D000000),
-            blurRadius: 2,
-            offset: Offset(0, 1),
-          ),
-          BoxShadow(color: Color(0x0FFFFFFF), spreadRadius: .5),
+          BoxShadow(color: Radix.blackA5, blurRadius: 2, offset: Offset(0, 1)),
+          BoxShadow(color: Radix.whiteA1, spreadRadius: .5),
         ];
 
   static List<BoxShadow> e2(Brightness b) => b == Brightness.light
       ? const [
-          BoxShadow(
-            color: Color(0x24000000),
-            blurRadius: 28,
-            offset: Offset(0, 8),
-          ),
-          BoxShadow(
-            color: Color(0x14000000),
-            blurRadius: 4,
-            offset: Offset(0, 1),
-          ),
-          BoxShadow(color: Color(0x14000000), spreadRadius: .5),
+          BoxShadow(color: Radix.blackA3, blurRadius: 28, offset: Offset(0, 8)),
+          BoxShadow(color: Radix.blackA2, blurRadius: 4, offset: Offset(0, 1)),
+          BoxShadow(color: Radix.blackA2, spreadRadius: .5),
         ]
       : const [
-          BoxShadow(
-            color: Color(0x80000000),
-            blurRadius: 28,
-            offset: Offset(0, 8),
-          ),
-          BoxShadow(
-            color: Color(0x66000000),
-            blurRadius: 4,
-            offset: Offset(0, 1),
-          ),
-          BoxShadow(color: Color(0x1AFFFFFF), spreadRadius: .5),
+          BoxShadow(color: Radix.blackA7, blurRadius: 28, offset: Offset(0, 8)),
+          BoxShadow(color: Radix.blackA6, blurRadius: 4, offset: Offset(0, 1)),
+          BoxShadow(color: Radix.whiteA2, spreadRadius: .5),
         ];
 
   static List<BoxShadow> e3(Brightness b) => b == Brightness.light
       ? const [
           BoxShadow(
-            color: Color(0x52101830),
+            color: Radix.blackA5,
             blurRadius: 80,
             offset: Offset(0, 32),
           ),
-          BoxShadow(
-            color: Color(0x24101830),
-            blurRadius: 24,
-            offset: Offset(0, 8),
-          ),
-          BoxShadow(color: Color(0x33000000), spreadRadius: .5),
+          BoxShadow(color: Radix.blackA3, blurRadius: 24, offset: Offset(0, 8)),
+          BoxShadow(color: Radix.blackA4, spreadRadius: .5),
         ]
       : const [
           BoxShadow(
-            color: Color(0x9E000000),
+            color: Radix.blackA8,
             blurRadius: 80,
             offset: Offset(0, 32),
           ),
-          BoxShadow(
-            color: Color(0x66000000),
-            blurRadius: 24,
-            offset: Offset(0, 8),
-          ),
-          BoxShadow(color: Color(0x24FFFFFF), spreadRadius: .5),
+          BoxShadow(color: Radix.blackA6, blurRadius: 24, offset: Offset(0, 8)),
+          BoxShadow(color: Radix.whiteA3, spreadRadius: .5),
         ];
 }
 
 /// The screens in the keyboard and mouse arrangement. They are pictures of real
 /// screens, so they look the same in both themes.
 abstract final class WhisperScreens {
-  static const menuBar = Color(0x66FFFFFF);
-  static const shadeTop = Color(0x14000000);
-  static const shadeBottom = Color(0x42000000);
-  static const label = Color(0xFFFFFFFF);
-  static const pointerFill = Color(0xFF000000);
-  static const pointerStroke = Color(0xFFFFFFFF);
+  static const menuBar = Radix.whiteA6;
+  static const shadeTop = Radix.blackA2;
+  static const shadeBottom = Radix.blackA5;
+  static const label = Radix.white;
+  static const pointerFill = Radix.black;
+  static const pointerStroke = Radix.white;
 
   static const shadow = [
-    BoxShadow(color: Color(0x33000000), blurRadius: 8, offset: Offset(0, 2)),
-    BoxShadow(color: Color(0x33000000), spreadRadius: .5),
+    BoxShadow(color: Radix.blackA4, blurRadius: 8, offset: Offset(0, 2)),
+    BoxShadow(color: Radix.blackA4, spreadRadius: .5),
   ];
 
   /// While it is held.
   static const lifted = [
-    BoxShadow(color: Color(0x57000000), blurRadius: 22, offset: Offset(0, 14)),
+    BoxShadow(color: Radix.blackA5, blurRadius: 22, offset: Offset(0, 14)),
   ];
 
   static const labelShadow = [
-    Shadow(color: Color(0x59000000), blurRadius: 2, offset: Offset(0, 1)),
+    Shadow(color: Radix.blackA5, blurRadius: 2, offset: Offset(0, 1)),
   ];
 
   static const pointerShadow = Shadow(
-    color: Color(0x80000000),
+    color: Radix.blackA7,
     blurRadius: 2,
     offset: Offset(0, 1),
   );
 
   /// Inside the canvas the screens sit on.
   static const canvasInset = BoxShadow(
-    color: Color(0x0F000000),
+    color: Radix.blackA1,
     blurRadius: 3,
     offset: Offset(0, 1),
   );
@@ -465,8 +483,8 @@ abstract final class WhisperScreens {
 
 /// The knob of a switch.
 const List<BoxShadow> whisperKnobShadow = [
-  BoxShadow(color: Color(0x4D000000), blurRadius: 3, offset: Offset(0, 1)),
-  BoxShadow(color: Color(0x0D000000), spreadRadius: .5),
+  BoxShadow(color: Radix.blackA5, blurRadius: 3, offset: Offset(0, 1)),
+  BoxShadow(color: Radix.blackA1, spreadRadius: .5),
 ];
 
 /// Signals that run on while something is happening. They are not transitions,
@@ -833,12 +851,12 @@ class _LiquidSegmentedState<T> extends State<LiquidSegmented<T>> {
                               shape: const StadiumBorder(),
                               shadows: const [
                                 BoxShadow(
-                                  color: Color(0x24000000),
+                                  color: Radix.blackA3,
                                   blurRadius: 2,
                                   offset: Offset(0, 1),
                                 ),
                                 BoxShadow(
-                                  color: Color(0x0D000000),
+                                  color: Radix.blackA1,
                                   spreadRadius: .5,
                                 ),
                               ],
@@ -1105,7 +1123,7 @@ class WhisperPageRoute<T> extends PageRoute<T> {
           decoration: const BoxDecoration(
             boxShadow: [
               BoxShadow(
-                color: Color(0x1A000000),
+                color: Radix.blackA2,
                 blurRadius: 32,
                 offset: Offset(-12, 0),
               ),
@@ -1358,11 +1376,11 @@ class CapsuleThumbShape extends SliderComponentShape {
     canvas.drawRRect(
       rr.shift(const Offset(0, 1)),
       Paint()
-        ..color = const Color(0x42000000)
+        ..color = Radix.blackA5
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2),
     );
-    canvas.drawRRect(rr.inflate(.5), Paint()..color = const Color(0x14000000));
-    canvas.drawRRect(rr, Paint()..color = const Color(0xFFFFFFFF));
+    canvas.drawRRect(rr.inflate(.5), Paint()..color = Radix.blackA2);
+    canvas.drawRRect(rr, Paint()..color = Radix.white);
   }
 }
 
@@ -1422,8 +1440,8 @@ SliderThemeData whisperSliderTheme(BuildContext context, {bool touch = false}) {
     trackHeight: 6,
     activeTrackColor: c.accent,
     inactiveTrackColor: c.fill2,
-    thumbColor: const Color(0xFFFFFFFF),
-    overlayColor: const Color(0x00000000),
+    thumbColor: Radix.white,
+    overlayColor: Colors.transparent,
     thumbShape: CapsuleThumbShape(width: thumb),
     overlayShape: RoundSliderOverlayShape(overlayRadius: touch ? 24 : 14),
     trackShape: WhisperSliderTrackShape(thumbWidth: thumb),
@@ -1503,9 +1521,9 @@ class _WhisperProgressBarState extends State<WhisperProgressBar>
                             decoration: BoxDecoration(
                               gradient: LinearGradient(
                                 colors: [
-                                  Color(0x00FFFFFF),
-                                  Color(0x80FFFFFF),
-                                  Color(0x00FFFFFF),
+                                  Radix.whiteA0,
+                                  Radix.whiteA7,
+                                  Radix.whiteA0,
                                 ],
                               ),
                             ),
@@ -1578,12 +1596,12 @@ class WhisperGlass extends StatelessWidget {
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final (tint, sigma, sat) = switch ((kind, dark)) {
-      (GlassKind.sidebar, false) => (const Color(0xA8EEEEF3), 44.0, 1.8),
-      (GlassKind.sidebar, true) => (const Color(0x9E26262A), 44.0, 1.8),
-      (GlassKind.control, false) => (const Color(0xB8FFFFFF), 30.0, 1.8),
-      (GlassKind.control, true) => (const Color(0xAD3A3A3C), 30.0, 1.8),
-      (GlassKind.panel, false) => (const Color(0xBDF6F6F9), 44.0, 1.9),
-      (GlassKind.panel, true) => (const Color(0xB8242428), 44.0, 1.9),
+      (GlassKind.sidebar, false) => (const Color(0xA8F0F0F3), 44.0, 1.8),
+      (GlassKind.sidebar, true) => (const Color(0x9E212225), 44.0, 1.8),
+      (GlassKind.control, false) => (Radix.whiteA9, 30.0, 1.8),
+      (GlassKind.control, true) => (const Color(0xAD2E3135), 30.0, 1.8),
+      (GlassKind.panel, false) => (const Color(0xBDF9F9FB), 44.0, 1.9),
+      (GlassKind.panel, true) => (const Color(0xB8212225), 44.0, 1.9),
     };
     final blurs = whisperGlassBlurs;
     final surface = DecoratedBox(
@@ -1636,7 +1654,7 @@ class WhisperBubble extends StatelessWidget {
           ),
           child: DecoratedBox(
             decoration: BoxDecoration(
-              color: mine ? c.accent : c.bubble,
+              color: mine ? c.tintHover : c.bubble,
               borderRadius: BorderRadius.circular(WhisperRadius.bubble),
             ),
             child: Padding(
@@ -1647,7 +1665,7 @@ class WhisperBubble extends StatelessWidget {
                 style: TextStyle(
                   fontSize: body,
                   height: 1.45,
-                  color: mine ? c.onAccent : c.ink,
+                  color: mine ? c.onTint : c.ink,
                 ),
               ),
             ),

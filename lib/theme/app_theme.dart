@@ -9,149 +9,86 @@ abstract final class WhisperUi {
   static const settingsMaxWidth = 760.0;
 }
 
-class WhisperPalette extends ThemeExtension<WhisperPalette> {
-  const WhisperPalette({
-    required this.connected,
-    required this.trusted,
-    required this.warning,
-    required this.danger,
-    required this.surfaceMuted,
-    required this.surfaceElevated,
-    required this.surfaceCanvas,
-    required this.borderSubtle,
-    required this.textMuted,
-    required this.messageIncoming,
-    required this.messageOutgoing,
-  });
-
-  final Color connected;
-  final Color trusted;
-  final Color warning;
-  final Color danger;
-  final Color surfaceMuted;
-  final Color surfaceElevated;
-  final Color surfaceCanvas;
-  final Color borderSubtle;
-  final Color textMuted;
-  final Color messageIncoming;
-  final Color messageOutgoing;
-
-  @override
-  WhisperPalette copyWith({
-    Color? connected,
-    Color? trusted,
-    Color? warning,
-    Color? danger,
-    Color? surfaceMuted,
-    Color? surfaceElevated,
-    Color? surfaceCanvas,
-    Color? borderSubtle,
-    Color? textMuted,
-    Color? messageIncoming,
-    Color? messageOutgoing,
-  }) {
-    return WhisperPalette(
-      connected: connected ?? this.connected,
-      trusted: trusted ?? this.trusted,
-      warning: warning ?? this.warning,
-      danger: danger ?? this.danger,
-      surfaceMuted: surfaceMuted ?? this.surfaceMuted,
-      surfaceElevated: surfaceElevated ?? this.surfaceElevated,
-      surfaceCanvas: surfaceCanvas ?? this.surfaceCanvas,
-      borderSubtle: borderSubtle ?? this.borderSubtle,
-      textMuted: textMuted ?? this.textMuted,
-      messageIncoming: messageIncoming ?? this.messageIncoming,
-      messageOutgoing: messageOutgoing ?? this.messageOutgoing,
-    );
-  }
-
-  @override
-  WhisperPalette lerp(ThemeExtension<WhisperPalette>? other, double t) {
-    if (other is! WhisperPalette) {
-      return this;
-    }
-    return WhisperPalette(
-      connected: Color.lerp(connected, other.connected, t)!,
-      trusted: Color.lerp(trusted, other.trusted, t)!,
-      warning: Color.lerp(warning, other.warning, t)!,
-      danger: Color.lerp(danger, other.danger, t)!,
-      surfaceMuted: Color.lerp(surfaceMuted, other.surfaceMuted, t)!,
-      surfaceElevated: Color.lerp(surfaceElevated, other.surfaceElevated, t)!,
-      surfaceCanvas: Color.lerp(surfaceCanvas, other.surfaceCanvas, t)!,
-      borderSubtle: Color.lerp(borderSubtle, other.borderSubtle, t)!,
-      textMuted: Color.lerp(textMuted, other.textMuted, t)!,
-      messageIncoming: Color.lerp(messageIncoming, other.messageIncoming, t)!,
-      messageOutgoing: Color.lerp(messageOutgoing, other.messageOutgoing, t)!,
-    );
-  }
-}
-
 class AppTheme {
   const AppTheme._();
 
   static const _lightScheme = ColorScheme(
     brightness: Brightness.light,
-    primary: Color(0xFF2563EB),
-    onPrimary: Colors.white,
-    secondary: Color(0xFF0EA5E9),
-    onSecondary: Colors.white,
-    error: Color(0xFFDC2626),
-    onError: Colors.white,
-    surface: Colors.white,
-    onSurface: Color(0xFF0F172A),
-    tertiary: Color(0xFFF59E0B),
-    onTertiary: Colors.white,
+    primary: Radix.blue9,
+    onPrimary: Radix.white,
+    primaryContainer: Radix.blue4,
+    onPrimaryContainer: Radix.blue12,
+    secondary: Radix.slate11,
+    onSecondary: Radix.white,
+    secondaryContainer: Radix.slate3,
+    onSecondaryContainer: Radix.slate12,
+    tertiary: Radix.amber9,
+    onTertiary: Radix.slate12,
+    tertiaryContainer: Radix.amber3,
+    onTertiaryContainer: Radix.amber12,
+    error: Radix.red9,
+    onError: Radix.white,
+    errorContainer: Radix.red3,
+    onErrorContainer: Radix.red12,
+    surface: Radix.white,
+    onSurface: Radix.slate12,
+    onSurfaceVariant: Radix.slate11,
+    surfaceContainerLowest: Radix.white,
+    surfaceContainerLow: Radix.slate1,
+    surfaceContainer: Radix.slate2,
+    surfaceContainerHigh: Radix.slate3,
+    surfaceContainerHighest: Radix.slate4,
+    outline: Radix.slate7,
+    outlineVariant: Radix.slate6,
+    inverseSurface: Radix.slate12,
+    onInverseSurface: Radix.slate1,
+    inversePrimary: Radix.blue8,
+    shadow: Radix.black,
+    scrim: Radix.black,
+    surfaceTint: Radix.whiteA0,
   );
 
   static const _darkScheme = ColorScheme(
     brightness: Brightness.dark,
-    primary: Color(0xFF7CA7FF),
-    onPrimary: Color(0xFF020617),
-    secondary: Color(0xFF94A3B8),
-    onSecondary: Color(0xFF020617),
-    error: Color(0xFFF87171),
-    onError: Color(0xFF450A0A),
-    surface: Color(0xFF000000),
-    onSurface: Color(0xFFE2E8F0),
-    tertiary: Color(0xFFFBBF24),
-    onTertiary: Color(0xFF451A03),
+    primary: Radix.blueDark9,
+    onPrimary: Radix.white,
+    primaryContainer: Radix.blueDark4,
+    onPrimaryContainer: Radix.blueDark12,
+    secondary: Radix.slateDark11,
+    onSecondary: Radix.slateDark1,
+    secondaryContainer: Radix.slateDark4,
+    onSecondaryContainer: Radix.slateDark12,
+    tertiary: Radix.amberDark9,
+    onTertiary: Radix.slateDark1,
+    tertiaryContainer: Radix.amberDark3,
+    onTertiaryContainer: Radix.amberDark12,
+    error: Radix.redDark9,
+    onError: Radix.white,
+    errorContainer: Radix.redDark3,
+    onErrorContainer: Radix.redDark12,
+    surface: Radix.slateDark1,
+    onSurface: Radix.slateDark12,
+    onSurfaceVariant: Radix.slateDark11,
+    surfaceContainerLowest: Radix.slateDark1,
+    surfaceContainerLow: Radix.slateDark2,
+    surfaceContainer: Radix.slateDark3,
+    surfaceContainerHigh: Radix.slateDark4,
+    surfaceContainerHighest: Radix.slateDark5,
+    outline: Radix.slateDark7,
+    outlineVariant: Radix.slateDark6,
+    inverseSurface: Radix.slateDark12,
+    onInverseSurface: Radix.slateDark1,
+    inversePrimary: Radix.blue8,
+    shadow: Radix.black,
+    scrim: Radix.black,
+    surfaceTint: Radix.whiteA0,
   );
 
-  static const _lightPalette = WhisperPalette(
-    connected: Color(0xFF0284C7),
-    trusted: Color(0xFF16A34A),
-    warning: Color(0xFFD97706),
-    danger: Color(0xFFDC2626),
-    surfaceMuted: Color(0xFFE2E8F0),
-    surfaceElevated: Colors.white,
-    surfaceCanvas: Color(0xFFF1F5F9),
-    borderSubtle: Color(0xFFE2E8F0),
-    textMuted: Color(0xFF64748B),
-    messageIncoming: Color(0xFFF8FAFC),
-    messageOutgoing: Color(0xFFE5F0FC),
-  );
+  static ThemeData get lightTheme =>
+      _buildTheme(_lightScheme, WhisperColors.light);
 
-  static const _darkPalette = WhisperPalette(
-    connected: Color(0xFF38BDF8),
-    trusted: Color(0xFF4ADE80),
-    warning: Color(0xFFFBBF24),
-    danger: Color(0xFFF87171),
-    surfaceMuted: Color(0xFF141414),
-    surfaceElevated: Color(0xFF0A0A0A),
-    surfaceCanvas: Color(0xFF000000),
-    borderSubtle: Color(0xFF242424),
-    textMuted: Color(0xFF8A8F98),
-    messageIncoming: Color(0xFF101010),
-    messageOutgoing: Color(0xFF18202A),
-  );
-
-  static WhisperPalette fallbackPalette(Brightness brightness) {
-    return brightness == Brightness.dark ? _darkPalette : _lightPalette;
-  }
-
-  static ThemeData get lightTheme => _buildTheme(_lightScheme, _lightPalette);
-
-  static ThemeData get darkTheme => _buildTheme(_darkScheme, _darkPalette);
+  static ThemeData get darkTheme =>
+      _buildTheme(_darkScheme, WhisperColors.dark);
 
   /// The interface sets its own sizes and asks nothing else of the text theme:
   /// Material's letter spacing spreads Chinese apart, and its leading sits text
@@ -180,10 +117,7 @@ class AppTheme {
     );
   }
 
-  static ThemeData _buildTheme(
-    ColorScheme colorScheme,
-    WhisperPalette palette,
-  ) {
+  static ThemeData _buildTheme(ColorScheme colorScheme, WhisperColors c) {
     final base = ThemeData(
       useMaterial3: true,
       colorScheme: colorScheme,
@@ -224,19 +158,15 @@ class AppTheme {
         surfaceTintColor: Colors.transparent,
       ),
       textSelectionTheme: TextSelectionThemeData(
-        cursorColor: colorScheme.brightness == Brightness.dark
-            ? const Color(0xFF3B82F6)
-            : const Color(0xFF2563EB),
+        cursorColor: c.accent,
         selectionColor: colorScheme.brightness == Brightness.dark
-            ? const Color(0xFF3B82F6).withValues(alpha: 0.28)
-            : const Color(0xFF2563EB).withValues(alpha: 0.22),
-        selectionHandleColor: colorScheme.brightness == Brightness.dark
-            ? const Color(0xFF3B82F6)
-            : const Color(0xFF2563EB),
+            ? Radix.blueDarkA5
+            : Radix.blueA5,
+        selectionHandleColor: c.accent,
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: palette.surfaceMuted,
+        fillColor: c.fill,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
           borderSide: BorderSide(color: colorScheme.outlineVariant),
@@ -251,7 +181,7 @@ class AppTheme {
         ),
       ),
       chipTheme: ChipThemeData(
-        backgroundColor: palette.surfaceMuted,
+        backgroundColor: c.fill,
         selectedColor: colorScheme.primary.withValues(alpha: 0.12),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
         labelStyle: TextStyle(color: colorScheme.onSurface),
@@ -259,10 +189,10 @@ class AppTheme {
       ),
       cardTheme: CardThemeData(
         elevation: 0,
-        color: palette.surfaceElevated,
+        color: c.raised,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(24),
-          side: BorderSide(color: palette.borderSubtle),
+          side: BorderSide(color: c.sep),
         ),
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       ),
@@ -273,13 +203,7 @@ class AppTheme {
     );
 
     return base.copyWith(
-      extensions: <ThemeExtension<dynamic>>[
-        palette,
-        // The interface's tokens.
-        colorScheme.brightness == Brightness.dark
-            ? WhisperColors.dark
-            : WhisperColors.light,
-      ],
+      extensions: <ThemeExtension<dynamic>>[c],
       appBarTheme: base.appBarTheme.copyWith(
         titleTextStyle: base.textTheme.titleLarge?.copyWith(
           fontSize: 22,
@@ -297,10 +221,4 @@ class AppTheme {
       ),
     );
   }
-}
-
-extension WhisperPaletteX on BuildContext {
-  WhisperPalette get whisperPalette =>
-      Theme.of(this).extension<WhisperPalette>() ??
-      AppTheme.fallbackPalette(Theme.of(this).brightness);
 }

@@ -1,3 +1,4 @@
+import 'package:whisper/theme/radix_colors.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -293,7 +294,7 @@ class OfferPresenter extends IslandPresenter {
   Widget featured(BuildContext context, IslandControls controls) {
     final l10n = AppLocalizations.of(context)!;
     final picture = offer.thumbnail;
-    final dim = Colors.white.withValues(alpha: 0.55);
+    const dim = Radix.whiteA8;
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
       child: Column(
@@ -353,10 +354,7 @@ class OfferPresenter extends IslandPresenter {
                     decoration: ShapeDecoration(
                       shape: RoundedSuperellipseBorder(
                         borderRadius: BorderRadius.circular(9),
-                        side: BorderSide(
-                          color: Colors.white.withValues(alpha: 0.14),
-                          width: 0.5,
-                        ),
+                        side: BorderSide(color: Radix.whiteA3, width: 0.5),
                       ),
                     ),
                     child: ClipRSuperellipse(
@@ -463,7 +461,7 @@ class OfferAppIcon extends StatelessWidget {
       child: Icon(
         CupertinoIcons.macwindow,
         size: size * 0.55,
-        color: Colors.white70,
+        color: Radix.whiteA9,
       ),
     );
   }

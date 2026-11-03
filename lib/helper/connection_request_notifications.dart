@@ -1,3 +1,4 @@
+import 'package:whisper/theme/radix_colors.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -191,7 +192,7 @@ class ConnectionRequestNotifier {
           vibrationPattern: Int64List.fromList(<int>[0, 160, 90, 160]),
           showBadge: false,
           enableLights: true,
-          ledColor: const Color(0xFF2563EB),
+          ledColor: Radix.blue9,
         ),
       );
       try {
@@ -342,23 +343,25 @@ class ConnectionRequestNotifier {
     required AppLocalizations l10n,
   }) async {
     try {
-      return await _nativeChannel
-              .invokeMethod<bool>('showConnectionAlert', <String, Object>{
-                'notificationId': notificationId,
-                'peerId': request.device.uid,
-                'deviceName': request.device.name,
-                'platform': request.device.platform,
-                'verificationText': l10n.pairingCodeSemantics(formattedCode),
-                // The island's pill shows it, to compare at a glance.
-                'code': formattedCode,
-                'title': title,
-                'payload': payload,
-                'rejectActionId': pairingRejectNotificationAction,
-                'answerActionId': pairingApproveNotificationAction,
-                'answerShowsUserInterface': true,
-                'channelName': l10n.connectRequest,
-                'channelDescription': l10n.connectRequest,
-              }) ??
+      return await _nativeChannel.invokeMethod<bool>(
+            'showConnectionAlert',
+            <String, Object>{
+              'notificationId': notificationId,
+              'peerId': request.device.uid,
+              'deviceName': request.device.name,
+              'platform': request.device.platform,
+              'verificationText': l10n.pairingCodeSemantics(formattedCode),
+              // The island's pill shows it, to compare at a glance.
+              'code': formattedCode,
+              'title': title,
+              'payload': payload,
+              'rejectActionId': pairingRejectNotificationAction,
+              'answerActionId': pairingApproveNotificationAction,
+              'answerShowsUserInterface': true,
+              'channelName': l10n.connectRequest,
+              'channelDescription': l10n.connectRequest,
+            },
+          ) ??
           false;
     } on MissingPluginException {
       return false;
@@ -375,17 +378,17 @@ class ConnectionRequestNotifier {
       pairingApproveNotificationAction => AndroidNotificationAction(
         actionId,
         l10n.pairingApprove,
-        titleColor: const Color(0xFF16A34A),
+        titleColor: Radix.green11,
       ),
       pairingRejectNotificationAction => AndroidNotificationAction(
         actionId,
         l10n.pairingReject,
-        titleColor: const Color(0xFFDC2626),
+        titleColor: Radix.red11,
       ),
       pairingCancelNotificationAction => AndroidNotificationAction(
         actionId,
         l10n.cancel,
-        titleColor: const Color(0xFFDC2626),
+        titleColor: Radix.red11,
       ),
       pairingViewNotificationAction => AndroidNotificationAction(
         actionId,

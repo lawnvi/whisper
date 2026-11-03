@@ -35,7 +35,7 @@ void main() {
     expect(source, contains('Future<List<AppInfo>> _loadVisibleApps()'));
     expect(
       RegExp(
-        r'InstalledApps\.getInstalledApps\([\s\S]*?excludeSystemApps:\s*false,[\s\S]*?withIcon:\s*false,',
+        r'InstalledApps\.getInstalledApps\([\s\S]*?excludeSystemApps:\s*false,[\s\S]*?withIcon:\s*false',
       ).hasMatch(source),
       isTrue,
     );

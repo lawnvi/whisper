@@ -180,7 +180,7 @@ class IslandPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
 
         /** 点了卡片或通知本身:打开 Whisper,由它在应用里接着问。 */
         const val OPEN = "open"
-        private const val BLUE = 0xFF0A84FF.toInt()
+        private const val BLUE = 0xFF0090FF.toInt()
 
         @Volatile
         private var active: IslandPlugin? = null

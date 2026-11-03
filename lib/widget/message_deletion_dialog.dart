@@ -1,3 +1,4 @@
+import 'package:whisper/theme/whisper_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:whisper/l10n/app_localizations.dart';
@@ -45,7 +46,7 @@ class _MessageDeletionDialogState extends State<_MessageDeletionDialog> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final palette = context.whisperPalette;
+    final palette = context.wc;
     return CallbackShortcuts(
       bindings: {const SingleActivator(LogicalKeyboardKey.escape): _close},
       child: Focus(
@@ -72,10 +73,10 @@ class _MessageDeletionDialogState extends State<_MessageDeletionDialog> {
                   horizontalTitleGap: 0,
                   controlAffinity: ListTileControlAffinity.leading,
                   checkboxShape: const CircleBorder(),
-                  tileColor: palette.surfaceMuted,
+                  tileColor: palette.fill,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
-                    side: BorderSide(color: palette.borderSubtle),
+                    side: BorderSide(color: palette.sep),
                   ),
                   title: Text(
                     l10n?.keepReceivedFiles ?? '保留接收的文件',

@@ -1,3 +1,4 @@
+import 'package:whisper/theme/radix_colors.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
@@ -248,7 +249,7 @@ class WhisperIcon extends StatelessWidget {
       painter: _StrokePainter(
         whisperGlyphPath(glyph),
         weight,
-        color ?? IconTheme.of(context).color ?? const Color(0xFF000000),
+        color ?? IconTheme.of(context).color ?? Radix.black,
       ),
     ),
   );
@@ -308,11 +309,11 @@ class _DocPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = .7
       ..strokeJoin = StrokeJoin.round
-      ..color = const Color(0x57000000);
+      ..color = Radix.blackA5;
     canvas
-      ..drawPath(_sheet, Paint()..color = const Color(0xFFFFFFFF))
+      ..drawPath(_sheet, Paint()..color = Radix.white)
       ..drawPath(_sheet, line)
-      ..drawPath(_fold, Paint()..color = const Color(0xFFE6E6EA))
+      ..drawPath(_fold, Paint()..color = Radix.slate4)
       ..drawPath(_fold, line);
   }
 
@@ -347,8 +348,8 @@ class _FolderPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     canvas.scale(size.width / 20);
     canvas
-      ..drawPath(_back, Paint()..color = const Color(0xFF5AB0F7))
-      ..drawPath(_front, Paint()..color = const Color(0xFF7CC4FB));
+      ..drawPath(_back, Paint()..color = Radix.blue8)
+      ..drawPath(_front, Paint()..color = Radix.blue7);
   }
 
   @override
