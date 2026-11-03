@@ -7490,6 +7490,60 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'{device} 停止了播放'**
   String soundMemberStoppedNotice(String device);
+
+  /// No description provided for @connectionCheckNetwork.
+  ///
+  /// In zh, this message translates to:
+  /// **'这台的网络'**
+  String get connectionCheckNetwork;
+
+  /// No description provided for @connectionCheckAddress.
+  ///
+  /// In zh, this message translates to:
+  /// **'对方的地址'**
+  String get connectionCheckAddress;
+
+  /// No description provided for @connectionCheckService.
+  ///
+  /// In zh, this message translates to:
+  /// **'对方的 Whisper'**
+  String get connectionCheckService;
+
+  /// No description provided for @connectionCheckSession.
+  ///
+  /// In zh, this message translates to:
+  /// **'加密连接'**
+  String get connectionCheckSession;
+
+  /// No description provided for @connectionCheckNotConnected.
+  ///
+  /// In zh, this message translates to:
+  /// **'未连接'**
+  String get connectionCheckNotConnected;
+
+  /// No description provided for @connectionCheckConnected.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接正常。'**
+  String get connectionCheckConnected;
+
+  /// No description provided for @connectionCheckOneWay.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接正常。不过这台连不到对方的端口，现在的连接是对方发起的；断开后要从对方再连一次。'**
+  String get connectionCheckOneWay;
+
+  /// No description provided for @connectionCheckReady.
+  ///
+  /// In zh, this message translates to:
+  /// **'网络和对方的 Whisper 都正常，可以连接。'**
+  String get connectionCheckReady;
+
+  /// No description provided for @connectionCheckAgain.
+  ///
+  /// In zh, this message translates to:
+  /// **'重新检查'**
+  String get connectionCheckAgain;
 }
 
 class _AppLocalizationsDelegate

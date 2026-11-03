@@ -41,6 +41,7 @@ import 'package:whisper/new_ui/shell/whisper_shell.dart';
 import 'package:whisper/new_ui/tray/clipboard_history.dart';
 import 'package:whisper/new_ui/tray/tray_host.dart';
 import 'package:whisper/new_ui/tray/tray_model.dart';
+import 'package:whisper/new_ui/shell/shell_connection_check.dart';
 import 'package:whisper/new_ui/tray/tray_panel.dart';
 import 'package:whisper/theme/whisper_device_art.dart';
 import 'package:whisper/theme/whisper_icons.dart';
@@ -2470,6 +2471,17 @@ class _DeviceListScreen extends State<DeviceListScreen>
     );
   }
 
+  void _shellOpenConnectionCheck(DeviceData target, {bool touch = false}) =>
+      unawaited(
+        showConnectionCheck(
+          context,
+          device: target,
+          touch: touch,
+          connected: () => socketManager.isConnectedTo(target.uid),
+          onConnect: () => _shellConnect(target),
+        ),
+      );
+
   void _noteSoundMemberStopped(String peerId) {
     if (!mounted) return;
     final name = socketManager.remoteProfileFor(peerId)?.device.name ?? peerId;
@@ -2613,8 +2625,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     openInput: () => setState(() => _shellPlace = ShellPlace.input),
     openShareLinks: _shellOpenShareLinks,
     openSettings: () => unawaited(_shellOpenSettings()),
-    openDiagnostics: (_) =>
-        _showConnectionDiagnosticStage(ConnectionDiagnosticStage.service),
+    openDiagnostics: _shellOpenConnectionCheck,
     buildConversation: (context, target) => SendMessageScreen(
       key: ValueKey('shell-chat-${target.uid}'),
       device: target,
@@ -2669,8 +2680,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
             ? null
             : () => unawaited(_toggleInputMember(target)),
         inputOn: _inputMember(target.uid),
-        onDiagnostics: () =>
-            _showConnectionDiagnosticStage(ConnectionDiagnosticStage.service),
+        onDiagnostics: () => _shellOpenConnectionCheck(target),
         onDisconnect: () => socketManager.disconnectPeer(target.uid),
         onRemove: _removeDevice,
       );
@@ -2729,9 +2739,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
         ),
       ),
     );
-    void diagnostics() => showAppToast(
-      connected ? l10n.connectedNow : l10n.deviceFeatureNeedsConnection,
-    );
+    void diagnostics() => _shellOpenConnectionCheck(target, touch: true);
     Future<void> remove(String uid) async {
       await _removeDevice(uid);
       onClose();

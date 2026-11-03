@@ -1886,5 +1886,14 @@
   "shellManualConnectField": "Dirección y puerto",
   "shellLinksChooseFolder": "Elegir carpeta",
   "soundMemberStoppedThere": "Detenido en ese dispositivo",
-  "soundMemberStoppedNotice": "{device} dejó de reproducir"
+  "soundMemberStoppedNotice": "{device} dejó de reproducir",
+  "connectionCheckNetwork": "Red de este dispositivo",
+  "connectionCheckAddress": "Su dirección",
+  "connectionCheckService": "Whisper en ese dispositivo",
+  "connectionCheckSession": "Conexión cifrada",
+  "connectionCheckNotConnected": "Sin conexión",
+  "connectionCheckConnected": "La conexión funciona.",
+  "connectionCheckOneWay": "La conexión funciona, pero este dispositivo no llega a su puerto: la conexión la inició el otro. Si se corta, vuelve a conectar desde allí.",
+  "connectionCheckReady": "La red y Whisper en ese dispositivo funcionan. Puedes conectar.",
+  "connectionCheckAgain": "Comprobar de nuevo"
 }

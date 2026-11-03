@@ -4550,4 +4550,33 @@ class AppLocalizationsEs extends AppLocalizations {
   String soundMemberStoppedNotice(String device) {
     return '$device dejó de reproducir';
   }
+
+  @override
+  String get connectionCheckNetwork => 'Red de este dispositivo';
+
+  @override
+  String get connectionCheckAddress => 'Su dirección';
+
+  @override
+  String get connectionCheckService => 'Whisper en ese dispositivo';
+
+  @override
+  String get connectionCheckSession => 'Conexión cifrada';
+
+  @override
+  String get connectionCheckNotConnected => 'Sin conexión';
+
+  @override
+  String get connectionCheckConnected => 'La conexión funciona.';
+
+  @override
+  String get connectionCheckOneWay =>
+      'La conexión funciona, pero este dispositivo no llega a su puerto: la conexión la inició el otro. Si se corta, vuelve a conectar desde allí.';
+
+  @override
+  String get connectionCheckReady =>
+      'La red y Whisper en ese dispositivo funcionan. Puedes conectar.';
+
+  @override
+  String get connectionCheckAgain => 'Comprobar de nuevo';
 }

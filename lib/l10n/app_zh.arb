@@ -3260,5 +3260,14 @@
         "type": "String"
       }
     }
-  }
+  },
+  "connectionCheckNetwork": "这台的网络",
+  "connectionCheckAddress": "对方的地址",
+  "connectionCheckService": "对方的 Whisper",
+  "connectionCheckSession": "加密连接",
+  "connectionCheckNotConnected": "未连接",
+  "connectionCheckConnected": "连接正常。",
+  "connectionCheckOneWay": "连接正常。不过这台连不到对方的端口，现在的连接是对方发起的；断开后要从对方再连一次。",
+  "connectionCheckReady": "网络和对方的 Whisper 都正常，可以连接。",
+  "connectionCheckAgain": "重新检查"
 }

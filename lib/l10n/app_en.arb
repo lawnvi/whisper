@@ -3089,5 +3089,14 @@
   "shellManualConnectField": "Address and port",
   "shellLinksChooseFolder": "Choose folder",
   "soundMemberStoppedThere": "Stopped on that device",
-  "soundMemberStoppedNotice": "{device} stopped playing"
+  "soundMemberStoppedNotice": "{device} stopped playing",
+  "connectionCheckNetwork": "This device's network",
+  "connectionCheckAddress": "Its address",
+  "connectionCheckService": "Whisper on that device",
+  "connectionCheckSession": "Encrypted connection",
+  "connectionCheckNotConnected": "Not connected",
+  "connectionCheckConnected": "The connection is working.",
+  "connectionCheckOneWay": "The connection is working, but this device can't reach its port: the other device made this connection. If it drops, connect again from there.",
+  "connectionCheckReady": "The network and Whisper on that device are fine. You can connect.",
+  "connectionCheckAgain": "Check again"
 }

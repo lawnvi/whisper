@@ -4250,4 +4250,32 @@ class AppLocalizationsZh extends AppLocalizations {
   String soundMemberStoppedNotice(String device) {
     return '$device 停止了播放';
   }
+
+  @override
+  String get connectionCheckNetwork => '这台的网络';
+
+  @override
+  String get connectionCheckAddress => '对方的地址';
+
+  @override
+  String get connectionCheckService => '对方的 Whisper';
+
+  @override
+  String get connectionCheckSession => '加密连接';
+
+  @override
+  String get connectionCheckNotConnected => '未连接';
+
+  @override
+  String get connectionCheckConnected => '连接正常。';
+
+  @override
+  String get connectionCheckOneWay =>
+      '连接正常。不过这台连不到对方的端口，现在的连接是对方发起的；断开后要从对方再连一次。';
+
+  @override
+  String get connectionCheckReady => '网络和对方的 Whisper 都正常，可以连接。';
+
+  @override
+  String get connectionCheckAgain => '重新检查';
 }

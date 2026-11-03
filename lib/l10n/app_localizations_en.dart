@@ -4499,4 +4499,33 @@ class AppLocalizationsEn extends AppLocalizations {
   String soundMemberStoppedNotice(String device) {
     return '$device stopped playing';
   }
+
+  @override
+  String get connectionCheckNetwork => 'This device\'s network';
+
+  @override
+  String get connectionCheckAddress => 'Its address';
+
+  @override
+  String get connectionCheckService => 'Whisper on that device';
+
+  @override
+  String get connectionCheckSession => 'Encrypted connection';
+
+  @override
+  String get connectionCheckNotConnected => 'Not connected';
+
+  @override
+  String get connectionCheckConnected => 'The connection is working.';
+
+  @override
+  String get connectionCheckOneWay =>
+      'The connection is working, but this device can\'t reach its port: the other device made this connection. If it drops, connect again from there.';
+
+  @override
+  String get connectionCheckReady =>
+      'The network and Whisper on that device are fine. You can connect.';
+
+  @override
+  String get connectionCheckAgain => 'Check again';
 }
