@@ -43,7 +43,7 @@ class PhonePageBar extends StatelessWidget {
                 iconSize: 20,
                 weight: 2,
                 touch: true,
-                color: c.accent,
+                color: c.ink,
                 label: context.shellL10n.back,
                 onTap: onBack ?? () => shellMaybePop(context),
               )
@@ -74,7 +74,8 @@ class PhonePageBar extends StatelessWidget {
   }
 }
 
-/// `.tb-end .iconbtn`: accent, 48 to hit.
+/// `.tb-end .iconbtn`: plain ink like the words beside it, 48 to hit. Accent is
+/// for what a tap does something special, not for finding your way around.
 class PhoneBarButton extends StatelessWidget {
   const PhoneBarButton({
     super.key,
@@ -103,7 +104,7 @@ class PhoneBarButton extends StatelessWidget {
           glyph,
           size: iconSize,
           weight: weight,
-          color: context.wc.accent,
+          color: context.wc.ink,
         ),
       ),
     ),

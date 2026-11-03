@@ -42,6 +42,7 @@ import 'package:whisper/new_ui/tray/clipboard_history.dart';
 import 'package:whisper/new_ui/tray/tray_host.dart';
 import 'package:whisper/new_ui/tray/tray_model.dart';
 import 'package:whisper/new_ui/shell/shell_connection_check.dart';
+import 'package:whisper/page/conversation_drafts.dart';
 import 'package:whisper/new_ui/tray/tray_panel.dart';
 import 'package:whisper/theme/whisper_device_art.dart';
 import 'package:whisper/theme/whisper_icons.dart';
@@ -2415,8 +2416,19 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
   /// There is always a device to show, once there is one: beside a sidebar it
   /// is on screen, and on a phone nothing is built until a row is tapped.
-  String? get _firstDesktopPeerId =>
-      _sessionItems.isEmpty ? null : _sessionItems.first.device.uid;
+  /// What the window opened on, until someone chooses. It stays once shown: the
+  /// list reorders as devices come and go, and the page must not change under a
+  /// pointer on its way to 连接.
+  String? _openedOnPeerId;
+
+  String? get _firstDesktopPeerId {
+    if (_sessionItems.isEmpty) return null;
+    final opened = _openedOnPeerId;
+    if (opened == null || !_sessionItems.any((s) => s.device.uid == opened)) {
+      _openedOnPeerId = _sessionItems.first.device.uid;
+    }
+    return _openedOnPeerId;
+  }
 
   DeviceRowFacts _shellFacts(ChatSessionItem session) {
     final uid = session.device.uid;
@@ -2606,6 +2618,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
       });
     },
     connect: _shellConnect,
+    disconnect: (target) => unawaited(socketManager.disconnectPeer(target.uid)),
     openPairing: ({bool startWithAddress = false}) =>
         _openPairingQr(startWithAddress: startWithAddress),
     removeDevice: _removeDevice,
@@ -2676,8 +2689,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
           null => null,
         },
         soundEnabled: ShellSoundController.shared.sinkView == null,
-        onInput:
-            deviceKindOf(target).handheld || !supportsNativeRemoteInput()
+        onInput: deviceKindOf(target).handheld || !supportsNativeRemoteInput()
             ? null
             : () => unawaited(_toggleInputMember(target)),
         inputOn: _inputMember(target.uid),
@@ -2757,8 +2769,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
           if (supportsManualRemoteInputSource() &&
               target.uid != device?.uid &&
               !deviceKindOf(target).handheld &&
-              (!connected ||
-                  socketManager.supportsManualInputFor(target.uid)))
+              (!connected || socketManager.supportsManualInputFor(target.uid)))
             ShellDeviceEntry(
               glyph: WhisperGlyph.keyboard,
               title: l10n.shellPhoneControl,
@@ -2787,6 +2798,14 @@ class _DeviceListScreen extends State<DeviceListScreen>
       connected: connected,
       paired: _isTrustedDevice(target),
       touch: true,
+      entries: [
+        if (_shellCanControl(target))
+          ShellDeviceEntry(
+            glyph: WhisperGlyph.keyboard,
+            title: l10n.shellPhoneControl,
+            onTap: connected ? () => _shellOpenControl(target) : null,
+          ),
+      ],
       onClose: onClose,
       statusLine: connected
           ? l10n.shellCardConnected
@@ -4054,6 +4073,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
   Future<void> _removeDevice(String uid) async {
     _connectionAttempts.cancel('peer:$uid');
+    ComposerDrafts.shared.forget(uid);
     await socketManager.deletePeer(uid);
     if (!mounted) {
       return;

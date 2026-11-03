@@ -57,6 +57,7 @@ class ShellActions {
   const ShellActions({
     required this.select,
     required this.connect,
+    required this.disconnect,
     required this.openPairing,
     required this.removeDevice,
     required this.contextActions,
@@ -79,7 +80,7 @@ class ShellActions {
   });
 
   final ValueChanged<String?> select;
-  final ValueChanged<DeviceData> connect;
+  final ValueChanged<DeviceData> connect, disconnect;
   final Future<void> Function({bool startWithAddress}) openPairing;
   final Future<void> Function(String uid) removeDevice;
 

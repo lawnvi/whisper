@@ -49,10 +49,18 @@ class IslandMoment {
     this.answers = const [],
     this.onStop,
     this.stopLabel = '',
+    this.art,
+    this.code,
   });
 
   final Widget leading;
   final String title, detail;
+
+  /// What an open question has at its top: who asks, or the warning.
+  final Widget? art;
+
+  /// The digits two devices compare.
+  final String? code;
 
   /// A number beside the title on the small island: 59%.
   final String? value;
@@ -79,6 +87,12 @@ mixin MomentViews on IslandPresenter implements MomentPresenter {
   @override
   Widget featured(BuildContext context, IslandControls controls) {
     final m = moment(context);
+    if (m.answers.isNotEmpty) {
+      return Padding(
+        padding: const EdgeInsets.all(9),
+        child: IslandAskCard(moment: m, touch: true),
+      );
+    }
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 14, 14, 14),
       child: Column(
@@ -94,17 +108,6 @@ mixin MomentViews on IslandPresenter implements MomentPresenter {
                 _MomentAction(label: m.stopLabel, onTap: stop),
             ],
           ),
-          if (m.answers.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            Wrap(
-              alignment: WrapAlignment.end,
-              spacing: 6,
-              children: [
-                for (final answer in m.answers)
-                  _MomentAction(label: answer.label, onTap: answer.onTap),
-              ],
-            ),
-          ],
         ],
       ),
     );
@@ -161,6 +164,115 @@ class _MomentAction extends StatelessWidget {
       ),
     ),
   );
+}
+
+/// docs/design/surfaces.md「灵动岛」: a question, centred from top to bottom. Who
+/// asks, what they want, the digits to compare when there are any, the answers.
+class IslandAskCard extends StatelessWidget {
+  const IslandAskCard({super.key, required this.moment, this.touch = false});
+
+  final IslandMoment moment;
+  final bool touch;
+
+  @override
+  Widget build(BuildContext context) {
+    final type = WhisperType(touch: touch);
+    final m = moment;
+    final faint = Colors.white.withValues(alpha: .14);
+    final height = touch ? 44.0 : 34.0;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(7, 12, 7, 7),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // A picture when a device is asking, the warning when it is one, and
+          // nothing rather than a question mark that says nothing.
+          if (m.art case final top?) ...[
+            Center(child: top),
+            const SizedBox(height: 10),
+          ],
+          Text(
+            m.title,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: type.head,
+              height: 1.25,
+              fontWeight: FontWeight.w600,
+              color: Colors.white,
+            ),
+          ),
+          if (m.detail.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              m.detail,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: type.note,
+                height: 1.4,
+                color: Colors.white.withValues(alpha: .62),
+              ),
+            ),
+          ],
+          if (m.code case final code?) ...[
+            const SizedBox(height: 12),
+            Text(
+              code,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontFamily: WhisperMono.family,
+                fontFamilyFallback: WhisperMono.fallback,
+                fontSize: WhisperSizes.pairCode,
+                height: 1.2,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 2,
+                color: Colors.white,
+                fontFeatures: [FontFeature.tabularFigures()],
+              ),
+            ),
+          ],
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              for (final (i, answer) in m.answers.indexed) ...[
+                if (i > 0) const SizedBox(width: 6),
+                Expanded(
+                  child: Pressable(
+                    onTap: answer.onTap,
+                    radius: WhisperRadius.capsule,
+                    label: answer.label,
+                    child: Container(
+                      height: height,
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: answer.primary ? Colors.white : faint,
+                        borderRadius: BorderRadius.circular(height / 2),
+                      ),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          answer.label,
+                          maxLines: 1,
+                          style: TextStyle(
+                            fontSize: type.note,
+                            fontWeight: FontWeight.w600,
+                            color: answer.primary ? Colors.black : Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// A presenter that can say what it shows as one [IslandMoment]. Others are laid
@@ -453,6 +565,7 @@ class _Moment extends StatelessWidget {
   Widget build(BuildContext context) {
     const type = WhisperType(touch: false);
     final m = moment;
+    if (m.answers.isNotEmpty) return IslandAskCard(moment: m);
     final faint = Colors.white.withValues(alpha: .14);
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -525,38 +638,6 @@ class _Moment extends StatelessWidget {
             ],
           ),
         ),
-        if (m.answers.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(49, 0, 7, 7),
-            child: Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                for (final answer in m.answers)
-                  Pressable(
-                    onTap: answer.onTap,
-                    radius: 15,
-                    child: Container(
-                      height: 30,
-                      padding: const EdgeInsets.symmetric(horizontal: 14),
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: answer.primary ? Colors.white : faint,
-                        borderRadius: BorderRadius.circular(15),
-                      ),
-                      child: Text(
-                        answer.label,
-                        style: TextStyle(
-                          fontSize: type.note,
-                          fontWeight: FontWeight.w500,
-                          color: answer.primary ? Colors.black : Colors.white,
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
       ],
     );
   }

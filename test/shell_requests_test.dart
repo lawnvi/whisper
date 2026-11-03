@@ -72,7 +72,8 @@ void main() {
       presenter.detail,
       contains(l10n.pairingIdentityChangedDescription('iMac')),
     );
-    expect(presenter.detail, contains('123 456'));
+    expect(presenter.code, '123 456');
+    expect(presenter.warning, isTrue);
   });
 
   test('cancelled by the other side: gone, and no answer is given', () async {

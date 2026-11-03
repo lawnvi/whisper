@@ -150,6 +150,7 @@ class _PreviewState extends State<_Preview> {
       actions: ShellActions(
         select: (uid) => setState(() => _selected = uid ?? _selected),
         connect: (_) {},
+        disconnect: (_) {},
         openPairing: ({bool startWithAddress = false}) async {
           if (!ShellContent.attached) return;
           await ShellContent.pushTop<void>(

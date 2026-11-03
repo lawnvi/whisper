@@ -93,7 +93,14 @@ class _FileBrowsePromptHostState extends State<FileBrowsePromptHost> {
   void _announce(FileBrowseRequest request) {
     if (whisperNewUi && isDesktop()) {
       final l10n = AppLocalizations.of(context);
-      if (l10n != null) askFileBrowse(l10n, request, _gate.decide);
+      if (l10n != null) {
+        askFileBrowse(
+          l10n,
+          request,
+          _gate.decide,
+          device: WsSvrManager().remoteProfileFor(request.peerId)?.device,
+        );
+      }
       return;
     }
     if (isDesktop()) {

@@ -78,6 +78,7 @@ ShellActions _actions(
 }) => ShellActions(
   select: (_) {},
   connect: (_) {},
+  disconnect: (_) {},
   openPairing: ({bool startWithAddress = false}) async {},
   removeDevice: (_) async {},
   contextActions: (_, {openCard}) => const <ContextMenuActionItem>[],
@@ -235,7 +236,7 @@ void main() {
     });
 
     Finder infoButton() => find.byWidgetPredicate(
-      (w) => w is ShellIconButton && w.glyph == WhisperGlyph.info,
+      (w) => w is ShellToolCapsuleItem && w.glyph == WhisperGlyph.info,
     );
     ShellDevicePage devicePage(WidgetTester tester) =>
         tester.widget<ShellDevicePage>(find.byType(ShellDevicePage));
@@ -437,6 +438,45 @@ void main() {
     });
   });
 
+  group('the toolbar at its narrowest', () {
+    for (final (name, connected) in [('connected', true), ('away', false)]) {
+      for (final width in [468.0, 700.0]) {
+        testWidgets('$name at $width, beside window buttons', (tester) async {
+          tester.view.physicalSize = Size(width, 400);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          final device = _device(
+            'tp',
+            'ThinkPad X1 Carbon 办公 很长的名字',
+            'windows',
+          );
+          await tester.pumpWidget(
+            _app(
+              ShellDevicePage(
+                session: _session(device, connected: connected),
+                actions: _actions(_chat),
+                paired: true,
+                connecting: false,
+                tab: 0,
+                onTab: (_) {},
+                cardOpen: false,
+                onToggleCard: () {},
+                rightInset: 138,
+              ),
+            ),
+          );
+          await tester.pump(const Duration(seconds: 1));
+          // An overflow would have failed this already.
+          expect(tester.takeException(), isNull);
+          expect(
+            find.byKey(const ValueKey('device-connection')),
+            findsOneWidget,
+          );
+        });
+      }
+    }
+  });
+
   group('recent clipboard in the tray', () {
     Future<List<Object?>> pumpTray(
       WidgetTester tester,
@@ -490,6 +530,16 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
       expect(ticked(), isFalse);
     });
+  });
+
+  test('the device opened on stays when the list reorders', () {
+    final list = File('lib/page/deviceList.dart').readAsStringSync();
+    final getter = list.substring(
+      list.indexOf('String? get _firstDesktopPeerId'),
+      list.indexOf('DeviceRowFacts _shellFacts'),
+    );
+    expect(getter, contains('_openedOnPeerId'));
+    expect(getter, isNot(contains('=>\n      _sessionItems.isEmpty')));
   });
 
   group('the tray panel on Windows', () {

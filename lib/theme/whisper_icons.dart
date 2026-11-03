@@ -14,6 +14,7 @@ enum WhisperGlyph {
   clip,
   drive,
   link,
+  power,
   search,
   info,
   back,
@@ -63,6 +64,7 @@ const Map<WhisperGlyph, String> _paths = {
       'M3.5 11.5 5.5 4.5h9l2 7M3.5 11.5h13v3.5a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1zM13.5 14h.01',
   WhisperGlyph.link:
       'M8.5 11.5a3 3 0 0 0 4.2 0l2.3-2.3a3 3 0 0 0-4.2-4.2l-.8.8M11.5 8.5a3 3 0 0 0-4.2 0L5 10.8A3 3 0 0 0 9.2 15l.8-.8',
+  WhisperGlyph.power: 'M10 2.5v7M6.5 4.9a6.25 6.25 0 1 0 7 0',
   WhisperGlyph.search: 'M9 15A6 6 0 1 0 9 3a6 6 0 0 0 0 12zM13.5 13.5 17 17',
   WhisperGlyph.info:
       'M10 17.5a7.5 7.5 0 1 0 0-15 7.5 7.5 0 0 0 0 15zM10 9.5v4M10 6.5h.01',

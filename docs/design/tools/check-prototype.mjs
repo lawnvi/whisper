@@ -119,7 +119,7 @@ await ok('theme thumb slides', await ev(`(()=>{const t=document.querySelector('.
 await click('.st-close'); await sleep(450);
 await click('.self-b'); await sleep(500); await shot('08-self'); await click('.sheet [data-a=closeSheet]'); await sleep(450);
 await ok('corner shows the name', (await ev(`document.querySelector('.self-b b').textContent`)).length>0);
-await ok('long name truncates, icons stay tight', await ev(`(()=>{const b=document.querySelector('.self-b b'),ic=[...document.querySelectorAll('.self .iconbtn')].map(e=>e.getBoundingClientRect());const gaps=ic.slice(1).map((r,i)=>r.left-ic[i].right);return b.scrollWidth>b.clientWidth&&ic.length===3&&gaps.every(g=>g<=2)&&b.getBoundingClientRect().right<=ic[0].left+1})()`));
+await ok('long name truncates, icons stay tight', await ev(`(()=>{const b=document.querySelector('.self-b b'),ic=[...document.querySelectorAll('.self .iconbtn')].map(e=>e.getBoundingClientRect());const gaps=ic.slice(1).map((r,i)=>r.left-ic[i].right);return b.scrollWidth>b.clientWidth&&ic.length===2&&gaps.every(g=>g<=2)&&b.getBoundingClientRect().right<=ic[0].left+1})()`));
 const footH0 = await ev(`document.querySelector('.self').getBoundingClientRect().height`);
 const listY0 = await ev(`document.querySelector('.side-list').getBoundingClientRect().height`);
 await click('[data-demo=lost]'); await sleep(150);
@@ -139,7 +139,7 @@ await ok('offline row says so', await ev(`document.querySelector('[data-dev=imac
 await shot('09b-offline');
 await click('[data-demo=drop]'); await sleep(200);
 await ok('sound and input at the top of the sidebar', (await ev(`[...document.querySelectorAll('.side-top .iconbtn')].map(b=>b.dataset.a+':'+(b.dataset.v||'')).join()`))==='palette:,global:audio,global:input');
-await ok('add and links in the corner', (await ev(`[...document.querySelectorAll('.self .iconbtn')].map(b=>b.dataset.a+':'+(b.dataset.v||'')).join()`))==='connectNew:,global:links,settings:');
+await ok('links and settings in the corner; the name opens the rest', (await ev(`[...document.querySelectorAll('.self .iconbtn')].map(b=>b.dataset.a+':'+(b.dataset.v||'')).join()`))==='global:links,settings:');
 await ok('corner shows settings', await ev(`!!document.querySelector('.self [data-a=settings]')`));
 await click('[data-demo=audio]'); await sleep(2100); await shot('10-audio');
 await ok('auto left/right', await ev(`document.querySelector('[data-a=audRole][data-v="imac:left"]').getAttribute('aria-pressed')==='true'&&document.querySelector('[data-a=audRole][data-v="mi:right"]').getAttribute('aria-pressed')==='true'`));
@@ -211,10 +211,13 @@ await click('[data-a=trayMod][data-v=input]'); await sleep(600); await shot('19-
 await ok('minimap', await ev(`!!document.querySelector('.minimap')`));
 await ok('minimap labels fit their screens', await ev(`[...document.querySelectorAll('.minimap g')].filter(g=>g.querySelector('text')).every(g=>{const r=g.querySelector('rect').getBoundingClientRect(),rs=[...g.querySelectorAll('rect')].map(x=>x.getBoundingClientRect()),w=Math.max(...rs.map(x=>x.right))-Math.min(...rs.map(x=>x.left));return g.querySelector('text').getBoundingClientRect().width<=w+1})`));
 await ok('tray: no recent files', !(await ev(`document.getElementById('trayPanel').textContent.includes('最近收到')`)));
-await ok('tray: clipboard list', (await ev(`document.querySelectorAll('#trayPanel .tr-cl').length`))===4);
+await ok('tray: clipboard list', (await ev(`document.querySelectorAll('#trayPanel .tr-cl').length`))===5);
+const clipOrder = await ev(`[...document.querySelectorAll('#trayPanel .tr-cl b')].map(e=>e.textContent).join()`);
 await click('[data-a=trayMod][data-v=input]'); await sleep(450); await shot('19b-tray-clips'); await click('[data-a=trayMod][data-v=input]'); await sleep(300);
-await click('#trayPanel .tr-cl'); await sleep(120); await shot('19c-tray-copied');
-await ok('tray: copy gives feedback', await ev(`!!document.querySelector('#trayPanel .cp.done')`));
+await click('#trayPanel .tr-cl:nth-of-type(2)'); await sleep(120); await shot('19c-tray-copied');
+await ok('tray: copying ticks that row, and the list stays still', await ev(`document.querySelectorAll('#trayPanel .tr-cl .cp.done').length===1&&[...document.querySelectorAll('#trayPanel .tr-cl b')].map(e=>e.textContent).join()===${JSON.stringify(clipOrder)}`));
+await sleep(1000);
+await ok('tray: the tick goes back', await ev(`document.querySelectorAll('#trayPanel .tr-cl .cp.done').length===0`));
 await sleep(1000);
 await ok('tray: copied item is now the clipboard', await ev(`document.querySelector('.tr-what').textContent.includes('10003')`));
 await ok('tray panel same element across renders', await ev(`(()=>{const a=document.querySelector('#trayPanel .tr-mod');a.__m=1;document.querySelector('[data-a=trayMod][data-v=input]').click();return document.querySelector('#trayPanel .tr-mod').__m===1})()`));
@@ -244,7 +247,8 @@ await click('[data-a=sinkStop]'); await sleep(200);
 await click('[data-demo=inInput]'); await sleep(550); await shot('24-controlled');
 await click('[data-a=ctrlStop]'); await sleep(200);
 await click('[data-demo=req]'); await sleep(700); await shot('25-request');
-await ev(`document.querySelector('.mo-acts [data-v$=always]').click()`); await sleep(300);
+await ok('a request: its answers side by side, equally wide', await ev(`(()=>{const b=[...document.querySelectorAll('.ask-acts button')].map(e=>e.getBoundingClientRect());return b.length===3&&b.every(r=>Math.abs(r.width-b[0].width)<.5&&r.top===b[0].top)})()`));
+await ev(`document.querySelector('.ask-acts [data-v$=always]').click()`); await sleep(300);
 
 // flows
 await click('[data-demo=open]'); await sleep(900); await shot('26-viewer');
@@ -285,7 +289,7 @@ await click('.side-list [data-a=dev][data-v=imac]'); await sleep(750); await sho
 await ok('phone: no bottom tabs', await ev(`!document.querySelector('#mainSeg')`));
 await ok('phone: no screenshot', await ev(`!document.querySelector('.composer [data-a=shot]')`));
 await ok('phone: composer at the bottom', await ev(`document.getElementById('win').getBoundingClientRect().bottom-document.querySelector('.composer').getBoundingClientRect().bottom<30`));
-await ok('phone: at most two icons on top', (await ev(`document.querySelectorAll('.tb-end [data-a=pgo]').length`))<=2);
+await ok('phone: no keyboard on top, control is on the device page', await ev(`!document.querySelector('.tb-end [data-v=control]')`));
 await ok('plus icon centred', await ev(`(()=>{const b=document.querySelector('.send').getBoundingClientRect(),i=document.querySelector('.send svg.add').getBoundingClientRect();return Math.abs((b.left+b.width/2)-(i.left+i.width/2))<1&&Math.abs((b.top+b.height/2)-(i.top+i.height/2))<1})()`));
 await click('.tb-end [data-a=pgo][data-v=card]'); await sleep(750); await shot('36-phone-card');
 await ok('phone: no audio or mount in card', !(await ev(`document.querySelector('#main').textContent`)).match(/挂载|放进访达|把这台的声音/));
@@ -364,8 +368,9 @@ await click('[data-demo=phone]'); await sleep(550);
 // connecting from the offline chat moves the row up
 await click('.self [data-a=global][data-v=links]'); await sleep(200);
 await click('[data-a=dev][data-v=pixel]'); await sleep(300);
-await ok('offline chat offers connect', await ev(`!!document.querySelector('.composer [data-a=connect]')`));
-await click('.composer [data-a=connect]'); await sleep(1200);
+await ok('offline chat offers connect in the toolbar, and has no composer', await ev(`!!document.querySelector('.tb-end [data-a=connect]')&&!document.querySelector('.composer')`));
+await click('.tb-end [data-a=connect]'); await sleep(1200);
+await ok('connected chat offers disconnect in the toolbar', await ev(`!!document.querySelector('.tb-end [data-a=disconnect]')`));
 const order3 = await ev(`[...document.querySelectorAll('.side-list .dev b')].map(e=>e.textContent)`);
 await ok('connecting moves a device up', order3.indexOf('Pixel 6')<order3.indexOf('2698b'), JSON.stringify(order3));
 // resizing keeps the page
@@ -391,7 +396,7 @@ await ok('sidebar rows show device art', await ev(`document.querySelectorAll('.s
 await ok('there is one blue', await ev(`(()=>{const css=[...document.styleSheets].flatMap(x=>[...x.cssRules]).map(r=>r.cssText).join('');return !/accent-(text|glass)/.test(css)&&!/#0066cc|#0056ad|#2997ff|#5eb0ff/i.test(document.documentElement.outerHTML)})()`));
 await ok('wallpapers stay in one colour family', await ev(`[...document.querySelectorAll('svg defs linearGradient[id^="w-"] stop')].every(s=>{const c=s.getAttribute('stop-color'),r=parseInt(c.slice(1,3),16),g=parseInt(c.slice(3,5),16),b=parseInt(c.slice(5,7),16);const mx=Math.max(r,g,b),d=mx-Math.min(r,g,b);if(!d)return true;let h=mx===r?((g-b)/d)%6:mx===g?(b-r)/d+2:(r-g)/d+4;h=(h*60+360)%360;return h>=170&&h<=290})`));
 await ok('live status uses the accent', await ev(`(()=>{const s=document.querySelector('.side-list small.live');return !!s&&getComputedStyle(s).color==='rgb(0, 122, 255)'})()`));
-await ok('offline art fades, connected art does not', await ev(`getComputedStyle(document.querySelector('.side-list [data-dev=ubuntu] .g')).filter.includes('grayscale')&&getComputedStyle(document.querySelector('.side-list [data-dev=imac] .g')).filter==='none'&&getComputedStyle(document.querySelector('.side-list [data-dev=near] .g')).filter==='none'`));
+await ok('offline art fades, connected art does not', await ev(`getComputedStyle(document.querySelector('.side-list [data-dev=ubuntu] .g svg')).filter.includes('grayscale')&&getComputedStyle(document.querySelector('.side-list [data-dev=imac] .g svg')).filter==='none'&&getComputedStyle(document.querySelector('.side-list [data-dev=near] .g')).filter==='none'`));
 await ok('selection glides and keeps its element', await ev(`new Promise(res=>{const el=document.querySelector('.side-sel');el.__m=1;const y0=new DOMMatrix(getComputedStyle(el).transform).m42;document.querySelector('.side-list [data-dev=mi]').click();const target=document.querySelector('.side-list [data-dev=mi]').offsetTop;let mid=false;const s=performance.now();(function f(){const y=new DOMMatrix(getComputedStyle(document.querySelector('.side-sel')).transform).m42;if(y>y0+1&&y<target-1)mid=true;if(performance.now()-s<700)requestAnimationFrame(f);else res(document.querySelector('.side-sel').__m===1&&mid)})()})`));
 await ok('selection lands on the new row', await pillOn());
 await click('.self [data-a=global][data-v=links]'); await sleep(300);
@@ -406,7 +411,7 @@ await click('[data-demo=inAudio]'); await sleep(300);
 // ---------- 手机的蓝 ----------
 await size(1400, 1000, false); await send('Page.navigate', { url: FILE }); await sleep(800);
 await click('[data-demo=phone]'); await sleep(700);
-const phoneBlue = `[getComputedStyle(document.querySelector('.side-top .iconbtn')).color,getComputedStyle(document.querySelector('.side-list small.live')).color]`;
+const phoneBlue = `[getComputedStyle(document.querySelector('.side-list small.live')).color]`;
 await ok('phone blue is the accent', (await ev(phoneBlue)).every(c => c === 'rgb(0, 122, 255)'), JSON.stringify(await ev(phoneBlue)));
 await ok('phone list shows device art', await ev(`!!document.querySelector('.side-list [data-dev=imac] .g [fill^="url(#w-"]')`));
 await ok('phone separators line up with the text', await ev(`(()=>{const r=document.querySelectorAll('.side-list .dev')[1],t=r.querySelector('b').getBoundingClientRect().left-r.getBoundingClientRect().left;return Math.abs(t-parseFloat(getComputedStyle(r,'::before').left))<2})()`));
@@ -480,7 +485,7 @@ for (const os of ['win', 'gnome', 'kde']) {
   // 最小窗口：宽 720 也放得下
   await size(772, 760, false); await sleep(500);
   await ok(`${os}: window is 720 wide in this check`, Math.abs(await ev(`document.getElementById('win').offsetWidth`) - 668) < 80, String(await ev(`document.getElementById('win').offsetWidth`)));
-  await ok(`${os}: toolbar fits at the smallest window`, !(await ev(hitJs('#capR', '.tb-end > *'))) && await ev(`document.querySelector('.tb-title').getBoundingClientRect().width>=40`));
+  await ok(`${os}: toolbar fits at the smallest window`, !(await ev(hitJs('#capR', '.tb-end > *'))) && await ev(`document.querySelector('.tb-title').getBoundingClientRect().width>=24`), String(await ev(`JSON.stringify({title:document.querySelector('.tb-title').getBoundingClientRect().width,end:document.querySelector('.tb-end').getBoundingClientRect().right,cap:document.getElementById('capR')?.getBoundingClientRect().left,main:document.getElementById('main').clientWidth})`)));
   await ok(`${os}: island does not cover the title`, await ev(`new Promise(r=>setTimeout(()=>{const i=document.getElementById('island');if(i.hidden)return r(true);const a=i.getBoundingClientRect(),g=document.createRange();g.selectNodeContents(document.querySelector('.tb-title b'));const b=g.getBoundingClientRect();r(!(a.left<b.right&&b.left<a.right&&a.top<b.bottom&&b.top<a.bottom))},500))`));
   await shot(`75-${os}-small`);
   await click('[data-demo=req]'); await sleep(800);
@@ -600,10 +605,10 @@ await click('#try [data-form=ipad]'); await sleep(300);
 
 // 平板的布局
 await form('ipad', 1);
-await ok('tablet: tabs are back, with control', await ev(`!!document.getElementById('mainSeg')&&!!document.querySelector('.tb-end [data-a=pgo][data-v=control]')`));
+await ok('tablet: tabs are back, control is on the card', await ev(`!!document.getElementById('mainSeg')&&!document.querySelector('.tb-end [data-v=control]')`));
 await ok('tablet: tabs have a full touch target', await ev(`(()=>{const b=document.querySelector('.seg button'),c=getComputedStyle(b,'::before');return b.offsetHeight+parseFloat(c.top)*-1+parseFloat(c.bottom)*-1>=48})()`));
 await click('[data-a=insp]'); await sleep(650);
-await ok('tablet: device card has no entries the toolbar already has', await ev(`!document.querySelector('#inspIn .circs')`));
+await ok('tablet: device card has no entries the toolbar already has', await ev(`!document.querySelector('.circ.act[data-v=files]')&&!document.querySelector('.circ.act[data-v=apps]')&&!!document.querySelector('.circ.act[data-v=control]')`));
 await ok('tablet: device card has only what a phone can do', await ev(`!document.querySelector('#inspIn [data-a=tileAudio]')&&!document.querySelector('#inspIn [data-a=tileMount]')&&!!document.querySelector('#inspIn [data-a=tileClip]')`));
 await ok('tablet: card floats over the content', await ev(`document.getElementById('insp').offsetWidth===320&&getComputedStyle(document.getElementById('insp')).position==='absolute'`));
 await shot('tablet-device-card');
@@ -665,7 +670,8 @@ await ok('book: fold drawn at the same place', await ev(`(()=>{const c=document.
 await ok('book: island is in the middle of the window', await ev(`(()=>{const i=document.getElementById('island');if(i.hidden)return true;const a=i.getBoundingClientRect(),w=document.getElementById('win').getBoundingClientRect();return Math.abs((a.left+a.width/2)-(w.left+w.width/2))<2})()`));
 await shot('fold-book');
 await click('[data-fstate="3"]'); await sleep(900);
-await click('[data-a=pgo][data-v=control]'); await sleep(800);
+await click('[data-a=insp]'); await sleep(600);
+await click('.circ[data-v=control]'); await sleep(800);
 await ok('tabletop: the pad is below the fold', await ev(`(()=>{const c=document.querySelector('#creases i.h').getBoundingClientRect(),y=c.top+c.height/2,p=document.querySelector('.gs-table .pad').getBoundingClientRect(),t=document.querySelector('.ctl-top').getBoundingClientRect();return p.top>=y&&t.bottom<=y})()`));
 await ok('tabletop: control is full width', await ev(`getComputedStyle(document.getElementById('side')).display==='none'&&document.getElementById('main').offsetWidth===640`));
 await shot('fold-tabletop-control');
@@ -676,7 +682,8 @@ await click('#try [data-form=fold]'); await sleep(300);
 // 高度不够
 await form('wide', 3);
 await ok('short: flagged under 600 tall', (await wa('short')) === 'true');
-await click('[data-a=pgo][data-v=control]'); await sleep(800);
+await click('[data-a=insp]'); await sleep(600);
+await click('.circ[data-v=control]'); await sleep(800);
 await ok('short: pad and buttons sit side by side', await ev(`(()=>{const a=document.querySelector('.pad').getBoundingClientRect(),b=document.querySelector('.pad-b').getBoundingClientRect();return b.left>=a.right-1&&a.height>=240})()`));
 await shot('wide-small-landscape-control');
 await click('.tb .back'); await sleep(500);

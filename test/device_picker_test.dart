@@ -350,7 +350,9 @@ void main() {
         tester,
         PhonePairPage(request: _request(), onResolved: answers.add),
       );
-      expect(find.text('481 726'), findsOneWidget);
+      for (final digit in '481726'.split('')) {
+        expect(find.text(digit), findsOneWidget);
+      }
       expect(find.text(zh.shellNearbyTitle('2698b')), findsOneWidget);
       expect(find.text(zh.pairingCompareCode), findsOneWidget);
       expect(find.text(zh.pairingEncryptionNotice), findsOneWidget);

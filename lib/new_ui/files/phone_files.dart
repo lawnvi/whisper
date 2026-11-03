@@ -809,7 +809,11 @@ class _PhoneFilesViewState extends State<PhoneFilesView> {
     final ready = device?.browser != null;
     final selectionRow = _selecting;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+      // The back chevron and the three dots line up with what is under them:
+      // the file icons and the sizes. Their targets stick out past that.
+      padding: selectionRow
+          ? const EdgeInsets.fromLTRB(20, 0, 20, 8)
+          : const EdgeInsets.fromLTRB(5, 0, 4, 8),
       child: ConstrainedBox(
         constraints: const BoxConstraints(minHeight: 48),
         child: selectionRow

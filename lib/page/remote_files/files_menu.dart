@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:whisper/theme/whisper_icons.dart';
 import 'package:whisper/theme/whisper_ui.dart';
 import 'dart:async';
@@ -171,26 +173,30 @@ class _MenuLayerState extends State<_MenuLayer> {
             : widget.position.dx;
         final x = left.clamp(8.0, size.width - width - 8);
         final submenu = _submenu;
+        final safeTop = padding.top + 8;
+        final safeBottom = size.height - padding.bottom - 8;
         return Stack(
           children: [
-            Positioned(
-              left: x,
-              top: widget.position.dy,
-              width: width,
-              child: _AnimatedMenu(
-                animation: widget.animation,
-                touch: widget.touch,
-                alignRight: widget.alignRight,
-                maxHeight:
-                    size.height - widget.position.dy - padding.bottom - 8,
-                anchorBottom: size.height - padding.bottom - 8,
-                child: _MenuPanel(
-                  items: widget.items,
+            Positioned.fill(
+              child: CustomSingleChildLayout(
+                delegate: _MenuPlacement(
+                  anchor: Offset(x, widget.position.dy),
+                  width: width,
+                  safeTop: safeTop,
+                  safeBottom: safeBottom,
+                ),
+                child: _AnimatedMenu(
+                  animation: widget.animation,
                   touch: widget.touch,
-                  autofocus: true,
-                  onSelected: widget.onSelected,
-                  onSubmenu: (rect, children) =>
-                      setState(() => _submenu = (rect, children)),
+                  alignRight: widget.alignRight,
+                  child: _MenuPanel(
+                    items: widget.items,
+                    touch: widget.touch,
+                    autofocus: true,
+                    onSelected: widget.onSelected,
+                    onSubmenu: (rect, children) =>
+                        setState(() => _submenu = (rect, children)),
+                  ),
                 ),
               ),
             ),
@@ -199,7 +205,16 @@ class _MenuLayerState extends State<_MenuLayer> {
                 left: (submenu.$1.right + width + 4 < size.width)
                     ? submenu.$1.right + 2
                     : submenu.$1.left - width - 2,
-                top: submenu.$1.top - 5,
+                // Up as far as it takes for its last row to be in the window.
+                top: math.max(
+                  safeTop,
+                  math.min(
+                    submenu.$1.top - 5,
+                    safeBottom -
+                        submenu.$2.length * (widget.touch ? 48.0 : 30.0) -
+                        12,
+                  ),
+                ),
                 width: width,
                 child: _MenuPanel(
                   key: ValueKey(submenu.$2),
@@ -219,21 +234,56 @@ class _MenuLayerState extends State<_MenuLayer> {
 
 /// Grows from the pointer like a native menu, and keeps the panel on
 /// screen when it would run off the bottom.
+/// Under the pointer when it fits, over it when it does not, and when it fits in
+/// neither, as much of it as the window holds, on the side with more room, and it
+/// scrolls. A menu that runs off the window is a menu you cannot read.
+class _MenuPlacement extends SingleChildLayoutDelegate {
+  const _MenuPlacement({
+    required this.anchor,
+    required this.width,
+    required this.safeTop,
+    required this.safeBottom,
+  });
+
+  final Offset anchor;
+  final double width, safeTop, safeBottom;
+
+  double get _below => safeBottom - anchor.dy;
+  double get _above => anchor.dy - safeTop;
+
+  @override
+  BoxConstraints getConstraintsForChild(BoxConstraints constraints) =>
+      BoxConstraints(
+        minWidth: width,
+        maxWidth: width,
+        maxHeight: math.max(0, math.max(_below, _above)),
+      );
+
+  @override
+  Offset getPositionForChild(Size size, Size child) {
+    final under = child.height <= _below || _below >= _above;
+    return Offset(anchor.dx, under ? anchor.dy : anchor.dy - child.height);
+  }
+
+  @override
+  bool shouldRelayout(_MenuPlacement old) =>
+      old.anchor != anchor ||
+      old.width != width ||
+      old.safeTop != safeTop ||
+      old.safeBottom != safeBottom;
+}
+
 class _AnimatedMenu extends StatelessWidget {
   const _AnimatedMenu({
     required this.animation,
     required this.touch,
     required this.alignRight,
-    required this.maxHeight,
-    required this.anchorBottom,
     required this.child,
   });
 
   final Animation<double> animation;
   final bool touch;
   final bool alignRight;
-  final double maxHeight;
-  final double anchorBottom;
   final Widget child;
 
   @override
@@ -248,10 +298,7 @@ class _AnimatedMenu extends StatelessWidget {
       child: ScaleTransition(
         scale: Tween(begin: touch ? 0.6 : 0.96, end: 1.0).animate(curved),
         alignment: alignRight ? Alignment.topRight : Alignment.topLeft,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxHeight: maxHeight.clamp(120, 2000)),
-          child: child,
-        ),
+        child: child,
       ),
     );
   }
@@ -574,12 +621,7 @@ class _Row extends StatelessWidget {
               ),
               if (whisperNewUi && item.checked) ...[
                 const SizedBox(width: 9),
-                WhisperIcon(
-                  WhisperGlyph.check,
-                  size: 14,
-                  weight: 2,
-                  color: fg,
-                ),
+                WhisperIcon(WhisperGlyph.check, size: 14, weight: 2, color: fg),
               ],
               if (item.shortcut != null)
                 Text(

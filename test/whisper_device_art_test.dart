@@ -74,10 +74,10 @@ void main() {
     expect(find.byType(Opacity), findsNothing);
 
     expect(await paint(DeviceArtState.nearby), normal);
-    expect(t.widget<Opacity>(find.byType(Opacity)).opacity, .72);
+    expect(t.widget<Opacity>(find.byType(Opacity)).opacity, .9);
 
     expect(await paint(DeviceArtState.offline), normal);
-    expect(t.widget<Opacity>(find.byType(Opacity)).opacity, .5);
+    expect(t.widget<Opacity>(find.byType(Opacity)).opacity, .45);
     expect(find.byType(ColorFiltered), findsOneWidget);
   });
 

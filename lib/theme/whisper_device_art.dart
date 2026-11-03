@@ -19,7 +19,8 @@ enum DeviceKind {
 enum DeviceArtState {
   normal,
 
-  /// Paired and nearby, but not connected: a little faded.
+  /// Paired and nearby, but not connected: only just faded. It is there, and
+  /// must not be mistaken for [offline], which has no colour at all.
   nearby,
 
   /// Gone: grey and half transparent.
@@ -37,8 +38,9 @@ class DeviceWallpaper {
   /// This device.
   static const self = DeviceWallpaper(Color(0xFF5B8CFF), Color(0xFF8F7BFF));
 
-  /// Devices that have not been paired.
-  static const unpaired = DeviceWallpaper(Color(0xFFC3CBD6), Color(0xFF9AA6B8));
+  /// Devices that have not been paired. Paler than a paired one's, but a colour:
+  /// grey is for what is gone.
+  static const unpaired = DeviceWallpaper(Color(0xFFA9C1EE), Color(0xFF7D9BDD));
 
   /// Paired devices, handed out in pairing order and then repeating.
   static const paired = [
@@ -143,8 +145,8 @@ class DeviceArt extends StatelessWidget {
         : Size(size, size / aspect);
     final (double sat, double opacity) = switch (state) {
       DeviceArtState.normal => (1, 1),
-      DeviceArtState.nearby => (.7, .72),
-      DeviceArtState.offline => (0, .5),
+      DeviceArtState.nearby => (.85, .9),
+      DeviceArtState.offline => (0, .45),
     };
     final painted = RepaintBoundary(
       child: CustomPaint(

@@ -107,7 +107,9 @@ code{font:12px/1.4 var(--mono)}
 .win[data-size=regular] .insp{width:var(--card-w)}
 .win[data-input=touch]:not([data-size=compact]) .side{width:clamp(240px,32%,300px);padding-top:var(--status);background:var(--sidebar-solid);backdrop-filter:none;-webkit-backdrop-filter:none;--ink2:var(--ink2-solid)}
 .win[data-input=touch]:not([data-size=compact]) .main{padding-top:var(--status)}
-.win[data-input=touch]:not([data-size=compact]) .side-list .dev{min-height:64px;gap:12px;border-radius:var(--r-m);padding:10px 12px}
+.win[data-input=touch]:not([data-size=compact]) .side-list .dev{min-height:68px;gap:12px;border-radius:var(--r-m);padding:10px 12px}
+.win[data-input=touch] .side-list .dev .g{width:44px;height:44px;border-radius:var(--r-m)}
+.win[data-input=touch] .side-list .dev small{margin-top:4px}
 .win[data-input=touch]:not([data-size=compact]) .side-list{padding:0 10px 24px}
 .win[data-input=touch]:not([data-size=compact]) .tb{height:50px}
 .win[data-input=touch] .seg button{height:36px;padding:0 16px}
@@ -180,24 +182,26 @@ code{font:12px/1.4 var(--mono)}
 .side-h1{flex:1;font-size:var(--t-large);font-weight:700;display:none;line-height:1.1}
 .win[data-input=touch] .side-h1{display:block}
 .win[data-input=touch] .side-top{padding:4px 4px 8px 18px;margin-top:0}
-.win[data-input=touch] .side-top .iconbtn{color:var(--accent);width:44px}
+.win[data-input=touch] .side-top .iconbtn{color:var(--ink);width:44px}
 .side-list{position:relative;flex:1;overflow-y:auto;padding:8px 10px 8px;min-height:0;display:flex;flex-direction:column;gap:2px}
 /* 选中底是一个元素，在行之间滑动 */
 .side-sel{position:absolute;left:10px;right:10px;top:0;height:0;border-radius:var(--r-s);background:var(--side-sel);box-shadow:var(--side-sel-shadow);opacity:0;transition:opacity .18s;pointer-events:none}
 .win[data-size=compact] .side-sel{display:none}
 .win[data-size=compact] .side-list{padding:0 0 28px;display:block}
 .sec{font-size:var(--t-tiny);font-weight:600;color:var(--ink2);padding:16px 10px 5px}
-.dev{flex:none;width:100%;display:flex;align-items:center;gap:10px;min-height:46px;padding:7px 10px;border-radius:var(--r-s);text-align:left;position:relative}
+.dev{flex:none;width:100%;display:flex;align-items:center;gap:10px;min-height:54px;padding:7px 10px;border-radius:var(--r-s);text-align:left;position:relative}
 .dev:hover{background:var(--fill)}
 .dev[aria-current=true]{background:none}
-.dev .g{width:34px;height:30px;display:grid;place-items:center;color:var(--accent);flex:none}
+.dev .g{width:36px;height:36px;border-radius:var(--r-s);background:var(--fill);display:grid;place-items:center;color:var(--accent);flex:none}
 .dev.off .g{color:var(--ink3)}
 /* 离线的设备图褪色，连着的和在附近的不褪 */
-.dev .g{transition:filter .3s,opacity .3s}
-.dev.gone .g{filter:grayscale(1);opacity:.5}
-.dev.seen .g{filter:saturate(.7);opacity:.72}
-.dev b{display:block;font-weight:500;font-size:var(--t-body);line-height:1.3;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
-.dev small{display:block;font-size:var(--t-note);color:var(--ink2);line-height:1.3;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.dev .g svg{transition:filter .3s,opacity .3s}
+.dev.gone .g svg{filter:grayscale(1);opacity:.45}
+.dev.seen .g svg{filter:saturate(.85);opacity:.9}
+.dev.gone:not([aria-current=true]) b{color:var(--ink2)}
+.dev.gone:not([aria-current=true]) small{color:var(--ink3)}
+.dev b{display:block;font-weight:500;font-size:var(--t-body);line-height:1.25;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.dev small{display:block;margin-top:3px;font-size:var(--t-note);color:var(--ink2);line-height:1.25;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .dev small.live{color:var(--accent);font-weight:500}
 .dev .t{min-width:0;flex:1}
 .dev .c{color:var(--ink3);display:none}
@@ -242,12 +246,12 @@ code{font:12px/1.4 var(--mono)}
 .iconbtn[aria-pressed=true]{color:var(--accent);background:var(--fill)}
 .win[data-input=touch] .iconbtn{width:48px;height:48px}
 .back{display:none}
-.back.show{display:grid;color:var(--accent);margin-right:-8px}
+.back.show{display:grid;color:var(--ink);margin-right:-8px}
 .win[data-size=compact] .tb{padding:0 4px;height:50px;gap:0}
-.win[data-size=compact] .back{display:grid;color:var(--accent);margin-right:-8px}
+.win[data-size=compact] .back{display:grid;color:var(--ink);margin-right:-8px}
 .win[data-size=compact] .tb-title{padding-left:6px;text-align:left}
 .win[data-input=touch] .tb-end{gap:0}
-.win[data-input=touch] .tb-end .iconbtn{color:var(--accent);width:44px;height:48px}
+.win[data-input=touch] .tb-end .iconbtn{color:var(--ink);width:44px;height:48px}
 .seg{position:relative;display:inline-flex;padding:2px;border-radius:var(--r-cap);background:var(--fill);flex:none}
 .seg .thumb{position:absolute;top:2px;bottom:2px;left:0;border-radius:var(--r-cap);background:var(--raised);box-shadow:0 1px 3px rgba(0,0,0,.14),0 0 0 .5px rgba(0,0,0,.05)}
 .seg button{position:relative;display:flex;align-items:center;gap:5px;height:26px;padding:0 14px;font-size:var(--t-note);font-weight:500;color:var(--ink);border-radius:var(--r-cap)}
@@ -296,11 +300,12 @@ code{font:12px/1.4 var(--mono)}
 .ihero b{overflow-wrap:anywhere}
 
 /* 消息 */
-.chat{padding:8px 16px 84px;display:flex;flex-direction:column;align-items:flex-start;gap:6px;width:100%}
+.chat{padding:8px 16px 84px;display:flex;flex-direction:column;align-items:flex-start;gap:8px;width:100%}
 .win[data-size=compact] .chat{padding:8px 12px 92px}
 .when{align-self:center;font-size:var(--t-tiny);color:var(--ink2);margin:14px 0 8px}
 .bub{align-self:flex-start;width:fit-content;max-width:min(72%,30em);padding:7px 13px;border-radius:18px;background:var(--bubble);font-size:var(--t-body);line-height:1.45;overflow-wrap:anywhere;margin-top:8px}
 .bub+.bub{margin-top:0}
+.bub.me+.bub:not(.me),.bub:not(.me)+.bub.me{margin-top:8px}
 .win[data-size=compact] .bub{max-width:min(80%,30em)}
 .bub.me{align-self:flex-end;background:var(--accent);color:var(--on-accent)}
 .in{animation:rise .5s var(--ease-smooth) both;transform-origin:100% 100%}
@@ -319,7 +324,6 @@ code{font:12px/1.4 var(--mono)}
 .composer .iconbtn{border-radius:50%;color:var(--ink2)}
 .composer input{flex:1;min-width:0;background:none;border:0;outline:0;font-size:var(--t-body);padding:0 4px;height:28px}
 .composer input{text-overflow:ellipsis}
-.composer input::placeholder{color:var(--ink2);text-overflow:ellipsis}
 .send{position:relative;width:28px;height:28px;border-radius:50%;background:var(--fill);color:var(--ink);display:grid;place-items:center;flex:none;transition:background-color .18s,color .18s,transform var(--dur-snappy) var(--ease-snappy)}
 .send svg{position:absolute;inset:0;margin:auto;transition:transform var(--dur-snappy) var(--ease-snappy),opacity .14s}
 .send svg.up{transform:scale(.5) rotate(-90deg);opacity:0}
@@ -334,6 +338,7 @@ code{font:12px/1.4 var(--mono)}
 .att button{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;color:var(--ink2)}
 
 /* 文件：像访达，不画线 */
+.win[data-size=compact] .fhead{padding-inline:5px 4px}
 .fhead{display:flex;align-items:center;gap:2px;padding:0 20px 8px;font-size:var(--t-note);color:var(--ink2);flex:none;min-height:24px;white-space:nowrap;overflow-x:auto;scrollbar-width:none}
 .fhead .cur{color:var(--ink);font-weight:500;padding:2px 5px}
 .fhead .cnt{margin-left:auto;padding-left:12px}
@@ -359,6 +364,31 @@ code{font:12px/1.4 var(--mono)}
 .btn.p:hover{background:color-mix(in srgb,var(--accent) 90%,#000)}
 .btn.q{background:none;color:var(--accent)}
 .btn.q:hover{background:var(--fill)}
+.pair{height:100%;display:flex;flex-direction:column}
+.pair-mid{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 24px;text-align:center}
+.pair-devs{display:flex;align-items:center;margin-bottom:28px}
+.pair-devs>i{width:4px;height:4px;margin:0 3px;border-radius:50%;background:var(--ink3)}
+.pair-devs>i:first-of-type{margin-left:16px}
+.pair-devs>i:last-of-type{margin-right:16px}
+.pair-devs .lk{width:32px;height:32px;margin:0 6px;border-radius:50%;background:var(--fill);display:grid;place-items:center;color:var(--ink2)}
+.pair-mid b{font-size:var(--t-title);font-weight:600;line-height:1.3}
+.pair-mid p{margin-top:8px;font-size:var(--t-note);line-height:1.5;color:var(--ink2)}
+.code.digits{display:flex;margin-top:28px;gap:6px;letter-spacing:0}
+.code.digits span{width:44px;height:58px;border-radius:var(--r-m);background:var(--fill);display:grid;place-items:center;font-family:var(--mono);font-size:30px;font-weight:600}
+.code.digits .gap{width:4px}
+.pair-end{display:flex;flex-direction:column;gap:4px;padding:12px 20px 12px}
+.pair-end .btn{width:100%}
+.pair-end small{margin-top:4px;text-align:center;font-size:var(--t-tiny);line-height:1.4;color:var(--ink3)}
+.tb-cap{display:inline-flex;align-items:center;flex:none;height:30px;padding:2px;border-radius:var(--r-cap);background:var(--fill)}
+.tb-cap>button,.tb-cap>span{width:28px;height:26px;border-radius:var(--r-cap);display:grid;place-items:center;color:var(--ink);transition:background-color .15s}
+.tb-cap>button[aria-pressed=true]{background:var(--raised);box-shadow:var(--shadow-1)}
+.tb-cap .tb-conn{color:var(--accent)}
+.tb-cap .tb-conn.off{color:var(--bad)}
+.win[data-input=touch] .tb-cap{height:36px}
+.win[data-size=compact] .tb-cap{margin-right:8px}
+.win[data-input=touch] .tb-cap>button,.win[data-input=touch] .tb-cap>span{width:38px;height:32px}
+.tb-conn .spin{width:13px;height:13px;border-radius:50%;border:2px solid color-mix(in srgb,var(--accent) 30%,transparent);border-top-color:var(--accent);animation:tbspin .8s linear infinite}
+@keyframes tbspin{to{transform:rotate(360deg)}}
 .btn.d{background:var(--bad);color:#fff}
 .btn.lg{height:36px;padding:0 20px;font-size:var(--t-body)}
 .win[data-input=touch] .btn{height:44px;padding:0 16px}
@@ -605,6 +635,14 @@ input[type=range]::-moz-range-thumb{width:var(--tw);height:18px;border:0;border-
 .mo-acts{display:flex;gap:6px;padding:0 7px 7px 49px;flex-wrap:wrap}
 .mo-acts button{height:30px;padding:0 14px;border-radius:15px;background:rgba(255,255,255,.14);color:inherit;font-size:var(--t-note);font-weight:500}
 .mo-acts button.p{background:#fff;color:#000}
+.ask{display:flex;flex-direction:column;padding:12px 7px 7px;text-align:center}
+.ask-t{display:grid;place-items:center;margin-bottom:10px}
+.ask b{display:block;font-size:var(--t-head);font-weight:600;line-height:1.25}
+.ask small{display:block;margin-top:4px;font-size:var(--t-note);line-height:1.4;color:rgba(255,255,255,.62)}
+.ask-code{margin-top:12px;font-family:var(--mono);font-size:30px;line-height:1.2;font-weight:600;letter-spacing:2px}
+.ask-acts{display:flex;gap:6px;margin-top:16px}
+.ask-acts button{flex:1;min-width:0;height:34px;padding:0 10px;border-radius:17px;background:rgba(255,255,255,.14);color:inherit;font-size:var(--t-note);font-weight:600;white-space:nowrap}
+.ask-acts button.p{background:#fff;color:#000}
 .eq{display:flex;align-items:center;gap:2px;height:14px}
 .eq i{width:2.5px;height:100%;border-radius:1px;background:currentColor;animation:wave 1s ease-in-out infinite}
 .eq i:nth-child(2){animation-delay:-.3s}.eq i:nth-child(3){animation-delay:-.62s}
@@ -714,7 +752,7 @@ input[type=range]::-moz-range-thumb{width:var(--tw);height:18px;border:0;border-
 .tr-cl b{display:block;font-weight:400;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tr-cl small{display:block;font-size:var(--t-tiny);color:var(--ink2);line-height:1.3}
 .tr-cl .cp{width:24px;height:24px;display:grid;place-items:center;color:var(--ink2);border-radius:50%;flex:none;transition:color .15s,background-color .15s}
-.tr-cl .cp.done{background:var(--accent);color:#fff}
+.tr-cl .cp.done{color:var(--accent)}
 .tr-cl .pic{width:26px;height:26px;border-radius:var(--r-xs);background:linear-gradient(135deg,#5b8cff,#8f7bff);flex:none}
 .tr-label{font-size:var(--t-tiny);font-weight:500;color:var(--ink2);padding:0 2px 6px}
 
@@ -1001,6 +1039,7 @@ const P = {
   keyboard:'M3 6h14a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1zM5.500 9h.01M8.500 9h.01M11.500 9h.01M14.500 9h.01M6.500 11.500h7',
   clip:'M7 4.500H5.500A1.500 1.500 0 0 0 4 6v10a1.500 1.500 0 0 0 1.500 1.500h9A1.500 1.500 0 0 0 16 16V6a1.500 1.500 0 0 0-1.500-1.500H13M7.500 3h5v3h-5z',
   drive:'M3.500 11.500 5.500 4.500h9l2 7M3.500 11.500h13v3.500a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1zM13.500 14h.01',
+  power:'M10 2.5v7M6.5 4.9a6.25 6.25 0 1 0 7 0',
   link:'M8.500 11.500a3 3 0 0 0 4.200 0l2.300-2.300a3 3 0 0 0-4.200-4.200l-.8.8M11.500 8.500a3 3 0 0 0-4.200 0L5 10.800A3 3 0 0 0 9.200 15l.8-.8',
   search:'M9 15A6 6 0 1 0 9 3a6 6 0 0 0 0 12zM13.500 13.500 17 17',
   info:'M10 17.500a7.500 7.500 0 1 0 0-15 7.500 7.500 0 0 0 0 15zM10 9.500v4M10 6.500h.01',
@@ -1023,7 +1062,7 @@ const glyph = (k, s = 22) => {
   return `<svg width="${s}" height="${s}" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${inner}</svg>`;
 };
 /* 大尺寸用写实的设备图，屏幕是这台设备的壁纸 */
-const WALL = { self:['#5b8cff','#8f7bff'], imac:['#2a93ff','#3cc4e8'], tp:['#6f86ff','#a78bfa'], mi:['#22aecb','#5bd3c6'], ubuntu:['#7f7bff','#c58af0'], pad:['#2a93ff','#3cc4e8'], office:['#6f86ff','#a78bfa'], pixel:['#22aecb','#5bd3c6'], near:['#c3cbd6','#9aa6b8'] };
+const WALL = { self:['#5b8cff','#8f7bff'], imac:['#2a93ff','#3cc4e8'], tp:['#6f86ff','#a78bfa'], mi:['#22aecb','#5bd3c6'], ubuntu:['#7f7bff','#c58af0'], pad:['#2a93ff','#3cc4e8'], office:['#6f86ff','#a78bfa'], pixel:['#22aecb','#5bd3c6'], near:['#a9c1ee','#7d9bdd'] };
 const wallCss = id => `linear-gradient(135deg,${WALL[id][0]},${WALL[id][1]})`;
 document.body.insertAdjacentHTML('afterbegin', `<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>${Object.entries(WALL).map(([k,[a,b]]) => `<linearGradient id="w-${k}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${a}"/><stop offset="1" stop-color="${b}"/></linearGradient>`).join('')}<linearGradient id="metal" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#eeeef2"/><stop offset="1" stop-color="#b9b9c1"/></linearGradient></defs></svg>`);
 function art(kind, id, w = 72) {
@@ -1365,9 +1404,9 @@ function moments() {
 /* ---------- 侧栏 ---------- */
 function devRow(id) {
   const d = DEV[id], st = statusOf(id);
-  const phone=mob(), big=phone?1.3:1;
+  const phone=mob(), big=phone?1.25:1;
   return `<button class="dev ${d.state==='on'?'':'off'} ${d.state==='off'?'gone':d.state==='seen'?'seen':''}" data-k="d-${id}" data-a="dev" data-v="${id}" data-dev="${id}" aria-current="${!isGlobal()&&S.place!=='settings'&&S.place!=='connect'&&S.dev===id}">
-    <span class="g">${art(d.kind,id,Math.round((d.kind==='phone'?30:32)*big))}</span>
+    <span class="g">${art(d.kind,id,Math.round((d.kind==='phone'||d.kind==='tablet'?24:26)*big))}</span>
     <span class="t"><b>${esc(d.name)}</b><small class="${st.live?'live':''}">${st.t}</small></span>
     <span class="c">${ic('right',14,2)}</span></button>`;
 }
@@ -1383,7 +1422,6 @@ function renderSide() {
     <div class="side-list"><i class="side-sel" data-k="sel" data-live aria-hidden="true"></i>${devOrder().map(devRow).join('')}</div>
     <div class="self">
       <button class="self-b ${S.selfOk?'':'lost'}" data-a="self" aria-label="这台设备：${esc(selfName())}" title="${esc(selfName())}"><span>${glyph(selfKind(),18)}</span><b>${esc(S.prefs.name||selfName())}</b></button>
-      <button class="iconbtn" data-a="connectNew" aria-label="连接新设备" title="连接新设备">${ic('plus',16)}</button>
       ${cornerBtn('links','link','共享链接',links)}
       <button class="iconbtn" data-a="settings" aria-label="设置" title="设置 ${cmdKey(',')}">${ic('gear',16)}</button>
     </div>`);
@@ -1459,13 +1497,19 @@ function tbHtml() {
     title=d.name;
     if (c) {
       tap='card';
-      const pc=d.kind!=='phone'&&d.kind!=='tablet', on=d.state==='on';
-      if (d.state!=='near') end=`${on&&pc?`<button class="iconbtn" data-a="pgo" data-v="control" aria-label="控制这台电脑">${ic('keyboard',21)}</button>`:''}<button class="iconbtn" data-a="pgo" data-v="card" aria-label="设备详情和设置">${ic('more',22,2.6)}</button>`;
-    } else if (d.state!=='near') end=`${segHtml()}${mob()&&d.kind!=='phone'&&d.kind!=='tablet'&&d.state==='on'?`<button class="iconbtn" data-a="pgo" data-v="control" aria-label="控制这台电脑">${ic('keyboard',21)}</button>`:''}<button class="iconbtn" data-a="insp" aria-label="设备卡片" aria-pressed="${S.insp}">${ic('info',17)}</button>`;
+      if (d.state!=='near') end=`<span class="tb-cap">${connBtn(d)}<button class="tb-info" data-a="pgo" data-v="card" aria-label="设备详情和设置">${ic('more',20,2.6)}</button></span>`;
+    } else if (d.state!=='near') end=`${segHtml()}<span class="tb-cap">${connBtn(d)}<button class="tb-info" data-a="insp" aria-label="设备卡片" aria-pressed="${S.insp}">${ic('info',mob()?19:15)}</button></span>`;
   }
   return `<div class="tb"><button class="iconbtn back ${!c&&S.pstack.length?'show':''}" data-a="back" aria-label="返回">${ic('back',20,2)}</button>
     ${tap?`<button class="tb-title" data-a="pgo" data-v="${tap}" aria-label="${esc(title)} 的设备设置"><b>${esc(title)}</b></button>`:`<div class="tb-title"><b>${esc(title)}</b></div>`}
     <div class="tb-end">${end}</div></div>`;
+}
+/* 连接和断开在工具栏，输入框只管写字。 */
+function connBtn(d) {
+  const on=d.state==='on', busy=d.state==='connecting', z=mob()?19:15;
+  const label=on?'断开连接':busy?'正在连接…':'连接';
+  if (busy) return `<span class="tb-conn busy" aria-label="${label}" title="${label}"><i class="spin"></i></span>`;
+  return `<button class="tb-conn ${on?'off':''}" data-a="${on?'disconnect':'connect'}" aria-label="${label}" title="${label}">${ic('power',z,1.8)}</button>`;
 }
 function placeHtml() {
   const d=DEV[S.dev], near=d.state==='near'&&!isGlobal();
@@ -1546,13 +1590,13 @@ function placeChat(d) {
   const off = d.state!=='on';
   const c = mob();
   return `<div class="scroll chat-scroll"><div class="chat">${items}</div></div>
-    <form class="composer" data-form="send">
+    ${off?'':`<form class="composer" data-form="send">
     <span style="width:${c?12:8}px;flex:none"></span>
     ${S.attach&&!off?`<span class="att"><i></i><span>${esc(S.attach)}</span><button type="button" data-a="attachOff" aria-label="移除截图">${ic('x',11,2.2)}</button></span>`:''}
-    <input id="composerInput" autocomplete="off" aria-label="消息" placeholder="${off?`连接 ${esc(d.name)} 后可以发送`:`发给 ${esc(d.name)}`}" ${off?'disabled':''}>
-    ${off?`<button type="button" class="btn p" data-a="connect">${d.state==='connecting'?'正在连接…':'连接'}</button>`:`<button type="button" class="iconbtn" data-a="sendClip" aria-label="发送剪贴板" title="发送剪贴板">${ic('clip',17)}</button>
+    <input id="composerInput" autocomplete="off" aria-label="${off?`连接 ${esc(d.name)} 后可以发送`:`发给 ${esc(d.name)}`}" ${off?'disabled':''}>
+    ${off?'':`<button type="button" class="iconbtn" data-a="sendClip" aria-label="发送剪贴板" title="发送剪贴板">${ic('clip',17)}</button>
     ${c?'':`<button type="button" class="iconbtn" data-a="shot" aria-label="截图" title="截图 ${S.prefs.shotKey}">${ic('camera',17)}</button>`}
-    <button class="send" data-a="composeAct" aria-label="发送或添加文件">${ic('plus',16,2).replace('class="ico"','class="ico add"')}${ic('up',15,2.2).replace('class="ico"','class="ico up"')}</button>`}</form>`;
+    <button class="send" data-a="composeAct" aria-label="发送或添加文件">${ic('plus',16,2).replace('class="ico"','class="ico add"')}${ic('up',15,2.2).replace('class="ico"','class="ico up"')}</button>`}</form>`}`;
 }
 function offlinePlace(d, what) {
   return `<div class="empty">${art(d.kind,d.id,84)}<b>${esc(d.name)} 没有连接</b><p>${what}</p>
@@ -1591,6 +1635,12 @@ function placeApps(d) {
   </div></div>`;
 }
 function placePair(d) {
+  if (mob()) {
+    const digits=[...'481726'].map((n,i) => `${i===3?'<i class="gap"></i>':''}<span>${n}</span>`).join('');
+    return `<div class="pair"><div class="pair-mid"><div class="pair-devs">${art('phone','self',72)}<i></i><i></i><span class="lk">${ic('lock',16)}</span><i></i><i></i>${art(d.kind,'near',d.kind==='phone'||d.kind==='tablet'?72:92)}</div>
+      <b>${esc(d.name)} 在附近</b><p>请确认两台设备显示相同的 6 位数字。</p><div class="code digits" aria-label="481 726">${digits}</div></div>
+      <div class="pair-end"><button class="btn p lg" data-a="pair">数字相同，配对</button><button class="btn q" data-a="back" style="color:var(--ink2)">取消</button><small>配对后，文本、文件、剪贴板和控制数据均端到端加密</small></div></div>`;
+  }
   return `<div class="empty">${art(d.kind,'near',84)}<b>${esc(d.name)} 在附近</b>
     <p>请确认两台设备显示相同的 6 位数字。</p><div class="code">481 726</div>
     <button class="btn p lg" data-a="pair">数字相同，配对</button></div>`;
@@ -1714,6 +1764,7 @@ function inspHtml() {
   const row = (k,label,dis) => `<div class="row ${dis?'dim':''}"><span>${label}</span><span class="sp"></span>${swHtml('perm',k,p[k],label,dis)}</div>`;
   return `${full?'':`<button class="iconbtn insp-x" data-a="insp" aria-label="关闭">${ic('x',14,2)}</button>`}<div class="ihero">${art(d.kind,d.id,104)}<b>${esc(d.name)}</b><small>${on?'已连接':d.state==='near'?'还没有配对':d.state==='connecting'?'正在连接…':`离线 · ${d.seen}`}</small></div>
     ${full&&d.state!=='near'?`<div class="circs act3">${pc?circ({a:'pgo',v:'control',icon:'keyboard',title:'控制',label:`控制 ${d.name}`,cls:'act',disabled:!on}):''}${circ({a:'pgo',v:'files',icon:'folder',title:'文件',label:`${d.name} 的文件`,cls:'act',disabled:!on})}${circ({a:'pgo',v:'apps',icon:'apps',title:'应用',label:`${d.name} 的应用`,cls:'act',disabled:!on})}</div>`:''}
+    ${!full&&c&&pc&&d.state!=='near'?`<div class="circs act3">${circ({a:'pgo',v:'control',icon:'keyboard',title:'控制',label:`控制 ${d.name}`,cls:'act',disabled:!on})}</div>`:''}
     ${c?(d.state==='near'?'':`<div class="group"><div class="row ${on?'':'dim'}"><span>把剪贴板同步给 ${esc(d.name)}</span><span class="sp"></span>${swHtml('tileClip',id,LK[id].clip,'把剪贴板同步给这台设备',!on)}</div></div>`):`<div class="circs">${circs}</div>`}
     ${d.state==='near'?'':`<div><div class="glabel">${esc(d.name)} 可以</div><div class="group">
       ${row('auto','不用确认就连上这台')}
@@ -1722,7 +1773,7 @@ function inspHtml() {
       </div></div>`}
     ${c&&d.state!=='near'?`<div class="group"><button class="row" data-a="noopHist"><span>搜索聊天记录</span><span class="sp"></span><span style="color:var(--ink3)">${ic('right',13,2)}</span></button></div>`:''}
     ${playing?`<div class="group"><div class="row"><span class="tx"><b><span>正在播放它的声音</span></b>${AUD.paused?'<small>已暂停</small>':''}</span><button class="btn" data-a="sinkPause">${AUD.paused?'继续':'暂停'}</button><button class="btn" data-a="sinkStop">断开</button></div></div>`:''}
-    <div class="group"><div class="row"><span>地址</span><span class="sp"></span><code>${esc(d.ip)}</code></div>${d.state==='near'?'':`<button class="row" data-a="navStub" data-v="连接诊断"><span>连接诊断</span><span class="sp"></span><span style="color:var(--ink3)">${ic('right',13,2)}</span></button>`}${on?`<button class="row" data-a="disconnect"><span>断开连接</span></button>`:''}</div>
+    <div class="group"><div class="row"><span>地址</span><span class="sp"></span><code>${esc(d.ip)}</code></div>${d.state==='near'?'':`<button class="row" data-a="navStub" data-v="连接诊断"><span>连接诊断</span><span class="sp"></span><span style="color:var(--ink3)">${ic('right',13,2)}</span></button>`}${on?`<button class="row" data-a="disconnect" style="color:var(--bad)"><span>断开连接</span></button>`:''}</div>
     ${d.state==='off'?`<button class="linkbtn bad" data-a="forget">移除这台设备</button>`:''}`;
 }
 const inspP = new Spring(0, M.smooth, x => paintInsp(x), .004);
@@ -1801,7 +1852,8 @@ function renderIsland() {
     morph(inn, `<div class="isl-e">${ms.map(m => {
       const r = m.kind==='transfer' && m.p<1 ? `<button class="rb" data-a="cancel" data-v="${m.id}" aria-label="取消">${ic('x',13,2)}</button>` : m.kind==='link' ? `<button class="rb" data-a="stopLink" data-v="${m.link}" aria-label="停止">${ic('x',13,2)}</button>` : '';
       const sub = m.kind==='transfer' ? `${esc(m.sub)}${m.p<1?` · <span data-pct="${m.id}">${Math.round(m.p*100)}%</span>`:' · 已完成'}` : esc(m.sub||'');
-      return `<div class="mo"><span class="ld">${leading(m)}</span><span class="t"><b>${esc(m.title)}</b><small>${sub}</small></span>${r}</div>${m.kind==='warn'?`<div class="mo-acts"><button data-a="self">查看</button></div>`:''}${m.kind==='req'?`<div class="mo-acts"><button class="p" data-a="reqAnswer" data-v="${m.id}:once">这次允许</button><button data-a="reqAnswer" data-v="${m.id}:always">始终允许</button><button data-a="reqAnswer" data-v="${m.id}:no">拒绝</button></div>`:''}`;
+      if (m.kind==='req') return `<div class="ask">${m.dev?`<span class="ask-t">${art(DEV[m.dev].kind,m.dev,48)}</span>`:''}<b>${esc(m.title)}</b>${sub?`<small>${sub}</small>`:''}${m.code?`<div class="ask-code">${esc(m.code)}</div>`:''}<div class="ask-acts"><button class="p" data-a="reqAnswer" data-v="${m.id}:once">这次允许</button><button data-a="reqAnswer" data-v="${m.id}:always">始终允许</button><button data-a="reqAnswer" data-v="${m.id}:no">拒绝</button></div></div>`;
+      return `<div class="mo"><span class="ld">${leading(m)}</span><span class="t"><b>${esc(m.title)}</b><small>${sub}</small></span>${r}</div>${m.kind==='warn'?`<div class="mo-acts"><button data-a="self">查看</button></div>`:''}`;
     }).join('')}</div>`);
   }
   const w = inn.offsetWidth, h = inn.offsetHeight;
@@ -1901,7 +1953,7 @@ function linuxTrayItems() {
       ? {label:`${DEV[KBM.controller].name} 在控制这台 · 停止`,on:() => A.ctrlStop()}
       : {label:'键鼠共享',check:KBM.on,on:() => kbSetOn(!KBM.on)},
     ...(S.flows.length?[{id:'flows',label:'正在流转的窗口',sub:S.flows.map(f => ({label:`${f.title.split(' · ')[0]} · ${f.runsOn==='self'?'拿回来':'结束'}`,on:() => A.endFlow(0,{dataset:{v:f.title}})}))}]:[]),
-    ...(S.clips.length>1?[{id:'clips',label:'最近的剪贴板',sub:S.clips.slice(1,5).map((c,i) => ({label:c.text,on:() => { A.clipCopy(0,{dataset:{v:i+1}}); note('已拷贝',c.text.slice(0,24)); }}))}]:[]),
+    ...(S.clips.length>1?[{id:'clips',label:'最近的剪贴板',sub:S.clips.filter(c => c!==S.clip).slice(0,4).map(c => ({label:c.text,on:() => { A.clipCopy(0,{dataset:{v:S.clips.indexOf(c)}}); note('已拷贝',c.text.slice(0,24)); }}))}]:[]),
     {sep:true},
     {label:'设置…',on:() => { showWin(); A.settings(); }},
     {label:'退出 Whisper',on:() => note('退出 Whisper','示例：真实的 App 这里会退出')},
@@ -1944,7 +1996,7 @@ function renderTray() {
     <div class="exp ${S.trayOpen==='audio'?'open':''}"><div><div class="mod">${trayAudio()}</div></div></div>
     <div class="exp ${S.trayOpen==='input'?'open':''}"><div><div class="mod">${trayInput()}</div></div></div>
     ${flows?`<div class="mod">${flows}</div>`:''}
-    ${S.clips.length>1?`<div class="mod tr-clips"><div class="tr-label" style="padding:4px 8px 4px">最近的剪贴板</div>${S.clips.slice(1,5).map((c,i) => `<button class="tr-cl" data-a="clipCopy" data-v="${i+1}" aria-label="拷贝：${esc(c.text)}">${c.kind==='shot'?'<i class="pic"></i>':''}<span class="tx"><b>${esc(c.text)}</b><small>${esc(c.from)} · ${esc(c.when)}</small></span><span class="cp ${S.copied===c?'done':''}">${ic(S.copied===c?'check':'copy',S.copied===c?12:14,S.copied===c?2.6:1.6)}</span></button>`).join('')}</div>`:''}
+    ${S.clips.length>1?`<div class="mod tr-clips"><div class="tr-label" style="padding:4px 8px 4px">最近的剪贴板</div>${S.clips.slice(0,5).map((c,i) => `<button class="tr-cl" data-a="clipCopy" data-v="${i}" aria-label="拷贝：${esc(c.text)}">${c.kind==='shot'?'<i class="pic"></i>':''}<span class="tx"><b>${esc(c.text)}</b><small>${esc(c.from)} · ${esc(c.when)}</small></span><span class="cp ${S.copied===c?'done':''}">${ic(S.copied===c?'check':'copy',14,S.copied===c?2.2:1.6)}</span></button>`).join('')}</div>`:''}
     <div class="tray-h" style="padding:2px 4px 0"><span class="sp"></span><button class="iconbtn" data-a="trayMain" aria-label="打开 Whisper" title="打开 Whisper">${ic('window',15)}</button><button class="iconbtn" data-a="settings" aria-label="设置" title="设置">${ic('gear',15)}</button></div>`;
   if (old) morph($('.tray-in',old), html);
   else { const p = document.createElement('div'); p.className='tray'; p.id='trayPanel'; p.innerHTML=`<div class="tray-in">${html}</div>`; stage.appendChild(p); }
@@ -2389,8 +2441,9 @@ const A = {
   clipCopy(_,el) {
     const c=S.clips[+el.dataset.v]; if (!c) return;
     if (c.kind==='text') { try { navigator.clipboard?.writeText(c.text).catch(()=>{}); } catch(e){} }
-    S.copied=c; renderTray(); clearTimeout(S.copyT);
-    S.copyT=setTimeout(() => { S.clips=[c,...S.clips.filter(x => x!==c)]; S.clip=c; S.copied=null; renderTray(); },900);
+    /* 列表不动：勾移到这一条，发送模块换成它。 */
+    S.clip=c; S.copied=c; renderTray(); clearTimeout(S.copyT);
+    S.copyT=setTimeout(() => { S.copied=null; renderTray(); },900);
   },
   shortRoute(_,el) { el.setAttribute('aria-checked', el.getAttribute('aria-checked')!=='true'); },
   palRun(_,el) { runPal(+el.dataset.v); },

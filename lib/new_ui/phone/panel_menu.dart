@@ -112,7 +112,16 @@ class PanelMenu extends StatelessWidget {
     );
     final title = this.title;
     return CustomSingleChildLayout(
-      delegate: _MenuPosition(anchor),
+      delegate: _MenuPosition(
+        anchor,
+        safe: EdgeInsets.only(
+          top: MediaQuery.viewPaddingOf(context).top,
+          bottom: math.max(
+            MediaQuery.viewPaddingOf(context).bottom,
+            MediaQuery.viewInsetsOf(context).bottom,
+          ),
+        ),
+      ),
       child: ConstrainedBox(
         constraints: const BoxConstraints(minWidth: 210, maxWidth: 320),
         child: IntrinsicWidth(
@@ -329,29 +338,44 @@ class PanelEdge extends CustomPainter {
 /// Under its button, centred on it and kept 10 inside the window; above it when
 /// it does not fit under.
 class _MenuPosition extends SingleChildLayoutDelegate {
-  const _MenuPosition(this.anchor);
+  const _MenuPosition(this.anchor, {this.safe = EdgeInsets.zero});
 
   final Rect anchor;
+
+  /// What it must keep clear of: the status bar, the gesture bar, the keyboard.
+  final EdgeInsets safe;
+
+  static const _edge = 10.0, _gap = 6.0;
+
+  double _roomBelow(double height) =>
+      height - safe.bottom - _edge - (anchor.bottom + _gap);
+
+  double _roomAbove() => anchor.top - _gap - safe.top - _edge;
 
   @override
   BoxConstraints getConstraintsForChild(BoxConstraints constraints) =>
       BoxConstraints(
-        maxWidth: math.min(320.0, constraints.maxWidth - 20),
-        maxHeight: math.max(0.0, constraints.maxHeight - 20),
+        maxWidth: math.min(320.0, constraints.maxWidth - 2 * _edge),
+        // It scrolls inside the bigger of the two spaces, and never leaves it.
+        maxHeight: math.max(
+          0.0,
+          math.max(_roomBelow(constraints.maxHeight), _roomAbove()),
+        ),
       );
 
   @override
   Offset getPositionForChild(Size size, Size child) {
     final x = (anchor.center.dx - child.width / 2)
-        .clamp(10.0, math.max(10.0, size.width - child.width - 10))
+        .clamp(_edge, math.max(_edge, size.width - child.width - _edge))
         .toDouble();
-    var y = anchor.bottom + 6;
-    if (y + child.height > size.height - 10) {
-      y = math.max(10.0, anchor.top - child.height - 6);
-    }
+    final below = _roomBelow(size.height);
+    final y = child.height <= below || below >= _roomAbove()
+        ? anchor.bottom + _gap
+        : anchor.top - _gap - child.height;
     return Offset(x, y);
   }
 
   @override
-  bool shouldRelayout(_MenuPosition old) => old.anchor != anchor;
+  bool shouldRelayout(_MenuPosition old) =>
+      old.anchor != anchor || old.safe != safe;
 }

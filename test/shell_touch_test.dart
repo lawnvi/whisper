@@ -74,7 +74,8 @@ class _HarnessState extends State<_Harness> {
     ),
     actions: ShellActions(
       select: (uid) => setState(() => selected = uid),
-      connect: (_) {},
+      connect: _connected.add,
+      disconnect: _disconnected.add,
       openPairing: ({bool startWithAddress = false}) async {
         await ShellContent.pushTop<void>(
           (context) => PhonePage(
@@ -113,13 +114,7 @@ class _HarnessState extends State<_Harness> {
       },
       openDiagnostics: (_) {},
       canControl: (d) => d.platform != 'android',
-      openControl: (d) => ShellContent.push<void>(
-        WhisperPageRoute<void>(
-          settings: const RouteSettings(name: ShellRoutes.control),
-          builder: (_) =>
-              const PhonePage(title: 'CONTROL', child: SizedBox.expand()),
-        ),
-      ),
+      openControl: _openControl,
       buildConversation: (_, d) => _Chat(key: ValueKey('chat-${d.uid}')),
       buildFiles: (_, d) => Text('FILES ${d.uid}'),
       buildApps: (_, d) => Text('APPS ${d.uid}'),
@@ -140,6 +135,10 @@ class _HarnessState extends State<_Harness> {
               children: [
                 const SizedBox(height: 100),
                 Text(page ? 'DEVICE PAGE ${d.uid}' : 'CARD ${d.uid}'),
+                TextButton(
+                  onPressed: () => _openControl(d),
+                  child: const Text('CONTROL ENTRY'),
+                ),
                 if (page) ...[
                   TextButton(
                     onPressed: () => onOpenTab(1),
@@ -212,6 +211,16 @@ Future<void> settle(WidgetTester tester) async {
   }
 }
 
+final _connected = <DeviceData>[];
+final _disconnected = <DeviceData>[];
+
+Future<void> _openControl(DeviceData d) => ShellContent.push<void>(
+  WhisperPageRoute<void>(
+    settings: const RouteSettings(name: ShellRoutes.control),
+    builder: (_) => const PhonePage(title: 'CONTROL', child: SizedBox.expand()),
+  ),
+);
+
 void main() {
   setUp(() {
     WhisperLayout.debugTouchOverride = true;
@@ -278,7 +287,8 @@ void main() {
   Finder glyph(WhisperGlyph g) => find.byWidgetPredicate(
     (w) =>
         (w is PhoneBarButton && w.glyph == g) ||
-        (w is ShellIconButton && w.glyph == g),
+        (w is ShellIconButton && w.glyph == g) ||
+        (w is ShellToolCapsuleItem && w.glyph == g),
   );
 
   group('the same shell at every width', () {
@@ -329,11 +339,11 @@ void main() {
   });
 
   group('beside a sidebar', () {
-    testWidgets('a toolbar tall enough to touch, with control for a computer', (
+    testWidgets('a toolbar tall enough to touch, control is on the card', (
       tester,
     ) async {
       await pumpShell(tester, _tabletLandscape);
-      expect(glyph(WhisperGlyph.keyboard), findsOneWidget);
+      expect(glyph(WhisperGlyph.keyboard), findsNothing);
       expect(glyph(WhisperGlyph.info), findsOneWidget);
       expect(find.text('对话'), findsOneWidget);
       // Tabs: 36 to look at, 48 to hit.
@@ -486,6 +496,49 @@ void main() {
     });
   });
 
+  group('the keyboard', () {
+    testWidgets('moves the page once, and what is inside does not count it', (
+      tester,
+    ) async {
+      await pumpShell(tester, _phoneSize);
+      await tapRow(tester, 'iMac');
+      final before = tester.getSize(find.byKey(const ValueKey('chat-imac')));
+      tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+      await settle(tester);
+      final chat = find.byKey(const ValueKey('chat-imac'));
+      expect(tester.getSize(chat).height, before.height - 300);
+      // A Scaffold in the page would otherwise take it off a second time.
+      expect(MediaQuery.viewInsetsOf(tester.element(chat)).bottom, 0);
+    });
+  });
+
+  group('connecting and letting go are in the toolbar', () {
+    setUp(() {
+      _connected.clear();
+      _disconnected.clear();
+    });
+
+    for (final size in [_tabletLandscape, _phoneSize]) {
+      testWidgets('a connected device can be disconnected at $size', (
+        tester,
+      ) async {
+        await pumpShell(tester, size);
+        if (size == _phoneSize) await tapRow(tester, 'iMac');
+        final button = find.byKey(const ValueKey('device-connection'));
+        expect(button, findsOneWidget);
+        expect(
+          find.byWidgetPredicate(
+            (w) => w is WhisperIcon && w.glyph == WhisperGlyph.power,
+          ),
+          findsOneWidget,
+        );
+        await tester.tap(button);
+        await tester.pump();
+        expect(_disconnected.map((d) => d.name), ['iMac']);
+      });
+    }
+  });
+
   group('the phone\'s stack', () {
     testWidgets('a row opens the device over the list, and back returns', (
       tester,
@@ -498,7 +551,8 @@ void main() {
       // No tabs: the title and ⋯ open the device page.
       expect(find.byType(LiquidSegmented<int>), findsNothing);
       expect(glyph(WhisperGlyph.more), findsOneWidget);
-      expect(glyph(WhisperGlyph.keyboard), findsOneWidget);
+      // Taking over a computer is not an everyday thing: it is on the device page.
+      expect(glyph(WhisperGlyph.keyboard), findsNothing);
       await tester.tap(glyph(WhisperGlyph.back));
       await settle(tester);
       // It goes, as a page popped off a stack does.
@@ -706,7 +760,9 @@ void main() {
         features: [fold(const Rect.fromLTWH(0, 452, 640, 0))],
       );
       expect(tester.getSize(find.byType(ShellPhoneList)).width, 240);
-      await tester.tap(glyph(WhisperGlyph.keyboard));
+      await tester.tap(glyph(WhisperGlyph.info));
+      await settle(tester);
+      await tester.tap(find.text('CONTROL ENTRY'));
       await settle(tester);
       expect(find.text('CONTROL'), findsOneWidget);
       expect(find.byType(ShellPhoneList).hitTestable(), findsNothing);

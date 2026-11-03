@@ -47,7 +47,7 @@ class ShellPhoneDevicePage extends StatelessWidget {
               iconSize: 20,
               weight: 2,
               touch: true,
-              color: c.accent,
+              color: c.ink,
               label: l10n.back,
               onTap: onBack ?? () => Navigator.of(context).maybePop(),
             ),

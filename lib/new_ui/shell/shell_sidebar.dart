@@ -176,14 +176,6 @@ class ShellSidebar extends StatelessWidget {
                     ),
                   ),
                 ),
-                ShellIconButton(
-                  glyph: WhisperGlyph.plus,
-                  label: l10n.shellAddDevice,
-                  color: second,
-                  // What other devices need to find this one is on that sheet,
-                  // along with 输入地址….
-                  onTap: onOpenSelf,
-                ),
                 if (data.linksSupported)
                   ShellIconButton(
                     glyph: WhisperGlyph.link,
@@ -274,7 +266,7 @@ class ShellDeviceRows extends StatelessWidget {
   Widget build(BuildContext context) {
     // Two lines of text grow with the system's text size. The row stays one
     // height throughout, or the selection could not slide by index.
-    final rowHeight = MediaQuery.textScalerOf(context).scale(touch ? 64 : 48);
+    final rowHeight = MediaQuery.textScalerOf(context).scale(touch ? 68 : 54);
     final step = rowHeight + _gap;
     final selectedIndex = rows.indexWhere(
       (row) => row.device.uid == selectedPeerId,
@@ -393,8 +385,12 @@ class _DeviceRow extends StatelessWidget {
     final type = WhisperType(touch: touch);
     final device = session.device;
     final live = deviceRowLineIsLive(deviceRowLine(facts));
-    // 1.3 times on touch: 30 tall for a handheld, 32 wide for a computer.
-    final big = touch ? 1.3 : 1.0;
+    // What is gone steps back, words too: nearby and offline read differently at
+    // a glance, before the words are read. Not while its row is the chosen one.
+    final gone = !session.isConnected && !session.isNearby && !selected;
+    // Every device in the same tile: a tall phone beside a wide computer does not
+    // line up on its own. 1.25 times on touch.
+    final big = touch ? 1.25 : 1.0;
     final row = Pressable(
       key: ShellFlyTargets.keyFor(device.uid),
       onTap: onTap,
@@ -413,16 +409,23 @@ class _DeviceRow extends StatelessWidget {
               : EdgeInsets.symmetric(horizontal: touch ? 12 : 10),
           child: Row(
             children: [
-              SizedBox(
-                width: touch ? 44 : 34,
-                height: touch ? 40 : 30,
-                child: Center(
-                  child: deviceArtFor(
-                    device,
-                    size: (deviceKindOf(device).handheld ? 30 : 32) * big,
-                    state: _artState,
-                    paired: paired,
+              Container(
+                width: touch ? 44 : 36,
+                height: touch ? 44 : 36,
+                alignment: Alignment.center,
+                decoration: ShapeDecoration(
+                  color: c.fill,
+                  shape: RoundedSuperellipseBorder(
+                    borderRadius: BorderRadius.circular(
+                      touch ? WhisperRadius.m : WhisperRadius.s,
+                    ),
                   ),
+                ),
+                child: deviceArtFor(
+                  device,
+                  size: (deviceKindOf(device).handheld ? 24 : 26) * big,
+                  state: _artState,
+                  paired: paired,
                 ),
               ),
               SizedBox(
@@ -444,19 +447,26 @@ class _DeviceRow extends StatelessWidget {
                       style: TextStyle(
                         fontSize: type.body,
                         fontWeight: FontWeight.w500,
-                        color: c.ink,
-                        height: 1.3,
+                        color: gone ? second : c.ink,
+                        height: 1.25,
                       ),
                     ),
+                    SizedBox(height: touch ? 4 : 3),
                     Text(
                       deviceRowText(l10n, facts),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: type.note,
-                        height: 1.3,
+                        height: 1.25,
                         fontWeight: live ? FontWeight.w500 : FontWeight.w400,
-                        color: live ? c.accent : second,
+                        color: live
+                            ? c.accent
+                            : gone && second != c.ink2Glass
+                            ? c.ink3
+                            : gone
+                            ? c.ink2
+                            : second,
                       ),
                     ),
                   ],

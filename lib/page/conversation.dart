@@ -30,6 +30,7 @@ import 'package:whisper/helper/whisper_file_picker.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/file_transfer.dart';
 import 'package:whisper/model/message.dart';
+import 'package:whisper/page/conversation_drafts.dart';
 import 'package:whisper/page/deviceList.dart';
 import 'package:whisper/page/remote_files/remote_files_page.dart';
 import 'package:whisper/remote_files/fs_placement.dart';
@@ -266,6 +267,13 @@ class _SendMessageScreen extends State<SendMessageScreen>
     _audioCoordinator.addListener(_handleAudioShareChanged);
     _audioGroupCoordinator.addListener(_handleAudioGroupChanged);
     _remoteInputCoordinator.addListener(_handleRemoteInputChanged);
+    // Before the listener: the first build has not happened yet.
+    if (ComposerDrafts.shared.of(device.uid) case final draft?) {
+      _textController.text = draft.text;
+      isInputEmpty = draft.text.isEmpty;
+      _pendingClipboardFiles = draft.files;
+      _pendingClipboardImages = draft.images;
+    }
     _textController.addListener(() {
       setState(() {
         isInputEmpty = _textController.text.isEmpty;
@@ -279,6 +287,14 @@ class _SendMessageScreen extends State<SendMessageScreen>
 
   @override
   void dispose() {
+    ComposerDrafts.shared.keep(
+      device.uid,
+      ComposerDraft(
+        text: _textController.text,
+        files: _pendingClipboardFiles,
+        images: _pendingClipboardImages,
+      ),
+    );
     WidgetsBinding.instance.removeObserver(this);
     _connectionAttempts.cancelAll();
     socketManager.unregisterEvent(this);
@@ -803,6 +819,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
             valueListenable: _composerHeight,
             builder: (context, composerHeight, _) => ChatMessageList(
               composerHeight: composerHeight,
+              hasComposer: _canSendCurrentDevice,
               // A card in the list says how far it is: no need for the island.
               buildFileMessage: (message, isOpponent) => IslandHome(
                 home: IslandHomes.message(message.uuid),
@@ -854,7 +871,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
               return Stack(
                 children: [
                   Positioned.fill(child: content),
-                  if (!_messageSelectionActive)
+                  // Nothing to write to: not a box that says so.
+                  if (!_messageSelectionActive && _canSendCurrentDevice)
                     Positioned(
                       left: 0,
                       right: 0,
@@ -1596,8 +1614,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
   Future<void> _openMobileControl() => Navigator.push<void>(
     context,
     MaterialPageRoute<void>(
-      builder: (_) =>
-          mobileControlPage(device: device, self: self, l10n: l10n),
+      builder: (_) => mobileControlPage(device: device, self: self, l10n: l10n),
     ),
   );
 
@@ -1732,6 +1749,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
       onSendClipboard: () async {
         await _sendText("", isClipboard: true);
       },
+      onSyncClipboard: _syncClipboard,
       onSendText: _sendComposerText,
       onPasteClipboard: _pasteClipboard,
       onSendClipboardFiles: _sendPendingClipboardFiles,
@@ -1740,11 +1758,17 @@ class _SendMessageScreen extends State<SendMessageScreen>
       onRemoveClipboardImage: _removePendingClipboardImage,
       composerHint: l10n.shellComposerHint(device.name),
       disabledHint: l10n.shellComposerOffline(device.name),
-      connectLabel: _isConnecting ? l10n.shellConnecting : l10n.shellConnect,
-      onConnect: _canToggleConnection && !_isConnecting
-          ? _toggleConnection
-          : null,
     );
+  }
+
+  /// The button says when it worked. Nothing to send has to be said in words.
+  Future<bool> _syncClipboard() async {
+    final text = (await getClipboardText() ?? '').trim();
+    if (text.isEmpty) {
+      if (mounted) showAppToast(l10n.shellTrayClipboardEmpty);
+      return false;
+    }
+    return _sendText(text, isClipboard: true);
   }
 
   Future<bool> _sendComposerText(String text) async {

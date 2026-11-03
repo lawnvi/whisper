@@ -475,6 +475,9 @@ abstract final class WhisperLoops {
 
   /// How long a folder may take before its page comes up empty, to say so.
   static const slowLoad = Duration(milliseconds: 300);
+
+  /// How long a button that just did its job says so.
+  static const doneHold = Duration(milliseconds: 1400);
 }
 
 /// response is seconds; mass is 1.

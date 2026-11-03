@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/l10n/app_localizations.dart';
@@ -165,9 +167,7 @@ void main() {
     expect(find.text('glyph:copy'), findsNothing);
   });
 
-  testWidgets('pages make room for the small island, the card lies over', (
-    tester,
-  ) async {
+  testWidgets('the island floats: nothing under it moves', (tester) async {
     await pumpHost(
       tester,
       home: Scaffold(
@@ -182,37 +182,69 @@ void main() {
 
     source.put(islandActivity('copy', arrival: IslandArrival.quiet));
     await settle(tester);
-    // The band under the status bar: gap, island, gap; no double padding
-    // for the body under the app bar.
-    expect(tester.getTopLeft(title).dy, closeTo(titleTop + 48, 0.5));
-    expect(tester.getTopLeft(row).dy, closeTo(rowTop + 48, 0.5));
-    final island = tester.getRect(find.text('compact:copy'));
-    expect(island.bottom, lessThan(tester.getTopLeft(title).dy));
+    expect(find.text('compact:copy'), findsOneWidget);
+    expect(tester.getTopLeft(title).dy, closeTo(titleTop, 0.5));
+    expect(tester.getTopLeft(row).dy, closeTo(rowTop, 0.5));
 
     center.tap();
     await settle(tester);
     expect(center.stage, IslandStage.expanded);
-    expect(tester.getTopLeft(title).dy, closeTo(titleTop + 48, 0.5));
-
-    center.collapse();
-    center.swipeUp();
-    await settle(tester);
     expect(tester.getTopLeft(title).dy, closeTo(titleTop, 0.5));
-
-    // A page that hides the status bar is not pushed.
-    source.put(
-      islandActivity(
-        'streamed',
-        kind: IslandKind.streamed,
-        arrival: IslandArrival.quiet,
-        urgent: true,
-      ),
-    );
-    tester.view.padding = FakeViewPadding.zero;
-    await settle(tester);
-    expect(find.text('compact:streamed'), findsOneWidget);
-    expect(tester.getTopLeft(row).dy, closeTo(rowTop - 28, 0.5));
+    expect(tester.getTopLeft(row).dy, closeTo(rowTop, 0.5));
     await tester.pump(const Duration(seconds: 10));
+  });
+
+  group('a camera in the middle of the screen', () {
+    const camera = ui.DisplayFeature(
+      bounds: Rect.fromLTWH(190, 8, 32, 32),
+      type: ui.DisplayFeatureType.cutout,
+      state: ui.DisplayFeatureState.unknown,
+    );
+
+    test('only one in the middle at the top counts', () {
+      expect(islandCamera(const [camera], 412), camera.bounds);
+      expect(islandCamera(const [], 412), isNull);
+      // A corner hole, or a fold.
+      const corner = ui.DisplayFeature(
+        bounds: Rect.fromLTWH(20, 8, 32, 32),
+        type: ui.DisplayFeatureType.cutout,
+        state: ui.DisplayFeatureState.unknown,
+      );
+      const fold = ui.DisplayFeature(
+        bounds: Rect.fromLTWH(190, 0, 32, 800),
+        type: ui.DisplayFeatureType.fold,
+        state: ui.DisplayFeatureState.postureFlat,
+      );
+      expect(islandCamera(const [corner, fold], 412), isNull);
+    });
+
+    testWidgets(
+      'the small island goes around it, narrow enough for the clock',
+      (tester) async {
+        await pumpHost(tester);
+        tester.view.displayFeatures = const [
+          ui.DisplayFeature(
+            bounds: Rect.fromLTWH(190, 8, 32, 32),
+            type: ui.DisplayFeatureType.cutout,
+            state: ui.DisplayFeatureState.unknown,
+          ),
+        ];
+        source.put(islandActivity('copy', arrival: IslandArrival.quiet));
+        await settle(tester);
+        final pill = tester.getRect(
+          find
+              .ancestor(
+                of: find.text('compact:copy'),
+                matching: find.byType(DecoratedBox),
+              )
+              .first,
+        );
+        expect(pill.center.dy, closeTo(24, 1));
+        expect(pill.center.dx, closeTo(206, 1));
+        expect(pill.width, lessThan(177));
+        await tester.pump(const Duration(seconds: 10));
+      },
+    );
   });
 
   testWidgets('a page may hush the island while it is first built', (

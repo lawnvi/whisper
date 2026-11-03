@@ -392,6 +392,7 @@ class _ShellDeviceCardState extends State<ShellDeviceCard> {
                       ShellRow(
                         touch: touch,
                         label: l10n.shellCardDisconnect,
+                        color: c.bad,
                         onTap: () => unawaited(widget.onDisconnect()),
                       ),
                   ],

@@ -112,6 +112,33 @@ class _ShellDevicePageBodyState extends State<_ShellDevicePageBody> {
     return false;
   }
 
+  /// Connect or disconnect: said once, in the toolbar, and not in the composer.
+  /// Blue is what can be done, red is letting go.
+  Widget _connection(BuildContext context) {
+    final page = widget.page;
+    final c = context.wc;
+    final l10n = context.shellL10n;
+    final device = page.device;
+    final connected = page.session.isConnected;
+    final busy = !connected && page.connecting;
+    return ShellToolCapsuleItem(
+      key: const ValueKey('device-connection'),
+      glyph: WhisperGlyph.power,
+      touch: page.touch,
+      weight: 1.8,
+      busy: busy,
+      color: connected ? c.bad : c.accent,
+      label: connected
+          ? l10n.shellCardDisconnect
+          : busy
+          ? l10n.shellConnecting
+          : l10n.shellConnect,
+      onTap: () => connected
+          ? page.actions.disconnect(device)
+          : page.actions.connect(device),
+    );
+  }
+
   /// A phone's bar: back, then the title that opens the device page, then what
   /// is left of the desktop's controls.
   Widget _compactBar(BuildContext context) {
@@ -150,7 +177,7 @@ class _ShellDevicePageBodyState extends State<_ShellDevicePageBody> {
               iconSize: 20,
               weight: 2,
               touch: true,
-              color: c.accent,
+              color: c.ink,
               label: l10n.back,
               onTap: page.onBack,
             ),
@@ -176,23 +203,26 @@ class _ShellDevicePageBodyState extends State<_ShellDevicePageBody> {
                       child: title,
                     ),
             ),
-            if (onDevice && known) ...[
-              if (page.actions.canControl?.call(device) ?? false)
-                PhoneBarButton(
-                  glyph: WhisperGlyph.keyboard,
-                  iconSize: 21,
-                  label: l10n.mobileControlTitle,
-                  onTap: () => page.actions.openControl?.call(device),
+            if (onDevice && known)
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: ShellToolCapsule(
+                  key: page.controlsKey,
+                  touch: true,
+                  children: [
+                    _connection(context),
+                    ShellToolCapsuleItem(
+                      glyph: WhisperGlyph.more,
+                      touch: true,
+                      iconSize: 20,
+                      weight: 2.6,
+                      color: c.ink,
+                      label: l10n.deviceDetailsTitle,
+                      onTap: page.onToggleCard,
+                    ),
+                  ],
                 ),
-              PhoneBarButton(
-                key: page.controlsKey,
-                glyph: WhisperGlyph.more,
-                iconSize: 22,
-                weight: 2.6,
-                label: l10n.deviceDetailsTitle,
-                onTap: page.onToggleCard,
               ),
-            ],
           ],
         ),
       ),
@@ -216,24 +246,29 @@ class _ShellDevicePageBodyState extends State<_ShellDevicePageBody> {
         child: LayoutBuilder(
           builder: (context, constraints) => Row(
             children: [
-              ConstrainedBox(
-                constraints: BoxConstraints(
-                  maxWidth: constraints.maxWidth * .34,
-                ),
-                child: Text(
-                  key: page.titleKey,
-                  device.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: type.head,
-                    height: 1.25,
-                    fontWeight: FontWeight.w600,
-                    color: c.ink,
+              // What the controls leave, up to a third of the bar.
+              Expanded(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: constraints.maxWidth * .34,
+                    ),
+                    child: Text(
+                      key: page.titleKey,
+                      device.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: type.head,
+                        height: 1.25,
+                        fontWeight: FontWeight.w600,
+                        color: c.ink,
+                      ),
+                    ),
                   ),
                 ),
               ),
-              const Spacer(),
               if (known) ...[
                 LiquidSegmented<int>(
                   key: page.controlsKey,
@@ -249,24 +284,20 @@ class _ShellDevicePageBodyState extends State<_ShellDevicePageBody> {
                   selected: page.tab,
                   onChanged: page.onTab,
                 ),
-                if (page.actions.canControl?.call(device) ?? false)
-                  PhoneBarButton(
-                    glyph: WhisperGlyph.keyboard,
-                    iconSize: 21,
-                    label: l10n.mobileControlTitle,
-                    onTap: () => page.actions.openControl?.call(device),
-                  ),
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: page.cardOpen ? c.fill : null,
-                    borderRadius: BorderRadius.circular(WhisperRadius.xs),
-                  ),
-                  child: PhoneBarButton(
-                    glyph: WhisperGlyph.info,
-                    iconSize: 17,
-                    label: l10n.shellDeviceInfo,
-                    onTap: page.onToggleCard,
-                  ),
+                const SizedBox(width: 6),
+                ShellToolCapsule(
+                  touch: true,
+                  children: [
+                    _connection(context),
+                    ShellToolCapsuleItem(
+                      glyph: WhisperGlyph.info,
+                      touch: true,
+                      color: c.ink,
+                      selected: page.cardOpen,
+                      label: l10n.shellDeviceInfo,
+                      onTap: page.onToggleCard,
+                    ),
+                  ],
                 ),
               ],
             ],
@@ -289,6 +320,155 @@ class _ShellDevicePageBodyState extends State<_ShellDevicePageBody> {
     // On a phone a connected device's files and apps are pages with their own
     // bar, with what they need at its end.
     final ownBar = page.compact && page.tab != 0 && session.isConnected;
+    final body = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (!ownBar)
+          DecoratedBox(
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: BorderSide(
+                  width: hairline,
+                  color: _scrolled ? c.sep : Colors.transparent,
+                ),
+              ),
+            ),
+            child: page.touch
+                ? SafeArea(
+                    bottom: false,
+                    child: page.compact
+                        ? _compactBar(context)
+                        : _touchBar(context),
+                  )
+                : ToolbarBand(
+                    child: SpringBuilder(
+                      value: page.rightInset,
+                      spring: WhisperSprings.smooth,
+                      builder: (context, right, child) => Padding(
+                        padding: EdgeInsets.fromLTRB(20, 0, 12 + right, 0),
+                        child: child,
+                      ),
+                      child: LayoutBuilder(
+                        builder: (context, constraints) => Row(
+                          children: [
+                            // What the controls leave, up to a third of the
+                            // bar.
+                            Expanded(
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: ConstrainedBox(
+                                  constraints: BoxConstraints(
+                                    maxWidth: constraints.maxWidth * .34,
+                                  ),
+                                  child: Text(
+                                    key: page.titleKey,
+                                    device.name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: type.head,
+                                      height: 1.25,
+                                      fontWeight: FontWeight.w600,
+                                      color: c.ink,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            if (session.isConnected ||
+                                page.paired ||
+                                !session.isNearby) ...[
+                              LiquidSegmented<int>(
+                                key: page.controlsKey,
+                                segments: {
+                                  0: l10n.shellTabChat,
+                                  1: l10n.shellTabFiles,
+                                  2: l10n.shellTabApps,
+                                },
+                                selected: page.tab,
+                                onChanged: page.onTab,
+                              ),
+                              const SizedBox(width: 6),
+                              ShellToolCapsule(
+                                children: [
+                                  _connection(context),
+                                  ShellToolCapsuleItem(
+                                    glyph: WhisperGlyph.info,
+                                    color: c.ink,
+                                    selected: page.cardOpen,
+                                    label: l10n.shellDeviceInfo,
+                                    onTap: page.onToggleCard,
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+          ),
+        Expanded(
+          child: Padding(
+            padding: EdgeInsets.only(
+              // No Scaffold here to do this: the keyboard moves the page and
+              // not the list beside it.
+              bottom: page.touch ? MediaQuery.viewInsetsOf(context).bottom : 0,
+            ),
+            // One MediaQuery: two nested from the same context would put back
+            // what the first took off, and the keyboard would count twice.
+            child: MediaQuery(
+              data: MediaQuery.of(context)
+                  .removeViewInsets(removeBottom: page.touch)
+                  // The toolbar has the status bar. Pages built for a stack of
+                  // their own would leave room for it again.
+                  .removePadding(removeTop: page.touch && !ownBar),
+              child: Builder(
+                builder: (context) =>
+                    NotificationListener<ScrollMetricsNotification>(
+                      onNotification: (n) => _onScroll(n.metrics),
+                      child: NotificationListener<ScrollUpdateNotification>(
+                        onNotification: (n) => _onScroll(n.metrics),
+                        child:
+                            !session.isConnected &&
+                                !page.paired &&
+                                session.isNearby
+                            ? page._away(context, l10n.shellNotConnectedFiles)
+                            : WhisperTabView(
+                                index: page.tab,
+                                itemCount: 3,
+                                itemBuilder: (context, i) => switch (i) {
+                                  0 => actions.buildConversation(
+                                    context,
+                                    device,
+                                  ),
+                                  1 =>
+                                    session.isConnected
+                                        ? actions.buildFiles(context, device)
+                                        : page._away(
+                                            context,
+                                            l10n.shellNotConnectedFiles,
+                                          ),
+                                  _ =>
+                                    session.isConnected
+                                        ? actions.buildApps(context, device)
+                                        : page._away(
+                                            context,
+                                            l10n.shellNotConnectedApps,
+                                          ),
+                                },
+                              ),
+                      ),
+                    ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+    // On touch the page slides in by itself. Fading it as well would draw the whole
+    // screen to one side first, on every frame of the way in, glass and all.
+    if (page.touch) return body;
     return SpringBuilder(
       from: 0,
       value: 1,
@@ -300,138 +480,7 @@ class _ShellDevicePageBodyState extends State<_ShellDevicePageBody> {
           child: child,
         ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (!ownBar)
-            DecoratedBox(
-              decoration: BoxDecoration(
-                border: Border(
-                  bottom: BorderSide(
-                    width: hairline,
-                    color: _scrolled ? c.sep : Colors.transparent,
-                  ),
-                ),
-              ),
-              child: page.touch
-                  ? SafeArea(
-                      bottom: false,
-                      child: page.compact
-                          ? _compactBar(context)
-                          : _touchBar(context),
-                    )
-                  : ToolbarBand(
-                      child: SpringBuilder(
-                        value: page.rightInset,
-                        spring: WhisperSprings.smooth,
-                        builder: (context, right, child) => Padding(
-                          padding: EdgeInsets.fromLTRB(20, 0, 12 + right, 0),
-                          child: child,
-                        ),
-                        child: LayoutBuilder(
-                          builder: (context, constraints) => Row(
-                            children: [
-                              ConstrainedBox(
-                                constraints: BoxConstraints(
-                                  maxWidth: constraints.maxWidth * .34,
-                                ),
-                                child: Text(
-                                  key: page.titleKey,
-                                  device.name,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: type.head,
-                                    height: 1.25,
-                                    fontWeight: FontWeight.w600,
-                                    color: c.ink,
-                                  ),
-                                ),
-                              ),
-                              const Spacer(),
-                              if (session.isConnected ||
-                                  page.paired ||
-                                  !session.isNearby) ...[
-                                LiquidSegmented<int>(
-                                  key: page.controlsKey,
-                                  segments: {
-                                    0: l10n.shellTabChat,
-                                    1: l10n.shellTabFiles,
-                                    2: l10n.shellTabApps,
-                                  },
-                                  selected: page.tab,
-                                  onChanged: page.onTab,
-                                ),
-                                const SizedBox(width: 6),
-                                ShellIconButton(
-                                  glyph: WhisperGlyph.info,
-                                  iconSize: 17,
-                                  label: l10n.shellDeviceInfo,
-                                  pressed: page.cardOpen,
-                                  onTap: page.onToggleCard,
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-            ),
-          Expanded(
-            child: Padding(
-              padding: EdgeInsets.only(
-                // No Scaffold here to do this: the keyboard moves the page and
-                // not the list beside it.
-                bottom: page.touch
-                    ? MediaQuery.viewInsetsOf(context).bottom
-                    : 0,
-              ),
-              child: MediaQuery.removeViewInsets(
-                context: context,
-                removeBottom: page.touch,
-                // The toolbar has the status bar. Pages built for a stack of
-                // their own would leave room for it again.
-                child: MediaQuery.removePadding(
-                  context: context,
-                  removeTop: page.touch && !ownBar,
-                  child: NotificationListener<ScrollMetricsNotification>(
-                    onNotification: (n) => _onScroll(n.metrics),
-                    child: NotificationListener<ScrollUpdateNotification>(
-                      onNotification: (n) => _onScroll(n.metrics),
-                      child:
-                          !session.isConnected &&
-                              !page.paired &&
-                              session.isNearby
-                          ? page._away(context, l10n.shellNotConnectedFiles)
-                          : WhisperTabView(
-                              index: page.tab,
-                              itemCount: 3,
-                              itemBuilder: (context, i) => switch (i) {
-                                0 => actions.buildConversation(context, device),
-                                1 =>
-                                  session.isConnected
-                                      ? actions.buildFiles(context, device)
-                                      : page._away(
-                                          context,
-                                          l10n.shellNotConnectedFiles,
-                                        ),
-                                _ =>
-                                  session.isConnected
-                                      ? actions.buildApps(context, device)
-                                      : page._away(
-                                          context,
-                                          l10n.shellNotConnectedApps,
-                                        ),
-                              },
-                            ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
+      child: body,
     );
   }
 }

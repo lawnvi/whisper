@@ -65,8 +65,10 @@ class ChatComposer extends StatelessWidget {
   final ValueChanged<int>? onRemoveClipboardImage;
 
   /// In the new UI: 发给 iMac, or 连接 iMac 后可以发送 with a button to do so.
-  final String? composerHint, disabledHint, connectLabel;
-  final VoidCallback? onConnect;
+  final String? composerHint, disabledHint;
+
+  /// Sends the clipboard and says whether it went, for the button to show it.
+  final Future<bool> Function()? onSyncClipboard;
 
   const ChatComposer({
     super.key,
@@ -92,8 +94,7 @@ class ChatComposer extends StatelessWidget {
     this.onRemoveClipboardImage,
     this.composerHint,
     this.disabledHint,
-    this.connectLabel,
-    this.onConnect,
+    this.onSyncClipboard,
   });
 
   @override
@@ -273,94 +274,98 @@ class ChatComposer extends StatelessWidget {
     final hasPreview =
         _showsClipboardFilesPreview || _showsClipboardImagesPreview;
     final disabled = !canSend;
-    final field = Focus(
-      onKeyEvent: (_, event) => _handleKeyEvent(event),
-      child: TextField(
-        key: const ValueKey('chat-composer-textfield'),
-        controller: controller,
-        focusNode: focusNode,
-        enabled: canSend,
-        keyboardType: TextInputType.multiline,
-        textInputAction: TextInputAction.newline,
-        minLines: 1,
-        maxLines: 5,
-        selectionWidthStyle: BoxWidthStyle.tight,
-        autofocus: isDesktop(),
-        autocorrect: true,
-        cursorColor: c.accent,
-        style: TextStyle(color: c.ink, fontSize: type.body, height: 1.35),
-        decoration: InputDecoration(
-          isCollapsed: true,
-          isDense: true,
-          filled: false,
-          fillColor: Colors.transparent,
-          border: InputBorder.none,
-          enabledBorder: InputBorder.none,
-          focusedBorder: InputBorder.none,
-          disabledBorder: InputBorder.none,
-          errorBorder: InputBorder.none,
-          focusedErrorBorder: InputBorder.none,
-          contentPadding: EdgeInsets.zero,
-          hintMaxLines: 1,
-          hintText: disabled ? disabledHint : composerHint,
-          hintStyle: TextStyle(
-            color: c.ink2Glass,
-            fontSize: type.body,
-            overflow: TextOverflow.ellipsis,
+    // Nothing written in the box. A screen reader still says what it is for.
+    final field = Semantics(
+      label: disabled ? disabledHint : composerHint,
+      child: Focus(
+        onKeyEvent: (_, event) => _handleKeyEvent(event),
+        child: TextField(
+          key: const ValueKey('chat-composer-textfield'),
+          controller: controller,
+          focusNode: focusNode,
+          enabled: canSend,
+          keyboardType: TextInputType.multiline,
+          textInputAction: TextInputAction.newline,
+          minLines: 1,
+          maxLines: 5,
+          selectionWidthStyle: BoxWidthStyle.tight,
+          autofocus: isDesktop(),
+          autocorrect: true,
+          cursorColor: c.accent,
+          style: TextStyle(color: c.ink, fontSize: type.body, height: 1.35),
+          decoration: InputDecoration(
+            isCollapsed: true,
+            isDense: true,
+            filled: false,
+            fillColor: Colors.transparent,
+            border: InputBorder.none,
+            enabledBorder: InputBorder.none,
+            focusedBorder: InputBorder.none,
+            disabledBorder: InputBorder.none,
+            errorBorder: InputBorder.none,
+            focusedErrorBorder: InputBorder.none,
+            contentPadding: EdgeInsets.zero,
           ),
         ),
       ),
     );
+    // As tall as the buttons on one line, so that they are level.
+    final fieldPadding = touch ? 8.0 : 4.5;
     final row = ConstrainedBox(
       constraints: BoxConstraints(minHeight: touch ? 38 : 28),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          SizedBox(width: touch ? 12 : 8),
           Expanded(
             child: Padding(
-              padding: EdgeInsets.fromLTRB(4, touch ? 9 : 5, 4, touch ? 9 : 5),
+              padding: EdgeInsets.fromLTRB(
+                touch ? 16 : 12,
+                fieldPadding,
+                4,
+                fieldPadding,
+              ),
               child: field,
             ),
           ),
-          const SizedBox(width: 4),
-          if (clipboardEnabled && !disabled)
-            _CapsuleIcon(
-              key: clipboardButtonKey,
-              glyph: WhisperGlyph.clip,
-              label: AppLocalizations.of(context)?.menuClipboard ?? '',
-              touch: touch,
-              onTap: isLoading ? null : () => unawaited(onSendClipboard()),
+          if (!disabled) ...[
+            // Only while there is nothing to send. Once there is, the words get
+            // the room and the one button left stays at the bottom right, as in
+            // any messaging app: nothing jumps, and nothing is empty above it.
+            AnimatedSize(
+              duration: whisperMotionDuration(context),
+              curve: Curves.easeOutCubic,
+              alignment: Alignment.bottomRight,
+              child: _showsAttachmentAction
+                  ? Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (clipboardEnabled) ...[
+                          _ClipboardButton(
+                            key: clipboardButtonKey,
+                            label:
+                                AppLocalizations.of(context)?.menuClipboard ??
+                                '',
+                            touch: touch,
+                            send: isLoading
+                                ? null
+                                : onSyncClipboard ??
+                                      () async {
+                                        await onSendClipboard();
+                                        return true;
+                                      },
+                          ),
+                          const SizedBox(width: 4),
+                        ],
+                        if (isDesktop()) ...[
+                          const ScreenshotButton(capsule: true),
+                          const SizedBox(width: 4),
+                        ],
+                      ],
+                    )
+                  : const SizedBox.shrink(),
             ),
-          if (isDesktop() && !disabled) ...[
-            const SizedBox(width: 4),
-            const ScreenshotButton(capsule: true),
-          ],
-          const SizedBox(width: 4),
-          if (disabled && onConnect != null)
-            Pressable(
-              onTap: onConnect,
-              radius: WhisperRadius.capsule,
-              child: Container(
-                constraints: BoxConstraints(minHeight: touch ? 38 : 28),
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: c.accent,
-                  borderRadius: BorderRadius.circular(WhisperRadius.capsule),
-                ),
-                child: Text(
-                  connectLabel ?? '',
-                  style: TextStyle(
-                    fontSize: type.note,
-                    fontWeight: FontWeight.w500,
-                    color: c.onAccent,
-                  ),
-                ),
-              ),
-            )
-          else if (!disabled)
             _buildCapsuleSend(context, touch),
+          ],
         ],
       ),
     );
@@ -1095,30 +1100,83 @@ class _ClipboardActionButtonState extends State<_ClipboardActionButton> {
   }
 }
 
-class _CapsuleIcon extends StatelessWidget {
-  const _CapsuleIcon({
+/// Sends the clipboard. The other device's clipboard changes where nobody here
+/// can see it, so the button itself says that it went: a tick, for a moment.
+class _ClipboardButton extends StatefulWidget {
+  const _ClipboardButton({
     super.key,
-    required this.glyph,
     required this.label,
     required this.touch,
-    required this.onTap,
+    required this.send,
   });
 
-  final WhisperGlyph glyph;
   final String label;
   final bool touch;
-  final VoidCallback? onTap;
+  final Future<bool> Function()? send;
 
   @override
-  Widget build(BuildContext context) => Pressable(
-    onTap: onTap,
-    radius: WhisperRadius.capsule,
-    label: label,
-    child: SizedBox.square(
-      dimension: touch ? 38 : 28,
-      child: Center(
-        child: WhisperIcon(glyph, size: 17, color: context.wc.ink2Glass),
+  State<_ClipboardButton> createState() => _ClipboardButtonState();
+}
+
+class _ClipboardButtonState extends State<_ClipboardButton> {
+  bool _sent = false;
+  bool _busy = false;
+  Timer? _reset;
+
+  @override
+  void dispose() {
+    _reset?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _tap() async {
+    final send = widget.send;
+    if (send == null || _busy) return;
+    _busy = true;
+    final sent = await send();
+    _busy = false;
+    if (!sent || !mounted) return;
+    if (widget.touch) unawaited(HapticFeedback.lightImpact());
+    setState(() => _sent = true);
+    _reset?.cancel();
+    _reset = Timer(WhisperLoops.doneHold, () {
+      if (mounted) setState(() => _sent = false);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.wc;
+    return Pressable(
+      onTap: widget.send == null ? null : () => unawaited(_tap()),
+      radius: WhisperRadius.capsule,
+      label: widget.label,
+      child: SizedBox.square(
+        dimension: widget.touch ? 38 : 28,
+        child: Center(
+          child: AnimatedSwitcher(
+            duration: whisperMotionDuration(context),
+            transitionBuilder: (child, animation) => ScaleTransition(
+              scale: Tween(begin: .6, end: 1.0).animate(animation),
+              child: FadeTransition(opacity: animation, child: child),
+            ),
+            child: _sent
+                ? WhisperIcon(
+                    key: const ValueKey('sent'),
+                    WhisperGlyph.check,
+                    size: 17,
+                    weight: 2.2,
+                    color: c.ok,
+                  )
+                : WhisperIcon(
+                    key: const ValueKey('clip'),
+                    WhisperGlyph.clip,
+                    size: 17,
+                    color: c.ink2Glass,
+                  ),
+          ),
+        ),
       ),
-    ),
-  );
+    );
+  }
 }

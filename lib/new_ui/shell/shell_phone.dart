@@ -133,9 +133,7 @@ class _TopButton extends StatelessWidget {
     child: SizedBox(
       width: 44,
       height: 48,
-      child: Center(
-        child: WhisperIcon(glyph, size: 20, color: context.wc.accent),
-      ),
+      child: Center(child: WhisperIcon(glyph, size: 20, color: context.wc.ink)),
     ),
   );
 }

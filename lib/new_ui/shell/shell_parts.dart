@@ -151,6 +151,115 @@ class ShellIconButton extends StatelessWidget {
 
 enum ShellButtonKind { normal, primary, quiet, danger }
 
+/// What goes beside the tabs goes in the same kind of capsule: the same height,
+/// the same fill, and for what is open the same raised thumb. Without a capsule
+/// the icons look like they belong to something else. 48 to hit on touch.
+class ShellToolCapsule extends StatelessWidget {
+  const ShellToolCapsule({
+    super.key,
+    required this.children,
+    this.touch = false,
+  });
+
+  final List<Widget> children;
+  final bool touch;
+
+  @override
+  Widget build(BuildContext context) => Stack(
+    alignment: Alignment.center,
+    children: [
+      Positioned(
+        left: 0,
+        right: 0,
+        child: Container(
+          height: touch ? 36 : 30,
+          decoration: BoxDecoration(
+            color: context.wc.fill,
+            borderRadius: BorderRadius.circular(WhisperRadius.capsule),
+          ),
+        ),
+      ),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        child: Row(mainAxisSize: MainAxisSize.min, children: children),
+      ),
+    ],
+  );
+}
+
+class ShellToolCapsuleItem extends StatelessWidget {
+  const ShellToolCapsuleItem({
+    super.key,
+    required this.glyph,
+    required this.label,
+    required this.onTap,
+    this.color,
+    this.selected = false,
+    this.busy = false,
+    this.touch = false,
+    this.iconSize,
+    this.weight = 1.6,
+  });
+
+  final WhisperGlyph glyph;
+  final String label;
+  final VoidCallback? onTap;
+  final Color? color;
+  final bool selected, busy, touch;
+  final double? iconSize;
+  final double weight;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.wc;
+    final inner = touch ? 32.0 : 26.0;
+    final size = iconSize ?? (touch ? 19.0 : 15.0);
+    return Tooltip(
+      message: label,
+      child: Pressable(
+        onTap: busy ? null : onTap,
+        radius: WhisperRadius.capsule,
+        scale: .92,
+        label: label,
+        child: SizedBox(
+          width: touch ? 40 : 30,
+          height: touch ? 48 : 30,
+          child: Center(
+            child: Container(
+              width: touch ? 38 : 28,
+              height: inner,
+              alignment: Alignment.center,
+              decoration: selected
+                  ? BoxDecoration(
+                      color: c.raised,
+                      borderRadius: BorderRadius.circular(
+                        WhisperRadius.capsule,
+                      ),
+                      boxShadow: WhisperShadow.e1(Theme.of(context).brightness),
+                    )
+                  : null,
+              child: busy
+                  ? SizedBox.square(
+                      dimension: size - 2,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: color ?? c.ink2,
+                      ),
+                    )
+                  : WhisperIcon(
+                      glyph,
+                      size: size,
+                      weight: weight,
+                      color: color ?? c.ink2,
+                    ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// `.btn`: 28 high, 36 when large, 44 and 48 on a phone.
 class ShellButton extends StatelessWidget {
   const ShellButton({

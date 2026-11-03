@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:whisper/new_ui/phone/phone_parts.dart';
 import 'package:whisper/new_ui/shell/shell_parts.dart';
+import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/state/pairing_request.dart';
+import 'package:whisper/theme/whisper_device_art.dart';
+import 'package:whisper/theme/whisper_icons.dart';
 import 'package:whisper/theme/whisper_ui.dart';
 import 'package:whisper/widget/pairing_dialog.dart';
 
@@ -57,128 +60,109 @@ class _PhonePairPageState extends State<PhonePairPage> {
       ),
     };
     final code = request.pairingCode;
-    final spaced = '${code.substring(0, 3)} ${code.substring(3)}';
     return PhonePage(
-      title: name,
+      title: '',
       background: c.content,
       onBack: () => _resolve(false),
-      child: CustomMultiChildLayout(
-        delegate: _PairLayout(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          LayoutId(
-            id: _PairLayout.content,
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  deviceArtFor(device, size: 84, paired: warning),
-                  const SizedBox(height: 10),
-                  Text(
-                    title,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: type.title,
-                      height: 1.4,
-                      fontWeight: FontWeight.w600,
-                      color: warning ? c.warn : c.ink,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    body,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: type.body,
-                      height: 1.5,
-                      color: c.ink2,
-                    ),
-                  ),
-                  if (warning) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      l10n.pairingCompareCode,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: type.body,
-                        height: 1.5,
-                        color: c.ink2,
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 18),
-                  Semantics(
-                    key: pairingCodeKey,
-                    label: l10n.pairingCodeSemantics(code),
-                    liveRegion: true,
-                    child: ExcludeSemantics(
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Padding(
-                          padding: const EdgeInsets.only(
-                            left: WhisperSizes.pairCode * .22,
-                          ),
-                          child: Text(
-                            spaced,
-                            maxLines: 1,
-                            style: TextStyle(
-                              fontFamily: WhisperMono.family,
-                              fontFamilyFallback: WhisperMono.fallback,
-                              fontSize: WhisperSizes.pairCode,
-                              height: 1,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: WhisperSizes.pairCode * .22,
-                              color: c.ink,
-                            ),
-                          ),
+          Expanded(
+            // Between the bar and the buttons, and it scrolls on a small screen.
+            child: LayoutBuilder(
+              builder: (context, box) => SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: box.maxHeight),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (warning)
+                        WhisperIcon(WhisperGlyph.warn, size: 44, color: c.warn)
+                      else
+                        _Devices(device: device),
+                      const SizedBox(height: 28),
+                      Text(
+                        title,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: type.title,
+                          height: 1.3,
+                          fontWeight: FontWeight.w600,
+                          color: c.ink,
                         ),
                       ),
-                    ),
+                      const SizedBox(height: 8),
+                      Text(
+                        body,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: type.note,
+                          height: 1.5,
+                          color: c.ink2,
+                        ),
+                      ),
+                      if (warning)
+                        Text(
+                          l10n.pairingCompareCode,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: type.note,
+                            height: 1.5,
+                            color: c.ink2,
+                          ),
+                        ),
+                      const SizedBox(height: 28),
+                      Semantics(
+                        key: pairingCodeKey,
+                        label: l10n.pairingCodeSemantics(code),
+                        liveRegion: true,
+                        child: ExcludeSemantics(child: _Digits(code: code)),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 18),
-                  PhoneButton(
-                    key: pairingApproveKey,
-                    large: true,
-                    kind: PhoneButtonKind.primary,
-                    label: warning
-                        ? l10n.pairingApprove
-                        : l10n.phonePairApprove,
-                    onTap: _resolved ? null : () => _resolve(true),
-                  ),
-                  const SizedBox(height: 4),
-                  PhoneButton(
-                    key: request.isInitiator
-                        ? pairingCancelKey
-                        : pairingRejectKey,
-                    kind: PhoneButtonKind.quiet,
-                    color: request.isInitiator ? c.accent : c.bad,
-                    label: request.isInitiator
-                        ? l10n.cancel
-                        : l10n.pairingReject,
-                    onTap: _resolved ? null : () => _resolve(false),
-                  ),
-                ],
+                ),
               ),
             ),
           ),
-          LayoutId(
-            id: _PairLayout.notice,
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(
-                28,
-                8,
-                28,
-                12 + MediaQuery.paddingOf(context).bottom,
-              ),
-              child: Text(
-                l10n.pairingEncryptionNotice,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: type.tiny,
-                  height: 1.4,
-                  color: c.ink3,
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              20,
+              12,
+              20,
+              12 + MediaQuery.paddingOf(context).bottom,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                PhoneButton(
+                  key: pairingApproveKey,
+                  large: true,
+                  kind: PhoneButtonKind.primary,
+                  label: warning ? l10n.pairingApprove : l10n.phonePairApprove,
+                  onTap: _resolved ? null : () => _resolve(true),
                 ),
-              ),
+                const SizedBox(height: 4),
+                PhoneButton(
+                  key: request.isInitiator
+                      ? pairingCancelKey
+                      : pairingRejectKey,
+                  kind: PhoneButtonKind.quiet,
+                  color: request.isInitiator ? c.ink2 : c.bad,
+                  label: request.isInitiator ? l10n.cancel : l10n.pairingReject,
+                  onTap: _resolved ? null : () => _resolve(false),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  l10n.pairingEncryptionNotice,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: type.tiny,
+                    height: 1.4,
+                    color: c.ink3,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -187,38 +171,97 @@ class _PhonePairPageState extends State<PhonePairPage> {
   }
 }
 
-/// The digits and the button where the prototype has them, in the middle of the
-/// page as if the quiet button under them were not there. The notice stays at the
-/// bottom, and on a small screen the rest gives way to it and scrolls.
-class _PairLayout extends MultiChildLayoutDelegate {
-  static const content = 'content', notice = 'notice';
+/// This phone and the other device, joined by a lock: what is about to happen.
+class _Devices extends StatelessWidget {
+  const _Devices({required this.device});
 
-  /// What goes under the part that is centred: the quiet button and its gap.
-  static const _under = 48.0;
+  final DeviceData device;
 
   @override
-  void performLayout(Size size) {
-    final foot = layoutChild(
-      notice,
-      BoxConstraints(maxWidth: size.width, minWidth: size.width),
+  Widget build(BuildContext context) {
+    final c = context.wc;
+    Widget dot() => Container(
+      width: 4,
+      height: 4,
+      margin: const EdgeInsets.symmetric(horizontal: 3),
+      decoration: BoxDecoration(color: c.ink3, shape: BoxShape.circle),
     );
-    positionChild(notice, Offset(0, size.height - foot.height));
-    final room = size.height - foot.height;
-    final body = layoutChild(
-      content,
-      BoxConstraints(
-        maxWidth: size.width,
-        minWidth: size.width,
-        maxHeight: room,
-      ),
-    );
-    final centred = (size.height - (body.height - _under)) / 2;
-    positionChild(
-      content,
-      Offset(0, centred.clamp(0.0, room - body.height).toDouble()),
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const DeviceArt(
+          kind: DeviceKind.phone,
+          wallpaper: DeviceWallpaper.self,
+          size: 72,
+        ),
+        const SizedBox(width: 16),
+        dot(),
+        dot(),
+        Container(
+          width: 32,
+          height: 32,
+          margin: const EdgeInsets.symmetric(horizontal: 6),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(color: c.fill, shape: BoxShape.circle),
+          child: WhisperIcon(WhisperGlyph.lock, size: 16, color: c.ink2),
+        ),
+        dot(),
+        dot(),
+        const SizedBox(width: 16),
+        deviceArtFor(
+          device,
+          size: deviceKindOf(device).handheld ? 72 : 92,
+          paired: false,
+        ),
+      ],
     );
   }
+}
+
+/// The six digits, each in its own tile, three and three: easy to compare one by
+/// one with the other screen.
+class _Digits extends StatelessWidget {
+  const _Digits({required this.code});
+
+  final String code;
 
   @override
-  bool shouldRelayout(_PairLayout oldDelegate) => false;
+  Widget build(BuildContext context) {
+    final c = context.wc;
+    Widget tile(String digit) => Container(
+      width: 44,
+      height: 58,
+      margin: const EdgeInsets.symmetric(horizontal: 3),
+      alignment: Alignment.center,
+      decoration: ShapeDecoration(
+        color: c.fill,
+        shape: RoundedSuperellipseBorder(
+          borderRadius: BorderRadius.circular(WhisperRadius.m),
+        ),
+      ),
+      child: Text(
+        digit,
+        style: TextStyle(
+          fontFamily: WhisperMono.family,
+          fontFamilyFallback: WhisperMono.fallback,
+          fontSize: WhisperSizes.pairCode,
+          height: 1,
+          fontWeight: FontWeight.w600,
+          color: c.ink,
+        ),
+      ),
+    );
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (var i = 0; i < code.length; i++) ...[
+            if (i == code.length ~/ 2) const SizedBox(width: 10),
+            tile(code[i]),
+          ],
+        ],
+      ),
+    );
+  }
 }

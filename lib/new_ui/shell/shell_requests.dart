@@ -2,7 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:whisper/l10n/app_localizations.dart';
+import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/new_ui/shell/shell_island.dart';
+import 'package:whisper/new_ui/shell/shell_parts.dart';
 import 'package:whisper/remote_files/fs_host.dart';
 import 'package:whisper/state/pairing_request.dart';
 import 'package:whisper/theme/whisper_icons.dart';
@@ -33,6 +35,9 @@ class RequestIslandSource extends IslandListSource {
     required String title,
     required String detail,
     required List<IslandAnswer> answers,
+    Widget? art,
+    String? code,
+    bool warning = false,
   }) {
     put(
       IslandActivity(
@@ -46,6 +51,9 @@ class RequestIslandSource extends IslandListSource {
           title: title,
           detail: detail,
           answers: answers,
+          art: art,
+          code: code,
+          warning: warning,
         ),
       ),
     );
@@ -71,15 +79,27 @@ class RequestPresenter extends IslandPresenter with MomentViews {
     required this.title,
     required this.detail,
     required this.answers,
+    this.art,
+    this.code,
+    this.warning = false,
   });
 
   final String title, detail;
   final List<IslandAnswer> answers;
 
-  static const _leading = WhisperIcon(
-    WhisperGlyph.ask,
+  /// Who is asking, when that is a device.
+  final Widget? art;
+
+  /// The digits to compare.
+  final String? code;
+
+  /// Not an ordinary question: a device's identity changed.
+  final bool warning;
+
+  Widget get _leading => WhisperIcon(
+    warning ? WhisperGlyph.warn : WhisperGlyph.ask,
     size: 17,
-    color: Color(0xFFFFB340),
+    color: const Color(0xFFFFB340),
   );
 
   @override
@@ -88,21 +108,31 @@ class RequestPresenter extends IslandPresenter with MomentViews {
     title: title,
     detail: detail,
     answers: answers,
+    // A warning shows the warning, not the device's picture.
+    art: warning
+        ? const WhisperIcon(
+            WhisperGlyph.warn,
+            size: 30,
+            color: Color(0xFFFFB340),
+          )
+        : art,
+    code: code,
   );
 
   @override
   Widget glyph(BuildContext context, double size) => _leading;
 
   @override
-  String describe(BuildContext context) => '$title $detail';
+  String describe(BuildContext context) => [title, detail, ?code].join(' ');
 }
 
 /// A device asks to browse this one's files.
 void askFileBrowse(
   AppLocalizations l10n,
   FileBrowseRequest request,
-  void Function(FileBrowseDecision) decide,
-) {
+  void Function(FileBrowseDecision) decide, {
+  DeviceData? device,
+}) {
   final id = fileBrowseAskId(request.peerId);
   void answer(FileBrowseDecision decision) {
     RequestIslandSource.shared.settle(id);
@@ -113,6 +143,7 @@ void askFileBrowse(
     id: id,
     title: l10n.remoteFilesPromptTitle(request.deviceName),
     detail: l10n.remoteFilesPromptBodyPhone,
+    art: device == null ? null : deviceArtFor(device, size: 48),
     answers: [
       IslandAnswer(
         l10n.remoteFilesAllowOnce,
@@ -185,9 +216,12 @@ void askPairing(
   RequestIslandSource.shared.ask(
     id: id,
     title: title,
-    detail:
-        '$why\n${request.pairingCode.substring(0, 3)} '
+    detail: why,
+    art: deviceArtFor(request.device, size: 48, paired: false),
+    code:
+        '${request.pairingCode.substring(0, 3)} '
         '${request.pairingCode.substring(3)}',
+    warning: request.reason == PairingReason.identityChanged,
     answers: [
       IslandAnswer(l10n.pairingApprove, () => answer(true), primary: true),
       IslandAnswer(
