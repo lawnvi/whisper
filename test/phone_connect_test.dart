@@ -156,7 +156,6 @@ void main() {
       await pumpPhone(tester, _page(camera));
       expect(find.byKey(const ValueKey('connect-qr')), findsOneWidget);
       expect(find.text('这台手机'), findsOneWidget);
-      expect(find.text(zh.phoneConnectQrHint), findsOneWidget);
       expect(find.text('192.168.31.8:10002'), findsOneWidget);
       expect(find.text('AAAA AAAA AAAA'), findsOneWidget);
       expect(find.text(zh.phoneConnectCopyLink), findsOneWidget);
@@ -184,7 +183,6 @@ void main() {
       await phoneSettle(tester);
       expect(camera.built, 1);
       expect(find.byKey(const ValueKey('fake-camera')), findsOneWidget);
-      expect(find.text(zh.phoneConnectScanHint), findsOneWidget);
 
       await tester.tap(find.text(zh.connectionQrTab));
       await phoneSettle(tester);
@@ -319,7 +317,6 @@ void main() {
         final message = tester.getCenter(find.text(zh.qrCameraUnavailable));
         final finder = tester.getRect(find.byType(AspectRatio).first);
         expect(finder.contains(message), isTrue);
-        expect(find.text(zh.phoneConnectScanHint), findsNothing);
         await tester.tap(find.byKey(const ValueKey('connect-open-settings')));
         await tester.pump();
         expect(opened, 1);

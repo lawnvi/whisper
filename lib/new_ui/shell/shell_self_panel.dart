@@ -128,12 +128,6 @@ class _ShellSelfPanelState extends State<ShellSelfPanel> {
                 ),
               ),
             ),
-            const SizedBox(height: 14),
-            Text(
-              l10n.shellSelfQrHint,
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: type.note, height: 1.5, color: c.ink2),
-            ),
           ],
           const SizedBox(height: 14),
           ShellGroup(

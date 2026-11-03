@@ -161,11 +161,6 @@ class _ShellLinkCreateState extends State<ShellLinkCreate> {
           ),
         ),
         const SizedBox(height: 14),
-        Text(
-          l10n.shellLinkCreateBody,
-          style: TextStyle(fontSize: type.note, height: 1.5, color: c.ink2),
-        ),
-        const SizedBox(height: 14),
         ShellField(
           label: l10n.shareLinkRoute,
           controller: _route,

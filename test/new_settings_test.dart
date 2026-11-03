@@ -363,7 +363,7 @@ const _macRows = ['辅助功能', '屏幕与系统录音', '仅系统录音'];
 
 Map<String, List<String>> _panelTable(_Os os) => {
   '通用': ['昵称', '外观', '语言', '文件保存到'],
-  '连接': ['服务端口', '自动连接互信设备', '接收电视投屏'],
+  '连接': ['服务端口', '自动连接已配对设备', '接收电视投屏'],
   '系统': [
     '开机自启动',
     '关闭时隐藏到托盘',
@@ -377,7 +377,7 @@ Map<String, List<String>> _panelTable(_Os os) => {
     '允许查看和操作本机窗口',
     '允许访问剪贴板',
     '自动同步剪贴板',
-    '播放别处声音的增益',
+    '播放音量',
     '键鼠共享滚轮速度',
   ],
   '通知': ['忽略安卓通知', '验证码写入剪贴板'],
@@ -422,11 +422,11 @@ void main() {
           '外观',
           '语言',
           '文件保存到',
-          '播放别处声音的增益',
+          '播放音量',
           '服务端口',
-          '自动连接互信设备',
+          '自动连接已配对设备',
           '后台保持连接',
-          '后台灵动岛',
+          '后台悬浮提示',
           '电池优化白名单',
           '窗口流转服务',
           '允许访问剪贴板',
@@ -455,9 +455,9 @@ void main() {
           '外观',
           '语言',
           '文件保存到',
-          '播放别处声音的增益',
+          '播放音量',
           '服务端口',
-          '自动连接互信设备',
+          '自动连接已配对设备',
           '允许访问剪贴板',
           '自动同步剪贴板',
           '忽略安卓通知',
@@ -475,9 +475,9 @@ void main() {
       await _section(t, '连接');
       expect(_rows(t), [
         '服务端口',
-        '自动连接互信设备',
+        '自动连接已配对设备',
         '后台保持连接',
-        '后台灵动岛',
+        '后台悬浮提示',
         '电池优化白名单',
         '窗口流转服务',
       ]);
@@ -873,7 +873,6 @@ void main() {
       await _section(t, '系统');
       expect(find.text('未安装'), findsOneWidget);
       expect(find.widgetWithText(SettingsButton, '安装'), findsOneWidget);
-      expect(find.text(_zh().windowsLockScreenInputHint), findsOneWidget);
 
       t.binding.defaultBinaryMessenger.setMockMethodCallHandler(
         _winChannel,

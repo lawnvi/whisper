@@ -22,6 +22,7 @@ import 'package:whisper/theme/whisper_ui.dart';
 import 'package:whisper/widget/glass_bottom_sheet.dart';
 import 'package:whisper/widget/subtle_motion.dart';
 import 'package:whisper/widget/segmented_tabs.dart';
+import 'package:whisper/remote_input/mobile_control_hints.dart';
 
 class MobileControlTarget {
   const MobileControlTarget(this.id, this.name, {this.platform = 'macos'});
@@ -93,6 +94,7 @@ class _MobileControlScreenState extends State<MobileControlScreen>
   Timer? _calibrationTimer;
   bool _available = false, _starting = false, _stopping = false;
   bool _awake = false;
+  final _hints = MobileControlHints();
   int _tab = 0, _keyPage = 0, _startGeneration = 0;
   String? _error;
   String _failureText(String reason) => switch (reason) {
@@ -125,6 +127,11 @@ class _MobileControlScreenState extends State<MobileControlScreen>
   @override
   void initState() {
     super.initState();
+    unawaited(
+      _hints.load().then((_) {
+        if (mounted) setState(() {});
+      }),
+    );
     for (final target in widget.targets?.call() ?? <MobileControlTarget>[]) {
       if (target.id == widget.peerId) _target = target;
     }
@@ -601,13 +608,6 @@ class _MobileControlScreenState extends State<MobileControlScreen>
                       l10n.mobileControlTarget,
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      l10n.mobileControlTargetHint,
-                      style: Theme.of(
-                        context,
-                      ).textTheme.bodyMedium?.copyWith(color: context.wc.ink2),
-                    ),
                   ],
                 ),
               ),
@@ -844,9 +844,12 @@ class _MobileControlScreenState extends State<MobileControlScreen>
                       : l10n.mobileControlMotionStart,
                   subtitle: _input.scrolling
                       ? l10n.mobileControlHoldScroll
-                      : _input.moving
-                      ? l10n.mobileControlMotionOnHint
-                      : l10n.mobileControlMotionOffHint,
+                      : _hints.once(
+                          _input.moving ? 'motion-on' : 'motion-off',
+                          _input.moving
+                              ? l10n.mobileControlMotionOnHint
+                              : l10n.mobileControlMotionOffHint,
+                        ),
                   icon: Icons.smartphone_rounded,
                   enabled: _enabled,
                   active: _input.moving || _input.scrolling,
@@ -1010,7 +1013,7 @@ class _MobileControlScreenState extends State<MobileControlScreen>
             child: _SurfaceLabel(
               icon: Icons.touch_app_outlined,
               label: l10n.mobileControlTouchpad,
-              subtitle: l10n.mobileControlTouchHint,
+              subtitle: _hints.once('touch', l10n.mobileControlTouchHint),
               enabled: _enabled,
             ),
           ),
@@ -1041,12 +1044,11 @@ class _MobileControlScreenState extends State<MobileControlScreen>
                 _textPanel(),
                 if (_editingText) ...[
                   const SizedBox(height: 12),
-                  Text(
-                    _target.platform.toLowerCase().contains('linux')
-                        ? l10n.mobileControlLinuxTextHint
-                        : l10n.mobileControlTextHint,
-                    style: TextStyle(color: context.wc.ink2),
-                  ),
+                  if (_target.platform.toLowerCase().contains('linux')
+                          ? l10n.mobileControlLinuxTextHint
+                          : _hints.once('text', l10n.mobileControlTextHint)
+                      case final hint?)
+                    Text(hint, style: TextStyle(color: context.wc.ink2)),
                   const SizedBox(height: 8),
                   TextButton(
                     onPressed: _coordinator.isSendingText

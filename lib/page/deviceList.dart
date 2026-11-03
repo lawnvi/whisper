@@ -569,7 +569,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
         ),
         MenuItem(
           key: 'clipboard',
-          label: AppLocalizations.of(context)?.menuClipboard ?? "发送剪切板",
+          label: AppLocalizations.of(context)?.menuClipboard ?? "发送剪贴板",
           onClick: (MenuItem item) {
             unawaited(
               _desktopQuickSendHotKey.captureClipboard(

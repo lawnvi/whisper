@@ -628,7 +628,7 @@ void main() {
     });
   });
 
-  group('发到…', () {
+  group('发送到…', () {
     testWidgets('this device\'s file: connected devices, then a copy', (
       tester,
     ) async {

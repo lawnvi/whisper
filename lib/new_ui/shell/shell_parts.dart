@@ -803,14 +803,14 @@ class ShellDeviceState extends StatelessWidget {
     super.key,
     required this.art,
     required this.title,
-    required this.body,
+    this.body,
     this.action,
     this.touch = false,
   });
 
   final Widget art;
   final String title;
-  final String body;
+  final String? body;
   final Widget? action;
   final bool touch;
 
@@ -835,15 +835,17 @@ class ShellDeviceState extends StatelessWidget {
                 color: c.ink,
               ),
             ),
-            const SizedBox(height: 6),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 360),
-              child: Text(
-                body,
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: type.body, color: c.ink2),
+            if (body case final body?) ...[
+              const SizedBox(height: 6),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 360),
+                child: Text(
+                  body,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: type.body, color: c.ink2),
+                ),
               ),
-            ),
+            ],
             if (action != null) ...[const SizedBox(height: 18), action!],
           ],
         ),

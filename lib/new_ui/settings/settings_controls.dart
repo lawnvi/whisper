@@ -477,11 +477,15 @@ class SettingsDisclosure extends StatelessWidget {
         Flexible(child: SettingsValue(value!)),
         const SizedBox(width: 10),
       ],
-      WhisperIcon(
-        WhisperGlyph.right,
-        size: 13,
-        weight: 2,
-        color: context.wc.ink3,
+      // The stroke sits inside its box: moved over, it ends where a switch ends.
+      Transform.translate(
+        offset: const Offset(3, 0),
+        child: WhisperIcon(
+          WhisperGlyph.right,
+          size: 13,
+          weight: 2,
+          color: context.wc.ink3,
+        ),
       ),
     ],
   );
@@ -880,7 +884,7 @@ class _MenuRowState<T> extends State<_MenuRow<T>> {
             padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
             decoration: BoxDecoration(
               color: lit ? c.accent : null,
-              borderRadius: BorderRadius.circular(WhisperRadius.xs),
+              borderRadius: BorderRadius.circular(WhisperRadius.menuRow),
             ),
             child: Row(
               children: [
@@ -1058,10 +1062,13 @@ class _SettingsFieldRowState extends State<SettingsFieldRow> {
                   child: field,
                   builder: (context, t, child) => Container(
                     constraints: const BoxConstraints(minHeight: 28),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: SettingsScope.of(context).touch ? 0 : 8,
                       vertical: 4,
                     ),
+                    transform: SettingsScope.of(context).touch
+                        ? null
+                        : Matrix4.translationValues(8, 0, 0),
                     alignment: Alignment.centerRight,
                     decoration: BoxDecoration(
                       color: Color.lerp(null, c.fill, t.clamp(0.0, 1.0)),
@@ -1491,7 +1498,7 @@ class SettingsServiceRow extends StatelessWidget {
   const SettingsServiceRow({
     super.key,
     required this.title,
-    required this.hint,
+    this.hint,
     required this.status,
     this.action,
     this.onAction,
@@ -1499,7 +1506,8 @@ class SettingsServiceRow extends StatelessWidget {
     this.onTap,
   });
 
-  final String title, hint, status;
+  final String title, status;
+  final String? hint;
   final String? action;
   final VoidCallback? onAction;
 
@@ -1598,13 +1606,13 @@ class SettingsNavItem extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 2),
       child: Pressable(
         scale: 1,
-        radius: WhisperRadius.s,
+        radius: WhisperRadius.m,
         selected: selected,
         onTap: onTap,
         child: SettingsHighlight(
           base: selected ? c.selected : null,
           hover: selected ? c.selected : c.fill,
-          radius: WhisperRadius.s,
+          radius: WhisperRadius.m,
           child: ConstrainedBox(
             constraints: const BoxConstraints(minHeight: 36),
             child: Padding(

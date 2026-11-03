@@ -76,7 +76,7 @@ void main() {
           WindowStreamFailureReason.helperUnavailable,
           WindowStreamPlatform.linux,
         ),
-        startsWith('loop-pc 还差一步'),
+        startsWith('请在 loop-pc 上注销'),
       );
       expect(
         text(

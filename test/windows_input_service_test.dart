@@ -533,7 +533,6 @@ void main() {
         final arb = File(path).readAsStringSync();
         for (final key in [
           'windowsLockScreenInput',
-          'windowsLockScreenInputHint',
           'windowsLockScreenInputDesc',
           'windowsLockScreenInputUninstallDesc',
           'windowsLockScreenInputNotInstalled',

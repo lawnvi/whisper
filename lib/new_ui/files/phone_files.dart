@@ -901,11 +901,6 @@ class _PhoneFilesViewState extends State<PhoneFilesView> {
                                 ),
                         ),
                       ],
-                      if (!_filtering &&
-                          crumbs.isNotEmpty &&
-                          box.maxWidth >= 330)
-                        _count(l10n, ready),
-                      const SizedBox(width: 2),
                       ShellIconButton(
                         key: const ValueKey('files-filter'),
                         glyph: _filtering
@@ -1123,7 +1118,6 @@ class _PhoneFilesViewState extends State<PhoneFilesView> {
       ),
       FilesDeviceState.offline => state(
         l10n.shellNotConnected(name),
-        body: l10n.shellNotConnectedFiles,
         action: retry(
           l10n.windowStreamRetry,
           () => unawaited(controller.retry()),

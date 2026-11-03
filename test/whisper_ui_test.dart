@@ -437,7 +437,7 @@ void main() {
             children: [
               WhisperBubble(
                 key: ValueKey('s'),
-                text: '好',
+                text: '完成',
                 mine: true,
                 touch: false,
               ),

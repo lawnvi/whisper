@@ -66,7 +66,7 @@ Widget _page(
                   PhoneAppsFlow(
                     title: '访达 · 下载',
                     detail: '运行于 这台，显示于 iMac',
-                    action: '拿回来',
+                    action: '收回',
                     onAction: () => tap('back'),
                   ),
                 ]

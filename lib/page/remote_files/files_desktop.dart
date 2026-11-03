@@ -1059,7 +1059,6 @@ class _FinderViewState extends State<FinderView> {
       ),
       FilesDeviceState.offline => state(
         l10n.shellNotConnected(name),
-        body: l10n.shellNotConnectedFiles,
         action: retry(
           l10n.windowStreamRetry,
           () => unawaited(controller.retry()),

@@ -54,14 +54,13 @@ class ShellDevicePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => _ShellDevicePageBody(page: this);
 
-  Widget _away(BuildContext context, String body) {
+  Widget _away(BuildContext context) {
     final l10n = context.shellL10n;
     if (!paired && session.isNearby) {
       return ShellDeviceState(
         touch: touch,
         art: deviceArtFor(device, size: 84, paired: false),
         title: l10n.shellNearbyTitle(device.name),
-        body: l10n.shellPairHint,
         action: ShellFilledButton(
           touch: touch,
           label: connecting ? l10n.shellConnecting : l10n.shellConnect,
@@ -79,7 +78,6 @@ class ShellDevicePage extends StatelessWidget {
             : DeviceArtState.offline,
       ),
       title: l10n.shellNotConnected(device.name),
-      body: body,
       action: ShellFilledButton(
         touch: touch,
         label: connecting ? l10n.shellConnecting : l10n.shellConnect,
@@ -241,7 +239,7 @@ class _ShellDevicePageBodyState extends State<_ShellDevicePageBody> {
     return SizedBox(
       height: 50,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 0, 12, 0),
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
         child: LayoutBuilder(
           builder: (context, constraints) => Row(
             children: [
@@ -344,7 +342,7 @@ class _ShellDevicePageBodyState extends State<_ShellDevicePageBody> {
                       value: page.rightInset,
                       spring: WhisperSprings.smooth,
                       builder: (context, right, child) => Padding(
-                        padding: EdgeInsets.fromLTRB(20, 0, 12 + right, 0),
+                        padding: EdgeInsets.fromLTRB(16, 0, 16 + right, 0),
                         child: child,
                       ),
                       child: LayoutBuilder(
@@ -432,7 +430,7 @@ class _ShellDevicePageBodyState extends State<_ShellDevicePageBody> {
                             !session.isConnected &&
                                 !page.paired &&
                                 session.isNearby
-                            ? page._away(context, l10n.shellNotConnectedFiles)
+                            ? page._away(context)
                             : WhisperTabView(
                                 index: page.tab,
                                 itemCount: 3,
@@ -444,17 +442,11 @@ class _ShellDevicePageBodyState extends State<_ShellDevicePageBody> {
                                   1 =>
                                     session.isConnected
                                         ? actions.buildFiles(context, device)
-                                        : page._away(
-                                            context,
-                                            l10n.shellNotConnectedFiles,
-                                          ),
+                                        : page._away(context),
                                   _ =>
                                     session.isConnected
                                         ? actions.buildApps(context, device)
-                                        : page._away(
-                                            context,
-                                            l10n.shellNotConnectedApps,
-                                          ),
+                                        : page._away(context),
                                 },
                               ),
                       ),

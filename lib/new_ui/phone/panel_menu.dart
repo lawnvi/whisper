@@ -263,7 +263,7 @@ class _PanelMenuRowState extends State<PanelMenuRow> {
             padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
             decoration: BoxDecoration(
               color: lit ? tint : Colors.transparent,
-              borderRadius: BorderRadius.circular(WhisperRadius.xs),
+              borderRadius: BorderRadius.circular(WhisperRadius.menuRow),
             ),
             child: Row(
               children: [

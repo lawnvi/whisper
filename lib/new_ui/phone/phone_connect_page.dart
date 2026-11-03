@@ -491,21 +491,6 @@ class _PhoneConnectPageState extends State<PhoneConnectPage>
                   ),
                   const SizedBox(height: 4),
                   // Not without a code, with its room kept for when one comes.
-                  Visibility(
-                    visible: text != null,
-                    maintainSize: true,
-                    maintainAnimation: true,
-                    maintainState: true,
-                    child: Text(
-                      l10n.phoneConnectQrHint,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: type.note,
-                        height: 1.4,
-                        color: c.ink2,
-                      ),
-                    ),
-                  ),
                 ],
               ),
             ),
@@ -573,7 +558,6 @@ class _PhoneConnectPageState extends State<PhoneConnectPage>
               child: AspectRatio(
                 aspectRatio: 1,
                 child: _Viewfinder(
-                  hint: l10n.phoneConnectScanHint,
                   denied: _cameraDenied
                       ? _CameraDenied(
                           message: l10n.qrCameraUnavailable,
@@ -799,14 +783,12 @@ class _RoundToolButton extends StatelessWidget {
 /// `.vf`: a dark square with a picture from the camera on it, four marks at 18%
 /// and a line going up and down between them.
 class _Viewfinder extends StatelessWidget {
-  const _Viewfinder({required this.hint, this.camera, this.denied});
+  const _Viewfinder({this.camera, this.denied});
 
-  final String hint;
   final Widget? camera, denied;
 
   @override
   Widget build(BuildContext context) {
-    const type = WhisperType(touch: true);
     final brightness = Theme.of(context).brightness;
     final denied = this.denied;
     return DecoratedBox(
@@ -834,24 +816,7 @@ class _Viewfinder extends StatelessWidget {
               ?camera,
               IgnorePointer(child: CustomPaint(painter: const _Marks())),
               if (denied == null) _ScanLine(side: box.maxWidth),
-              if (denied != null)
-                Center(child: denied)
-              else
-                Positioned(
-                  left: 12,
-                  right: 12,
-                  bottom: 14,
-                  child: Text(
-                    hint,
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: type.note,
-                      color: WhisperViewfinder.hint,
-                    ),
-                  ),
-                ),
+              if (denied != null) Center(child: denied),
             ],
           ),
         ),

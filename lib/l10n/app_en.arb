@@ -33,7 +33,7 @@
   "mobileControlTextHint": "Select a text field on the computer, then write and send.",
   "mobileControlTextTooLong": "Send up to 4 KiB of text at a time.",
   "mobileControlTextUnconfirmed": "Input was not confirmed. Draft kept; check the computer before resending.",
-  "mobileControlTextSent": "Text delivered to the system. Check the target app.",
+  "mobileControlTextSent": "Sent to the computer",
   "mobileControlSensitivity": "Motion pointer speed",
   "mobileControlCalibrate": "Calibrate",
   "mobileControlCalibrating": "Hold the phone still briefly…",
@@ -64,7 +64,7 @@
   "screenshotSelectionHint": "Click a window · Drag a region · Esc to cancel",
   "screenshotAdjustHint": "Drag to move · Drag edges to resize · Enter to copy · Esc to cancel",
   "screenshotConfirm": "Copy",
-  "screenshotCopied": "Screenshot copied. Paste it wherever you need.",
+  "screenshotCopied": "Screenshot copied",
   "screenshotPermissionDenied": "Allow Whisper to record the screen in System Settings → Privacy & Security, then restart Whisper.",
   "screenshotUnavailable": "Region capture is unavailable. On Linux, check that your desktop screenshot portal is installed and running.",
   "screenshotFailed": "Screenshot or clipboard copy failed. Please try again.",
@@ -220,9 +220,8 @@
   "localeNameZhHans": "Simplified Chinese",
   "localeNameEnglish": "English",
   "localeNameSpanish": "Spanish",
-  "autoConnectTrustedDevices": "Auto-connect mutually trusted devices",
+  "autoConnectTrustedDevices": "Auto-connect paired devices",
   "windowsLockScreenInput": "Keyboard and mouse on the lock screen and UAC",
-  "windowsLockScreenInputHint": "Type on the lock screen. The switch adds UAC prompts",
   "windowsLockScreenInputDesc": "This installs a system service so trusted devices can type on this PC's lock screen. Administrator approval is required.",
   "windowsLockScreenInputUninstallDesc": "After uninstalling, this PC's lock screen and UAC prompts can no longer be controlled. Administrator approval is required.",
   "windowsLockScreenInputNotInstalled": "Not installed",
@@ -249,18 +248,18 @@
   "androidBatteryOptimization": "Battery optimization",
   "fileTransferQueued": "Queued",
   "fileTransferPreparingResume": "Preparing resume {progress}%",
-  "fileTransferNegotiating": "Negotiating",
+  "fileTransferNegotiating": "Preparing",
   "fileTransferWaitingReconnect": "Waiting to reconnect {progress}%",
   "fileTransferPaused": "Paused",
   "fileTransferVerifying": "Verifying",
-  "fileTransferWaitingPeerVerification": "Waiting for peer verification",
+  "fileTransferWaitingPeerVerification": "Waiting for the other device to verify",
   "fileTransferFailedNotice": "File transfer failed",
   "fileTransferCanceled": "Canceled",
   "audioShareCaptureConnecting": "Capture side: connecting to remote speaker",
   "audioSharePlaybackPreparing": "Playback side: preparing shared audio",
   "audioShareCaptureActiveStop": "Capture side: sharing this device's audio, click to stop",
   "audioSharePlaybackActiveStop": "Playback side: playing shared audio, click to stop",
-  "audioShareStart": "Share this device's audio to peer",
+  "audioShareStart": "Share this device's audio",
   "remoteInputScrollMultiplierTitle": "Keyboard and mouse scroll speed",
   "audioShareUnsupportedCapture": "This device does not support system audio capture",
   "audioGroupSelectSinks": "Select playback devices",
@@ -275,19 +274,19 @@
   "audioGroupSyncFair": "Sync fair",
   "audioGroupSyncUnstable": "Sync unstable",
   "audioShareFailed": "Audio sharing failed: {error}",
-  "remoteInputSourceConnecting": "Keyboard and mouse sharing: connecting to peer",
+  "remoteInputSourceConnecting": "Keyboard and mouse sharing: connecting",
   "remoteInputSinkConnecting": "Keyboard and mouse sharing: preparing to receive control",
   "remoteInputEdgeActiveStop": "Keyboard and mouse sharing: edge crossing is enabled, click to stop",
-  "remoteInputSourceActiveStop": "Keyboard and mouse sharing: controlling peer, click to stop",
+  "remoteInputSourceActiveStop": "Keyboard and mouse sharing: in control, click to stop",
   "remoteInputSinkActiveStop": "Keyboard and mouse sharing: receiving control, click to stop",
   "remoteInputStart": "Enable keyboard and mouse sharing",
   "remoteInputStopCurrentFirst": "Stop the current keyboard and mouse sharing session first",
   "remoteInputLocalUnsupported": "This device does not support keyboard and mouse sharing",
   "remoteInputPeerUnsupported": "Connected device does not support keyboard and mouse sharing",
-  "remoteInputRequiresMutualTrust": "Keyboard and mouse sharing requires mutual trust",
-  "remoteInputPeerMustTrustThisDevice": "The peer has not trusted this device yet. Trust this device on the peer before sharing keyboard and mouse",
-  "remoteInputLayoutRequired": "Place the peer screen against this device's edge in the keyboard and mouse workspace first",
-  "remoteInputEnabledMoveToEdge": "Keyboard and mouse sharing is enabled. Move to the screen edge to control peer",
+  "remoteInputRequiresMutualTrust": "Keyboard and mouse sharing requires both devices to be paired",
+  "remoteInputPeerMustTrustThisDevice": "The other device hasn't trusted this one yet",
+  "remoteInputLayoutRequired": "Drag the other screen to this device's screen edge first",
+  "remoteInputEnabledMoveToEdge": "Sharing is on. Move to the screen edge to start",
   "remoteInputFailed": "Keyboard and mouse sharing failed: {error}",
   "remoteInputWorkspaceStop": "Stop",
   "remoteInputWorkspaceNoTargets": "No available desktop control targets",
@@ -331,7 +330,7 @@
       }
     }
   },
-  "updateAvailableBody": "You have {currentVersion}. Version {latestVersion} is ready. The download will be verified against GitHub's file digest before it opens.",
+  "updateAvailableBody": "Version {currentVersion} can be updated to {latestVersion}.",
   "@updateAvailableBody": {
     "placeholders": {
       "currentVersion": {
@@ -343,7 +342,7 @@
     }
   },
   "downloadAndInstallUpdate": "Update",
-  "viewRelease": "View release",
+  "viewRelease": "View release notes",
   "updateInstallerOpened": "The verified update is ready in the system installer",
   "updateInstallFailed": "The update installer couldn't be opened. Try again later",
   "aboutWhisper": "About Whisper",
@@ -582,14 +581,12 @@
   "mobileControlPointer": "Mouse",
   "mobileControlKeysTab": "Keyboard",
   "mobileControlSettings": "Pointer settings",
-  "mobileControlPrecisionHint": "Small movements give finer control. Turn faster to travel farther.",
   "mobileControlCalibrationRetry": "Keep the phone still and try calibrating again.",
   "mobileControlMotionStart": "Enable motion",
   "mobileControlMotionPause": "Pause motion",
   "mobileControlMotionOnHint": "Turn your wrist to move. Tap here to pause.",
   "mobileControlMotionOffHint": "Tap once, then move without holding the screen.",
   "mobileControlTarget": "Control target",
-  "mobileControlTargetHint": "Start again after switching.",
   "mobileControlPointerSpeed": "Touchpad pointer speed",
   "mobileControlScrollSpeed": "Scroll speed",
   "mobileControlPermissionDesktop": "Allow remote control on the computer, then start again. On Linux, accept the system remote-control prompt.",
@@ -676,7 +673,7 @@
       }
     }
   },
-  "windowStreamSent": "Sent to {device}. Tap the prompt there to view it.",
+  "windowStreamSent": "Sent to {device}",
   "@windowStreamSent": {
     "placeholders": {
       "device": {
@@ -775,7 +772,7 @@
   },
   "remoteFilesPromptBodyPhone": "If you allow it, it can see this phone's internal storage and copy, create, rename and delete files there. Deleted files can't be recovered.",
   "remoteFilesDeny": "Don't allow",
-  "remoteFilesAllowOnce": "Allow this time",
+  "remoteFilesAllowOnce": "Allow",
   "remoteFilesAllowAlways": "Always allow",
   "windowStreamTouchBlockedTitle": "{device} isn't responding to touch",
   "@windowStreamTouchBlockedTitle": {
@@ -1305,11 +1302,11 @@
       }
     }
   },
-  "shareLinkRoute": "Route",
+  "shareLinkRoute": "Link suffix",
   "@shareLinkRoute": {
     "description": "Label of the field for the path part of the link, e.g. the 'k7qm' in http://host:port/k7qm"
   },
-  "shareLinkShortRoute": "Short Route",
+  "shareLinkShortRoute": "Short suffix",
   "@shareLinkShortRoute": {
     "description": "Switch that makes the generated route 4 characters long"
   },
@@ -1321,7 +1318,7 @@
   "@shareLinkCreate": {
     "description": "Primary button of the share-link sheet"
   },
-  "shareLinkRouteTaken": "Another link already uses this route",
+  "shareLinkRouteTaken": "Another link already uses this suffix",
   "@shareLinkRouteTaken": {
     "description": "Error under the route field"
   },
@@ -1329,7 +1326,7 @@
   "@shareLinkRouteInvalid": {
     "description": "Error under the route field"
   },
-  "shareLinkRouteReserved": "This route is reserved. Try another one.",
+  "shareLinkRouteReserved": "This suffix is reserved. Try another one.",
   "@shareLinkRouteReserved": {
     "description": "Error under the route field when the user typed a reserved word such as zip"
   },
@@ -1675,10 +1672,6 @@
       }
     }
   },
-  "shareWebFooterLan": "Files come straight from this device over your local network, not through the cloud.",
-  "@shareWebFooterLan": {
-    "description": "Web page footer explaining where the files come from"
-  },
   "shareWebPreviewTruncated": "Showing the first {size}. Download the file to see all of it.",
   "@shareWebPreviewTruncated": {
     "description": "Under a text preview that was cut short; size is like 32 KB",
@@ -1699,10 +1692,6 @@
   "shareLinkAddress": "Address",
   "@shareLinkAddress": {
     "description": "Row label for this device's network address in the share link details"
-  },
-  "shareLinksServiceFooter": "Devices on the same network can open a link in any browser. The server only runs while a link is on.",
-  "@shareLinksServiceFooter": {
-    "description": "Footer under the file server switch on the share links page"
   },
   "androidWindowServiceTitle": "Window flow service",
   "@androidWindowServiceTitle": {
@@ -1876,7 +1865,7 @@
   "@remoteFilesPromptBodyReadOnlyPhone": {
     "description": "Prompt body on a phone when 'Allow changes' is off."
   },
-  "islandOverlay": "Island in the background",
+  "islandOverlay": "Background alerts",
   "@islandOverlay": {
     "description": "Android settings row: the island drawn over other apps while Whisper is in the background"
   },
@@ -1958,8 +1947,6 @@
       }
     }
   },
-  "shellNotConnectedFiles": "Connect to browse its files.",
-  "shellNotConnectedApps": "Connect to see its windows and apps.",
   "shellConnect": "Connect",
   "shellConnecting": "Connecting…",
   "shellNearbyTitle": "{device} is nearby",
@@ -1970,7 +1957,6 @@
       }
     }
   },
-  "shellPairHint": "Once connecting, both devices show the same 6 digits.",
   "shellComposerOffline": "Connect {device} to send",
   "@shellComposerOffline": {
     "placeholders": {
@@ -1979,7 +1965,6 @@
       }
     }
   },
-  "shellSelfQrHint": "Scan this code on another device to connect to this one",
   "shellSelfNoLan": "This device isn't on a local network, so others can't find it",
   "shellSelfAddress": "Address",
   "shellSelfFingerprint": "Identity fingerprint",
@@ -1999,13 +1984,13 @@
       }
     }
   },
-  "shellCardTrust": "Connect without asking",
+  "shellCardTrust": "Accept connections automatically",
   "shellCardBrowse": "Browse my files",
   "shellCardChange": "Change my files",
   "shellCardAddress": "Address",
   "shellCardDiagnostics": "Connection diagnostics",
   "shellCardDisconnect": "Disconnect",
-  "shellCardRemove": "Remove this device",
+  "shellCardRemove": "Delete device",
   "shellCardSound": "Sound",
   "shellCardInput": "Input",
   "shellCardClipboard": "Clipboard",
@@ -2070,10 +2055,8 @@
   "shellSettingsPressShortcut": "Press a shortcut…",
   "shellSettingsAllowClipboard": "Allow clipboard access",
   "shellSettingsAutoClipboard": "Sync clipboard automatically",
-  "shellSettingsPlaybackGain": "Gain for sound from other devices",
+  "shellSettingsPlaybackGain": "Playback volume",
   "shellSettingsCopyCode": "Copy verification codes to clipboard",
-  "shellSettingsSharingNote": "Gain only affects sound played on this device, and too much can distort. Scroll speed only applies while this device is being controlled.",
-  "shellSettingsGainHint": "Too much can distort",
   "shellSettingsVersion": "Version",
   "shellSettingsVersionChecking": "Checking…",
   "shellSettingsQrAndAddress": "QR code and address",
@@ -2084,7 +2067,6 @@
   "shellSettingsAboutVersion": "Version {version}",
   "shellSettingsLinksOn": "{count, plural, =1{1 on} other{{count} on}}",
   "soundHeroIdleTitle": "Play on other devices",
-  "soundHeroIdleBody": "Pick a few devices and they play together.",
   "soundHeroPlaying": "{count, plural, =1{Playing on 1 device} other{Playing on {count} devices}}",
   "@soundHeroPlaying": {
     "placeholders": {
@@ -2155,7 +2137,6 @@
       }
     }
   },
-  "soundSinkHint": "To change the source, disconnect first",
   "soundSinkPaused": "Paused",
   "soundSinkResuming": "Resuming…",
   "soundGain": "Gain",
@@ -2169,7 +2150,6 @@
   },
   "soundResume": "Resume",
   "shareOpenSettings": "Turn on",
-  "inputHintIdle": "Drag screens to arrange them. The pointer crosses where edges touch.",
   "inputHintExit": "Press {shortcut} to take back the keyboard and mouse",
   "@inputHintExit": {
     "placeholders": {
@@ -2232,7 +2212,6 @@
       }
     }
   },
-  "inputControlledHint": "To control another computer, stop first.",
   "inputSwitchLabel": "Keyboard and mouse sharing",
   "inputScreenLabel": "{device}'s screen, {detail}",
   "@inputScreenLabel": {
@@ -2257,9 +2236,9 @@
   "shellPaletteEmpty": "Nothing found",
   "shellLinksServiceOff": "File service is off",
   "shellLinksServiceIdle": "No links are on, so the service isn't running",
-  "shellLinksFoot": "They don't need Whisper: on the same network, a browser can open it and download. It uses plain HTTP, so a password only stops casual opening.",
+  "shellLinksFoot": "Uses plain HTTP. The password only keeps casual visitors out.",
   "shellLinksEmptyTitle": "No links yet",
-  "shellLinksEmptyBody": "Pick some files to make a link. They don't need Whisper: a browser can open it and download.",
+  "shellLinksEmptyBody": "Choose files to make a link. Others open it in a browser to download.",
   "shellLinksChoose": "Choose files",
   "shellLinksNew": "New",
   "shellLinkOff": "Off",
@@ -2398,8 +2377,6 @@
   "shellTraySendClipboardTo": "Send clipboard to",
   "shellTraySendFileTo": "Send file to",
   "shellTrayPlayOn": "Play sound on",
-  "phoneConnectQrHint": "Scan this code with another device",
-  "phoneConnectScanHint": "Point at the code on another device",
   "phoneConnectCopyLink": "Copy connection link",
   "phoneConnectCopied": "Connection link copied",
   "phoneConnectCopyFailed": "Couldn’t copy. Try again",
@@ -2423,7 +2400,7 @@
     }
   },
   "pickerSendText": "Send this text to",
-  "phoneFilesCopied": "{count} copied. Paste them in the folder you want",
+  "phoneFilesCopied": "{count} copied",
   "@phoneFilesCopied": {
     "placeholders": {
       "count": {
@@ -2440,7 +2417,6 @@
       }
     }
   },
-  "shellLinkCreateBody": "Devices on the same network can open it in a browser and download.",
   "shellLinkPasswordOptional": "Password (optional)",
   "shellAppsShownOn": "Runs here, shown on {device}",
   "@shellAppsShownOn": {
@@ -2450,7 +2426,7 @@
       }
     }
   },
-  "shellAppsBringBack": "Bring back",
+  "shellAppsBringBack": "Take back",
   "shellManualConnectTitle": "Connect by address",
   "shellManualConnectField": "Address and port",
   "shellLinksChooseFolder": "Choose folder",

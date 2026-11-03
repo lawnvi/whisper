@@ -271,6 +271,10 @@ abstract final class WhisperRadius {
       s = 10.0,
       m = 14.0,
       l = 20.0,
+          /// A row in a menu: the menu's [m] less its padding of 5, so the corners
+          /// run parallel.
+          menuRow =
+          9.0,
       bubble = 18.0,
       composer = 26.0,
       tray = 24.0,

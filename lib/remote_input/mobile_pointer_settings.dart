@@ -67,10 +67,6 @@ class MobilePointerSettings extends StatelessWidget {
               onChangeEnd: (value) =>
                   unawaited(LocalSetting().setMobileInputSensitivity(value)),
             ),
-            Text(
-              l10n.mobileControlPrecisionHint,
-              style: TextStyle(color: context.wc.ink2),
-            ),
             const SizedBox(height: 24),
             SizedBox(
               width: double.infinity,

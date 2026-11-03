@@ -199,7 +199,7 @@ abstract class AppLocalizations {
   /// No description provided for @remoteInputPeerControlling.
   ///
   /// In zh, this message translates to:
-  /// **'正在控制此设备'**
+  /// **'正在控制本机'**
   String get remoteInputPeerControlling;
 
   /// No description provided for @remoteInputPeerReceiving.
@@ -301,13 +301,13 @@ abstract class AppLocalizations {
   /// No description provided for @mobileControlTextUnconfirmed.
   ///
   /// In zh, this message translates to:
-  /// **'未确认输入结果，草稿已保留。请查看电脑后再决定是否重发。'**
+  /// **'未确认是否输入成功，草稿已保留'**
   String get mobileControlTextUnconfirmed;
 
   /// No description provided for @mobileControlTextSent.
   ///
   /// In zh, this message translates to:
-  /// **'文字已交给电脑系统，请查看目标应用。'**
+  /// **'已发送到电脑'**
   String get mobileControlTextSent;
 
   /// No description provided for @mobileControlSensitivity.
@@ -337,7 +337,7 @@ abstract class AppLocalizations {
   /// No description provided for @mobileControlReceiving.
   ///
   /// In zh, this message translates to:
-  /// **'此电脑正由 {name} 控制'**
+  /// **'本机正由 {name} 控制'**
   String mobileControlReceiving(String name);
 
   /// No description provided for @mobileControlShortcutHint.
@@ -385,7 +385,7 @@ abstract class AppLocalizations {
   /// No description provided for @screenshotCopied.
   ///
   /// In zh, this message translates to:
-  /// **'截图已复制，可自行粘贴使用'**
+  /// **'截图已复制'**
   String get screenshotCopied;
 
   /// No description provided for @screenshotPermissionDenied.
@@ -505,7 +505,7 @@ abstract class AppLocalizations {
   /// No description provided for @allow.
   ///
   /// In zh, this message translates to:
-  /// **'同意'**
+  /// **'允许'**
   String get allow;
 
   /// No description provided for @refuse.
@@ -535,13 +535,13 @@ abstract class AppLocalizations {
   /// No description provided for @trust.
   ///
   /// In zh, this message translates to:
-  /// **'自动接入'**
+  /// **'自动接受连接'**
   String get trust;
 
   /// No description provided for @writeClipboard.
   ///
   /// In zh, this message translates to:
-  /// **'写入剪切板'**
+  /// **'写入剪贴板'**
   String get writeClipboard;
 
   /// No description provided for @deleteDevice.
@@ -559,7 +559,7 @@ abstract class AppLocalizations {
   /// No description provided for @clipboardAutoSync.
   ///
   /// In zh, this message translates to:
-  /// **'自动同步剪切板'**
+  /// **'自动同步剪贴板'**
   String get clipboardAutoSync;
 
   /// No description provided for @close2tray.
@@ -613,7 +613,7 @@ abstract class AppLocalizations {
   /// No description provided for @menuClipboard.
   ///
   /// In zh, this message translates to:
-  /// **'发送剪切板'**
+  /// **'发送剪贴板'**
   String get menuClipboard;
 
   /// No description provided for @menuSendFile.
@@ -685,7 +685,7 @@ abstract class AppLocalizations {
   /// No description provided for @deleteDeviceDesc.
   ///
   /// In zh, this message translates to:
-  /// **'断开连接并删除与此设备的所有消息，不可恢复'**
+  /// **'断开连接并删除与该设备的所有消息，不可恢复'**
   String get deleteDeviceDesc;
 
   /// No description provided for @brokeConnectTitle.
@@ -793,7 +793,7 @@ abstract class AppLocalizations {
   /// No description provided for @openInFinder.
   ///
   /// In zh, this message translates to:
-  /// **'在Finder中显示'**
+  /// **'在访达中显示'**
   String get openInFinder;
 
   /// No description provided for @openInDir.
@@ -859,7 +859,7 @@ abstract class AppLocalizations {
   /// No description provided for @noMessagesYet.
   ///
   /// In zh, this message translates to:
-  /// **'还没有消息'**
+  /// **'没有消息'**
   String get noMessagesYet;
 
   /// No description provided for @sharedFile.
@@ -889,7 +889,7 @@ abstract class AppLocalizations {
   /// No description provided for @autoConnectTrustedDevices.
   ///
   /// In zh, this message translates to:
-  /// **'自动连接互信设备'**
+  /// **'自动连接已配对设备'**
   String get autoConnectTrustedDevices;
 
   /// No description provided for @windowsLockScreenInput.
@@ -898,16 +898,10 @@ abstract class AppLocalizations {
   /// **'锁屏与 UAC 时接收键鼠'**
   String get windowsLockScreenInput;
 
-  /// No description provided for @windowsLockScreenInputHint.
-  ///
-  /// In zh, this message translates to:
-  /// **'锁屏时可输入密码，开关控制 UAC 提示'**
-  String get windowsLockScreenInputHint;
-
   /// No description provided for @windowsLockScreenInputDesc.
   ///
   /// In zh, this message translates to:
-  /// **'将安装系统服务，让互信设备可在本机锁屏时输入密码。需要管理员确认。'**
+  /// **'将安装系统服务，让已配对设备可在本机锁屏时输入密码。需要管理员确认。'**
   String get windowsLockScreenInputDesc;
 
   /// No description provided for @windowsLockScreenInputUninstallDesc.
@@ -979,13 +973,13 @@ abstract class AppLocalizations {
   /// No description provided for @windowsElevatedInputEnableDesc.
   ///
   /// In zh, this message translates to:
-  /// **'开启后互信设备可操作 UAC 提示，但本机上以你身份运行的程序也能借此绕过 UAC。需要管理员确认。'**
+  /// **'开启后已配对设备可操作 UAC 提示，但本机上以你身份运行的程序也能借此绕过 UAC。需要管理员确认。'**
   String get windowsElevatedInputEnableDesc;
 
   /// No description provided for @windowsElevatedInputDisableDesc.
   ///
   /// In zh, this message translates to:
-  /// **'关闭后互信设备无法操作 UAC 提示，锁屏输入不受影响。需要管理员确认。'**
+  /// **'关闭后已配对设备无法操作 UAC 提示，锁屏输入不受影响。需要管理员确认。'**
   String get windowsElevatedInputDisableDesc;
 
   /// No description provided for @windowsElevatedInputEnable.
@@ -1063,7 +1057,7 @@ abstract class AppLocalizations {
   /// No description provided for @fileTransferNegotiating.
   ///
   /// In zh, this message translates to:
-  /// **'协商中'**
+  /// **'正在准备'**
   String get fileTransferNegotiating;
 
   /// No description provided for @fileTransferWaitingReconnect.
@@ -1087,7 +1081,7 @@ abstract class AppLocalizations {
   /// No description provided for @fileTransferWaitingPeerVerification.
   ///
   /// In zh, this message translates to:
-  /// **'等待对端校验'**
+  /// **'等待对方校验'**
   String get fileTransferWaitingPeerVerification;
 
   /// No description provided for @fileTransferFailedNotice.
@@ -1129,7 +1123,7 @@ abstract class AppLocalizations {
   /// No description provided for @audioShareStart.
   ///
   /// In zh, this message translates to:
-  /// **'把本机声音共享给对端'**
+  /// **'把本机声音共享给对方'**
   String get audioShareStart;
 
   /// No description provided for @remoteInputScrollMultiplierTitle.
@@ -1219,7 +1213,7 @@ abstract class AppLocalizations {
   /// No description provided for @remoteInputSourceConnecting.
   ///
   /// In zh, this message translates to:
-  /// **'键鼠共享：正在连接对端'**
+  /// **'键鼠共享：正在连接对方'**
   String get remoteInputSourceConnecting;
 
   /// No description provided for @remoteInputSinkConnecting.
@@ -1237,7 +1231,7 @@ abstract class AppLocalizations {
   /// No description provided for @remoteInputSourceActiveStop.
   ///
   /// In zh, this message translates to:
-  /// **'键鼠共享：正在控制对端，点击停止'**
+  /// **'键鼠共享：正在控制对方，点击停止'**
   String get remoteInputSourceActiveStop;
 
   /// No description provided for @remoteInputSinkActiveStop.
@@ -1273,25 +1267,25 @@ abstract class AppLocalizations {
   /// No description provided for @remoteInputRequiresMutualTrust.
   ///
   /// In zh, this message translates to:
-  /// **'键鼠共享需要互信设备'**
+  /// **'键鼠共享需要两台设备已配对'**
   String get remoteInputRequiresMutualTrust;
 
   /// No description provided for @remoteInputPeerMustTrustThisDevice.
   ///
   /// In zh, this message translates to:
-  /// **'对端还没有信任本机，请先在对端信任本机后再共享键鼠'**
+  /// **'对方还没有信任本机，请先在对方设备上信任本机'**
   String get remoteInputPeerMustTrustThisDevice;
 
   /// No description provided for @remoteInputLayoutRequired.
   ///
   /// In zh, this message translates to:
-  /// **'请先在键鼠工作区把对端屏幕贴到本机边缘'**
+  /// **'请先把对方屏幕拖到本机屏幕边缘'**
   String get remoteInputLayoutRequired;
 
   /// No description provided for @remoteInputEnabledMoveToEdge.
   ///
   /// In zh, this message translates to:
-  /// **'键鼠共享已启用，移动到屏幕边缘开始控制对端'**
+  /// **'键鼠共享已开启，移到屏幕边缘开始控制对方'**
   String get remoteInputEnabledMoveToEdge;
 
   /// No description provided for @remoteInputFailed.
@@ -1471,7 +1465,7 @@ abstract class AppLocalizations {
   /// No description provided for @updateAvailableBody.
   ///
   /// In zh, this message translates to:
-  /// **'当前版本 {currentVersion}，可更新到 {latestVersion}。安装前会校验 GitHub 提供的文件哈希。'**
+  /// **'当前版本 {currentVersion}，可更新到 {latestVersion}。'**
   String updateAvailableBody(String currentVersion, String latestVersion);
 
   /// No description provided for @downloadAndInstallUpdate.
@@ -1483,7 +1477,7 @@ abstract class AppLocalizations {
   /// No description provided for @viewRelease.
   ///
   /// In zh, this message translates to:
-  /// **'查看 Release'**
+  /// **'查看更新说明'**
   String get viewRelease;
 
   /// No description provided for @updateInstallerOpened.
@@ -2173,7 +2167,7 @@ abstract class AppLocalizations {
   /// No description provided for @castRequestTitle.
   ///
   /// In zh, this message translates to:
-  /// **'允许这台设备投屏吗？'**
+  /// **'允许该设备投屏吗？'**
   String get castRequestTitle;
 
   /// No description provided for @castRequestMessage.
@@ -2230,12 +2224,6 @@ abstract class AppLocalizations {
   /// **'指针设置'**
   String get mobileControlSettings;
 
-  /// No description provided for @mobileControlPrecisionHint.
-  ///
-  /// In zh, this message translates to:
-  /// **'慢转精细定位，快转大幅移动。'**
-  String get mobileControlPrecisionHint;
-
   /// No description provided for @mobileControlCalibrationRetry.
   ///
   /// In zh, this message translates to:
@@ -2271,12 +2259,6 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'控制目标'**
   String get mobileControlTarget;
-
-  /// No description provided for @mobileControlTargetHint.
-  ///
-  /// In zh, this message translates to:
-  /// **'切换后需重新开始控制。'**
-  String get mobileControlTargetHint;
 
   /// No description provided for @mobileControlPointerSpeed.
   ///
@@ -2485,7 +2467,7 @@ abstract class AppLocalizations {
   /// No description provided for @folderSkipWriteFailed.
   ///
   /// In zh, this message translates to:
-  /// **'无法保存到这台设备'**
+  /// **'无法保存到本机'**
   String get folderSkipWriteFailed;
 
   /// No description provided for @folderSkipNameCollision.
@@ -2563,7 +2545,7 @@ abstract class AppLocalizations {
   /// No description provided for @windowStreamDisplaced.
   ///
   /// In zh, this message translates to:
-  /// **'已回到手机上，点按拿回来'**
+  /// **'已回到手机上，点按收回'**
   String get windowStreamDisplaced;
 
   /// No description provided for @windowStreamSecureBlocked.
@@ -2581,37 +2563,37 @@ abstract class AppLocalizations {
   /// No description provided for @windowStreamDisconnected.
   ///
   /// In zh, this message translates to:
-  /// **'连接已断开，可以关闭这个窗口'**
+  /// **'连接已断开'**
   String get windowStreamDisconnected;
 
   /// No description provided for @windowStreamUnauthorized.
   ///
   /// In zh, this message translates to:
-  /// **'请在手机上允许这台电脑调试'**
+  /// **'请在手机上允许本机调试'**
   String get windowStreamUnauthorized;
 
   /// No description provided for @windowStreamDeviceOffline.
   ///
   /// In zh, this message translates to:
-  /// **'手机暂时连不上，请重新插拔数据线或重新打开无线调试'**
+  /// **'无法连接手机，请重新插拔数据线或重新打开无线调试'**
   String get windowStreamDeviceOffline;
 
   /// No description provided for @windowStreamAdbMissing.
   ///
   /// In zh, this message translates to:
-  /// **'没有找到 adb，请先安装 Android 平台工具'**
+  /// **'未找到 adb，请安装 Android 平台工具'**
   String get windowStreamAdbMissing;
 
   /// No description provided for @windowStreamAdbFailed.
   ///
   /// In zh, this message translates to:
-  /// **'adb 服务没能启动'**
+  /// **'adb 服务启动失败'**
   String get windowStreamAdbFailed;
 
   /// No description provided for @windowStreamUnsupported.
   ///
   /// In zh, this message translates to:
-  /// **'这台电脑暂时还不能打开手机应用窗口'**
+  /// **'本机暂不支持打开手机应用窗口'**
   String get windowStreamUnsupported;
 
   /// No description provided for @windowStreamSearchApps.
@@ -2647,13 +2629,13 @@ abstract class AppLocalizations {
   /// No description provided for @windowStreamOpenFailed.
   ///
   /// In zh, this message translates to:
-  /// **'没能打开这个应用'**
+  /// **'无法打开此应用'**
   String get windowStreamOpenFailed;
 
   /// No description provided for @windowStreamNoApps.
   ///
   /// In zh, this message translates to:
-  /// **'没有读到应用'**
+  /// **'未读取到应用'**
   String get windowStreamNoApps;
 
   /// No description provided for @windowStreamSpaceTitle.
@@ -2683,7 +2665,7 @@ abstract class AppLocalizations {
   /// No description provided for @windowStreamNoDevices.
   ///
   /// In zh, this message translates to:
-  /// **'还没有可用的设备'**
+  /// **'没有可用设备'**
   String get windowStreamNoDevices;
 
   /// No description provided for @windowStreamNoDevicesHintDesktop.
@@ -2695,13 +2677,13 @@ abstract class AppLocalizations {
   /// No description provided for @windowStreamNoDevicesHintMobile.
   ///
   /// In zh, this message translates to:
-  /// **'在 Mac 上打开 Whisper，并和这台设备互相信任后，Mac 的窗口会出现在这里。'**
+  /// **'在 Mac 上打开 Whisper 并完成配对后，Mac 的窗口会显示在这里。'**
   String get windowStreamNoDevicesHintMobile;
 
   /// No description provided for @windowStreamLoadFailed.
   ///
   /// In zh, this message translates to:
-  /// **'没能读取这台设备的应用'**
+  /// **'无法读取该设备的应用'**
   String get windowStreamLoadFailed;
 
   /// No description provided for @windowStreamBackToSpace.
@@ -2719,25 +2701,25 @@ abstract class AppLocalizations {
   /// No description provided for @windowStreamSourceLocked.
   ///
   /// In zh, this message translates to:
-  /// **'这台电脑已锁屏，解锁后才能流转它的窗口'**
+  /// **'该电脑已锁屏，解锁后才能流转窗口'**
   String get windowStreamSourceLocked;
 
   /// No description provided for @windowStreamCapturePermission.
   ///
   /// In zh, this message translates to:
-  /// **'这台电脑还没允许 Whisper 录屏，请在它的“系统设置 › 隐私与安全性 › 录屏”里打开'**
+  /// **'该电脑未允许 Whisper 录屏，请在“系统设置 › 隐私与安全性 › 录屏”中开启'**
   String get windowStreamCapturePermission;
 
   /// No description provided for @windowStreamUntrusted.
   ///
   /// In zh, this message translates to:
-  /// **'这台手机的 Whisper 还没和本机配对。在手机上打开 Whisper，连接本机并确认配对后才能流转'**
+  /// **'该手机的 Whisper 尚未与本机配对，请在手机上连接本机并确认配对'**
   String get windowStreamUntrusted;
 
   /// No description provided for @windowStreamWhisperMissing.
   ///
   /// In zh, this message translates to:
-  /// **'这台手机上没有可用的 Whisper。装上最新版 Whisper 并和本机配对后才能流转'**
+  /// **'该手机上没有可用的 Whisper，请安装最新版并与本机配对'**
   String get windowStreamWhisperMissing;
 
   /// No description provided for @windowStreamNotPaired.
@@ -2749,19 +2731,19 @@ abstract class AppLocalizations {
   /// No description provided for @windowStreamSendTo.
   ///
   /// In zh, this message translates to:
-  /// **'送到 {device}'**
+  /// **'发送到 {device}'**
   String windowStreamSendTo(String device);
 
   /// No description provided for @windowStreamSent.
   ///
   /// In zh, this message translates to:
-  /// **'已送到 {device}，在那台设备上点开即可查看'**
+  /// **'已发送到 {device}'**
   String windowStreamSent(String device);
 
   /// No description provided for @windowStreamSendFailed.
   ///
   /// In zh, this message translates to:
-  /// **'没能送过去，请确认那台设备连着本机'**
+  /// **'发送失败，请确认该设备已连接本机'**
   String get windowStreamSendFailed;
 
   /// No description provided for @windowStreamSendUnavailable.
@@ -2779,7 +2761,7 @@ abstract class AppLocalizations {
   /// No description provided for @windowStreamOfferTitle.
   ///
   /// In zh, this message translates to:
-  /// **'{device} 送来了一个窗口'**
+  /// **'{device} 发来一个窗口'**
   String windowStreamOfferTitle(String device);
 
   /// No description provided for @windowStreamOfferView.
@@ -2809,7 +2791,7 @@ abstract class AppLocalizations {
   /// No description provided for @remoteFilesOffline.
   ///
   /// In zh, this message translates to:
-  /// **'{device} 现在没有连接本机'**
+  /// **'{device} 未连接本机'**
   String remoteFilesOffline(String device);
 
   /// No description provided for @remoteFilesUnsupported.
@@ -2821,7 +2803,7 @@ abstract class AppLocalizations {
   /// No description provided for @remoteFilesEmptyFolder.
   ///
   /// In zh, this message translates to:
-  /// **'这个文件夹是空的'**
+  /// **'空文件夹'**
   String get remoteFilesEmptyFolder;
 
   /// No description provided for @remoteFilesNewFolder.
@@ -2857,19 +2839,19 @@ abstract class AppLocalizations {
   /// No description provided for @remoteFilesDeleteForever.
   ///
   /// In zh, this message translates to:
-  /// **'要永久删除这 {count} 项吗？这台设备没有废纸篓，删除后无法恢复。'**
+  /// **'要永久删除这 {count} 项吗？该设备没有废纸篓，删除后无法恢复。'**
   String remoteFilesDeleteForever(int count);
 
   /// No description provided for @remoteFilesFailed.
   ///
   /// In zh, this message translates to:
-  /// **'操作没有完成'**
+  /// **'操作失败'**
   String get remoteFilesFailed;
 
   /// No description provided for @remoteFilesNameExists.
   ///
   /// In zh, this message translates to:
-  /// **'这里已经有同名的文件或文件夹'**
+  /// **'已存在同名项目'**
   String get remoteFilesNameExists;
 
   /// No description provided for @remoteFilesShowHidden.
@@ -2953,7 +2935,7 @@ abstract class AppLocalizations {
   /// No description provided for @remoteFilesPromptTitle.
   ///
   /// In zh, this message translates to:
-  /// **'{device} 想浏览你的文件'**
+  /// **'{device} 请求访问你的文件'**
   String remoteFilesPromptTitle(String device);
 
   /// No description provided for @remoteFilesPromptBodyPhone.
@@ -2971,7 +2953,7 @@ abstract class AppLocalizations {
   /// No description provided for @remoteFilesAllowOnce.
   ///
   /// In zh, this message translates to:
-  /// **'允许这一次'**
+  /// **'允许'**
   String get remoteFilesAllowOnce;
 
   /// No description provided for @remoteFilesAllowAlways.
@@ -2983,37 +2965,37 @@ abstract class AppLocalizations {
   /// No description provided for @windowStreamTouchBlockedTitle.
   ///
   /// In zh, this message translates to:
-  /// **'{device} 现在点不动了'**
+  /// **'{device} 无法操作'**
   String windowStreamTouchBlockedTitle(String device);
 
   /// No description provided for @windowStreamTouchBlockedBody.
   ///
   /// In zh, this message translates to:
-  /// **'{app} 留在后台的一个页面挡住了手机屏幕，手机收不到触摸。关掉这个页面就能恢复，{app} 不会被卸载，账号和记录都还在。'**
+  /// **'{app} 留在后台的页面挡住了手机屏幕，手机收不到触摸。关闭该页面即可恢复，不会卸载 {app}，账号和记录不受影响。'**
   String windowStreamTouchBlockedBody(String app);
 
   /// No description provided for @windowStreamTouchBlockedFix.
   ///
   /// In zh, this message translates to:
-  /// **'关掉这个页面'**
+  /// **'关闭该页面'**
   String get windowStreamTouchBlockedFix;
 
   /// No description provided for @windowStreamTouchBlockedLater.
   ///
   /// In zh, this message translates to:
-  /// **'以后再说'**
+  /// **'稍后'**
   String get windowStreamTouchBlockedLater;
 
   /// No description provided for @windowStreamTouchBlockedFixed.
   ///
   /// In zh, this message translates to:
-  /// **'好了，手机可以操作了'**
+  /// **'手机已恢复操作'**
   String get windowStreamTouchBlockedFixed;
 
   /// No description provided for @remoteFilesWaitingDetail.
   ///
   /// In zh, this message translates to:
-  /// **'Whisper 正在那台设备上询问是否让本机浏览文件。'**
+  /// **'正在等待对方允许'**
   String get remoteFilesWaitingDetail;
 
   /// No description provided for @remoteFilesAskAgain.
@@ -3139,7 +3121,7 @@ abstract class AppLocalizations {
   /// No description provided for @remoteFilesCopy.
   ///
   /// In zh, this message translates to:
-  /// **'拷贝'**
+  /// **'复制'**
   String get remoteFilesCopy;
 
   /// No description provided for @remoteFilesPaste.
@@ -3157,13 +3139,13 @@ abstract class AppLocalizations {
   /// No description provided for @remoteFilesSameDevice.
   ///
   /// In zh, this message translates to:
-  /// **'已经在这台设备上了'**
+  /// **'已在该设备上'**
   String get remoteFilesSameDevice;
 
   /// No description provided for @remoteFilesBetweenOthers.
   ///
   /// In zh, this message translates to:
-  /// **'只能在本机和另一台设备之间拷贝'**
+  /// **'只能在本机和另一台设备之间复制'**
   String get remoteFilesBetweenOthers;
 
   /// No description provided for @remoteFilesOpenFirst.
@@ -3193,19 +3175,19 @@ abstract class AppLocalizations {
   /// No description provided for @remoteFilesCopyToMenu.
   ///
   /// In zh, this message translates to:
-  /// **'拷贝到…'**
+  /// **'复制到…'**
   String get remoteFilesCopyToMenu;
 
   /// No description provided for @remoteFilesCopyHere.
   ///
   /// In zh, this message translates to:
-  /// **'拷贝到这里'**
+  /// **'复制到这里'**
   String get remoteFilesCopyHere;
 
   /// No description provided for @remoteFilesChooseDestination.
   ///
   /// In zh, this message translates to:
-  /// **'选好位置后点“拷贝到这里”'**
+  /// **'选择位置后点“复制到这里”'**
   String get remoteFilesChooseDestination;
 
   /// No description provided for @remoteFilesToday.
@@ -3223,7 +3205,7 @@ abstract class AppLocalizations {
   /// No description provided for @remoteFilesCopyToSubmenu.
   ///
   /// In zh, this message translates to:
-  /// **'拷贝到'**
+  /// **'复制到'**
   String get remoteFilesCopyToSubmenu;
 
   /// No description provided for @remoteFilesPasteInto.
@@ -3337,7 +3319,7 @@ abstract class AppLocalizations {
   /// No description provided for @windowStreamCloseFailed.
   ///
   /// In zh, this message translates to:
-  /// **'没能关闭这个窗口'**
+  /// **'无法关闭此窗口'**
   String get windowStreamCloseFailed;
 
   /// No description provided for @windowStreamOfferIgnore.
@@ -3385,7 +3367,7 @@ abstract class AppLocalizations {
   /// No description provided for @remoteFilesCopyToDevice.
   ///
   /// In zh, this message translates to:
-  /// **'拷贝到 {device} 的“{folder}”'**
+  /// **'复制到 {device} 的“{folder}”'**
   String remoteFilesCopyToDevice(String device, String folder);
 
   /// No description provided for @remoteFilesFinder.
@@ -3409,19 +3391,19 @@ abstract class AppLocalizations {
   /// No description provided for @remoteFilesMountTooOld.
   ///
   /// In zh, this message translates to:
-  /// **'{device} 上的 Whisper 需要更新，才能在{app}中打开它的文件'**
+  /// **'{device} 上的 Whisper 需要更新，才能在{app}中打开文件'**
   String remoteFilesMountTooOld(String device, String app);
 
   /// No description provided for @remoteFilesMountDenied.
   ///
   /// In zh, this message translates to:
-  /// **'{device} 没有允许访问它的文件'**
+  /// **'{device} 未允许访问文件'**
   String remoteFilesMountDenied(String device);
 
   /// No description provided for @remoteFilesMountFailed.
   ///
   /// In zh, this message translates to:
-  /// **'{app}没能打开 {device} 的文件'**
+  /// **'{app}无法打开 {device} 的文件'**
   String remoteFilesMountFailed(String app, String device);
 
   /// No description provided for @remoteFilesMountNeedsFuse.
@@ -3433,7 +3415,7 @@ abstract class AppLocalizations {
   /// No description provided for @remoteFilesCopyFromDevice.
   ///
   /// In zh, this message translates to:
-  /// **'从 {device} 拷贝到“{folder}”'**
+  /// **'从 {device} 复制到“{folder}”'**
   String remoteFilesCopyFromDevice(String device, String folder);
 
   /// No description provided for @remoteFilesCopyLeft.
@@ -3487,7 +3469,7 @@ abstract class AppLocalizations {
   /// No description provided for @remoteFilesCopyFailedShort.
   ///
   /// In zh, this message translates to:
-  /// **'没有拷贝成功'**
+  /// **'复制失败'**
   String get remoteFilesCopyFailedShort;
 
   /// No description provided for @remoteFilesCopyCanceledShort.
@@ -3499,7 +3481,7 @@ abstract class AppLocalizations {
   /// No description provided for @remoteFilesCopyDoneShort.
   ///
   /// In zh, this message translates to:
-  /// **'已拷贝'**
+  /// **'已复制'**
   String get remoteFilesCopyDoneShort;
 
   /// No description provided for @remoteFilesCopyResume.
@@ -3517,7 +3499,7 @@ abstract class AppLocalizations {
   /// No description provided for @remoteFilesCopyStop.
   ///
   /// In zh, this message translates to:
-  /// **'停止拷贝'**
+  /// **'停止复制'**
   String get remoteFilesCopyStop;
 
   /// No description provided for @remoteFilesCopyShowAll.
@@ -3529,7 +3511,7 @@ abstract class AppLocalizations {
   /// No description provided for @remoteFilesCopyAlready.
   ///
   /// In zh, this message translates to:
-  /// **'这些项目已经在拷贝到这里了'**
+  /// **'这些项目正在复制到这里'**
   String get remoteFilesCopyAlready;
 
   /// No description provided for @remoteFilesTransfers.
@@ -3541,7 +3523,7 @@ abstract class AppLocalizations {
   /// No description provided for @remoteFilesTransfersEmpty.
   ///
   /// In zh, this message translates to:
-  /// **'还没有拷贝'**
+  /// **'没有传输记录'**
   String get remoteFilesTransfersEmpty;
 
   /// No description provided for @remoteFilesTransfersClear.
@@ -3595,43 +3577,43 @@ abstract class AppLocalizations {
   /// Toast when the same files are pasted into the same folder again right after a copy finished
   ///
   /// In zh, this message translates to:
-  /// **'刚刚已经拷贝过了'**
+  /// **'刚刚已复制'**
   String get remoteFilesCopyJustDone;
 
   /// Window stream: the source desktop is locked; shown on the viewing device.
   ///
   /// In zh, this message translates to:
-  /// **'{device} 已锁屏，解锁后才能流转它的窗口'**
+  /// **'{device} 已锁屏，解锁后才能流转窗口'**
   String windowStreamHostLocked(String device);
 
   /// Window stream: a Mac source lacks the Screen Recording permission; tells the viewer what to do on the Mac.
   ///
   /// In zh, this message translates to:
-  /// **'{device} 还没允许 Whisper 录屏。请在那台 Mac 的“系统设置 › 隐私与安全性 › 录屏与系统录音”里打开 Whisper'**
+  /// **'{device} 未允许 Whisper 录屏，请在该 Mac 的“系统设置 › 隐私与安全性 › 录屏与系统录音”中开启'**
   String windowStreamHostPermissionMac(String device);
 
   /// Window stream: a Windows or Linux source refused screen capture (privacy setting).
   ///
   /// In zh, this message translates to:
-  /// **'{device} 的系统不允许 Whisper 录制窗口。请在那台电脑的隐私设置里允许 Whisper 录屏，然后再试一次'**
+  /// **'{device} 不允许 Whisper 录制窗口，请在隐私设置中允许后重试'**
   String windowStreamHostPermission(String device);
 
   /// Window stream: a Linux (GNOME) source's Whisper Shell helper is not active yet; it becomes active after logging out and in once.
   ///
   /// In zh, this message translates to:
-  /// **'{device} 还差一步：请在那台电脑上注销并重新登录一次，之后就能流转它的窗口'**
+  /// **'请在 {device} 上注销并重新登录，之后才能流转窗口'**
   String windowStreamHostHelper(String device);
 
   /// Window stream: a Linux source runs a desktop other than GNOME or KDE Plasma on Wayland (X11, others), or KWin refused Whisper its screencast protocols.
   ///
   /// In zh, this message translates to:
-  /// **'{device} 的桌面暂不支持流转窗口，需要 GNOME 或 KDE Plasma（Wayland）'**
+  /// **'{device} 的桌面不支持流转窗口，需要 GNOME 或 KDE Plasma（Wayland）'**
   String windowStreamHostDesktopUnsupported(String device);
 
   /// Window stream: a Windows source's window belongs to an elevated (administrator) process.
   ///
   /// In zh, this message translates to:
-  /// **'这个窗口以管理员身份运行，Whisper 无法流转它。请在 {device} 上以普通身份重新打开这个应用'**
+  /// **'此窗口以管理员身份运行，无法流转。请在 {device} 上以普通身份重新打开'**
   String windowStreamHostElevated(String device);
 
   /// Window stream: the window excludes itself from screen capture (DRM, password managers).
@@ -3643,19 +3625,19 @@ abstract class AppLocalizations {
   /// Window stream: the source could not open a video encoder.
   ///
   /// In zh, this message translates to:
-  /// **'{device} 没能开始编码画面，请稍后再试'**
+  /// **'{device} 画面编码失败，请稍后重试'**
   String windowStreamHostEncoder(String device);
 
   /// Window stream: a Linux source's FFmpeg has no usable H.264 encoder (or FFmpeg is missing).
   ///
   /// In zh, this message translates to:
-  /// **'{device} 缺少 H.264 视频编码器，无法流转窗口。请在那台电脑上安装 FFmpeg，以及 x264 或 openh264 编码器'**
+  /// **'{device} 缺少 H.264 编码器，请安装 FFmpeg 以及 x264 或 openh264'**
   String windowStreamHostEncoderLinux(String device);
 
   /// Window stream: the source has no usable capture backend (generic).
   ///
   /// In zh, this message translates to:
-  /// **'{device} 暂时还不能流转窗口。请把那台设备上的 Whisper 更新到最新版'**
+  /// **'{device} 暂不支持流转窗口，请更新 Whisper'**
   String windowStreamHostUnsupported(String device);
 
   /// Window stream: a Windows source lacks Windows Graphics Capture.
@@ -3673,7 +3655,7 @@ abstract class AppLocalizations {
   /// Window stream: stands in for {device} when the source's name is unknown (lower case; the sentence start is capitalised in code).
   ///
   /// In zh, this message translates to:
-  /// **'那台设备'**
+  /// **'该设备'**
   String get windowStreamThatDevice;
 
   /// File browser: a Windows drive with a volume label, e.g. "Data (D:)".
@@ -3727,7 +3709,7 @@ abstract class AppLocalizations {
   /// Island: under 'Streaming to {device}'
   ///
   /// In zh, this message translates to:
-  /// **'{count} 个窗口正在那台设备上显示，可以被操作'**
+  /// **'{count} 个窗口正在该设备上显示'**
   String islandStreamedWindows(int count);
 
   /// Island button: stop streaming this phone's apps (same as the notification's button)
@@ -3781,13 +3763,13 @@ abstract class AppLocalizations {
   /// Label of the field for the path part of the link, e.g. the 'k7qm' in http://host:port/k7qm
   ///
   /// In zh, this message translates to:
-  /// **'路由'**
+  /// **'链接后缀'**
   String get shareLinkRoute;
 
   /// Switch that makes the generated route 4 characters long
   ///
   /// In zh, this message translates to:
-  /// **'简短路由'**
+  /// **'简短后缀'**
   String get shareLinkShortRoute;
 
   /// Label of the optional password field; also the placeholder of the password box on the web page
@@ -3805,19 +3787,19 @@ abstract class AppLocalizations {
   /// Error under the route field
   ///
   /// In zh, this message translates to:
-  /// **'已经有链接在用这个路由了'**
+  /// **'此后缀已被其他链接使用'**
   String get shareLinkRouteTaken;
 
   /// Error under the route field
   ///
   /// In zh, this message translates to:
-  /// **'路由要 2–32 个字符，只能用小写字母、数字、- 和 _'**
+  /// **'后缀需 2–32 个字符，只能使用小写字母、数字、- 和 _'**
   String get shareLinkRouteInvalid;
 
   /// Error under the route field when the user typed a reserved word such as zip
   ///
   /// In zh, this message translates to:
-  /// **'这个路由留作他用了，换一个吧'**
+  /// **'此后缀不可用，请更换'**
   String get shareLinkRouteReserved;
 
   /// Error when the selected files were moved or deleted before the link was created
@@ -3829,7 +3811,7 @@ abstract class AppLocalizations {
   /// Generic error when creating a share link fails
   ///
   /// In zh, this message translates to:
-  /// **'没能创建链接'**
+  /// **'创建链接失败'**
   String get shareLinkCreateFailed;
 
   /// Button / tooltip that copies the link address
@@ -3865,13 +3847,13 @@ abstract class AppLocalizations {
   /// File server status when it is switched on but no link is enabled
   ///
   /// In zh, this message translates to:
-  /// **'没有开着的链接，端口已关闭'**
+  /// **'没有开启的链接'**
   String get shareLinksServiceIdle;
 
   /// File server status when switched off
   ///
   /// In zh, this message translates to:
-  /// **'已关闭。链接都还在，只是暂时打不开。'**
+  /// **'已关闭，链接暂时无法打开'**
   String get shareLinksServiceOff;
 
   /// File server status
@@ -3907,13 +3889,13 @@ abstract class AppLocalizations {
   /// Status of a share link whose files were all moved or deleted
   ///
   /// In zh, this message translates to:
-  /// **'文件不见了'**
+  /// **'文件已移动或删除'**
   String get shareLinkStatusMissing;
 
   /// Status of a share link when some of its files were moved or deleted
   ///
   /// In zh, this message translates to:
-  /// **'部分文件不见了'**
+  /// **'部分文件已移动或删除'**
   String get shareLinkStatusPartlyMissing;
 
   /// How many times the link's pages were opened
@@ -3961,7 +3943,7 @@ abstract class AppLocalizations {
   /// Empty state title
   ///
   /// In zh, this message translates to:
-  /// **'还没有共享链接'**
+  /// **'没有共享链接'**
   String get shareLinksEmpty;
 
   /// Empty state detail on desktop
@@ -4003,31 +3985,31 @@ abstract class AppLocalizations {
   /// Web page
   ///
   /// In zh, this message translates to:
-  /// **'这个文件夹是空的'**
+  /// **'空文件夹'**
   String get shareWebEmptyFolder;
 
   /// Web page for an unknown or switched-off link
   ///
   /// In zh, this message translates to:
-  /// **'这个链接打不开'**
+  /// **'无法打开此链接'**
   String get shareWebNotFoundTitle;
 
   /// Web page for an unknown or switched-off link
   ///
   /// In zh, this message translates to:
-  /// **'链接可能已经关闭，或者地址输错了。请找分享的人确认一下。'**
+  /// **'链接可能已关闭或地址有误，请联系分享者确认。'**
   String get shareWebNotFoundDetail;
 
   /// Web page when a shared file was moved or deleted
   ///
   /// In zh, this message translates to:
-  /// **'文件不见了'**
+  /// **'文件已移动或删除'**
   String get shareWebMissingTitle;
 
   /// Web page when a shared file was moved or deleted
   ///
   /// In zh, this message translates to:
-  /// **'它可能被移动、改名或删除了。'**
+  /// **'请联系分享者确认。'**
   String get shareWebMissingDetail;
 
   /// Web page: link from an error page to the link's first page
@@ -4057,7 +4039,7 @@ abstract class AppLocalizations {
   /// Web page: error after a wrong password
   ///
   /// In zh, this message translates to:
-  /// **'密码不对，再试一次'**
+  /// **'密码错误，请重试'**
   String get shareWebPasswordWrong;
 
   /// Web page when a client is rate-limited
@@ -4069,25 +4051,25 @@ abstract class AppLocalizations {
   /// Web page when a client is rate-limited
   ///
   /// In zh, this message translates to:
-  /// **'请等 1 分钟再试。'**
+  /// **'请 1 分钟后重试。'**
   String get shareWebTooManyDetail;
 
   /// Web page for an unexpected server error
   ///
   /// In zh, this message translates to:
-  /// **'出了点问题'**
+  /// **'加载失败'**
   String get shareWebErrorTitle;
 
   /// Web page for an unexpected server error
   ///
   /// In zh, this message translates to:
-  /// **'请稍后再试。'**
+  /// **'请稍后重试。'**
   String get shareWebErrorDetail;
 
   /// Overlay message for a streamed window on Linux when no H.264 decoder can be loaded (native WSN_WINDOW_DECODE_ERROR with a = 1). Dart should set it with wsn_surface_set_visual(WSN_VISUAL_ERROR, message).
   ///
   /// In zh, this message translates to:
-  /// **'无法显示画面：这台电脑缺少 FFmpeg 视频解码库'**
+  /// **'无法显示画面：本机缺少 FFmpeg 视频解码库'**
   String get windowStreamDecoderMissing;
 
   /// Tooltip and accessibility label of the volume button in a streamed window (desktop).
@@ -4177,37 +4159,37 @@ abstract class AppLocalizations {
   /// Confirmation dialog before installing the helper.
   ///
   /// In zh, this message translates to:
-  /// **'Whisper 会给 GNOME 装一个小扩展：被流转的窗口在后台运行，键盘和鼠标由它转交。只有 Whisper 能使用它。装好后需要注销并重新登录一次。'**
+  /// **'将安装一个 GNOME 扩展，用于在后台运行被流转的窗口。安装后需要注销并重新登录。'**
   String get gnomeHelperInstallDesc;
 
   /// Confirmation dialog before updating the helper.
   ///
   /// In zh, this message translates to:
-  /// **'这个版本的 Whisper 带来了新的窗口流转组件。更新后需要注销并重新登录一次。'**
+  /// **'窗口流转组件有新版本，更新后需要注销并重新登录。'**
   String get gnomeHelperUpdateDesc;
 
   /// Dialog when the helper waits for a new login; the confirm button logs out (GNOME asks again).
   ///
   /// In zh, this message translates to:
-  /// **'组件已经装好，GNOME 要在重新登录后才会加载它。注销前请先保存好其他应用里的内容。'**
+  /// **'组件已安装，重新登录后生效。注销前请保存其他应用的内容。'**
   String get gnomeHelperReloginDesc;
 
   /// Dialog when the helper was switched off in GNOME Extensions.
   ///
   /// In zh, this message translates to:
-  /// **'窗口流转组件在 GNOME 的“扩展”里被关掉了。重新打开后，其他设备才能流转本机窗口。'**
+  /// **'窗口流转组件已在 GNOME 扩展中关闭，打开后其他设备才能流转本机窗口。'**
   String get gnomeHelperDisabledDesc;
 
   /// Dialog when all GNOME extensions are off; confirming turns user extensions back on.
   ///
   /// In zh, this message translates to:
-  /// **'GNOME 扩展目前全部关闭。打开扩展后，窗口流转组件才能运行（其他已装的扩展也会一起打开）。'**
+  /// **'GNOME 扩展已全部关闭，打开后窗口流转组件才能运行，其他扩展也会一起打开。'**
   String get gnomeHelperExtensionsOffDesc;
 
   /// Dialog when the helper is running (information only).
   ///
   /// In zh, this message translates to:
-  /// **'窗口流转组件正在运行。其他设备可以把本机窗口流转过去，窗口会在本机后台继续运行。'**
+  /// **'窗口流转组件正在运行。'**
   String get gnomeHelperReadyDesc;
 
   /// Button: install the helper.
@@ -4249,7 +4231,7 @@ abstract class AppLocalizations {
   /// Button: close an information dialog.
   ///
   /// In zh, this message translates to:
-  /// **'好'**
+  /// **'完成'**
   String get gnomeHelperDone;
 
   /// Toast after installing: log out and back in to finish.
@@ -4306,12 +4288,6 @@ abstract class AppLocalizations {
   /// **'来自 {device}'**
   String shareWebFrom(String device);
 
-  /// Web page footer explaining where the files come from
-  ///
-  /// In zh, this message translates to:
-  /// **'文件直接从这台设备经局域网传来，不经过云端。'**
-  String get shareWebFooterLan;
-
   /// Under a text preview that was cut short; size is like 32 KB
   ///
   /// In zh, this message translates to:
@@ -4336,12 +4312,6 @@ abstract class AppLocalizations {
   /// **'地址'**
   String get shareLinkAddress;
 
-  /// Footer under the file server switch on the share links page
-  ///
-  /// In zh, this message translates to:
-  /// **'同一局域网里的设备用浏览器打开链接就能下载。服务只在有开着的链接时运行。'**
-  String get shareLinksServiceFooter;
-
   /// Android page title: the on-phone service that lets other devices view and control this phone's apps.
   ///
   /// In zh, this message translates to:
@@ -4357,7 +4327,7 @@ abstract class AppLocalizations {
   /// Android window flow service subtitle when running: what it enables.
   ///
   /// In zh, this message translates to:
-  /// **'你信任的电脑现在可以在它们的流转里看到这台手机，打开手机上的应用来操作'**
+  /// **'已配对的电脑现在可以查看和操作本机应用'**
   String get androidWindowServiceRunningHint;
 
   /// Android window flow service status: set up before, but the agent is not running now (e.g. after a reboot).
@@ -4381,7 +4351,7 @@ abstract class AppLocalizations {
   /// Android window flow service subtitle when not set up: what the feature does.
   ///
   /// In zh, this message translates to:
-  /// **'开启后，这台手机的应用可以流转到你信任的电脑上查看和操作，手机留在后台'**
+  /// **'开启后，已配对的电脑可以查看和操作本机应用'**
   String get androidWindowServiceNeedsSetupHint;
 
   /// Android window flow service primary button: start the service.
@@ -4447,7 +4417,7 @@ abstract class AppLocalizations {
   /// Android setup step 3 subtitle.
   ///
   /// In zh, this message translates to:
-  /// **'把系统显示的 6 位配对码填到这里，Whisper 会和这台手机自己配对并开启服务'**
+  /// **'填入系统显示的 6 位配对码'**
   String get androidWindowServiceStep3Hint;
 
   /// Android setup pairing-code text field label.
@@ -4519,7 +4489,7 @@ abstract class AppLocalizations {
   /// Android window flow service hint shown when the phone cannot start the agent by itself (no bundled pairing): use a computer once.
   ///
   /// In zh, this message translates to:
-  /// **'把这台手机连到一台装了 Whisper、开着窗口流转的电脑一次，就能开启；之后其他电脑都能用'**
+  /// **'将本机连接一次装有 Whisper 并开启窗口流转的电脑即可开启'**
   String get androidWindowServiceComputerHint;
 
   /// Shown above an Android phone's (empty) window list on another device when the phone's window-flow service is not running.
@@ -4537,7 +4507,7 @@ abstract class AppLocalizations {
   /// File browser: under remoteFilesNoAnswer.
   ///
   /// In zh, this message translates to:
-  /// **'那台设备上的询问已经过期。请确认对方在设备旁，再试一次。'**
+  /// **'请求已过期，请确认对方在设备旁后重试。'**
   String get remoteFilesNoAnswerDetail;
 
   /// File browser: shown after the user stopped waiting for the other device to allow browsing; a button asks again.
@@ -4561,7 +4531,7 @@ abstract class AppLocalizations {
   /// Toast when trying to change files on a device whose user allows reading only.
   ///
   /// In zh, this message translates to:
-  /// **'{device} 只允许读取它的文件'**
+  /// **'{device} 只允许读取文件'**
   String remoteFilesReadOnlyHost(String device);
 
   /// Prompt body on a phone when 'Allow changes' is off.
@@ -4573,7 +4543,7 @@ abstract class AppLocalizations {
   /// Android settings row: the island drawn over other apps while Whisper is in the background
   ///
   /// In zh, this message translates to:
-  /// **'后台灵动岛'**
+  /// **'后台悬浮提示'**
   String get islandOverlay;
 
   /// Status of the background island: the permission is given
@@ -4645,25 +4615,25 @@ abstract class AppLocalizations {
   /// No description provided for @shellRowSoundHere.
   ///
   /// In zh, this message translates to:
-  /// **'声音放到这台'**
+  /// **'正在本机播放'**
   String get shellRowSoundHere;
 
   /// No description provided for @shellRowControllingThis.
   ///
   /// In zh, this message translates to:
-  /// **'正在控制这台'**
+  /// **'正在控制本机'**
   String get shellRowControllingThis;
 
   /// No description provided for @shellRowPointerThere.
   ///
   /// In zh, this message translates to:
-  /// **'键鼠正在控制它'**
+  /// **'正在控制该设备'**
   String get shellRowPointerThere;
 
   /// No description provided for @shellRowPlayingOurs.
   ///
   /// In zh, this message translates to:
-  /// **'放着这台的声音'**
+  /// **'正在播放本机声音'**
   String get shellRowPlayingOurs;
 
   /// No description provided for @shellRowWindows.
@@ -4750,18 +4720,6 @@ abstract class AppLocalizations {
   /// **'{device} 没有连接'**
   String shellNotConnected(String device);
 
-  /// No description provided for @shellNotConnectedFiles.
-  ///
-  /// In zh, this message translates to:
-  /// **'连接后可以浏览它的文件。'**
-  String get shellNotConnectedFiles;
-
-  /// No description provided for @shellNotConnectedApps.
-  ///
-  /// In zh, this message translates to:
-  /// **'连接后可以看到它的窗口和应用。'**
-  String get shellNotConnectedApps;
-
   /// No description provided for @shellConnect.
   ///
   /// In zh, this message translates to:
@@ -4780,28 +4738,16 @@ abstract class AppLocalizations {
   /// **'{device} 在附近'**
   String shellNearbyTitle(String device);
 
-  /// No description provided for @shellPairHint.
-  ///
-  /// In zh, this message translates to:
-  /// **'连接后，两台设备会显示相同的 6 位数字。'**
-  String get shellPairHint;
-
   /// No description provided for @shellComposerOffline.
   ///
   /// In zh, this message translates to:
   /// **'连接 {device} 后可以发送'**
   String shellComposerOffline(String device);
 
-  /// No description provided for @shellSelfQrHint.
-  ///
-  /// In zh, this message translates to:
-  /// **'另一台设备扫这个二维码就能连上这台'**
-  String get shellSelfQrHint;
-
   /// No description provided for @shellSelfNoLan.
   ///
   /// In zh, this message translates to:
-  /// **'这台不在局域网里，其他设备发现不了它'**
+  /// **'本机未连接局域网，其他设备无法发现'**
   String get shellSelfNoLan;
 
   /// No description provided for @shellSelfAddress.
@@ -4873,7 +4819,7 @@ abstract class AppLocalizations {
   /// No description provided for @shellCardTrust.
   ///
   /// In zh, this message translates to:
-  /// **'不用确认就连上这台'**
+  /// **'自动接受连接'**
   String get shellCardTrust;
 
   /// No description provided for @shellCardBrowse.
@@ -4909,7 +4855,7 @@ abstract class AppLocalizations {
   /// No description provided for @shellCardRemove.
   ///
   /// In zh, this message translates to:
-  /// **'移除这台设备'**
+  /// **'删除设备'**
   String get shellCardRemove;
 
   /// No description provided for @shellCardSound.
@@ -4969,7 +4915,7 @@ abstract class AppLocalizations {
   /// No description provided for @shellComposerHint.
   ///
   /// In zh, this message translates to:
-  /// **'发给 {device}'**
+  /// **'发送给 {device}'**
   String shellComposerHint(String device);
 
   /// No description provided for @shellPaletteDevice.
@@ -4999,13 +4945,13 @@ abstract class AppLocalizations {
   /// No description provided for @shellPalettePlayOn.
   ///
   /// In zh, this message translates to:
-  /// **'把这台的声音放到 {device}'**
+  /// **'把本机声音播放到 {device}'**
   String shellPalettePlayOn(String device);
 
   /// No description provided for @shellPaletteControl.
   ///
   /// In zh, this message translates to:
-  /// **'用这台的键鼠控制 {device}'**
+  /// **'用本机键鼠控制 {device}'**
   String shellPaletteControl(String device);
 
   /// No description provided for @shellSettingsGeneral.
@@ -5131,7 +5077,7 @@ abstract class AppLocalizations {
   /// No description provided for @shellSettingsPlaybackGain.
   ///
   /// In zh, this message translates to:
-  /// **'播放别处声音的增益'**
+  /// **'播放音量'**
   String get shellSettingsPlaybackGain;
 
   /// No description provided for @shellSettingsCopyCode.
@@ -5139,18 +5085,6 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'验证码写入剪贴板'**
   String get shellSettingsCopyCode;
-
-  /// No description provided for @shellSettingsSharingNote.
-  ///
-  /// In zh, this message translates to:
-  /// **'增益只影响这台播放的声音，过高可能失真。滚轮速度只影响这台被控制时。'**
-  String get shellSettingsSharingNote;
-
-  /// No description provided for @shellSettingsGainHint.
-  ///
-  /// In zh, this message translates to:
-  /// **'过高可能失真'**
-  String get shellSettingsGainHint;
 
   /// No description provided for @shellSettingsVersion.
   ///
@@ -5209,19 +5143,13 @@ abstract class AppLocalizations {
   /// No description provided for @soundHeroIdleTitle.
   ///
   /// In zh, this message translates to:
-  /// **'放到其他设备'**
+  /// **'播放到其他设备'**
   String get soundHeroIdleTitle;
-
-  /// No description provided for @soundHeroIdleBody.
-  ///
-  /// In zh, this message translates to:
-  /// **'选几台设备，它们会一起响。'**
-  String get soundHeroIdleBody;
 
   /// No description provided for @soundHeroPlaying.
   ///
   /// In zh, this message translates to:
-  /// **'正在放到 {count} 台设备'**
+  /// **'正在播放到 {count} 台设备'**
   String soundHeroPlaying(int count);
 
   /// No description provided for @soundChannelLeft.
@@ -5239,7 +5167,7 @@ abstract class AppLocalizations {
   /// No description provided for @soundShareThisDevice.
   ///
   /// In zh, this message translates to:
-  /// **'共享这台的声音'**
+  /// **'共享本机声音'**
   String get soundShareThisDevice;
 
   /// No description provided for @soundMemberStopped.
@@ -5257,19 +5185,19 @@ abstract class AppLocalizations {
   /// No description provided for @soundMemberFailed.
   ///
   /// In zh, this message translates to:
-  /// **'没有放出来 · {reason}'**
+  /// **'播放失败 · {reason}'**
   String soundMemberFailed(String reason);
 
   /// No description provided for @soundMemberBusy.
   ///
   /// In zh, this message translates to:
-  /// **'它在放别处的声音'**
+  /// **'正在播放其他来源'**
   String get soundMemberBusy;
 
   /// No description provided for @soundMemberSoloOnly.
   ///
   /// In zh, this message translates to:
-  /// **'只能单独放'**
+  /// **'只能单独播放'**
   String get soundMemberSoloOnly;
 
   /// No description provided for @soundSyncNumbers.
@@ -5298,7 +5226,7 @@ abstract class AppLocalizations {
   /// No description provided for @soundCheckLabel.
   ///
   /// In zh, this message translates to:
-  /// **'把声音放到 {device}'**
+  /// **'把声音播放到 {device}'**
   String soundCheckLabel(String device);
 
   /// No description provided for @soundChannelLabel.
@@ -5310,7 +5238,7 @@ abstract class AppLocalizations {
   /// No description provided for @soundNoDevices.
   ///
   /// In zh, this message translates to:
-  /// **'没有连着的设备'**
+  /// **'没有已连接的设备'**
   String get soundNoDevices;
 
   /// No description provided for @soundSinkTitle.
@@ -5318,12 +5246,6 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'正在播放 {device} 的声音'**
   String soundSinkTitle(String device);
-
-  /// No description provided for @soundSinkHint.
-  ///
-  /// In zh, this message translates to:
-  /// **'要换来源，先断开'**
-  String get soundSinkHint;
 
   /// No description provided for @soundSinkPaused.
   ///
@@ -5361,12 +5283,6 @@ abstract class AppLocalizations {
   /// **'去开启'**
   String get shareOpenSettings;
 
-  /// No description provided for @inputHintIdle.
-  ///
-  /// In zh, this message translates to:
-  /// **'拖动屏幕来排列。指针从相接的边过去。'**
-  String get inputHintIdle;
-
   /// No description provided for @inputHintExit.
   ///
   /// In zh, this message translates to:
@@ -5382,37 +5298,37 @@ abstract class AppLocalizations {
   /// No description provided for @inputStatusNotConnected.
   ///
   /// In zh, this message translates to:
-  /// **'没有连上'**
+  /// **'未连接'**
   String get inputStatusNotConnected;
 
   /// No description provided for @inputSideRight.
   ///
   /// In zh, this message translates to:
-  /// **'在右边'**
+  /// **'右侧'**
   String get inputSideRight;
 
   /// No description provided for @inputSideLeft.
   ///
   /// In zh, this message translates to:
-  /// **'在左边'**
+  /// **'左侧'**
   String get inputSideLeft;
 
   /// No description provided for @inputSideAbove.
   ///
   /// In zh, this message translates to:
-  /// **'在上面'**
+  /// **'上方'**
   String get inputSideAbove;
 
   /// No description provided for @inputSideBelow.
   ///
   /// In zh, this message translates to:
-  /// **'在下面'**
+  /// **'下方'**
   String get inputSideBelow;
 
   /// No description provided for @inputSideElsewhere.
   ///
   /// In zh, this message translates to:
-  /// **'接在别的屏幕旁'**
+  /// **'接在其他屏幕旁'**
   String get inputSideElsewhere;
 
   /// No description provided for @inputScreenCount.
@@ -5442,37 +5358,37 @@ abstract class AppLocalizations {
   /// No description provided for @inputReasonPeerNotTrusting.
   ///
   /// In zh, this message translates to:
-  /// **'它还没有信任这台'**
+  /// **'对方未信任本机'**
   String get inputReasonPeerNotTrusting;
 
   /// No description provided for @inputReasonNotTrusted.
   ///
   /// In zh, this message translates to:
-  /// **'这台还没有信任它'**
+  /// **'本机未信任对方'**
   String get inputReasonNotTrusted;
 
   /// No description provided for @inputReasonUnsupported.
   ///
   /// In zh, this message translates to:
-  /// **'它的版本不支持'**
+  /// **'对方版本不支持'**
   String get inputReasonUnsupported;
 
   /// No description provided for @inputReasonPeerPermission.
   ///
   /// In zh, this message translates to:
-  /// **'它还没有允许被控制'**
+  /// **'对方未允许被控制'**
   String get inputReasonPeerPermission;
 
   /// No description provided for @inputReasonBusy.
   ///
   /// In zh, this message translates to:
-  /// **'它现在不能被控制'**
+  /// **'对方暂时无法被控制'**
   String get inputReasonBusy;
 
   /// No description provided for @inputReasonBlocked.
   ///
   /// In zh, this message translates to:
-  /// **'它接在没连上的屏幕后面'**
+  /// **'中间的屏幕未连接'**
   String get inputReasonBlocked;
 
   /// No description provided for @inputCandidateUnsupported.
@@ -5490,14 +5406,8 @@ abstract class AppLocalizations {
   /// No description provided for @inputControlledTitle.
   ///
   /// In zh, this message translates to:
-  /// **'{device} 正在控制这台'**
+  /// **'{device} 正在控制本机'**
   String inputControlledTitle(String device);
-
-  /// No description provided for @inputControlledHint.
-  ///
-  /// In zh, this message translates to:
-  /// **'要控制别的电脑，先停止。'**
-  String get inputControlledHint;
 
   /// No description provided for @inputSwitchLabel.
   ///
@@ -5538,25 +5448,25 @@ abstract class AppLocalizations {
   /// No description provided for @shellLinksServiceIdle.
   ///
   /// In zh, this message translates to:
-  /// **'没有开启的链接，服务没有运行'**
+  /// **'没有开启的链接'**
   String get shellLinksServiceIdle;
 
   /// No description provided for @shellLinksFoot.
   ///
   /// In zh, this message translates to:
-  /// **'对方不用装 Whisper，在同一局域网用浏览器打开就能下载。走的是普通 HTTP，密码只防止别人随意打开。'**
+  /// **'使用普通 HTTP，密码只能防止随意打开。'**
   String get shellLinksFoot;
 
   /// No description provided for @shellLinksEmptyTitle.
   ///
   /// In zh, this message translates to:
-  /// **'还没有链接'**
+  /// **'没有链接'**
   String get shellLinksEmptyTitle;
 
   /// No description provided for @shellLinksEmptyBody.
   ///
   /// In zh, this message translates to:
-  /// **'选一些文件，生成一个链接。对方不用装 Whisper，用浏览器打开就能下载。'**
+  /// **'选择文件生成链接，对方用浏览器打开即可下载。'**
   String get shellLinksEmptyBody;
 
   /// No description provided for @shellLinksChoose.
@@ -5580,7 +5490,7 @@ abstract class AppLocalizations {
   /// No description provided for @shellLinkMissing.
   ///
   /// In zh, this message translates to:
-  /// **'有些文件不在原来的位置了'**
+  /// **'部分文件已移动或删除'**
   String get shellLinkMissing;
 
   /// No description provided for @shellLinkVisits.
@@ -5658,19 +5568,19 @@ abstract class AppLocalizations {
   /// No description provided for @shellFilesSendTo.
   ///
   /// In zh, this message translates to:
-  /// **'发到…'**
+  /// **'发送到…'**
   String get shellFilesSendTo;
 
   /// No description provided for @shellFilesCopyHere.
   ///
   /// In zh, this message translates to:
-  /// **'拷到这台'**
+  /// **'复制到本机'**
   String get shellFilesCopyHere;
 
   /// No description provided for @shellFilesAskOnDevice.
   ///
   /// In zh, this message translates to:
-  /// **'请在 {device} 上点允许'**
+  /// **'请在 {device} 上允许'**
   String shellFilesAskOnDevice(String device);
 
   /// No description provided for @shellFilesDenied.
@@ -5688,7 +5598,7 @@ abstract class AppLocalizations {
   /// No description provided for @shellAppsRunsOn.
   ///
   /// In zh, this message translates to:
-  /// **'运行于 {device}，显示于这台'**
+  /// **'运行于 {device}，显示于本机'**
   String shellAppsRunsOn(String device);
 
   /// No description provided for @shellAppsEnd.
@@ -5760,7 +5670,7 @@ abstract class AppLocalizations {
   /// No description provided for @shellTrayThisDevice.
   ///
   /// In zh, this message translates to:
-  /// **'这台'**
+  /// **'本机'**
   String get shellTrayThisDevice;
 
   /// No description provided for @shellTrayPlaying.
@@ -5772,7 +5682,7 @@ abstract class AppLocalizations {
   /// No description provided for @shellTrayControlled.
   ///
   /// In zh, this message translates to:
-  /// **'{device} 在控制这台'**
+  /// **'{device} 正在控制本机'**
   String shellTrayControlled(String device);
 
   /// No description provided for @shellTrayInputOn.
@@ -5784,7 +5694,7 @@ abstract class AppLocalizations {
   /// No description provided for @shellIslandPlayingOn.
   ///
   /// In zh, this message translates to:
-  /// **'声音放到 {devices}'**
+  /// **'正在播放到 {devices}'**
   String shellIslandPlayingOn(String devices);
 
   /// No description provided for @shellIslandControlling.
@@ -5820,37 +5730,25 @@ abstract class AppLocalizations {
   /// No description provided for @shellTrayPlayOn.
   ///
   /// In zh, this message translates to:
-  /// **'声音放到'**
+  /// **'播放到'**
   String get shellTrayPlayOn;
-
-  /// No description provided for @phoneConnectQrHint.
-  ///
-  /// In zh, this message translates to:
-  /// **'用另一台设备扫这个二维码'**
-  String get phoneConnectQrHint;
-
-  /// No description provided for @phoneConnectScanHint.
-  ///
-  /// In zh, this message translates to:
-  /// **'对准另一台设备上的二维码'**
-  String get phoneConnectScanHint;
 
   /// No description provided for @phoneConnectCopyLink.
   ///
   /// In zh, this message translates to:
-  /// **'拷贝连接链接'**
+  /// **'复制连接链接'**
   String get phoneConnectCopyLink;
 
   /// No description provided for @phoneConnectCopied.
   ///
   /// In zh, this message translates to:
-  /// **'连接链接已拷贝'**
+  /// **'连接链接已复制'**
   String get phoneConnectCopied;
 
   /// No description provided for @phoneConnectCopyFailed.
   ///
   /// In zh, this message translates to:
-  /// **'没拷贝成功，再试一次'**
+  /// **'复制失败，请重试'**
   String get phoneConnectCopyFailed;
 
   /// No description provided for @phoneConnectOpenSettings.
@@ -5862,7 +5760,7 @@ abstract class AppLocalizations {
   /// No description provided for @phonePairApprove.
   ///
   /// In zh, this message translates to:
-  /// **'数字相同，配对'**
+  /// **'数字一致'**
   String get phonePairApprove;
 
   /// No description provided for @pickerNoDevices.
@@ -5874,25 +5772,25 @@ abstract class AppLocalizations {
   /// No description provided for @pickerSendFile.
   ///
   /// In zh, this message translates to:
-  /// **'把「{name}」发到'**
+  /// **'把「{name}」发送到'**
   String pickerSendFile(String name);
 
   /// No description provided for @pickerSendItems.
   ///
   /// In zh, this message translates to:
-  /// **'把 {count} 项发到'**
+  /// **'把 {count} 项发送到'**
   String pickerSendItems(int count);
 
   /// No description provided for @pickerSendText.
   ///
   /// In zh, this message translates to:
-  /// **'把这段文字发到'**
+  /// **'把这段文字发送到'**
   String get pickerSendText;
 
   /// No description provided for @phoneFilesCopied.
   ///
   /// In zh, this message translates to:
-  /// **'已拷贝 {count} 项，到要放的文件夹里粘贴'**
+  /// **'已复制 {count} 项'**
   String phoneFilesCopied(int count);
 
   /// No description provided for @phoneConnectPort.
@@ -5907,12 +5805,6 @@ abstract class AppLocalizations {
   /// **'共享「{name}」'**
   String shellLinkCreateTitle(String name);
 
-  /// No description provided for @shellLinkCreateBody.
-  ///
-  /// In zh, this message translates to:
-  /// **'同一局域网的设备用浏览器打开就能下载。'**
-  String get shellLinkCreateBody;
-
   /// No description provided for @shellLinkPasswordOptional.
   ///
   /// In zh, this message translates to:
@@ -5922,13 +5814,13 @@ abstract class AppLocalizations {
   /// No description provided for @shellAppsShownOn.
   ///
   /// In zh, this message translates to:
-  /// **'运行于这台，显示于 {device}'**
+  /// **'运行于本机，显示于 {device}'**
   String shellAppsShownOn(String device);
 
   /// No description provided for @shellAppsBringBack.
   ///
   /// In zh, this message translates to:
-  /// **'拿回来'**
+  /// **'收回'**
   String get shellAppsBringBack;
 
   /// No description provided for @shellManualConnectTitle.
@@ -5964,7 +5856,7 @@ abstract class AppLocalizations {
   /// No description provided for @connectionCheckNetwork.
   ///
   /// In zh, this message translates to:
-  /// **'这台的网络'**
+  /// **'本机网络'**
   String get connectionCheckNetwork;
 
   /// No description provided for @connectionCheckAddress.
@@ -6000,7 +5892,7 @@ abstract class AppLocalizations {
   /// No description provided for @connectionCheckOneWay.
   ///
   /// In zh, this message translates to:
-  /// **'连接正常。不过这台连不到对方的端口，现在的连接是对方发起的；断开后要从对方再连一次。'**
+  /// **'连接正常。本机无法连接对方端口，当前连接由对方发起，断开后需从对方重新连接。'**
   String get connectionCheckOneWay;
 
   /// No description provided for @connectionCheckReady.

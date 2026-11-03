@@ -659,7 +659,7 @@ void main() {
                       id: 'f',
                       title: '备忘录',
                       detail: '显示于 iMac',
-                      action: '拿回来',
+                      action: '收回',
                     ),
                   ],
                   clips: [
@@ -719,7 +719,7 @@ void main() {
               PaletteItem(
                 glyph: WhisperGlyph.gear,
                 name: '设置',
-                category: '这台',
+                category: '本机',
                 onRun: () {},
               ),
             ],

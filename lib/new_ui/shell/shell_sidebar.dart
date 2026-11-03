@@ -135,7 +135,7 @@ class ShellSidebar extends StatelessWidget {
         ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 46),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(10, 6, 8, 10),
+            padding: const EdgeInsets.fromLTRB(10, 6, 10, 10),
             child: Row(
               children: [
                 Expanded(
@@ -144,8 +144,9 @@ class ShellSidebar extends StatelessWidget {
                     radius: WhisperRadius.s,
                     label: self?.name,
                     child: Padding(
+                      // The icon starts where the rows' pictures start.
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
+                        horizontal: 9,
                         vertical: 5,
                       ),
                       child: Row(
@@ -184,6 +185,7 @@ class ShellSidebar extends StatelessWidget {
                     selected: data.place == ShellPlace.links,
                     onTap: actions.openShareLinks,
                   ),
+                const SizedBox(width: 2),
                 ShellIconButton(
                   glyph: WhisperGlyph.gear,
                   label: l10n.shellSettings,
@@ -327,7 +329,7 @@ class _SelectionBackground extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final radius = touch ? WhisperRadius.m : WhisperRadius.s;
+    final radius = touch ? WhisperRadius.l : WhisperRadius.m;
     final brightness = Theme.of(context).brightness;
     return CustomPaint(
       painter: WhisperOutsideShadow(
@@ -396,8 +398,8 @@ class _DeviceRow extends StatelessWidget {
       radius: edgeToEdge
           ? 0
           : touch
-          ? WhisperRadius.m
-          : WhisperRadius.s,
+          ? WhisperRadius.l
+          : WhisperRadius.m,
       selected: selected,
       scale: 1,
       child: SizedBox(
@@ -405,7 +407,7 @@ class _DeviceRow extends StatelessWidget {
         child: Padding(
           padding: edgeToEdge
               ? const EdgeInsets.fromLTRB(18, 0, 16, 0)
-              : EdgeInsets.symmetric(horizontal: touch ? 12 : 10),
+              : EdgeInsets.symmetric(horizontal: touch ? 12 : 9),
           child: Row(
             children: [
               Tooltip(
@@ -418,7 +420,11 @@ class _DeviceRow extends StatelessWidget {
                     color: c.fill,
                     shape: RoundedSuperellipseBorder(
                       borderRadius: BorderRadius.circular(
-                        touch ? WhisperRadius.m : WhisperRadius.s,
+                        edgeToEdge
+                            ? WhisperRadius.m
+                            : touch
+                            ? WhisperRadius.s
+                            : WhisperRadius.xs,
                       ),
                     ),
                   ),
@@ -474,15 +480,6 @@ class _DeviceRow extends StatelessWidget {
                   ],
                 ),
               ),
-              if (edgeToEdge) ...[
-                const SizedBox(width: 10),
-                WhisperIcon(
-                  WhisperGlyph.right,
-                  size: 14,
-                  weight: 2,
-                  color: c.ink3,
-                ),
-              ],
             ],
           ),
         ),

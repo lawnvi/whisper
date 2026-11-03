@@ -115,8 +115,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'Input was not confirmed. Draft kept; check the computer before resending.';
 
   @override
-  String get mobileControlTextSent =>
-      'Text delivered to the system. Check the target app.';
+  String get mobileControlTextSent => 'Sent to the computer';
 
   @override
   String get mobileControlSensitivity => 'Motion pointer speed';
@@ -162,8 +161,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get screenshotConfirm => 'Copy';
 
   @override
-  String get screenshotCopied =>
-      'Screenshot copied. Paste it wherever you need.';
+  String get screenshotCopied => 'Screenshot copied';
 
   @override
   String get screenshotPermissionDenied =>
@@ -456,16 +454,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get localeNameSpanish => 'Spanish';
 
   @override
-  String get autoConnectTrustedDevices =>
-      'Auto-connect mutually trusted devices';
+  String get autoConnectTrustedDevices => 'Auto-connect paired devices';
 
   @override
   String get windowsLockScreenInput =>
       'Keyboard and mouse on the lock screen and UAC';
-
-  @override
-  String get windowsLockScreenInputHint =>
-      'Type on the lock screen. The switch adds UAC prompts';
 
   @override
   String get windowsLockScreenInputDesc =>
@@ -557,7 +550,7 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get fileTransferNegotiating => 'Negotiating';
+  String get fileTransferNegotiating => 'Preparing';
 
   @override
   String fileTransferWaitingReconnect(String progress) {
@@ -572,7 +565,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get fileTransferWaitingPeerVerification =>
-      'Waiting for peer verification';
+      'Waiting for the other device to verify';
 
   @override
   String get fileTransferFailedNotice => 'File transfer failed';
@@ -597,7 +590,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'Playback side: playing shared audio, click to stop';
 
   @override
-  String get audioShareStart => 'Share this device\'s audio to peer';
+  String get audioShareStart => 'Share this device\'s audio';
 
   @override
   String get remoteInputScrollMultiplierTitle =>
@@ -648,7 +641,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get remoteInputSourceConnecting =>
-      'Keyboard and mouse sharing: connecting to peer';
+      'Keyboard and mouse sharing: connecting';
 
   @override
   String get remoteInputSinkConnecting =>
@@ -660,7 +653,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get remoteInputSourceActiveStop =>
-      'Keyboard and mouse sharing: controlling peer, click to stop';
+      'Keyboard and mouse sharing: in control, click to stop';
 
   @override
   String get remoteInputSinkActiveStop =>
@@ -683,19 +676,19 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get remoteInputRequiresMutualTrust =>
-      'Keyboard and mouse sharing requires mutual trust';
+      'Keyboard and mouse sharing requires both devices to be paired';
 
   @override
   String get remoteInputPeerMustTrustThisDevice =>
-      'The peer has not trusted this device yet. Trust this device on the peer before sharing keyboard and mouse';
+      'The other device hasn\'t trusted this one yet';
 
   @override
   String get remoteInputLayoutRequired =>
-      'Place the peer screen against this device\'s edge in the keyboard and mouse workspace first';
+      'Drag the other screen to this device\'s screen edge first';
 
   @override
   String get remoteInputEnabledMoveToEdge =>
-      'Keyboard and mouse sharing is enabled. Move to the screen edge to control peer';
+      'Sharing is on. Move to the screen edge to start';
 
   @override
   String remoteInputFailed(String error) {
@@ -801,14 +794,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String updateAvailableBody(String currentVersion, String latestVersion) {
-    return 'You have $currentVersion. Version $latestVersion is ready. The download will be verified against GitHub\'s file digest before it opens.';
+    return 'Version $currentVersion can be updated to $latestVersion.';
   }
 
   @override
   String get downloadAndInstallUpdate => 'Update';
 
   @override
-  String get viewRelease => 'View release';
+  String get viewRelease => 'View release notes';
 
   @override
   String get updateInstallerOpened =>
@@ -1258,10 +1251,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get mobileControlSettings => 'Pointer settings';
 
   @override
-  String get mobileControlPrecisionHint =>
-      'Small movements give finer control. Turn faster to travel farther.';
-
-  @override
   String get mobileControlCalibrationRetry =>
       'Keep the phone still and try calibrating again.';
 
@@ -1281,9 +1270,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get mobileControlTarget => 'Control target';
-
-  @override
-  String get mobileControlTargetHint => 'Start again after switching.';
 
   @override
   String get mobileControlPointerSpeed => 'Touchpad pointer speed';
@@ -1598,7 +1584,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String windowStreamSent(String device) {
-    return 'Sent to $device. Tap the prompt there to view it.';
+    return 'Sent to $device';
   }
 
   @override
@@ -1727,7 +1713,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get remoteFilesDeny => 'Don\'t allow';
 
   @override
-  String get remoteFilesAllowOnce => 'Allow this time';
+  String get remoteFilesAllowOnce => 'Allow';
 
   @override
   String get remoteFilesAllowAlways => 'Always allow';
@@ -2243,10 +2229,10 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get shareLinkRoute => 'Route';
+  String get shareLinkRoute => 'Link suffix';
 
   @override
-  String get shareLinkShortRoute => 'Short Route';
+  String get shareLinkShortRoute => 'Short suffix';
 
   @override
   String get shareLinkPassword => 'Password';
@@ -2255,7 +2241,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get shareLinkCreate => 'Create Link';
 
   @override
-  String get shareLinkRouteTaken => 'Another link already uses this route';
+  String get shareLinkRouteTaken => 'Another link already uses this suffix';
 
   @override
   String get shareLinkRouteInvalid =>
@@ -2263,7 +2249,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get shareLinkRouteReserved =>
-      'This route is reserved. Try another one.';
+      'This suffix is reserved. Try another one.';
 
   @override
   String get shareLinkItemsMissing => 'The items to share are no longer there';
@@ -2552,10 +2538,6 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get shareWebFooterLan =>
-      'Files come straight from this device over your local network, not through the cloud.';
-
-  @override
   String shareWebPreviewTruncated(String size) {
     return 'Showing the first $size. Download the file to see all of it.';
   }
@@ -2568,10 +2550,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get shareLinkAddress => 'Address';
-
-  @override
-  String get shareLinksServiceFooter =>
-      'Devices on the same network can open a link in any browser. The server only runs while a link is on.';
 
   @override
   String get androidWindowServiceTitle => 'Window flow service';
@@ -2709,7 +2687,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'If you allow it, it can see this phone\'s internal storage and open and copy files from it, but not change them.';
 
   @override
-  String get islandOverlay => 'Island in the background';
+  String get islandOverlay => 'Background alerts';
 
   @override
   String get islandOverlayOn => 'On';
@@ -2815,12 +2793,6 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get shellNotConnectedFiles => 'Connect to browse its files.';
-
-  @override
-  String get shellNotConnectedApps => 'Connect to see its windows and apps.';
-
-  @override
   String get shellConnect => 'Connect';
 
   @override
@@ -2832,17 +2804,9 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get shellPairHint =>
-      'Once connecting, both devices show the same 6 digits.';
-
-  @override
   String shellComposerOffline(String device) {
     return 'Connect $device to send';
   }
-
-  @override
-  String get shellSelfQrHint =>
-      'Scan this code on another device to connect to this one';
 
   @override
   String get shellSelfNoLan =>
@@ -2884,7 +2848,7 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get shellCardTrust => 'Connect without asking';
+  String get shellCardTrust => 'Accept connections automatically';
 
   @override
   String get shellCardBrowse => 'Browse my files';
@@ -2902,7 +2866,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get shellCardDisconnect => 'Disconnect';
 
   @override
-  String get shellCardRemove => 'Remove this device';
+  String get shellCardRemove => 'Delete device';
 
   @override
   String get shellCardSound => 'Sound';
@@ -3021,17 +2985,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get shellSettingsAutoClipboard => 'Sync clipboard automatically';
 
   @override
-  String get shellSettingsPlaybackGain => 'Gain for sound from other devices';
+  String get shellSettingsPlaybackGain => 'Playback volume';
 
   @override
   String get shellSettingsCopyCode => 'Copy verification codes to clipboard';
-
-  @override
-  String get shellSettingsSharingNote =>
-      'Gain only affects sound played on this device, and too much can distort. Scroll speed only applies while this device is being controlled.';
-
-  @override
-  String get shellSettingsGainHint => 'Too much can distort';
 
   @override
   String get shellSettingsVersion => 'Version';
@@ -3080,9 +3037,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get soundHeroIdleTitle => 'Play on other devices';
-
-  @override
-  String get soundHeroIdleBody => 'Pick a few devices and they play together.';
 
   @override
   String soundHeroPlaying(int count) {
@@ -3157,9 +3111,6 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get soundSinkHint => 'To change the source, disconnect first';
-
-  @override
   String get soundSinkPaused => 'Paused';
 
   @override
@@ -3178,10 +3129,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get shareOpenSettings => 'Turn on';
-
-  @override
-  String get inputHintIdle =>
-      'Drag screens to arrange them. The pointer crosses where edges touch.';
 
   @override
   String inputHintExit(String shortcut) {
@@ -3259,9 +3206,6 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get inputControlledHint => 'To control another computer, stop first.';
-
-  @override
   String get inputSwitchLabel => 'Keyboard and mouse sharing';
 
   @override
@@ -3289,14 +3233,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get shellLinksFoot =>
-      'They don\'t need Whisper: on the same network, a browser can open it and download. It uses plain HTTP, so a password only stops casual opening.';
+      'Uses plain HTTP. The password only keeps casual visitors out.';
 
   @override
   String get shellLinksEmptyTitle => 'No links yet';
 
   @override
   String get shellLinksEmptyBody =>
-      'Pick some files to make a link. They don\'t need Whisper: a browser can open it and download.';
+      'Choose files to make a link. Others open it in a browser to download.';
 
   @override
   String get shellLinksChoose => 'Choose files';
@@ -3489,12 +3433,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get shellTrayPlayOn => 'Play sound on';
 
   @override
-  String get phoneConnectQrHint => 'Scan this code with another device';
-
-  @override
-  String get phoneConnectScanHint => 'Point at the code on another device';
-
-  @override
   String get phoneConnectCopyLink => 'Copy connection link';
 
   @override
@@ -3527,7 +3465,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String phoneFilesCopied(int count) {
-    return '$count copied. Paste them in the folder you want';
+    return '$count copied';
   }
 
   @override
@@ -3539,10 +3477,6 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get shellLinkCreateBody =>
-      'Devices on the same network can open it in a browser and download.';
-
-  @override
   String get shellLinkPasswordOptional => 'Password (optional)';
 
   @override
@@ -3551,7 +3485,7 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get shellAppsBringBack => 'Bring back';
+  String get shellAppsBringBack => 'Take back';
 
   @override
   String get shellManualConnectTitle => 'Connect by address';

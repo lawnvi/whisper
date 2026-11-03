@@ -299,26 +299,36 @@ class _TrayPanelBodyState extends State<TrayPanelBody> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Padding(
-                        padding: const EdgeInsets.fromLTRB(2, 0, 2, 8),
+                        padding: const EdgeInsets.fromLTRB(0, 0, 0, 8),
                         child: Row(
                           children: [
-                            state.currentImage
-                                ? Container(
-                                    width: 22,
-                                    height: 22,
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(5),
-                                      gradient: const LinearGradient(
-                                        colors: [Radix.indigo9, Radix.violet9],
+                            SizedBox.square(
+                              dimension: _lead,
+                              child: Center(
+                                child: state.currentImage
+                                    ? Container(
+                                        width: 22,
+                                        height: 22,
+                                        decoration: BoxDecoration(
+                                          borderRadius: BorderRadius.circular(
+                                            5,
+                                          ),
+                                          gradient: const LinearGradient(
+                                            colors: [
+                                              Radix.indigo9,
+                                              Radix.violet9,
+                                            ],
+                                          ),
+                                        ),
+                                      )
+                                    : WhisperIcon(
+                                        WhisperGlyph.clip,
+                                        size: 17,
+                                        color: c.ink2Glass,
                                       ),
-                                    ),
-                                  )
-                                : WhisperIcon(
-                                    WhisperGlyph.clip,
-                                    size: 17,
-                                    color: c.ink2Glass,
-                                  ),
-                            const SizedBox(width: 8),
+                              ),
+                            ),
+                            const SizedBox(width: _leadGap),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -413,12 +423,17 @@ class _TrayPanelBodyState extends State<TrayPanelBody> {
                       constraints: const BoxConstraints(minHeight: 34),
                       child: Row(
                         children: [
-                          WhisperIcon(
-                            WhisperGlyph.window,
-                            size: 15,
-                            color: c.ink2Glass,
+                          SizedBox.square(
+                            dimension: _lead,
+                            child: Center(
+                              child: WhisperIcon(
+                                WhisperGlyph.window,
+                                size: 15,
+                                color: c.ink2Glass,
+                              ),
+                            ),
                           ),
-                          const SizedBox(width: 9),
+                          const SizedBox(width: _leadGap),
                           Expanded(
                             child: _TwoLines(
                               first: flow.title,
@@ -440,12 +455,12 @@ class _TrayPanelBodyState extends State<TrayPanelBody> {
           if (state.clips.length > 1) ...[
             const SizedBox(height: 8),
             _Module(
-              padding: const EdgeInsets.all(6),
+              padding: const EdgeInsets.all(4),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
+                    padding: const EdgeInsets.fromLTRB(6, 4, 6, 4),
                     child: Text(
                       l10n.shellTrayRecent,
                       style: TextStyle(
@@ -465,7 +480,7 @@ class _TrayPanelBodyState extends State<TrayPanelBody> {
                         constraints: const BoxConstraints(minHeight: 40),
                         child: Padding(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
+                            horizontal: 6,
                             vertical: 5,
                           ),
                           child: Row(
@@ -579,6 +594,10 @@ class _TrayPanelBodyState extends State<TrayPanelBody> {
 }
 
 /// `.mod`: a block of control glass, with a highlight along the top.
+/// Every row's picture sits in a box this size, and its text starts at the same
+/// place, whatever the picture.
+const double _lead = 24, _leadGap = 8;
+
 class _Module extends StatelessWidget {
   const _Module({required this.child, this.padding = const EdgeInsets.all(10)});
 
@@ -589,7 +608,7 @@ class _Module extends StatelessWidget {
   Widget build(BuildContext context) => DecoratedBox(
     decoration: BoxDecoration(
       color: context.wc.controlTint,
-      borderRadius: BorderRadius.circular(WhisperRadius.l),
+      borderRadius: BorderRadius.circular(WhisperRadius.m),
       border: Border(
         top: BorderSide(
           width: .5,
@@ -678,10 +697,15 @@ class _MomentView extends StatelessWidget {
         Row(
           children: [
             if (progress == null)
-              WhisperIcon(WhisperGlyph.ask, size: 18, color: c.warn)
+              SizedBox.square(
+                dimension: _lead,
+                child: Center(
+                  child: WhisperIcon(WhisperGlyph.ask, size: 18, color: c.warn),
+                ),
+              )
             else
               SizedBox.square(
-                dimension: 20,
+                dimension: _lead,
                 child: CircularProgressIndicator(
                   value: progress,
                   strokeWidth: 2.5,
@@ -689,7 +713,7 @@ class _MomentView extends StatelessWidget {
                   backgroundColor: c.fill2,
                 ),
               ),
-            const SizedBox(width: 9),
+            const SizedBox(width: _leadGap),
             Expanded(
               child: _TwoLines(first: moment.title, second: moment.detail),
             ),
@@ -749,7 +773,7 @@ class _Tile extends StatelessWidget {
     const type = WhisperType(touch: false);
     return Pressable(
       onTap: onTap,
-      radius: WhisperRadius.l,
+      radius: WhisperRadius.m,
       label: title,
       child: _Module(
         padding: const EdgeInsets.all(8),

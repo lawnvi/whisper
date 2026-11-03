@@ -79,17 +79,6 @@ extension _RedesignedSettings on _SettingsScreenState {
               Text(section.title, style: titleStyle),
               const SizedBox(height: 16),
               SettingsGroup(children: section.rows),
-              if (section.note != null) ...[
-                const SizedBox(height: 8),
-                Text(
-                  section.note!,
-                  style: TextStyle(
-                    fontSize: type.note,
-                    height: 1.5,
-                    color: c.ink2,
-                  ),
-                ),
-              ],
             ],
           );
     return Center(
@@ -151,9 +140,10 @@ extension _RedesignedSettings on _SettingsScreenState {
                         ),
                       ],
                     ),
+                    // On the title's line, at the right edge of the groups.
                     Positioned(
-                      top: 10,
-                      right: 10,
+                      top: 26,
+                      right: 21,
                       child: SettingsCloseButton(
                         label: l10n.close,
                         onTap: () => Navigator.of(context).maybePop(),
@@ -249,9 +239,6 @@ extension _RedesignedSettings on _SettingsScreenState {
         title: l10n.shellSettingsSharing,
         glyph: WhisperGlyph.link,
         color: WhisperSettingsIcons.sharing,
-        note: desktop
-            ? l10n.shellSettingsSharingNote
-            : l10n.shellSettingsGainHint,
         rows: [
           if (_isMacPlatform) ..._macPermissionRows(l10n),
           if (desktop)
@@ -766,9 +753,7 @@ extension _RedesignedSettings on _SettingsScreenState {
       final installed = running || state == WindowsInputServiceState.stopped;
       return SettingsServiceRow(
         title: l10n.windowsLockScreenInput,
-        hint: service.busy
-            ? l10n.windowsLockScreenInputWorking
-            : l10n.windowsLockScreenInputHint,
+        hint: service.busy ? l10n.windowsLockScreenInputWorking : null,
         status: switch (state) {
           WindowsInputServiceState.running =>
             l10n.windowsLockScreenInputRunning,
@@ -834,7 +819,7 @@ extension _RedesignedSettings on _SettingsScreenState {
     };
     return SettingsServiceRow(
       title: l10n.gnomeHelperTitle,
-      hint: helper.busy ? l10n.gnomeHelperWorking : l10n.gnomeHelperHint,
+      hint: helper.busy ? l10n.gnomeHelperWorking : null,
       status: helper.checked ? gnomeHelperStateLabel(context, state) : '',
       action: helper.busy ? null : action,
       onAction: open,
@@ -892,7 +877,6 @@ extension _RedesignedSettings on _SettingsScreenState {
   Widget _gainRow(AppLocalizations l10n) => SettingsSliderRow(
     title: l10n.shellSettingsPlaybackGain,
     valueLabel: _multiplier(l10n, _audioSharePlaybackGain),
-    hint: _isPage ? l10n.shellSettingsGainHint : null,
     value: _audioSharePlaybackGain,
     min: 1,
     max: 3,
@@ -1056,7 +1040,6 @@ class _PanelSection {
     required this.glyph,
     required this.color,
     required this.rows,
-    this.note,
   });
 
   final String title;
@@ -1065,5 +1048,4 @@ class _PanelSection {
   final WhisperGlyph? glyph;
   final Color color;
   final List<Widget> rows;
-  final String? note;
 }

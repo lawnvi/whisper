@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:toastification/toastification.dart';
+import 'package:whisper/helper/local.dart';
 import 'package:whisper/helper/toast.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/remote_input/mobile_control_screen.dart';
@@ -769,10 +770,9 @@ void main() {
     sliders[0].onChangeEnd!(2);
     sliders[1].onChanged!(0.5);
     sliders[1].onChangeEnd!(0.5);
-    await tester.pump();
-    final preferences = await SharedPreferences.getInstance();
-    expect(preferences.getDouble('mobile_pointer_speed'), 2);
-    expect(preferences.getDouble('mobile_scroll_speed'), 0.5);
+    await tester.pumpAndSettle();
+    expect(await LocalSetting().mobilePointerSpeed(), 2);
+    expect(await LocalSetting().mobileScrollSpeed(), 0.5);
     await tester.pumpWidget(const SizedBox());
   });
 

@@ -35,7 +35,7 @@ class ShareToolbar extends StatelessWidget {
         value: rightInset,
         spring: WhisperSprings.smooth,
         builder: (context, right, child) => Padding(
-          padding: EdgeInsets.fromLTRB(20, 0, 12 + right, 0),
+          padding: EdgeInsets.fromLTRB(20, 0, 20 + right, 0),
           child: child,
         ),
         child: LayoutBuilder(

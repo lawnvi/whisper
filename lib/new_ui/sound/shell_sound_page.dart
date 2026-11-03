@@ -181,7 +181,7 @@ class _SourceView extends StatelessWidget {
         : failure != null
         ? l10n.audioShareFailed(_failureDetail(l10n, failure))
         : live.isEmpty
-        ? l10n.soundHeroIdleBody
+        ? null
         : solo
         ? l10n.soundMemberSoloOnly
         : live.every((row) => row.sink == null)
@@ -273,13 +273,14 @@ class _Hero extends StatelessWidget {
     required this.art,
     required this.live,
     required this.title,
-    required this.subtitle,
+    this.subtitle,
     this.action,
   });
 
   final Widget art;
   final bool live;
-  final String title, subtitle;
+  final String title;
+  final String? subtitle;
   final Widget? action;
 
   @override
@@ -308,8 +309,9 @@ class _Hero extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 3),
+          // Its line stays when it has nothing to say: what is below must not move.
           Text(
-            subtitle,
+            subtitle ?? ' ',
             textAlign: TextAlign.center,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
@@ -866,7 +868,7 @@ class _SinkView extends StatelessWidget {
           live: playing,
           title: l10n.soundSinkTitle(source?.name ?? ''),
           subtitle: switch (view.phase) {
-            SoundSinkPhase.playing => l10n.soundSinkHint,
+            SoundSinkPhase.playing => null,
             SoundSinkPhase.paused => l10n.soundSinkPaused,
             SoundSinkPhase.resuming => l10n.soundSinkResuming,
           },

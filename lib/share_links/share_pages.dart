@@ -398,8 +398,7 @@ class SharePages {
         '<span>${_e(text.shareWebFrom(deviceName))}</span></span>'
         '</div></header>'
         '$body'
-        '<footer><p>$_shieldGlyph${_e(text.shareWebFooterLan)}</p>'
-        '</footer></body></html>';
+        '</body></html>';
   }
 
   String _kindLabel(String name) {

@@ -42,10 +42,10 @@ void main() {
   testWidgets('a toast appears near the top of the window', (tester) async {
     await pumpApp(tester);
 
-    showAppToast('键鼠共享需要互信设备');
+    showAppToast('键鼠共享需要两台设备已配对');
     await pumpToast(tester);
 
-    final message = find.text('键鼠共享需要互信设备');
+    final message = find.text('键鼠共享需要两台设备已配对');
     expect(message, findsOneWidget);
     expect(find.byIcon(Icons.info_rounded), findsOneWidget);
     final window = tester.getSize(find.byType(MaterialApp));

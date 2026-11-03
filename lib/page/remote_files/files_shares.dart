@@ -99,7 +99,6 @@ class _FilesSharesListState extends State<FilesSharesList> {
                               ),
                         ],
                       ),
-                      _Footer(text.shareLinksServiceFooter),
                       const SizedBox(height: 22),
                       _Header(text.shareLinksTitle),
                       if (links.isEmpty)

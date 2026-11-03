@@ -33,7 +33,7 @@
   "mobileControlTextHint": "Selecciona un campo en el ordenador, escribe y envía.",
   "mobileControlTextTooLong": "Envía hasta 4 KiB de texto cada vez.",
   "mobileControlTextUnconfirmed": "Entrada sin confirmar. Borrador conservado; revisa el ordenador antes de reenviar.",
-  "mobileControlTextSent": "Texto entregado al sistema. Revisa la aplicación de destino.",
+  "mobileControlTextSent": "Enviado al ordenador",
   "mobileControlSensitivity": "Velocidad del puntero por movimiento",
   "mobileControlCalibrate": "Calibrar",
   "mobileControlCalibrating": "Mantén el teléfono quieto un momento…",
@@ -53,7 +53,7 @@
   "screenshotSelectionHint": "Clic en una ventana · Arrastra un área · Esc para cancelar",
   "screenshotAdjustHint": "Arrastra para mover · Ajusta los bordes · Enter para copiar · Esc para cancelar",
   "screenshotConfirm": "Copiar",
-  "screenshotCopied": "Captura copiada. Pégala donde quieras.",
+  "screenshotCopied": "Captura copiada",
   "screenshotPermissionDenied": "Permite a Whisper grabar la pantalla en Ajustes del Sistema → Privacidad y seguridad y reinicia Whisper.",
   "screenshotUnavailable": "La captura de regiones no está disponible. En Linux, comprueba que el portal de capturas esté instalado y activo.",
   "screenshotFailed": "No se pudo capturar o copiar al portapapeles. Inténtalo de nuevo.",
@@ -220,7 +220,6 @@
   "localeNameSpanish": "Español",
   "autoConnectTrustedDevices": "Conectar automáticamente los dispositivos con confianza mutua",
   "windowsLockScreenInput": "Teclado y ratón en la pantalla de bloqueo y UAC",
-  "windowsLockScreenInputHint": "Escribe en la pantalla de bloqueo. El interruptor añade los avisos de UAC",
   "windowsLockScreenInputDesc": "Se instalará un servicio del sistema para que los dispositivos de confianza puedan escribir en la pantalla de bloqueo de este PC. Requiere aprobación de administrador.",
   "windowsLockScreenInputUninstallDesc": "Tras desinstalarlo, ya no se podrán controlar la pantalla de bloqueo ni los avisos de UAC de este PC. Requiere aprobación de administrador.",
   "windowsLockScreenInputNotInstalled": "No instalado",
@@ -247,7 +246,7 @@
   "androidBatteryOptimization": "Optimizacion de bateria",
   "fileTransferQueued": "En cola",
   "fileTransferPreparingResume": "Preparando reanudacion {progress}%",
-  "fileTransferNegotiating": "Negociando",
+  "fileTransferNegotiating": "Preparando",
   "fileTransferWaitingReconnect": "Esperando reconexion {progress}%",
   "fileTransferPaused": "Pausada",
   "fileTransferVerifying": "Verificando",
@@ -329,7 +328,7 @@
       }
     }
   },
-  "updateAvailableBody": "Tienes la versión {currentVersion}. La versión {latestVersion} está lista. La descarga se verificará con el hash de GitHub antes de abrirse.",
+  "updateAvailableBody": "La versión {currentVersion} se puede actualizar a {latestVersion}.",
   "@updateAvailableBody": {
     "placeholders": {
       "currentVersion": {
@@ -341,7 +340,7 @@
     }
   },
   "downloadAndInstallUpdate": "Actualizar",
-  "viewRelease": "Ver versión",
+  "viewRelease": "Ver notas de la versión",
   "updateInstallerOpened": "La actualización verificada está lista en el instalador del sistema",
   "updateInstallFailed": "No se pudo abrir el instalador. Inténtalo más tarde",
   "aboutWhisper": "Acerca de Whisper",
@@ -580,14 +579,12 @@
   "mobileControlPointer": "Ratón",
   "mobileControlKeysTab": "Teclado",
   "mobileControlSettings": "Ajustes del puntero",
-  "mobileControlPrecisionHint": "Mueve despacio para mayor precisión. Gira más rápido para recorrer más distancia.",
   "mobileControlCalibrationRetry": "Mantén el teléfono quieto y vuelve a calibrar.",
   "mobileControlMotionStart": "Activar movimiento",
   "mobileControlMotionPause": "Pausar movimiento",
   "mobileControlMotionOnHint": "Gira la muñeca para mover. Toca aquí para pausar.",
   "mobileControlMotionOffHint": "Toca una vez y mueve sin mantener pulsada la pantalla.",
   "mobileControlTarget": "Equipo a controlar",
-  "mobileControlTargetHint": "Vuelve a iniciar al cambiar.",
   "mobileControlPointerSpeed": "Velocidad del puntero del panel táctil",
   "mobileControlScrollSpeed": "Velocidad de desplazamiento",
   "mobileControlPermissionDesktop": "Permite el control remoto en el equipo y vuelve a iniciar. En Linux, acepta la solicitud de control remoto del sistema.",
@@ -667,7 +664,7 @@
   "windowStreamWhisperMissing": "Este teléfono no tiene un Whisper utilizable. Instala la última versión de Whisper y vincúlala con este dispositivo para transmitir.",
   "windowStreamNotPaired": "Sin vincular",
   "windowStreamSendTo": "Enviar a {device}",
-  "windowStreamSent": "Enviada a {device}. Toca el aviso allí para verla.",
+  "windowStreamSent": "Enviado a {device}",
   "windowStreamSendFailed": "No se pudo enviar. Comprueba que ese dispositivo esté conectado a este.",
   "windowStreamSendUnavailable": "Whisper en {device} debe estar conectado a este ordenador y actualizado para recibir ventanas.",
   "windowStreamNoLocalWindows": "No hay ventanas en este ordenador para enviar",
@@ -703,7 +700,7 @@
   "remoteFilesPromptTitle": "{device} quiere explorar tus archivos",
   "remoteFilesPromptBodyPhone": "Si lo permites, podrá ver el almacenamiento interno de este teléfono y copiar, crear, renombrar y eliminar archivos allí. Lo eliminado no se puede recuperar.",
   "remoteFilesDeny": "No permitir",
-  "remoteFilesAllowOnce": "Permitir esta vez",
+  "remoteFilesAllowOnce": "Permitir",
   "remoteFilesAllowAlways": "Permitir siempre",
   "windowStreamTouchBlockedTitle": "{device} no responde al tacto",
   "windowStreamTouchBlockedBody": "Una página que {app} dejó en segundo plano cubre la pantalla del teléfono y los toques no llegan. Cerrar esa página lo arregla; {app} sigue instalada con su cuenta e historial.",
@@ -838,13 +835,13 @@
   "islandHint": "Toca para ampliar, desliza hacia arriba para ocultar",
   "shareLinkMenuCreate": "Crear enlace para compartir…",
   "shareLinkDefaultName": "{count, plural, =1{1 elemento} other{{count} elementos}}",
-  "shareLinkRoute": "Ruta",
-  "shareLinkShortRoute": "Ruta corta",
+  "shareLinkRoute": "Sufijo del enlace",
+  "shareLinkShortRoute": "Sufijo corto",
   "shareLinkPassword": "Contraseña",
   "shareLinkCreate": "Crear enlace",
-  "shareLinkRouteTaken": "Otro enlace ya usa esta ruta",
+  "shareLinkRouteTaken": "Otro enlace ya usa este sufijo",
   "shareLinkRouteInvalid": "Usa de 2 a 32 caracteres: minúsculas, números, - o _",
-  "shareLinkRouteReserved": "Esta ruta está reservada. Prueba con otra.",
+  "shareLinkRouteReserved": "Este sufijo está reservado. Prueba otro.",
   "shareLinkItemsMissing": "Los elementos que querías compartir ya no están",
   "shareLinkCreateFailed": "No se pudo crear el enlace",
   "shareLinkCopy": "Copiar enlace",
@@ -926,12 +923,10 @@
   "windowStreamCloseShow": "Mostrar ventana",
   "windowStreamClosing": "Cerrando",
   "shareWebFrom": "Desde {device}",
-  "shareWebFooterLan": "Los archivos llegan directamente desde este dispositivo por tu red local, sin pasar por la nube.",
   "shareWebPreviewTruncated": "Se muestran los primeros {size}. Descarga el archivo para verlo completo.",
   "shareWebPrevious": "Anterior",
   "shareWebNext": "Siguiente",
   "shareLinkAddress": "Dirección",
-  "shareLinksServiceFooter": "Los dispositivos de la misma red pueden abrir un enlace en cualquier navegador. El servidor solo funciona mientras haya un enlace activo.",
   "androidWindowServiceTitle": "Servicio de flujo de ventanas",
   "androidWindowServiceRunning": "Activado",
   "androidWindowServiceRunningHint": "Tus ordenadores de confianza ya pueden ver este teléfono en su flujo de ventanas y abrir sus apps",
@@ -970,7 +965,7 @@
   "remoteFilesPromptAllowChanges": "Permitir cambios",
   "remoteFilesReadOnlyHost": "{device} solo permite leer sus archivos",
   "remoteFilesPromptBodyReadOnlyPhone": "Si lo permites, podrá ver el almacenamiento interno de este teléfono y abrir y copiar sus archivos, pero no cambiarlos.",
-  "islandOverlay": "Isla en segundo plano",
+  "islandOverlay": "Avisos en segundo plano",
   "islandOverlayOn": "Activada",
   "islandOverlayOff": "Desactivada",
   "islandOverlayStop": "Detener",
@@ -1021,8 +1016,6 @@
       }
     }
   },
-  "shellNotConnectedFiles": "Conéctalo para explorar sus archivos.",
-  "shellNotConnectedApps": "Conéctalo para ver sus ventanas y apps.",
   "shellConnect": "Conectar",
   "shellConnecting": "Conectando…",
   "shellNearbyTitle": "{device} está cerca",
@@ -1033,7 +1026,6 @@
       }
     }
   },
-  "shellPairHint": "Al conectar, ambos dispositivos muestran los mismos 6 dígitos.",
   "shellComposerOffline": "Conecta {device} para enviar",
   "@shellComposerOffline": {
     "placeholders": {
@@ -1042,7 +1034,6 @@
       }
     }
   },
-  "shellSelfQrHint": "Escanea este código en otro dispositivo para conectarlo a este",
   "shellSelfNoLan": "Este dispositivo no está en una red local y los demás no pueden encontrarlo",
   "shellSelfAddress": "Dirección",
   "shellSelfFingerprint": "Huella de identidad",
@@ -1062,13 +1053,13 @@
       }
     }
   },
-  "shellCardTrust": "Conectarse sin preguntar",
+  "shellCardTrust": "Aceptar conexiones automáticamente",
   "shellCardBrowse": "Explorar mis archivos",
   "shellCardChange": "Modificar mis archivos",
   "shellCardAddress": "Dirección",
   "shellCardDiagnostics": "Diagnóstico de conexión",
   "shellCardDisconnect": "Desconectar",
-  "shellCardRemove": "Quitar este dispositivo",
+  "shellCardRemove": "Eliminar dispositivo",
   "shellCardSound": "Sonido",
   "shellCardInput": "Control",
   "shellCardClipboard": "Portapapeles",
@@ -1133,10 +1124,8 @@
   "shellSettingsPressShortcut": "Pulsa un atajo…",
   "shellSettingsAllowClipboard": "Permitir acceso al portapapeles",
   "shellSettingsAutoClipboard": "Sincronizar el portapapeles automáticamente",
-  "shellSettingsPlaybackGain": "Ganancia del sonido de otros dispositivos",
+  "shellSettingsPlaybackGain": "Volumen de reproducción",
   "shellSettingsCopyCode": "Copiar códigos de verificación al portapapeles",
-  "shellSettingsSharingNote": "La ganancia solo afecta al sonido que reproduce este dispositivo y, si es muy alta, puede distorsionar. La velocidad de desplazamiento solo se aplica cuando este dispositivo está siendo controlado.",
-  "shellSettingsGainHint": "Si es muy alta, puede distorsionar",
   "shellSettingsVersion": "Versión",
   "shellSettingsVersionChecking": "Comprobando…",
   "shellSettingsQrAndAddress": "Código QR y dirección",
@@ -1147,7 +1136,6 @@
   "shellSettingsAboutVersion": "Versión {version}",
   "shellSettingsLinksOn": "{count, plural, =1{1 activo} other{{count} activos}}",
   "soundHeroIdleTitle": "Reproducir en otros dispositivos",
-  "soundHeroIdleBody": "Elige varios dispositivos y sonarán a la vez.",
   "soundHeroPlaying": "{count, plural, =1{Reproduciendo en 1 dispositivo} other{Reproduciendo en {count} dispositivos}}",
   "@soundHeroPlaying": {
     "placeholders": {
@@ -1218,7 +1206,6 @@
       }
     }
   },
-  "soundSinkHint": "Para cambiar de origen, desconecta primero",
   "soundSinkPaused": "En pausa",
   "soundSinkResuming": "Reanudando…",
   "soundGain": "Ganancia",
@@ -1232,7 +1219,6 @@
   },
   "soundResume": "Reanudar",
   "shareOpenSettings": "Activar",
-  "inputHintIdle": "Arrastra las pantallas para ordenarlas. El puntero pasa por los bordes que se tocan.",
   "inputHintExit": "Pulsa {shortcut} para recuperar el teclado y el ratón",
   "@inputHintExit": {
     "placeholders": {
@@ -1295,7 +1281,6 @@
       }
     }
   },
-  "inputControlledHint": "Para controlar otro ordenador, detén primero.",
   "inputSwitchLabel": "Compartir teclado y ratón",
   "inputScreenLabel": "Pantalla de {device}, {detail}",
   "@inputScreenLabel": {
@@ -1320,9 +1305,9 @@
   "shellPaletteEmpty": "Sin resultados",
   "shellLinksServiceOff": "El servicio de archivos está desactivado",
   "shellLinksServiceIdle": "No hay enlaces activos, el servicio no se está ejecutando",
-  "shellLinksFoot": "No necesitan Whisper: en la misma red, un navegador puede abrirlo y descargar. Usa HTTP normal, así que la contraseña solo evita aperturas casuales.",
+  "shellLinksFoot": "Usa HTTP sin cifrar. La contraseña solo evita visitas casuales.",
   "shellLinksEmptyTitle": "Aún no hay enlaces",
-  "shellLinksEmptyBody": "Elige archivos para crear un enlace. No necesitan Whisper: un navegador puede abrirlo y descargar.",
+  "shellLinksEmptyBody": "Elige archivos para crear un enlace. Otros lo abren en el navegador para descargar.",
   "shellLinksChoose": "Elegir archivos",
   "shellLinksNew": "Nuevo",
   "shellLinkOff": "Desactivado",
@@ -1461,8 +1446,6 @@
   "shellTraySendClipboardTo": "Enviar el portapapeles a",
   "shellTraySendFileTo": "Enviar archivo a",
   "shellTrayPlayOn": "Reproducir sonido en",
-  "phoneConnectQrHint": "Escanea este código con otro dispositivo",
-  "phoneConnectScanHint": "Apunta al código de otro dispositivo",
   "phoneConnectCopyLink": "Copiar enlace de conexión",
   "phoneConnectCopied": "Enlace de conexión copiado",
   "phoneConnectCopyFailed": "No se pudo copiar. Inténtalo de nuevo",
@@ -1486,7 +1469,7 @@
     }
   },
   "pickerSendText": "Enviar este texto a",
-  "phoneFilesCopied": "{count} copiados. Pégalos en la carpeta que quieras",
+  "phoneFilesCopied": "{count} copiados",
   "@phoneFilesCopied": {
     "placeholders": {
       "count": {
@@ -1503,7 +1486,6 @@
       }
     }
   },
-  "shellLinkCreateBody": "Los dispositivos de la misma red pueden abrirlo en un navegador y descargar.",
   "shellLinkPasswordOptional": "Contraseña (opcional)",
   "shellAppsShownOn": "Se ejecuta aquí, se muestra en {device}",
   "@shellAppsShownOn": {

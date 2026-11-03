@@ -79,7 +79,7 @@ Future<InputWorld> _input(
   return world;
 }
 
-Finder _check(String device) => find.bySemanticsLabel('把声音放到 $device');
+Finder _check(String device) => find.bySemanticsLabel('把声音播放到 $device');
 
 Finder _screen(String device) => find.bySemanticsLabel(RegExp('^$device 的屏幕'));
 
@@ -197,7 +197,7 @@ void main() {
       expect(world.group.session, isNull);
       expect(find.text('已停止'), findsOneWidget);
       expect(world.controller.isSelected(imacDevice.uid), isTrue);
-      expect(find.text('放到其他设备'), findsOneWidget);
+      expect(find.text('播放到其他设备'), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
     });
 
@@ -242,7 +242,7 @@ void main() {
       await tester.tap(find.text('断开'));
       await settle(tester);
       expect(world.controller.sinkView, isNull);
-      expect(find.text('放到其他设备'), findsOneWidget);
+      expect(find.text('播放到其他设备'), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
     });
 
@@ -275,7 +275,7 @@ void main() {
     ) async {
       final world = await _input(tester);
       final toggle = find.byType(ShareSwitch);
-      expect(tester.getTopRight(toggle).dx, _wide.width - 12);
+      expect(tester.getTopRight(toggle).dx, _wide.width - 20);
       expect(tester.getCenter(toggle).dy, 26);
       await tester.tap(toggle);
       await settle(tester);
@@ -308,11 +308,11 @@ void main() {
       );
       await tester.tap(find.byType(ShareSwitch));
       await settle(tester);
-      expect(find.text('它还没有信任这台'), findsOneWidget);
+      expect(find.text('对方未信任本机'), findsOneWidget);
       world.notTrustingUs.clear();
       await tester.tap(find.text('重试'));
       await settle(tester);
-      expect(find.text('它还没有信任这台'), findsNothing);
+      expect(find.text('对方未信任本机'), findsNothing);
       expect(
         world.workspace.snapshot.targets.keys,
         contains(thinkPadDevice.uid),
@@ -327,7 +327,7 @@ void main() {
       await tester.tap(_screen('iMac'));
       await settle(tester);
       expect(world.controller.selected, imacDevice.uid);
-      expect(find.text('2560×1440 · 在右边'), findsOneWidget);
+      expect(find.text('2560×1440 · 右侧'), findsOneWidget);
 
       await tester.tap(find.text('移出'));
       await settle(tester);
@@ -482,7 +482,7 @@ void main() {
         ),
         size: _wide,
       );
-      expect(find.text('iMac 正在控制这台'), findsOneWidget);
+      expect(find.text('iMac 正在控制本机'), findsOneWidget);
       expect(find.byType(ShareSwitch), findsNothing);
       await tester.tap(find.text('停止'));
       await tester.runAsync(() => Future<void>.delayed(Duration.zero));

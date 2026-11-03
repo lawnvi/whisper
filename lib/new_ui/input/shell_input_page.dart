@@ -1060,7 +1060,7 @@ class _Footer extends StatelessWidget {
     final footer = controller.footer;
     final children = <Widget>[
       switch (footer) {
-        InputFooterHint() => Expanded(child: line(l10n.inputHintIdle)),
+        InputFooterHint() => const Spacer(),
         InputFooterExit(:final shortcut) => Expanded(
           child: _ExitHint(shortcut: shortcut),
         ),
@@ -1142,10 +1142,14 @@ class _Footer extends StatelessWidget {
             ),
           ],
           const SizedBox(width: 8),
-          ShareButton(
-            label: l10n.inputRemove,
-            kind: ShareButtonKind.plain,
-            onTap: () => unawaited(controller.remove(screen.peerId)),
+          // The word lines up with the canvas; its padding hangs outside.
+          Transform.translate(
+            offset: const Offset(14, 0),
+            child: ShareButton(
+              label: l10n.inputRemove,
+              kind: ShareButtonKind.plain,
+              onTap: () => unawaited(controller.remove(screen.peerId)),
+            ),
           ),
         ]);
     }
@@ -1257,20 +1261,6 @@ class _Controlled extends StatelessWidget {
                 fontWeight: FontWeight.w600,
                 height: 1.4,
                 color: c.ink,
-              ),
-            ),
-            const SizedBox(height: 10),
-            ConstrainedBox(
-              // max-width: 32ch
-              constraints: BoxConstraints(maxWidth: type.body * 32),
-              child: Text(
-                l10n.inputControlledHint,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: type.body,
-                  height: 1.5,
-                  color: c.ink2,
-                ),
               ),
             ),
             const SizedBox(height: 16),

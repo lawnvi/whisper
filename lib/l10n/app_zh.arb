@@ -15,7 +15,7 @@
   "mobileControlStop": "停止控制",
   "mobileControlReady": "已就绪",
   "mobileControlActive": "正在控制",
-  "remoteInputPeerControlling": "正在控制此设备",
+  "remoteInputPeerControlling": "正在控制本机",
   "remoteInputPeerReceiving": "正在控制本机",
   "remoteInputPeerReady": "已就绪，等待切入",
   "mobileControlPreparing": "正在连接控制",
@@ -32,13 +32,13 @@
   "mobileControlSendText": "发送文字",
   "mobileControlTextHint": "先在电脑选中输入框，再输入并发送文字。",
   "mobileControlTextTooLong": "每次最多发送 4 KiB 文字。",
-  "mobileControlTextUnconfirmed": "未确认输入结果，草稿已保留。请查看电脑后再决定是否重发。",
-  "mobileControlTextSent": "文字已交给电脑系统，请查看目标应用。",
+  "mobileControlTextUnconfirmed": "未确认是否输入成功，草稿已保留",
+  "mobileControlTextSent": "已发送到电脑",
   "mobileControlSensitivity": "体感移动速度",
   "mobileControlCalibrate": "校准",
   "mobileControlCalibrating": "请保持手机静止片刻…",
   "mobileControlCalibrationDone": "校准完成",
-  "mobileControlReceiving": "此电脑正由 {name} 控制",
+  "mobileControlReceiving": "本机正由 {name} 控制",
   "mobileControlShortcutHint": "点选修饰键，再点普通键组合发送；完成后自动解除。",
   "@mobileControlReceiving": {
     "placeholders": {
@@ -64,7 +64,7 @@
   "screenshotSelectionHint": "单击选择窗口 · 拖动框选区域 · Esc 取消",
   "screenshotAdjustHint": "拖动移动 · 拖边调整 · Enter 复制 · Esc 取消",
   "screenshotConfirm": "复制",
-  "screenshotCopied": "截图已复制，可自行粘贴使用",
+  "screenshotCopied": "截图已复制",
   "screenshotPermissionDenied": "请在系统设置 → 隐私与安全性中允许 Whisper 录制屏幕，然后重启 Whisper",
   "screenshotUnavailable": "当前环境无法进行区域截图；Linux 请检查桌面的截图 Portal 服务是否已安装并运行",
   "screenshotFailed": "截图或复制到剪贴板失败，请重试",
@@ -135,16 +135,16 @@
   "transferNotificationInterrupted": "传输已中断,回到应用可恢复",
   "connect": "连接",
   "confirm": "确定",
-  "allow": "同意",
+  "allow": "允许",
   "refuse": "拒绝",
   "cancel": "取消",
   "retry": "重试",
   "setting": "设置",
-  "trust": "自动接入",
-  "writeClipboard": "写入剪切板",
+  "trust": "自动接受连接",
+  "writeClipboard": "写入剪贴板",
   "deleteDevice": "删除设备",
   "serverPortTitle": "服务端口",
-  "clipboardAutoSync": "自动同步剪切板",
+  "clipboardAutoSync": "自动同步剪贴板",
   "close2tray": "关闭时隐藏到托盘",
   "nickname": "昵称",
   "port": "服务端口",
@@ -153,7 +153,7 @@
   "keepConnect": "保持",
   "menuShow": "显示",
   "menuHide": "隐藏",
-  "menuClipboard": "发送剪切板",
+  "menuClipboard": "发送剪贴板",
   "menuSendFile": "发送文件",
   "filePickerOpenFailed": "无法打开文件选择器",
   "clipboardImageSendFailed": "剪贴板图片发送失败",
@@ -181,7 +181,7 @@
       }
     }
   },
-  "deleteDeviceDesc": "断开连接并删除与此设备的所有消息，不可恢复",
+  "deleteDeviceDesc": "断开连接并删除与该设备的所有消息，不可恢复",
   "brokeConnectTitle": "断开连接",
   "connectFailed": "连接失败",
   "connectAlreadyInProgress": "连接正在进行中",
@@ -213,7 +213,7 @@
   "clearAll": "清空",
   "selectNotifyApp": "选择通知应用",
   "open": "打开",
-  "openInFinder": "在Finder中显示",
+  "openInFinder": "在访达中显示",
   "openInDir": "所在文件夹",
   "deleteFile": "删除文件",
   "copyMessage": "复制消息",
@@ -224,15 +224,14 @@
   "followSystem": "跟随系统",
   "connectedNow": "当前已连接",
   "nearbyAvailable": "附近可连接",
-  "noMessagesYet": "还没有消息",
+  "noMessagesYet": "没有消息",
   "sharedFile": "发送了一个文件",
   "localeNameZhHans": "简体中文",
   "localeNameEnglish": "English",
   "localeNameSpanish": "Español",
-  "autoConnectTrustedDevices": "自动连接互信设备",
+  "autoConnectTrustedDevices": "自动连接已配对设备",
   "windowsLockScreenInput": "锁屏与 UAC 时接收键鼠",
-  "windowsLockScreenInputHint": "锁屏时可输入密码，开关控制 UAC 提示",
-  "windowsLockScreenInputDesc": "将安装系统服务，让互信设备可在本机锁屏时输入密码。需要管理员确认。",
+  "windowsLockScreenInputDesc": "将安装系统服务，让已配对设备可在本机锁屏时输入密码。需要管理员确认。",
   "windowsLockScreenInputUninstallDesc": "卸载后将无法操作本机的锁屏和 UAC 提示。需要管理员确认。",
   "windowsLockScreenInputNotInstalled": "未安装",
   "windowsLockScreenInputRunning": "运行中",
@@ -244,8 +243,8 @@
   "windowsLockScreenInputWorking": "正在等待系统服务就绪…",
   "windowsLockScreenInputFailed": "锁屏键鼠服务设置失败",
   "windowsElevatedInput": "操作 UAC 提示",
-  "windowsElevatedInputEnableDesc": "开启后互信设备可操作 UAC 提示，但本机上以你身份运行的程序也能借此绕过 UAC。需要管理员确认。",
-  "windowsElevatedInputDisableDesc": "关闭后互信设备无法操作 UAC 提示，锁屏输入不受影响。需要管理员确认。",
+  "windowsElevatedInputEnableDesc": "开启后已配对设备可操作 UAC 提示，但本机上以你身份运行的程序也能借此绕过 UAC。需要管理员确认。",
+  "windowsElevatedInputDisableDesc": "关闭后已配对设备无法操作 UAC 提示，锁屏输入不受影响。需要管理员确认。",
   "windowsElevatedInputEnable": "开启",
   "windowsElevatedInputDisable": "关闭",
   "windowsElevatedInputFailed": "UAC 控制设置失败",
@@ -265,7 +264,7 @@
       }
     }
   },
-  "fileTransferNegotiating": "协商中",
+  "fileTransferNegotiating": "正在准备",
   "fileTransferWaitingReconnect": "等待重连 {progress}%",
   "@fileTransferWaitingReconnect": {
     "placeholders": {
@@ -276,14 +275,14 @@
   },
   "fileTransferPaused": "已暂停",
   "fileTransferVerifying": "校验中",
-  "fileTransferWaitingPeerVerification": "等待对端校验",
+  "fileTransferWaitingPeerVerification": "等待对方校验",
   "fileTransferFailedNotice": "文件传输失败",
   "fileTransferCanceled": "已取消",
   "audioShareCaptureConnecting": "采集端：正在连接远端扬声器",
   "audioSharePlaybackPreparing": "播放端：正在准备播放共享声音",
   "audioShareCaptureActiveStop": "采集端：正在共享本机声音，点击停止",
   "audioSharePlaybackActiveStop": "播放端：正在作为扬声器播放，点击停止",
-  "audioShareStart": "把本机声音共享给对端",
+  "audioShareStart": "把本机声音共享给对方",
   "remoteInputScrollMultiplierTitle": "键鼠共享滚轮速度",
   "audioShareUnsupportedCapture": "当前设备不支持系统音频采集",
   "audioGroupSelectSinks": "选择播放设备",
@@ -305,19 +304,19 @@
       }
     }
   },
-  "remoteInputSourceConnecting": "键鼠共享：正在连接对端",
+  "remoteInputSourceConnecting": "键鼠共享：正在连接对方",
   "remoteInputSinkConnecting": "键鼠共享：正在准备接收控制",
   "remoteInputEdgeActiveStop": "键鼠共享：边缘穿越已启用，点击停止",
-  "remoteInputSourceActiveStop": "键鼠共享：正在控制对端，点击停止",
+  "remoteInputSourceActiveStop": "键鼠共享：正在控制对方，点击停止",
   "remoteInputSinkActiveStop": "键鼠共享：正在接收控制，点击停止",
   "remoteInputStart": "启用键鼠共享",
   "remoteInputStopCurrentFirst": "请先停止当前键鼠共享会话",
   "remoteInputLocalUnsupported": "当前设备不支持键鼠共享",
   "remoteInputPeerUnsupported": "当前连接设备不支持键鼠共享",
-  "remoteInputRequiresMutualTrust": "键鼠共享需要互信设备",
-  "remoteInputPeerMustTrustThisDevice": "对端还没有信任本机，请先在对端信任本机后再共享键鼠",
-  "remoteInputLayoutRequired": "请先在键鼠工作区把对端屏幕贴到本机边缘",
-  "remoteInputEnabledMoveToEdge": "键鼠共享已启用，移动到屏幕边缘开始控制对端",
+  "remoteInputRequiresMutualTrust": "键鼠共享需要两台设备已配对",
+  "remoteInputPeerMustTrustThisDevice": "对方还没有信任本机，请先在对方设备上信任本机",
+  "remoteInputLayoutRequired": "请先把对方屏幕拖到本机屏幕边缘",
+  "remoteInputEnabledMoveToEdge": "键鼠共享已开启，移到屏幕边缘开始控制对方",
   "remoteInputFailed": "键鼠共享失败：{error}",
   "@remoteInputFailed": {
     "placeholders": {
@@ -385,7 +384,7 @@
       }
     }
   },
-  "updateAvailableBody": "当前版本 {currentVersion}，可更新到 {latestVersion}。安装前会校验 GitHub 提供的文件哈希。",
+  "updateAvailableBody": "当前版本 {currentVersion}，可更新到 {latestVersion}。",
   "@updateAvailableBody": {
     "placeholders": {
       "currentVersion": {
@@ -397,7 +396,7 @@
     }
   },
   "downloadAndInstallUpdate": "更新",
-  "viewRelease": "查看 Release",
+  "viewRelease": "查看更新说明",
   "updateInstallerOpened": "更新包已校验，已交给系统安装器",
   "updateInstallFailed": "无法打开更新安装包，请稍后重试",
   "aboutWhisper": "关于 Whisper",
@@ -619,7 +618,7 @@
   "videoPlaybackFailed": "视频播放失败，请重试或使用其他应用打开。",
   "castPlaybackFailed": "视频播放失败，请重试或在手机上重新投屏。",
   "castControlFailed": "操作未完成，请重试。",
-  "castRequestTitle": "允许这台设备投屏吗？",
+  "castRequestTitle": "允许该设备投屏吗？",
   "castRequestMessage": "来自 {address} 的设备希望在本机播放视频。",
   "castRequestDeny": "拒绝",
   "castRequestAllow": "允许投屏",
@@ -636,14 +635,12 @@
   "mobileControlPointer": "鼠标",
   "mobileControlKeysTab": "键盘",
   "mobileControlSettings": "指针设置",
-  "mobileControlPrecisionHint": "慢转精细定位，快转大幅移动。",
   "mobileControlCalibrationRetry": "请保持手机静止，再试一次校准。",
   "mobileControlMotionStart": "开启体感",
   "mobileControlMotionPause": "暂停体感",
   "mobileControlMotionOnHint": "转腕即可移动，点此暂停。",
   "mobileControlMotionOffHint": "点一下开启，无需一直按住屏幕。",
   "mobileControlTarget": "控制目标",
-  "mobileControlTargetHint": "切换后需重新开始控制。",
   "mobileControlPointerSpeed": "触控板移动速度",
   "mobileControlScrollSpeed": "滚轮滑动速度",
   "mobileControlPermissionDesktop": "请在电脑上允许远程控制后重试。Linux 需要接受系统的远程控制授权。",
@@ -702,7 +699,7 @@
   "folderSkipTooLarge": "文件过大",
   "folderSkipUnreadable": "无法读取",
   "folderSkipSourceUnavailable": "发送时已被移动、修改或无法读取",
-  "folderSkipWriteFailed": "无法保存到这台设备",
+  "folderSkipWriteFailed": "无法保存到本机",
   "folderSkipNameCollision": "与同目录的另一项只有大小写不同",
   "folderSkipIntegrity": "校验未通过",
   "folderSendFailed": "无法发送这个文件夹",
@@ -735,38 +732,38 @@
   "windowStreamConnecting": "正在连接…",
   "windowStreamPaused": "已暂停，点按继续",
   "windowStreamReconnecting": "正在重新连接…",
-  "windowStreamDisplaced": "已回到手机上，点按拿回来",
+  "windowStreamDisplaced": "已回到手机上，点按收回",
   "windowStreamSecureBlocked": "此应用不允许投屏",
   "windowStreamAppExited": "应用已退出",
-  "windowStreamDisconnected": "连接已断开，可以关闭这个窗口",
-  "windowStreamUnauthorized": "请在手机上允许这台电脑调试",
-  "windowStreamDeviceOffline": "手机暂时连不上，请重新插拔数据线或重新打开无线调试",
-  "windowStreamAdbMissing": "没有找到 adb，请先安装 Android 平台工具",
-  "windowStreamAdbFailed": "adb 服务没能启动",
-  "windowStreamUnsupported": "这台电脑暂时还不能打开手机应用窗口",
+  "windowStreamDisconnected": "连接已断开",
+  "windowStreamUnauthorized": "请在手机上允许本机调试",
+  "windowStreamDeviceOffline": "无法连接手机，请重新插拔数据线或重新打开无线调试",
+  "windowStreamAdbMissing": "未找到 adb，请安装 Android 平台工具",
+  "windowStreamAdbFailed": "adb 服务启动失败",
+  "windowStreamUnsupported": "本机暂不支持打开手机应用窗口",
   "windowStreamSearchApps": "搜索应用",
   "windowStreamShowSystemApps": "显示系统应用",
   "windowStreamRetry": "重试",
   "windowStreamInjectDenied": "小米手机还要在开发者选项里打开“USB 调试（安全设置）”，然后重启手机",
   "windowStreamAndroidTooOld": "需要 Android 10 或更新的系统",
-  "windowStreamOpenFailed": "没能打开这个应用",
-  "windowStreamNoApps": "没有读到应用",
+  "windowStreamOpenFailed": "无法打开此应用",
+  "windowStreamNoApps": "未读取到应用",
   "windowStreamSpaceTitle": "流转",
   "windowStreamPause": "暂停",
   "windowStreamResume": "继续",
   "windowStreamClose": "关闭",
-  "windowStreamNoDevices": "还没有可用的设备",
+  "windowStreamNoDevices": "没有可用设备",
   "windowStreamNoDevicesHintDesktop": "用数据线连接安卓手机，或在手机的开发者选项里打开“无线调试”。",
-  "windowStreamNoDevicesHintMobile": "在 Mac 上打开 Whisper，并和这台设备互相信任后，Mac 的窗口会出现在这里。",
-  "windowStreamLoadFailed": "没能读取这台设备的应用",
+  "windowStreamNoDevicesHintMobile": "在 Mac 上打开 Whisper 并完成配对后，Mac 的窗口会显示在这里。",
+  "windowStreamLoadFailed": "无法读取该设备的应用",
   "windowStreamBackToSpace": "返回流转",
   "windowStreamKeyboard": "键盘",
-  "windowStreamSourceLocked": "这台电脑已锁屏，解锁后才能流转它的窗口",
-  "windowStreamCapturePermission": "这台电脑还没允许 Whisper 录屏，请在它的“系统设置 › 隐私与安全性 › 录屏”里打开",
-  "windowStreamUntrusted": "这台手机的 Whisper 还没和本机配对。在手机上打开 Whisper，连接本机并确认配对后才能流转",
-  "windowStreamWhisperMissing": "这台手机上没有可用的 Whisper。装上最新版 Whisper 并和本机配对后才能流转",
+  "windowStreamSourceLocked": "该电脑已锁屏，解锁后才能流转窗口",
+  "windowStreamCapturePermission": "该电脑未允许 Whisper 录屏，请在“系统设置 › 隐私与安全性 › 录屏”中开启",
+  "windowStreamUntrusted": "该手机的 Whisper 尚未与本机配对，请在手机上连接本机并确认配对",
+  "windowStreamWhisperMissing": "该手机上没有可用的 Whisper，请安装最新版并与本机配对",
   "windowStreamNotPaired": "未配对",
-  "windowStreamSendTo": "送到 {device}",
+  "windowStreamSendTo": "发送到 {device}",
   "@windowStreamSendTo": {
     "placeholders": {
       "device": {
@@ -774,7 +771,7 @@
       }
     }
   },
-  "windowStreamSent": "已送到 {device}，在那台设备上点开即可查看",
+  "windowStreamSent": "已发送到 {device}",
   "@windowStreamSent": {
     "placeholders": {
       "device": {
@@ -782,7 +779,7 @@
       }
     }
   },
-  "windowStreamSendFailed": "没能送过去，请确认那台设备连着本机",
+  "windowStreamSendFailed": "发送失败，请确认该设备已连接本机",
   "windowStreamSendUnavailable": "{device} 上的 Whisper 需要连接本机并更新到最新版，才能接收窗口",
   "@windowStreamSendUnavailable": {
     "placeholders": {
@@ -792,7 +789,7 @@
     }
   },
   "windowStreamNoLocalWindows": "本机没有可以送出去的窗口",
-  "windowStreamOfferTitle": "{device} 送来了一个窗口",
+  "windowStreamOfferTitle": "{device} 发来一个窗口",
   "@windowStreamOfferTitle": {
     "placeholders": {
       "device": {
@@ -811,7 +808,7 @@
   },
   "remoteFilesTitle": "文件",
   "remoteFilesThisDevice": "本机",
-  "remoteFilesOffline": "{device} 现在没有连接本机",
+  "remoteFilesOffline": "{device} 未连接本机",
   "@remoteFilesOffline": {
     "placeholders": {
       "device": {
@@ -827,13 +824,13 @@
       }
     }
   },
-  "remoteFilesEmptyFolder": "这个文件夹是空的",
+  "remoteFilesEmptyFolder": "空文件夹",
   "remoteFilesNewFolder": "新建文件夹",
   "remoteFilesFolderName": "文件夹名称",
   "remoteFilesRename": "重命名",
   "remoteFilesMoveToTrash": "移到废纸篓",
   "remoteFilesDelete": "删除",
-  "remoteFilesDeleteForever": "要永久删除这 {count} 项吗？这台设备没有废纸篓，删除后无法恢复。",
+  "remoteFilesDeleteForever": "要永久删除这 {count} 项吗？该设备没有废纸篓，删除后无法恢复。",
   "@remoteFilesDeleteForever": {
     "placeholders": {
       "count": {
@@ -841,8 +838,8 @@
       }
     }
   },
-  "remoteFilesFailed": "操作没有完成",
-  "remoteFilesNameExists": "这里已经有同名的文件或文件夹",
+  "remoteFilesFailed": "操作失败",
+  "remoteFilesNameExists": "已存在同名项目",
   "remoteFilesShowHidden": "显示隐藏文件",
   "remoteFilesSelected": "已选 {count} 项",
   "@remoteFilesSelected": {
@@ -863,7 +860,7 @@
   "remoteFilesPlaceCamera": "相机",
   "remoteFilesPlaceMovies": "影片",
   "remoteFilesPlaceMusic": "音乐",
-  "remoteFilesPromptTitle": "{device} 想浏览你的文件",
+  "remoteFilesPromptTitle": "{device} 请求访问你的文件",
   "@remoteFilesPromptTitle": {
     "placeholders": {
       "device": {
@@ -873,9 +870,9 @@
   },
   "remoteFilesPromptBodyPhone": "允许后，它能看到这台手机的内部存储，并在里面拷贝、新建、重命名和删除文件。删除的文件不能恢复。",
   "remoteFilesDeny": "拒绝",
-  "remoteFilesAllowOnce": "允许这一次",
+  "remoteFilesAllowOnce": "允许",
   "remoteFilesAllowAlways": "始终允许",
-  "windowStreamTouchBlockedTitle": "{device} 现在点不动了",
+  "windowStreamTouchBlockedTitle": "{device} 无法操作",
   "@windowStreamTouchBlockedTitle": {
     "placeholders": {
       "device": {
@@ -883,7 +880,7 @@
       }
     }
   },
-  "windowStreamTouchBlockedBody": "{app} 留在后台的一个页面挡住了手机屏幕，手机收不到触摸。关掉这个页面就能恢复，{app} 不会被卸载，账号和记录都还在。",
+  "windowStreamTouchBlockedBody": "{app} 留在后台的页面挡住了手机屏幕，手机收不到触摸。关闭该页面即可恢复，不会卸载 {app}，账号和记录不受影响。",
   "@windowStreamTouchBlockedBody": {
     "placeholders": {
       "app": {
@@ -891,10 +888,10 @@
       }
     }
   },
-  "windowStreamTouchBlockedFix": "关掉这个页面",
-  "windowStreamTouchBlockedLater": "以后再说",
-  "windowStreamTouchBlockedFixed": "好了，手机可以操作了",
-  "remoteFilesWaitingDetail": "Whisper 正在那台设备上询问是否让本机浏览文件。",
+  "windowStreamTouchBlockedFix": "关闭该页面",
+  "windowStreamTouchBlockedLater": "稍后",
+  "windowStreamTouchBlockedFixed": "手机已恢复操作",
+  "remoteFilesWaitingDetail": "正在等待对方允许",
   "remoteFilesAskAgain": "再问一次",
   "remoteFilesColumnName": "名称",
   "remoteFilesColumnModified": "修改日期",
@@ -932,7 +929,7 @@
     }
   },
   "remoteFilesOpen": "打开",
-  "remoteFilesCopy": "拷贝",
+  "remoteFilesCopy": "复制",
   "remoteFilesPaste": "粘贴 {count} 项",
   "@remoteFilesPaste": {
     "placeholders": {
@@ -942,8 +939,8 @@
     }
   },
   "remoteFilesRefresh": "刷新",
-  "remoteFilesSameDevice": "已经在这台设备上了",
-  "remoteFilesBetweenOthers": "只能在本机和另一台设备之间拷贝",
+  "remoteFilesSameDevice": "已在该设备上",
+  "remoteFilesBetweenOthers": "只能在本机和另一台设备之间复制",
   "remoteFilesOpenFirst": "先打开 {device} 的文件",
   "@remoteFilesOpenFirst": {
     "placeholders": {
@@ -955,9 +952,9 @@
   "remoteFilesUntitledFolder": "未命名文件夹",
   "remoteFilesSelect": "选择",
   "remoteFilesSelectAll": "全选",
-  "remoteFilesCopyToMenu": "拷贝到…",
-  "remoteFilesCopyHere": "拷贝到这里",
-  "remoteFilesChooseDestination": "选好位置后点“拷贝到这里”",
+  "remoteFilesCopyToMenu": "复制到…",
+  "remoteFilesCopyHere": "复制到这里",
+  "remoteFilesChooseDestination": "选择位置后点“复制到这里”",
   "remoteFilesToday": "今天 {time}",
   "@remoteFilesToday": {
     "placeholders": {
@@ -974,7 +971,7 @@
       }
     }
   },
-  "remoteFilesCopyToSubmenu": "拷贝到",
+  "remoteFilesCopyToSubmenu": "复制到",
   "remoteFilesPasteInto": "粘贴到“{name}”",
   "@remoteFilesPasteInto": {
     "placeholders": {
@@ -1000,7 +997,7 @@
   "windowStreamQualityHint": "越高越清晰，也越占网络",
   "windowStreamStreaming": "流转中",
   "windowStreamCloseWindow": "关闭窗口",
-  "windowStreamCloseFailed": "没能关闭这个窗口",
+  "windowStreamCloseFailed": "无法关闭此窗口",
   "windowStreamOfferIgnore": "忽略",
   "deviceDetailsTitle": "设备详情",
   "deviceFeaturesSection": "功能",
@@ -1015,7 +1012,7 @@
       }
     }
   },
-  "remoteFilesCopyToDevice": "拷贝到 {device} 的“{folder}”",
+  "remoteFilesCopyToDevice": "复制到 {device} 的“{folder}”",
   "@remoteFilesCopyToDevice": {
     "placeholders": {
       "device": {
@@ -1029,7 +1026,7 @@
   "remoteFilesFinder": "访达",
   "remoteFilesExplorer": "文件资源管理器",
   "remoteFilesFileManager": "文件管理器",
-  "remoteFilesMountTooOld": "{device} 上的 Whisper 需要更新，才能在{app}中打开它的文件",
+  "remoteFilesMountTooOld": "{device} 上的 Whisper 需要更新，才能在{app}中打开文件",
   "@remoteFilesMountTooOld": {
     "placeholders": {
       "device": {
@@ -1040,7 +1037,7 @@
       }
     }
   },
-  "remoteFilesMountDenied": "{device} 没有允许访问它的文件",
+  "remoteFilesMountDenied": "{device} 未允许访问文件",
   "@remoteFilesMountDenied": {
     "placeholders": {
       "device": {
@@ -1048,7 +1045,7 @@
       }
     }
   },
-  "remoteFilesMountFailed": "{app}没能打开 {device} 的文件",
+  "remoteFilesMountFailed": "{app}无法打开 {device} 的文件",
   "@remoteFilesMountFailed": {
     "placeholders": {
       "app": {
@@ -1067,7 +1064,7 @@
       }
     }
   },
-  "remoteFilesCopyFromDevice": "从 {device} 拷贝到“{folder}”",
+  "remoteFilesCopyFromDevice": "从 {device} 复制到“{folder}”",
   "@remoteFilesCopyFromDevice": {
     "placeholders": {
       "device": {
@@ -1138,16 +1135,16 @@
     }
   },
   "remoteFilesCopyPaused": "已暂停",
-  "remoteFilesCopyFailedShort": "没有拷贝成功",
+  "remoteFilesCopyFailedShort": "复制失败",
   "remoteFilesCopyCanceledShort": "已停止",
-  "remoteFilesCopyDoneShort": "已拷贝",
+  "remoteFilesCopyDoneShort": "已复制",
   "remoteFilesCopyResume": "继续",
   "remoteFilesCopyRetry": "重试",
-  "remoteFilesCopyStop": "停止拷贝",
+  "remoteFilesCopyStop": "停止复制",
   "remoteFilesCopyShowAll": "查看全部传输",
-  "remoteFilesCopyAlready": "这些项目已经在拷贝到这里了",
+  "remoteFilesCopyAlready": "这些项目正在复制到这里",
   "remoteFilesTransfers": "传输",
-  "remoteFilesTransfersEmpty": "还没有拷贝",
+  "remoteFilesTransfersEmpty": "没有传输记录",
   "remoteFilesTransfersClear": "清除已结束",
   "remoteFilesTransfersActive": "进行中",
   "remoteFilesTransfersRecent": "已结束",
@@ -1177,11 +1174,11 @@
       }
     }
   },
-  "remoteFilesCopyJustDone": "刚刚已经拷贝过了",
+  "remoteFilesCopyJustDone": "刚刚已复制",
   "@remoteFilesCopyJustDone": {
     "description": "Toast when the same files are pasted into the same folder again right after a copy finished"
   },
-  "windowStreamHostLocked": "{device} 已锁屏，解锁后才能流转它的窗口",
+  "windowStreamHostLocked": "{device} 已锁屏，解锁后才能流转窗口",
   "@windowStreamHostLocked": {
     "description": "Window stream: the source desktop is locked; shown on the viewing device.",
     "placeholders": {
@@ -1190,7 +1187,7 @@
       }
     }
   },
-  "windowStreamHostPermissionMac": "{device} 还没允许 Whisper 录屏。请在那台 Mac 的“系统设置 › 隐私与安全性 › 录屏与系统录音”里打开 Whisper",
+  "windowStreamHostPermissionMac": "{device} 未允许 Whisper 录屏，请在该 Mac 的“系统设置 › 隐私与安全性 › 录屏与系统录音”中开启",
   "@windowStreamHostPermissionMac": {
     "description": "Window stream: a Mac source lacks the Screen Recording permission; tells the viewer what to do on the Mac.",
     "placeholders": {
@@ -1199,7 +1196,7 @@
       }
     }
   },
-  "windowStreamHostPermission": "{device} 的系统不允许 Whisper 录制窗口。请在那台电脑的隐私设置里允许 Whisper 录屏，然后再试一次",
+  "windowStreamHostPermission": "{device} 不允许 Whisper 录制窗口，请在隐私设置中允许后重试",
   "@windowStreamHostPermission": {
     "description": "Window stream: a Windows or Linux source refused screen capture (privacy setting).",
     "placeholders": {
@@ -1208,7 +1205,7 @@
       }
     }
   },
-  "windowStreamHostHelper": "{device} 还差一步：请在那台电脑上注销并重新登录一次，之后就能流转它的窗口",
+  "windowStreamHostHelper": "请在 {device} 上注销并重新登录，之后才能流转窗口",
   "@windowStreamHostHelper": {
     "description": "Window stream: a Linux (GNOME) source's Whisper Shell helper is not active yet; it becomes active after logging out and in once.",
     "placeholders": {
@@ -1217,7 +1214,7 @@
       }
     }
   },
-  "windowStreamHostDesktopUnsupported": "{device} 的桌面暂不支持流转窗口，需要 GNOME 或 KDE Plasma（Wayland）",
+  "windowStreamHostDesktopUnsupported": "{device} 的桌面不支持流转窗口，需要 GNOME 或 KDE Plasma（Wayland）",
   "@windowStreamHostDesktopUnsupported": {
     "description": "Window stream: a Linux source runs a desktop other than GNOME or KDE Plasma on Wayland (X11, others), or KWin refused Whisper its screencast protocols.",
     "placeholders": {
@@ -1226,7 +1223,7 @@
       }
     }
   },
-  "windowStreamHostElevated": "这个窗口以管理员身份运行，Whisper 无法流转它。请在 {device} 上以普通身份重新打开这个应用",
+  "windowStreamHostElevated": "此窗口以管理员身份运行，无法流转。请在 {device} 上以普通身份重新打开",
   "@windowStreamHostElevated": {
     "description": "Window stream: a Windows source's window belongs to an elevated (administrator) process.",
     "placeholders": {
@@ -1239,7 +1236,7 @@
   "@windowStreamHostProtected": {
     "description": "Window stream: the window excludes itself from screen capture (DRM, password managers)."
   },
-  "windowStreamHostEncoder": "{device} 没能开始编码画面，请稍后再试",
+  "windowStreamHostEncoder": "{device} 画面编码失败，请稍后重试",
   "@windowStreamHostEncoder": {
     "description": "Window stream: the source could not open a video encoder.",
     "placeholders": {
@@ -1248,7 +1245,7 @@
       }
     }
   },
-  "windowStreamHostEncoderLinux": "{device} 缺少 H.264 视频编码器，无法流转窗口。请在那台电脑上安装 FFmpeg，以及 x264 或 openh264 编码器",
+  "windowStreamHostEncoderLinux": "{device} 缺少 H.264 编码器，请安装 FFmpeg 以及 x264 或 openh264",
   "@windowStreamHostEncoderLinux": {
     "description": "Window stream: a Linux source's FFmpeg has no usable H.264 encoder (or FFmpeg is missing).",
     "placeholders": {
@@ -1257,7 +1254,7 @@
       }
     }
   },
-  "windowStreamHostUnsupported": "{device} 暂时还不能流转窗口。请把那台设备上的 Whisper 更新到最新版",
+  "windowStreamHostUnsupported": "{device} 暂不支持流转窗口，请更新 Whisper",
   "@windowStreamHostUnsupported": {
     "description": "Window stream: the source has no usable capture backend (generic).",
     "placeholders": {
@@ -1284,7 +1281,7 @@
       }
     }
   },
-  "windowStreamThatDevice": "那台设备",
+  "windowStreamThatDevice": "该设备",
   "@windowStreamThatDevice": {
     "description": "Window stream: stands in for {device} when the source's name is unknown (lower case; the sentence start is capitalised in code)."
   },
@@ -1343,7 +1340,7 @@
       }
     }
   },
-  "islandStreamedWindows": "{count} 个窗口正在那台设备上显示，可以被操作",
+  "islandStreamedWindows": "{count} 个窗口正在该设备上显示",
   "@islandStreamedWindows": {
     "description": "Island: under 'Streaming to {device}'",
     "placeholders": {
@@ -1394,11 +1391,11 @@
       }
     }
   },
-  "shareLinkRoute": "路由",
+  "shareLinkRoute": "链接后缀",
   "@shareLinkRoute": {
     "description": "Label of the field for the path part of the link, e.g. the 'k7qm' in http://host:port/k7qm"
   },
-  "shareLinkShortRoute": "简短路由",
+  "shareLinkShortRoute": "简短后缀",
   "@shareLinkShortRoute": {
     "description": "Switch that makes the generated route 4 characters long"
   },
@@ -1410,15 +1407,15 @@
   "@shareLinkCreate": {
     "description": "Primary button of the share-link sheet"
   },
-  "shareLinkRouteTaken": "已经有链接在用这个路由了",
+  "shareLinkRouteTaken": "此后缀已被其他链接使用",
   "@shareLinkRouteTaken": {
     "description": "Error under the route field"
   },
-  "shareLinkRouteInvalid": "路由要 2–32 个字符，只能用小写字母、数字、- 和 _",
+  "shareLinkRouteInvalid": "后缀需 2–32 个字符，只能使用小写字母、数字、- 和 _",
   "@shareLinkRouteInvalid": {
     "description": "Error under the route field"
   },
-  "shareLinkRouteReserved": "这个路由留作他用了，换一个吧",
+  "shareLinkRouteReserved": "此后缀不可用，请更换",
   "@shareLinkRouteReserved": {
     "description": "Error under the route field when the user typed a reserved word such as zip"
   },
@@ -1426,7 +1423,7 @@
   "@shareLinkItemsMissing": {
     "description": "Error when the selected files were moved or deleted before the link was created"
   },
-  "shareLinkCreateFailed": "没能创建链接",
+  "shareLinkCreateFailed": "创建链接失败",
   "@shareLinkCreateFailed": {
     "description": "Generic error when creating a share link fails"
   },
@@ -1455,11 +1452,11 @@
       }
     }
   },
-  "shareLinksServiceIdle": "没有开着的链接，端口已关闭",
+  "shareLinksServiceIdle": "没有开启的链接",
   "@shareLinksServiceIdle": {
     "description": "File server status when it is switched on but no link is enabled"
   },
-  "shareLinksServiceOff": "已关闭。链接都还在，只是暂时打不开。",
+  "shareLinksServiceOff": "已关闭，链接暂时无法打开",
   "@shareLinksServiceOff": {
     "description": "File server status when switched off"
   },
@@ -1491,11 +1488,11 @@
   "@shareLinkStatusOff": {
     "description": "Status of a share link"
   },
-  "shareLinkStatusMissing": "文件不见了",
+  "shareLinkStatusMissing": "文件已移动或删除",
   "@shareLinkStatusMissing": {
     "description": "Status of a share link whose files were all moved or deleted"
   },
-  "shareLinkStatusPartlyMissing": "部分文件不见了",
+  "shareLinkStatusPartlyMissing": "部分文件已移动或删除",
   "@shareLinkStatusPartlyMissing": {
     "description": "Status of a share link when some of its files were moved or deleted"
   },
@@ -1532,7 +1529,7 @@
   "@shareLinkDeleteDetail": {
     "description": "Delete confirmation body"
   },
-  "shareLinksEmpty": "还没有共享链接",
+  "shareLinksEmpty": "没有共享链接",
   "@shareLinksEmpty": {
     "description": "Empty state title"
   },
@@ -1565,23 +1562,23 @@
       }
     }
   },
-  "shareWebEmptyFolder": "这个文件夹是空的",
+  "shareWebEmptyFolder": "空文件夹",
   "@shareWebEmptyFolder": {
     "description": "Web page"
   },
-  "shareWebNotFoundTitle": "这个链接打不开",
+  "shareWebNotFoundTitle": "无法打开此链接",
   "@shareWebNotFoundTitle": {
     "description": "Web page for an unknown or switched-off link"
   },
-  "shareWebNotFoundDetail": "链接可能已经关闭，或者地址输错了。请找分享的人确认一下。",
+  "shareWebNotFoundDetail": "链接可能已关闭或地址有误，请联系分享者确认。",
   "@shareWebNotFoundDetail": {
     "description": "Web page for an unknown or switched-off link"
   },
-  "shareWebMissingTitle": "文件不见了",
+  "shareWebMissingTitle": "文件已移动或删除",
   "@shareWebMissingTitle": {
     "description": "Web page when a shared file was moved or deleted"
   },
-  "shareWebMissingDetail": "它可能被移动、改名或删除了。",
+  "shareWebMissingDetail": "请联系分享者确认。",
   "@shareWebMissingDetail": {
     "description": "Web page when a shared file was moved or deleted"
   },
@@ -1601,7 +1598,7 @@
   "@shareWebContinue": {
     "description": "Web page: submit button of the password form"
   },
-  "shareWebPasswordWrong": "密码不对，再试一次",
+  "shareWebPasswordWrong": "密码错误，请重试",
   "@shareWebPasswordWrong": {
     "description": "Web page: error after a wrong password"
   },
@@ -1609,19 +1606,19 @@
   "@shareWebTooManyTitle": {
     "description": "Web page when a client is rate-limited"
   },
-  "shareWebTooManyDetail": "请等 1 分钟再试。",
+  "shareWebTooManyDetail": "请 1 分钟后重试。",
   "@shareWebTooManyDetail": {
     "description": "Web page when a client is rate-limited"
   },
-  "shareWebErrorTitle": "出了点问题",
+  "shareWebErrorTitle": "加载失败",
   "@shareWebErrorTitle": {
     "description": "Web page for an unexpected server error"
   },
-  "shareWebErrorDetail": "请稍后再试。",
+  "shareWebErrorDetail": "请稍后重试。",
   "@shareWebErrorDetail": {
     "description": "Web page for an unexpected server error"
   },
-  "windowStreamDecoderMissing": "无法显示画面：这台电脑缺少 FFmpeg 视频解码库",
+  "windowStreamDecoderMissing": "无法显示画面：本机缺少 FFmpeg 视频解码库",
   "@windowStreamDecoderMissing": {
     "description": "Overlay message for a streamed window on Linux when no H.264 decoder can be loaded (native WSN_WINDOW_DECODE_ERROR with a = 1). Dart should set it with wsn_surface_set_visual(WSN_VISUAL_ERROR, message)."
   },
@@ -1686,27 +1683,27 @@
   "@gnomeHelperExtensionsOff": {
     "description": "Status label: all GNOME user extensions are switched off."
   },
-  "gnomeHelperInstallDesc": "Whisper 会给 GNOME 装一个小扩展：被流转的窗口在后台运行，键盘和鼠标由它转交。只有 Whisper 能使用它。装好后需要注销并重新登录一次。",
+  "gnomeHelperInstallDesc": "将安装一个 GNOME 扩展，用于在后台运行被流转的窗口。安装后需要注销并重新登录。",
   "@gnomeHelperInstallDesc": {
     "description": "Confirmation dialog before installing the helper."
   },
-  "gnomeHelperUpdateDesc": "这个版本的 Whisper 带来了新的窗口流转组件。更新后需要注销并重新登录一次。",
+  "gnomeHelperUpdateDesc": "窗口流转组件有新版本，更新后需要注销并重新登录。",
   "@gnomeHelperUpdateDesc": {
     "description": "Confirmation dialog before updating the helper."
   },
-  "gnomeHelperReloginDesc": "组件已经装好，GNOME 要在重新登录后才会加载它。注销前请先保存好其他应用里的内容。",
+  "gnomeHelperReloginDesc": "组件已安装，重新登录后生效。注销前请保存其他应用的内容。",
   "@gnomeHelperReloginDesc": {
     "description": "Dialog when the helper waits for a new login; the confirm button logs out (GNOME asks again)."
   },
-  "gnomeHelperDisabledDesc": "窗口流转组件在 GNOME 的“扩展”里被关掉了。重新打开后，其他设备才能流转本机窗口。",
+  "gnomeHelperDisabledDesc": "窗口流转组件已在 GNOME 扩展中关闭，打开后其他设备才能流转本机窗口。",
   "@gnomeHelperDisabledDesc": {
     "description": "Dialog when the helper was switched off in GNOME Extensions."
   },
-  "gnomeHelperExtensionsOffDesc": "GNOME 扩展目前全部关闭。打开扩展后，窗口流转组件才能运行（其他已装的扩展也会一起打开）。",
+  "gnomeHelperExtensionsOffDesc": "GNOME 扩展已全部关闭，打开后窗口流转组件才能运行，其他扩展也会一起打开。",
   "@gnomeHelperExtensionsOffDesc": {
     "description": "Dialog when all GNOME extensions are off; confirming turns user extensions back on."
   },
-  "gnomeHelperReadyDesc": "窗口流转组件正在运行。其他设备可以把本机窗口流转过去，窗口会在本机后台继续运行。",
+  "gnomeHelperReadyDesc": "窗口流转组件正在运行。",
   "@gnomeHelperReadyDesc": {
     "description": "Dialog when the helper is running (information only)."
   },
@@ -1734,7 +1731,7 @@
   "@gnomeHelperTurnOnExtensions": {
     "description": "Button: turn GNOME user extensions back on."
   },
-  "gnomeHelperDone": "好",
+  "gnomeHelperDone": "完成",
   "@gnomeHelperDone": {
     "description": "Button: close an information dialog."
   },
@@ -1781,10 +1778,6 @@
       }
     }
   },
-  "shareWebFooterLan": "文件直接从这台设备经局域网传来，不经过云端。",
-  "@shareWebFooterLan": {
-    "description": "Web page footer explaining where the files come from"
-  },
   "shareWebPreviewTruncated": "只显示了前 {size}，下载后可查看全部内容。",
   "@shareWebPreviewTruncated": {
     "description": "Under a text preview that was cut short; size is like 32 KB",
@@ -1806,10 +1799,6 @@
   "@shareLinkAddress": {
     "description": "Row label for this device's network address in the share link details"
   },
-  "shareLinksServiceFooter": "同一局域网里的设备用浏览器打开链接就能下载。服务只在有开着的链接时运行。",
-  "@shareLinksServiceFooter": {
-    "description": "Footer under the file server switch on the share links page"
-  },
   "androidWindowServiceTitle": "窗口流转服务",
   "@androidWindowServiceTitle": {
     "description": "Android page title: the on-phone service that lets other devices view and control this phone's apps."
@@ -1818,7 +1807,7 @@
   "@androidWindowServiceRunning": {
     "description": "Android window flow service status: the agent is running and reachable."
   },
-  "androidWindowServiceRunningHint": "你信任的电脑现在可以在它们的流转里看到这台手机，打开手机上的应用来操作",
+  "androidWindowServiceRunningHint": "已配对的电脑现在可以查看和操作本机应用",
   "@androidWindowServiceRunningHint": {
     "description": "Android window flow service subtitle when running: what it enables."
   },
@@ -1834,7 +1823,7 @@
   "@androidWindowServiceNeedsSetup": {
     "description": "Android window flow service status: never set up on this phone."
   },
-  "androidWindowServiceNeedsSetupHint": "开启后，这台手机的应用可以流转到你信任的电脑上查看和操作，手机留在后台",
+  "androidWindowServiceNeedsSetupHint": "开启后，已配对的电脑可以查看和操作本机应用",
   "@androidWindowServiceNeedsSetupHint": {
     "description": "Android window flow service subtitle when not set up: what the feature does."
   },
@@ -1878,7 +1867,7 @@
   "@androidWindowServiceStep3": {
     "description": "Android setup step 3 title: the 6-digit Wireless debugging pairing code."
   },
-  "androidWindowServiceStep3Hint": "把系统显示的 6 位配对码填到这里，Whisper 会和这台手机自己配对并开启服务",
+  "androidWindowServiceStep3Hint": "填入系统显示的 6 位配对码",
   "@androidWindowServiceStep3Hint": {
     "description": "Android setup step 3 subtitle."
   },
@@ -1926,7 +1915,7 @@
   "@androidWindowServiceEntryTitle": {
     "description": "Settings row title linking to the Android window flow service page."
   },
-  "androidWindowServiceComputerHint": "把这台手机连到一台装了 Whisper、开着窗口流转的电脑一次，就能开启；之后其他电脑都能用",
+  "androidWindowServiceComputerHint": "将本机连接一次装有 Whisper 并开启窗口流转的电脑即可开启",
   "@androidWindowServiceComputerHint": {
     "description": "Android window flow service hint shown when the phone cannot start the agent by itself (no bundled pairing): use a computer once."
   },
@@ -1948,7 +1937,7 @@
       }
     }
   },
-  "remoteFilesNoAnswerDetail": "那台设备上的询问已经过期。请确认对方在设备旁，再试一次。",
+  "remoteFilesNoAnswerDetail": "请求已过期，请确认对方在设备旁后重试。",
   "@remoteFilesNoAnswerDetail": {
     "description": "File browser: under remoteFilesNoAnswer."
   },
@@ -1969,7 +1958,7 @@
   "@remoteFilesPromptAllowChanges": {
     "description": "Switch in the 'wants to browse your files' prompt: whether the other device may also create, rename, delete and change files. Remembered for that device."
   },
-  "remoteFilesReadOnlyHost": "{device} 只允许读取它的文件",
+  "remoteFilesReadOnlyHost": "{device} 只允许读取文件",
   "@remoteFilesReadOnlyHost": {
     "description": "Toast when trying to change files on a device whose user allows reading only.",
     "placeholders": {
@@ -1982,7 +1971,7 @@
   "@remoteFilesPromptBodyReadOnlyPhone": {
     "description": "Prompt body on a phone when 'Allow changes' is off."
   },
-  "islandOverlay": "后台灵动岛",
+  "islandOverlay": "后台悬浮提示",
   "@islandOverlay": {
     "description": "Android settings row: the island drawn over other apps while Whisper is in the background"
   },
@@ -2032,10 +2021,10 @@
       }
     }
   },
-  "shellRowSoundHere": "声音放到这台",
-  "shellRowControllingThis": "正在控制这台",
-  "shellRowPointerThere": "键鼠正在控制它",
-  "shellRowPlayingOurs": "放着这台的声音",
+  "shellRowSoundHere": "正在本机播放",
+  "shellRowControllingThis": "正在控制本机",
+  "shellRowPointerThere": "正在控制该设备",
+  "shellRowPlayingOurs": "正在播放本机声音",
   "shellRowWindows": "{count} 个窗口",
   "@shellRowWindows": {
     "placeholders": {
@@ -2064,8 +2053,6 @@
       }
     }
   },
-  "shellNotConnectedFiles": "连接后可以浏览它的文件。",
-  "shellNotConnectedApps": "连接后可以看到它的窗口和应用。",
   "shellConnect": "连接",
   "shellConnecting": "正在连接…",
   "shellNearbyTitle": "{device} 在附近",
@@ -2076,7 +2063,6 @@
       }
     }
   },
-  "shellPairHint": "连接后，两台设备会显示相同的 6 位数字。",
   "shellComposerOffline": "连接 {device} 后可以发送",
   "@shellComposerOffline": {
     "placeholders": {
@@ -2085,8 +2071,7 @@
       }
     }
   },
-  "shellSelfQrHint": "另一台设备扫这个二维码就能连上这台",
-  "shellSelfNoLan": "这台不在局域网里，其他设备发现不了它",
+  "shellSelfNoLan": "本机未连接局域网，其他设备无法发现",
   "shellSelfAddress": "地址",
   "shellSelfFingerprint": "身份指纹",
   "shellEnterAddress": "输入地址…",
@@ -2105,13 +2090,13 @@
       }
     }
   },
-  "shellCardTrust": "不用确认就连上这台",
+  "shellCardTrust": "自动接受连接",
   "shellCardBrowse": "浏览我的文件",
   "shellCardChange": "修改我的文件",
   "shellCardAddress": "地址",
   "shellCardDiagnostics": "连接诊断",
   "shellCardDisconnect": "断开连接",
-  "shellCardRemove": "移除这台设备",
+  "shellCardRemove": "删除设备",
   "shellCardSound": "声音",
   "shellCardInput": "键鼠",
   "shellCardClipboard": "剪贴板",
@@ -2128,7 +2113,7 @@
   },
   "shellPhoneSearchHistory": "搜索聊天记录",
   "shellLanDown": "局域网断开了",
-  "shellComposerHint": "发给 {device}",
+  "shellComposerHint": "发送给 {device}",
   "@shellComposerHint": {
     "placeholders": {
       "device": {
@@ -2140,7 +2125,7 @@
   "shellPaletteAction": "动作",
   "shellPalettePage": "页面",
   "shellPaletteMessage": "消息",
-  "shellPalettePlayOn": "把这台的声音放到 {device}",
+  "shellPalettePlayOn": "把本机声音播放到 {device}",
   "@shellPalettePlayOn": {
     "placeholders": {
       "device": {
@@ -2148,7 +2133,7 @@
       }
     }
   },
-  "shellPaletteControl": "用这台的键鼠控制 {device}",
+  "shellPaletteControl": "用本机键鼠控制 {device}",
   "@shellPaletteControl": {
     "placeholders": {
       "device": {
@@ -2176,10 +2161,8 @@
   "shellSettingsPressShortcut": "按下快捷键…",
   "shellSettingsAllowClipboard": "允许访问剪贴板",
   "shellSettingsAutoClipboard": "自动同步剪贴板",
-  "shellSettingsPlaybackGain": "播放别处声音的增益",
+  "shellSettingsPlaybackGain": "播放音量",
   "shellSettingsCopyCode": "验证码写入剪贴板",
-  "shellSettingsSharingNote": "增益只影响这台播放的声音，过高可能失真。滚轮速度只影响这台被控制时。",
-  "shellSettingsGainHint": "过高可能失真",
   "shellSettingsVersion": "版本",
   "shellSettingsVersionChecking": "正在检查…",
   "shellSettingsQrAndAddress": "二维码和地址",
@@ -2231,9 +2214,8 @@
       }
     }
   },
-  "soundHeroIdleTitle": "放到其他设备",
-  "soundHeroIdleBody": "选几台设备，它们会一起响。",
-  "soundHeroPlaying": "正在放到 {count} 台设备",
+  "soundHeroIdleTitle": "播放到其他设备",
+  "soundHeroPlaying": "正在播放到 {count} 台设备",
   "@soundHeroPlaying": {
     "placeholders": {
       "count": {
@@ -2243,10 +2225,10 @@
   },
   "soundChannelLeft": "左",
   "soundChannelRight": "右",
-  "soundShareThisDevice": "共享这台的声音",
+  "soundShareThisDevice": "共享本机声音",
   "soundMemberStopped": "已停止",
   "soundMemberNotConnected": "未连接",
-  "soundMemberFailed": "没有放出来 · {reason}",
+  "soundMemberFailed": "播放失败 · {reason}",
   "@soundMemberFailed": {
     "placeholders": {
       "reason": {
@@ -2254,8 +2236,8 @@
       }
     }
   },
-  "soundMemberBusy": "它在放别处的声音",
-  "soundMemberSoloOnly": "只能单独放",
+  "soundMemberBusy": "正在播放其他来源",
+  "soundMemberSoloOnly": "只能单独播放",
   "soundSyncNumbers": "网络 {network}ms · 抖动 {jitter}ms · 缓冲 {buffer}ms · 晚包 {late}",
   "@soundSyncNumbers": {
     "placeholders": {
@@ -2275,7 +2257,7 @@
   },
   "soundSyncNumbersPending": "网络 — · 抖动 — · 缓冲 — · 晚包 —",
   "soundPermissionNeeded": "需要允许屏幕与系统录音",
-  "soundCheckLabel": "把声音放到 {device}",
+  "soundCheckLabel": "把声音播放到 {device}",
   "@soundCheckLabel": {
     "placeholders": {
       "device": {
@@ -2294,7 +2276,7 @@
       }
     }
   },
-  "soundNoDevices": "没有连着的设备",
+  "soundNoDevices": "没有已连接的设备",
   "soundSinkTitle": "正在播放 {device} 的声音",
   "@soundSinkTitle": {
     "placeholders": {
@@ -2303,7 +2285,6 @@
       }
     }
   },
-  "soundSinkHint": "要换来源，先断开",
   "soundSinkPaused": "已暂停",
   "soundSinkResuming": "正在恢复…",
   "soundGain": "增益",
@@ -2317,7 +2298,6 @@
   },
   "soundResume": "继续",
   "shareOpenSettings": "去开启",
-  "inputHintIdle": "拖动屏幕来排列。指针从相接的边过去。",
   "inputHintExit": "按 {shortcut} 收回键鼠",
   "@inputHintExit": {
     "placeholders": {
@@ -2327,12 +2307,12 @@
     }
   },
   "inputStatusWaiting": "等待确认",
-  "inputStatusNotConnected": "没有连上",
-  "inputSideRight": "在右边",
-  "inputSideLeft": "在左边",
-  "inputSideAbove": "在上面",
-  "inputSideBelow": "在下面",
-  "inputSideElsewhere": "接在别的屏幕旁",
+  "inputStatusNotConnected": "未连接",
+  "inputSideRight": "右侧",
+  "inputSideLeft": "左侧",
+  "inputSideAbove": "上方",
+  "inputSideBelow": "下方",
+  "inputSideElsewhere": "接在其他屏幕旁",
   "inputScreenCount": "{count, plural, =2{两块屏幕} other{{count} 块屏幕}}",
   "@inputScreenCount": {
     "placeholders": {
@@ -2364,15 +2344,15 @@
     }
   },
   "inputRemove": "移出",
-  "inputReasonPeerNotTrusting": "它还没有信任这台",
-  "inputReasonNotTrusted": "这台还没有信任它",
-  "inputReasonUnsupported": "它的版本不支持",
-  "inputReasonPeerPermission": "它还没有允许被控制",
-  "inputReasonBusy": "它现在不能被控制",
-  "inputReasonBlocked": "它接在没连上的屏幕后面",
+  "inputReasonPeerNotTrusting": "对方未信任本机",
+  "inputReasonNotTrusted": "本机未信任对方",
+  "inputReasonUnsupported": "对方版本不支持",
+  "inputReasonPeerPermission": "对方未允许被控制",
+  "inputReasonBusy": "对方暂时无法被控制",
+  "inputReasonBlocked": "中间的屏幕未连接",
   "inputCandidateUnsupported": "不支持",
   "inputPermissionNeeded": "需要允许辅助功能",
-  "inputControlledTitle": "{device} 正在控制这台",
+  "inputControlledTitle": "{device} 正在控制本机",
   "@inputControlledTitle": {
     "placeholders": {
       "device": {
@@ -2380,7 +2360,6 @@
       }
     }
   },
-  "inputControlledHint": "要控制别的电脑，先停止。",
   "inputSwitchLabel": "键鼠共享",
   "inputScreenLabel": "{device} 的屏幕，{detail}",
   "@inputScreenLabel": {
@@ -2404,14 +2383,14 @@
   "shellIslandFinished": "已完成",
   "shellPaletteEmpty": "没有找到",
   "shellLinksServiceOff": "文件服务已关闭",
-  "shellLinksServiceIdle": "没有开启的链接，服务没有运行",
-  "shellLinksFoot": "对方不用装 Whisper，在同一局域网用浏览器打开就能下载。走的是普通 HTTP，密码只防止别人随意打开。",
-  "shellLinksEmptyTitle": "还没有链接",
-  "shellLinksEmptyBody": "选一些文件，生成一个链接。对方不用装 Whisper，用浏览器打开就能下载。",
+  "shellLinksServiceIdle": "没有开启的链接",
+  "shellLinksFoot": "使用普通 HTTP，密码只能防止随意打开。",
+  "shellLinksEmptyTitle": "没有链接",
+  "shellLinksEmptyBody": "选择文件生成链接，对方用浏览器打开即可下载。",
   "shellLinksChoose": "选择文件",
   "shellLinksNew": "新建",
   "shellLinkOff": "已关闭",
-  "shellLinkMissing": "有些文件不在原来的位置了",
+  "shellLinkMissing": "部分文件已移动或删除",
   "shellLinkVisits": "{count} 次访问",
   "@shellLinkVisits": {
     "placeholders": {
@@ -2452,9 +2431,9 @@
       }
     }
   },
-  "shellFilesSendTo": "发到…",
-  "shellFilesCopyHere": "拷到这台",
-  "shellFilesAskOnDevice": "请在 {device} 上点允许",
+  "shellFilesSendTo": "发送到…",
+  "shellFilesCopyHere": "复制到本机",
+  "shellFilesAskOnDevice": "请在 {device} 上允许",
   "@shellFilesAskOnDevice": {
     "placeholders": {
       "device": {
@@ -2471,7 +2450,7 @@
     }
   },
   "shellAppsMoving": "正在流转",
-  "shellAppsRunsOn": "运行于 {device}，显示于这台",
+  "shellAppsRunsOn": "运行于 {device}，显示于本机",
   "@shellAppsRunsOn": {
     "placeholders": {
       "device": {
@@ -2504,7 +2483,7 @@
   "shellTrayNoDevice": "没有已连接的设备",
   "shellTraySoundOff": "关",
   "shellTrayFrom": "{device} · {when}",
-  "shellTrayThisDevice": "这台",
+  "shellTrayThisDevice": "本机",
   "@shellTrayFrom": {
     "placeholders": {
       "device": {
@@ -2516,7 +2495,7 @@
     }
   },
   "shellTrayPlaying": "正在播放 {device} 的声音",
-  "shellTrayControlled": "{device} 在控制这台",
+  "shellTrayControlled": "{device} 正在控制本机",
   "shellTrayInputOn": "已开启",
   "@shellTrayPlaying": {
     "placeholders": {
@@ -2532,7 +2511,7 @@
       }
     }
   },
-  "shellIslandPlayingOn": "声音放到 {devices}",
+  "shellIslandPlayingOn": "正在播放到 {devices}",
   "shellIslandControlling": "正在控制 {device}",
   "@shellIslandPlayingOn": {
     "placeholders": {
@@ -2552,16 +2531,14 @@
   "shellYesterday": "昨天",
   "shellTraySendClipboardTo": "发送剪贴板到",
   "shellTraySendFileTo": "发送文件到",
-  "shellTrayPlayOn": "声音放到",
-  "phoneConnectQrHint": "用另一台设备扫这个二维码",
-  "phoneConnectScanHint": "对准另一台设备上的二维码",
-  "phoneConnectCopyLink": "拷贝连接链接",
-  "phoneConnectCopied": "连接链接已拷贝",
-  "phoneConnectCopyFailed": "没拷贝成功，再试一次",
+  "shellTrayPlayOn": "播放到",
+  "phoneConnectCopyLink": "复制连接链接",
+  "phoneConnectCopied": "连接链接已复制",
+  "phoneConnectCopyFailed": "复制失败，请重试",
   "phoneConnectOpenSettings": "去开启",
-  "phonePairApprove": "数字相同，配对",
+  "phonePairApprove": "数字一致",
   "pickerNoDevices": "没有其他已连接的设备",
-  "pickerSendFile": "把「{name}」发到",
+  "pickerSendFile": "把「{name}」发送到",
   "@pickerSendFile": {
     "placeholders": {
       "name": {
@@ -2569,7 +2546,7 @@
       }
     }
   },
-  "pickerSendItems": "把 {count} 项发到",
+  "pickerSendItems": "把 {count} 项发送到",
   "@pickerSendItems": {
     "placeholders": {
       "count": {
@@ -2577,8 +2554,8 @@
       }
     }
   },
-  "pickerSendText": "把这段文字发到",
-  "phoneFilesCopied": "已拷贝 {count} 项，到要放的文件夹里粘贴",
+  "pickerSendText": "把这段文字发送到",
+  "phoneFilesCopied": "已复制 {count} 项",
   "@phoneFilesCopied": {
     "placeholders": {
       "count": {
@@ -2595,9 +2572,8 @@
       }
     }
   },
-  "shellLinkCreateBody": "同一局域网的设备用浏览器打开就能下载。",
   "shellLinkPasswordOptional": "密码（可不填）",
-  "shellAppsShownOn": "运行于这台，显示于 {device}",
+  "shellAppsShownOn": "运行于本机，显示于 {device}",
   "@shellAppsShownOn": {
     "placeholders": {
       "device": {
@@ -2605,7 +2581,7 @@
       }
     }
   },
-  "shellAppsBringBack": "拿回来",
+  "shellAppsBringBack": "收回",
   "shellManualConnectTitle": "输入地址连接",
   "shellManualConnectField": "地址和端口",
   "shellLinksChooseFolder": "选择文件夹",
@@ -2618,13 +2594,13 @@
       }
     }
   },
-  "connectionCheckNetwork": "这台的网络",
+  "connectionCheckNetwork": "本机网络",
   "connectionCheckAddress": "对方的地址",
   "connectionCheckService": "对方的 Whisper",
   "connectionCheckSession": "加密连接",
   "connectionCheckNotConnected": "未连接",
   "connectionCheckConnected": "连接正常。",
-  "connectionCheckOneWay": "连接正常。不过这台连不到对方的端口，现在的连接是对方发起的；断开后要从对方再连一次。",
+  "connectionCheckOneWay": "连接正常。本机无法连接对方端口，当前连接由对方发起，断开后需从对方重新连接。",
   "connectionCheckReady": "网络和对方的 Whisper 都正常，可以连接。",
   "connectionCheckAgain": "重新检查"
 }
