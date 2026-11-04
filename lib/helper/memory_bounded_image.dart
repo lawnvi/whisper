@@ -4,7 +4,7 @@ import 'package:flutter/painting.dart';
 import 'package:synchronized/synchronized.dart';
 
 class MemoryBoundedFileImage extends FileImage {
-  const MemoryBoundedFileImage(super.file);
+  const MemoryBoundedFileImage(super.file, {super.scale});
 
   @override
   ImageStreamCompleter loadImage(FileImage key, ImageDecoderCallback decode) =>
@@ -30,6 +30,53 @@ class MemoryBoundedFileImage extends FileImage {
     }
     return decode(await ui.ImmutableBuffer.fromFilePath(key.file.path));
   }
+}
+
+/// Decodes [image] so that it still covers [extent] pixels both ways, for
+/// `BoxFit.cover`. `ResizeImage` only fits: a wide screenshot in a square would
+/// come out a few pixels tall and be blown up again, a blur.
+class CoverResizeImage extends ImageProvider<_CoverKey> {
+  const CoverResizeImage(this.image, {required this.extent});
+
+  final ImageProvider image;
+  final int extent;
+
+  @override
+  Future<_CoverKey> obtainKey(ImageConfiguration configuration) async =>
+      _CoverKey(await image.obtainKey(configuration), extent);
+
+  @override
+  ImageStreamCompleter loadImage(_CoverKey key, ImageDecoderCallback decode) {
+    Future<ui.Codec> covering(
+      ui.ImmutableBuffer buffer, {
+      ui.TargetImageSizeCallback? getTargetSize,
+    }) => decode(
+      buffer,
+      getTargetSize: (width, height) {
+        final shortest = width < height ? width : height;
+        if (shortest <= extent) return ui.TargetImageSize();
+        return ui.TargetImageSize(
+          width: (width * extent / shortest).ceil(),
+          height: (height * extent / shortest).ceil(),
+        );
+      },
+    );
+    return image.loadImage(key.image, covering);
+  }
+}
+
+class _CoverKey {
+  const _CoverKey(this.image, this.extent);
+
+  final Object image;
+  final int extent;
+
+  @override
+  bool operator ==(Object other) =>
+      other is _CoverKey && other.image == image && other.extent == extent;
+
+  @override
+  int get hashCode => Object.hash(image, extent);
 }
 
 class MemoryBoundedMemoryImage extends MemoryImage {

@@ -14,6 +14,7 @@ import 'package:flutter/services.dart';
 import 'package:mime/mime.dart';
 import 'package:whisper/cast_receiver/playback_window.dart';
 import 'package:whisper/helper/android_document_picker.dart';
+import 'package:whisper/helper/helper.dart' show isDesktop;
 import 'package:whisper/helper/memory_bounded_image.dart';
 import 'package:whisper/helper/toast.dart';
 import 'package:whisper/helper/video_thumbnail.dart';
@@ -328,11 +329,16 @@ class _ImagePreviewState extends State<_ImagePreview> {
   /// The shapes of pictures already seen: back in a conversation they take their
   /// room at once, and nothing around them moves when they arrive.
   static final Map<String, double> _knownRatios = {};
+  static final Map<String, int> _knownWidths = {};
 
   ImageStream? _stream;
   ImageStreamListener? _listener;
   Uint8List? _contentUriBytes;
   late double? _aspectRatio = _knownRatios[widget.path];
+
+  /// As wide as it came out of the decoder: its own width, unless that is more
+  /// than the list needs. Remembered for the same reason as the ratio.
+  late int? _decodedWidth = _knownWidths[widget.path];
 
   @override
   void initState() {
@@ -347,6 +353,7 @@ class _ImagePreviewState extends State<_ImagePreview> {
       _removeImageListener();
       _contentUriBytes = null;
       _aspectRatio = _knownRatios[widget.path];
+      _decodedWidth = _knownWidths[widget.path];
       _loadContentUriThumbnail();
     }
   }
@@ -385,8 +392,19 @@ class _ImagePreviewState extends State<_ImagePreview> {
           return;
         }
         final ratio = width / height;
-        if (_knownRatios.length >= 500) _knownRatios.clear();
+        if (_knownRatios.length >= 500) {
+          _knownRatios.clear();
+          _knownWidths.clear();
+        }
         _knownRatios[widget.path] = ratio;
+        _knownWidths[widget.path] = width;
+        if (_decodedWidth != width) {
+          if (synchronousCall) {
+            _decodedWidth = width;
+          } else {
+            setState(() => _decodedWidth = width);
+          }
+        }
         if (_aspectRatio != ratio) {
           if (synchronousCall) {
             _aspectRatio = ratio;
@@ -428,7 +446,13 @@ class _ImagePreviewState extends State<_ImagePreview> {
         // Bucket resizes to avoid decoding another image for each dragged pixel.
         // Sharp enough at this size in a list; the full picture is one tap away.
         // Twice the pixels here is twice the upload on every frame it scrolls in.
-        final cacheWidth = ((pixels / 64).ceil() * 64).clamp(64, 720);
+        // A phone scrolls these at 120 Hz. A desktop has the room, and text in a
+        // screenshot shows every pixel that is missing.
+        final bucket = isDesktop() ? 16 : 64;
+        final cacheWidth = ((pixels / bucket).ceil() * bucket).clamp(
+          64,
+          isDesktop() ? 1536 : 720,
+        );
         return _buildPreview(context, cacheWidth);
       },
     );
@@ -454,6 +478,10 @@ class _ImagePreviewState extends State<_ImagePreview> {
     return _AdaptiveVisualMediaFrame(
       frameKey: const ValueKey<String>('image-preview-frame'),
       sourceAspectRatio: _aspectRatio ?? 4 / 3,
+      // No larger than its own pixels: a small screenshot stays sharp.
+      maxWidth: isDesktop() && _decodedWidth != null
+          ? _decodedWidth! / MediaQuery.devicePixelRatioOf(context)
+          : null,
       child: ColoredBox(
         color: palette.fill,
         child: provider == null
@@ -489,21 +517,24 @@ class _AdaptiveVisualMediaFrame extends StatelessWidget {
     required this.frameKey,
     required this.sourceAspectRatio,
     required this.child,
+    this.maxWidth,
   });
 
   final Key frameKey;
   final double sourceAspectRatio;
+  final double? maxWidth;
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final maxWidth = constraints.hasBoundedWidth
+        final room = constraints.hasBoundedWidth
             ? constraints.maxWidth
             : 300.0;
+        final limit = maxWidth;
         final size = mediaPreviewSizeFor(
-          maxWidth: maxWidth,
+          maxWidth: limit == null ? room : math.min(room, limit),
           sourceAspectRatio: sourceAspectRatio,
           maxHeight: constraints.hasBoundedHeight
               ? constraints.maxHeight
@@ -1863,7 +1894,13 @@ class _FullscreenImageState extends State<_FullscreenImage> {
         builder: (context, constraints) {
           final pixelRatio = MediaQuery.devicePixelRatioOf(context);
           final viewport = constraints.biggest;
-          final original = MemoryBoundedFileImage(File(widget.path));
+          // With a pointer a picture stops at one pixel to one pixel: blown up to
+          // fill the window, a small screenshot is a blurred one.
+          final natural = isDesktop();
+          final original = MemoryBoundedFileImage(
+            File(widget.path),
+            scale: natural ? pixelRatio : 1,
+          );
           final ImageProvider provider = _zoomed
               ? original
               : ResizeImage(
@@ -1881,7 +1918,7 @@ class _FullscreenImageState extends State<_FullscreenImage> {
           return _buildViewer(
             Image(
               image: provider,
-              fit: BoxFit.contain,
+              fit: natural ? BoxFit.scaleDown : BoxFit.contain,
               gaplessPlayback: true,
               filterQuality: FilterQuality.medium,
               semanticLabel: widget.name,
