@@ -300,7 +300,9 @@ class _TrayPanelBodyState extends State<TrayPanelBody> {
     final state = widget.state;
     final on = widget.onAction;
     return Padding(
-      padding: const EdgeInsets.all(10),
+      // More room above: the row of small icons makes the bottom airy already,
+      // and the first module right under the edge looks stuck there.
+      padding: const EdgeInsets.fromLTRB(10, 18, 10, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

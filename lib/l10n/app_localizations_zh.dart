@@ -3328,4 +3328,17 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get screenshotShortcutReset => '恢复默认快捷键';
+
+  @override
+  String shellDropSendTitle(String name) {
+    return '发送给 $name';
+  }
+
+  @override
+  String shellDropSendMore(int count) {
+    return '还有 $count 个';
+  }
+
+  @override
+  String get shellDropSendConfirm => '发送';
 }

@@ -53,6 +53,7 @@ import 'package:whisper/state/pairing_request.dart';
 import 'package:whisper/state/peer_endpoint.dart';
 import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/theme/whisper_ui.dart';
+import 'package:whisper/new_ui/shell/shell_device_drop.dart';
 import 'package:whisper/new_ui/shell/shell_device_card.dart';
 import 'package:whisper/new_ui/shell/shell_parts.dart';
 import 'package:whisper/new_ui/shell/shell_phone_device.dart';
@@ -845,13 +846,15 @@ class _SendMessageScreen extends State<SendMessageScreen>
     return DropRegion(
       formats: const [Formats.fileUri],
       hitTestBehavior: HitTestBehavior.opaque,
-      onDropEnter: (_) {
-        setState(() => _dropHover = true);
+      onDropEnter: (event) {
+        setState(() => _dropHover = !isChatMessageDrag(event.session));
       },
       onDropLeave: (_) {
         setState(() => _dropHover = false);
       },
       onDropOver: (event) {
+        // A message dragged and let go in the conversation is a change of mind.
+        if (isChatMessageDrag(event.session)) return DropOperation.none;
         final canCopy = event.session.allowedOperations.contains(
           DropOperation.copy,
         );
@@ -867,7 +870,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
       onPerformDrop: (event) async {
         if (mounted) setState(() => _dropHover = false);
         final paths = await Future.wait(
-          event.session.items.map(_readDroppedFilePath),
+          event.session.items.map(readDroppedFilePath),
         );
         if (paths.any((path) => path == null)) {
           if (mounted) {
@@ -882,30 +885,6 @@ class _SendMessageScreen extends State<SendMessageScreen>
         children: [base, if (_dropHover) _buildDropFrame()],
       ),
     );
-  }
-
-  Future<String?> _readDroppedFilePath(DropItem item) async {
-    final reader = item.dataReader;
-    if (reader == null) {
-      return null;
-    }
-    final completer = Completer<Uri?>();
-    void complete(Uri? value) {
-      if (!completer.isCompleted) {
-        completer.complete(value);
-      }
-    }
-
-    final progress = reader.getValue<Uri>(
-      Formats.fileUri,
-      complete,
-      onError: (_) => complete(null),
-    );
-    if (progress == null) {
-      return null;
-    }
-    final uri = await completer.future;
-    return uri?.isScheme('file') == true ? uri!.toFilePath() : null;
   }
 
   Future<void> _handleFileDrop(List<String> paths) async {
@@ -1001,16 +980,10 @@ class _SendMessageScreen extends State<SendMessageScreen>
       return true;
     }
     if (mounted) {
-      showAppToast(switch (outcome) {
-        FolderSendOutcome.peerUnsupported => l10n.folderSendUnsupported,
-        FolderSendOutcome.invalidName => l10n.folderSendInvalidName,
-        FolderSendOutcome.unreadable => l10n.folderSendUnreadable,
-        FolderSendOutcome.tooManyEntries => l10n.folderSendTooManyEntries(
-          folderManifestMaxEntries,
-        ),
-        FolderSendOutcome.tooLarge => l10n.folderSendTooLarge,
-        _ => l10n.folderSendFailed,
-      }, tone: AppToastTone.error);
+      showAppToast(
+        folderSendFailureText(l10n, outcome),
+        tone: AppToastTone.error,
+      );
     }
     return false;
   }
@@ -2646,6 +2619,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
     }
 
     return DesktopFileDragSource(
+      peerId: device.uid,
       path: messagePath,
       name: message.name,
       enabled: _canDragFileMessage(message, transfer),
@@ -2719,6 +2693,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
     );
 
     return DesktopFileDragSource(
+      peerId: device.uid,
       path: path,
       name: message.name,
       enabled: _canDragFileMessage(message, transfer),

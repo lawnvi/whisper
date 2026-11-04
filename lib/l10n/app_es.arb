@@ -1507,5 +1507,8 @@
   "shellSelfCopy": "Copiar datos de conexión",
   "shellSelfCopied": "Copiado",
   "shareLinkNoNetwork": "Sin conexión a una red local: otros dispositivos aún no pueden abrirlo",
-  "screenshotShortcutReset": "Restaurar atajo predeterminado"
+  "screenshotShortcutReset": "Restaurar atajo predeterminado",
+  "shellDropSendTitle": "Enviar a {name}",
+  "shellDropSendMore": "{count} más",
+  "shellDropSendConfirm": "Enviar"
 }

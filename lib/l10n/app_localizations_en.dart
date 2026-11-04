@@ -3523,4 +3523,17 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get screenshotShortcutReset => 'Restore default shortcut';
+
+  @override
+  String shellDropSendTitle(String name) {
+    return 'Send to $name';
+  }
+
+  @override
+  String shellDropSendMore(int count) {
+    return '$count more';
+  }
+
+  @override
+  String get shellDropSendConfirm => 'Send';
 }

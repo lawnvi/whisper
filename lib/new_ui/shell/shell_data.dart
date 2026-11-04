@@ -61,6 +61,7 @@ class ShellActions {
     required this.openPairing,
     required this.removeDevice,
     required this.contextActions,
+    required this.sendDropped,
     required this.openSound,
     required this.openInput,
     required this.openShareLinks,
@@ -90,6 +91,9 @@ class ShellActions {
     VoidCallback? openCard,
   })
   contextActions;
+
+  /// Files were dropped on a connected device in the list.
+  final void Function(DeviceData target, List<String> paths) sendDropped;
   final VoidCallback openSound, openInput, openShareLinks, openSettings;
   final ValueChanged<DeviceData> openDiagnostics;
 

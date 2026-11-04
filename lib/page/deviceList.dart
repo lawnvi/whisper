@@ -16,6 +16,7 @@ import 'package:whisper/audio/audio_share_coordinator.dart';
 import 'package:whisper/cast_receiver/cast_receiver_manager.dart';
 import 'package:whisper/cast_receiver/playback_window.dart';
 import 'package:whisper/share_links/share_link_store.dart';
+import 'package:whisper/new_ui/shell/shell_device_drop.dart';
 import 'package:whisper/new_ui/shell/device_row_status.dart';
 import 'package:whisper/new_ui/shell/shell_data.dart';
 import 'package:whisper/new_ui/shell/shell_device_card.dart';
@@ -2524,6 +2525,23 @@ class _DeviceListScreen extends State<DeviceListScreen>
     };
   }
 
+  /// Files dropped on a device in the list: asked first, as the drop may have
+  /// landed on the wrong row.
+  Future<void> _shellSendDropped(DeviceData target, List<String> paths) async {
+    final send = await showShellDropSend(
+      context,
+      device: target,
+      paths: paths,
+    );
+    if (!send || !mounted) return;
+    await sendDroppedPaths(
+      paths: paths,
+      l10n: AppLocalizations.of(context)!,
+      sendFile: (path) => socketManager.sendFileTo(target.uid, path),
+      sendFolder: (path) => socketManager.sendFolderTo(target.uid, path),
+    );
+  }
+
   late final ShellActions _shellActions = ShellActions(
     select: (uid) {
       if (uid != null && socketManager.isConnectedTo(uid)) {
@@ -2539,6 +2557,8 @@ class _DeviceListScreen extends State<DeviceListScreen>
     openPairing: ({bool startWithAddress = false}) =>
         _openPairingQr(startWithAddress: startWithAddress),
     removeDevice: _removeDevice,
+    sendDropped: (target, paths) =>
+        unawaited(_shellSendDropped(target, paths)),
     contextActions: (target, {openCard}) {
       final l10n = AppLocalizations.of(context)!;
       return [

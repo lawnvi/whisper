@@ -20,6 +20,7 @@ import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/theme/whisper_icons.dart';
 import 'package:whisper/new_ui/phone/phone_parts.dart';
 import 'package:whisper/new_ui/settings/settings_controls.dart';
+import 'package:whisper/new_ui/shell/shell_device_drop.dart';
 import 'package:whisper/theme/whisper_ui.dart';
 import 'package:whisper/theme/whisper_window.dart';
 import 'package:whisper/widget/context_menu_region.dart';
@@ -83,6 +84,7 @@ ShellActions _actions(
   disconnect: (_) {},
   openPairing: ({bool startWithAddress = false}) async {},
   removeDevice: (_) async {},
+  sendDropped: (_, _) {},
   contextActions: (_, {openCard}) => const <ContextMenuActionItem>[],
   openSound: () {},
   openInput: () {},
@@ -688,16 +690,29 @@ void main() {
     });
 
     for (final (name, state) in [
-      ('tray-empty', const TrayState(current: 'http://192.168.31.8:10003/k7qm')),
+      (
+        'tray-empty',
+        const TrayState(current: 'http://192.168.31.8:10003/k7qm'),
+      ),
       (
         'tray-nearby',
         const TrayState(
           current: 'http://192.168.31.8:10003/k7qm',
           nearby: [
             TrayDevice(id: 'a', name: 'iMac', platform: 'macos', order: 1),
-            TrayDevice(id: 'b', name: 'Xiaomi 16', platform: 'android', order: 2),
+            TrayDevice(
+              id: 'b',
+              name: 'Xiaomi 16',
+              platform: 'android',
+              order: 2,
+            ),
           ],
-          clips: [TrayClip(text: 'http://192.168.31.8:10003/k7qm', line: '这台 · 17:42')],
+          clips: [
+            TrayClip(
+              text: 'http://192.168.31.8:10003/k7qm',
+              line: '这台 · 17:42',
+            ),
+          ],
         ),
       ),
     ]) {
@@ -793,6 +808,34 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
       await _render(tester, 'about-pressed');
       await finger.cancel();
+    });
+
+    testWidgets('the drop sheet', (tester) async {
+      final dir = Directory.systemTemp.createTempSync('drop');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final doc = File('${dir.path}/发版说明.pdf')
+        ..writeAsBytesSync(List.filled(4096, 1));
+      final folder = Directory('${dir.path}/设计稿')..createSync();
+      final movie = File('${dir.path}/演示.mp4')
+        ..writeAsBytesSync(List.filled(2048, 1));
+      await pumpOver(
+        tester,
+        Center(
+          child: SizedBox(
+            width: 380,
+            child: Material(
+              color: Radix.white,
+              borderRadius: BorderRadius.circular(WhisperRadius.l),
+              child: ShellDropSendSheet(
+                name: 'iMac',
+                paths: [doc.path, folder.path, movie.path],
+              ),
+            ),
+          ),
+        ),
+        const Size(480, 420),
+      );
+      await _render(tester, 'drop-sheet');
     });
 
     testWidgets('the fields', (tester) async {

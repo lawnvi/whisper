@@ -2606,5 +2606,22 @@
   "@shareLinkNoNetwork": {
     "description": "Shown instead of an address when this device has no LAN address"
   },
-  "screenshotShortcutReset": "恢复默认快捷键"
+  "screenshotShortcutReset": "恢复默认快捷键",
+  "shellDropSendTitle": "发送给 {name}",
+  "shellDropSendMore": "还有 {count} 个",
+  "shellDropSendConfirm": "发送",
+  "@shellDropSendTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "@shellDropSendMore": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

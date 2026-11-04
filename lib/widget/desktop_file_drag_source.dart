@@ -4,16 +4,20 @@ import 'package:flutter/widgets.dart';
 import 'package:path/path.dart' as p;
 import 'package:super_drag_and_drop/super_drag_and_drop.dart';
 import 'package:whisper/helper/helper.dart';
+import 'package:whisper/new_ui/shell/shell_device_drop.dart';
 
 class DesktopFileDragSource extends StatelessWidget {
   const DesktopFileDragSource({
     super.key,
+    required this.peerId,
     required this.path,
     required this.name,
     required this.enabled,
     required this.child,
   });
 
+  /// The conversation the message is in.
+  final String peerId;
   final String path;
   final String name;
   final bool enabled;
@@ -37,7 +41,7 @@ class DesktopFileDragSource extends StatelessWidget {
         }
         final item = DragItem(
           suggestedName: name.isNotEmpty ? name : p.basename(path),
-          localData: <String, String>{'path': path},
+          localData: chatMessageDragData(peerId, path),
         );
         item.add(Formats.fileUri(Uri.file(path)));
         return item;

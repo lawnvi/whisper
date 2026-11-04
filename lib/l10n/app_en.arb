@@ -2444,5 +2444,8 @@
   "@shareLinkNoNetwork": {
     "description": "Shown instead of an address when this device has no LAN address"
   },
-  "screenshotShortcutReset": "Restore default shortcut"
+  "screenshotShortcutReset": "Restore default shortcut",
+  "shellDropSendTitle": "Send to {name}",
+  "shellDropSendMore": "{count} more",
+  "shellDropSendConfirm": "Send"
 }

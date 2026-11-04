@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:whisper/new_ui/shell/shell_device_drop.dart';
 import 'package:whisper/page/remote_files/remote_files_page.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/new_ui/shell/device_row_status.dart';
@@ -124,6 +125,7 @@ class ShellSidebar extends StatelessWidget {
                         isPaired: data.isPaired,
                         second: second,
                         onSelect: (uid) => actions.select(uid),
+                        onDropPaths: actions.sendDropped,
                         contextActions: (device) => actions.contextActions(
                           device,
                           openCard: () => onOpenCard(device),
@@ -243,6 +245,7 @@ class ShellDeviceRows extends StatelessWidget {
     required this.isPaired,
     required this.second,
     required this.onSelect,
+    this.onDropPaths,
     required this.contextActions,
     this.touch = false,
     this.edgeToEdge = false,
@@ -260,6 +263,7 @@ class ShellDeviceRows extends StatelessWidget {
   final bool Function(DeviceData) isPaired;
   final Color second;
   final ValueChanged<String> onSelect;
+  final void Function(DeviceData target, List<String> paths)? onDropPaths;
   final List<ContextMenuActionItem> Function(DeviceData) contextActions;
 
   static const _gap = 2.0;
@@ -296,17 +300,25 @@ class ShellDeviceRows extends StatelessWidget {
               spring: WhisperSprings.smooth,
               child: ContextMenuRegion(
                 items: contextActions(row.device),
-                child: FilesDropBridgeTarget(
+                child: ShellDeviceDrop(
                   peerId: row.device.uid,
+                  connected: row.isConnected,
                   radius: touch ? WhisperRadius.l : WhisperRadius.m,
-                  child: _DeviceRow(
-                    session: row,
-                    height: rowHeight,
-                    facts: factsFor(row),
-                    selected: row.device.uid == selectedPeerId,
-                    touch: touch,
-                    edgeToEdge: edgeToEdge,
-                    onTap: () => onSelect(row.device.uid),
+                  onPaths: onDropPaths == null
+                      ? null
+                      : (paths) => onDropPaths!(row.device, paths),
+                  child: FilesDropBridgeTarget(
+                    peerId: row.device.uid,
+                    radius: touch ? WhisperRadius.l : WhisperRadius.m,
+                    child: _DeviceRow(
+                      session: row,
+                      height: rowHeight,
+                      facts: factsFor(row),
+                      selected: row.device.uid == selectedPeerId,
+                      touch: touch,
+                      edgeToEdge: edgeToEdge,
+                      onTap: () => onSelect(row.device.uid),
+                    ),
                   ),
                 ),
               ),

@@ -3562,4 +3562,17 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get screenshotShortcutReset => 'Restaurar atajo predeterminado';
+
+  @override
+  String shellDropSendTitle(String name) {
+    return 'Enviar a $name';
+  }
+
+  @override
+  String shellDropSendMore(int count) {
+    return '$count más';
+  }
+
+  @override
+  String get shellDropSendConfirm => 'Enviar';
 }

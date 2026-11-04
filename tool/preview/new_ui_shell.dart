@@ -174,6 +174,7 @@ class _PreviewState extends State<_Preview> {
           );
         },
         removeDevice: (_) async {},
+        sendDropped: (_, _) {},
         contextActions: (_, {openCard}) => const <ContextMenuActionItem>[],
         openSound: () {},
         openInput: () {},

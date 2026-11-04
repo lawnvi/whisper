@@ -5894,6 +5894,24 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'恢复默认快捷键'**
   String get screenshotShortcutReset;
+
+  /// No description provided for @shellDropSendTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'发送给 {name}'**
+  String shellDropSendTitle(String name);
+
+  /// No description provided for @shellDropSendMore.
+  ///
+  /// In zh, this message translates to:
+  /// **'还有 {count} 个'**
+  String shellDropSendMore(int count);
+
+  /// No description provided for @shellDropSendConfirm.
+  ///
+  /// In zh, this message translates to:
+  /// **'发送'**
+  String get shellDropSendConfirm;
 }
 
 class _AppLocalizationsDelegate
