@@ -109,6 +109,50 @@ class WindowThemePlugin : public flutter::Plugin {
       return;
     }
 
+    // The screenshot overlay: over a whole screen, unseen until it has drawn.
+    // Where it goes is in pixels, from the selection overlay it takes over from.
+    if (call.method_name() == "coverDisplay") {
+      const auto* frame = std::get_if<flutter::EncodableList>(call.arguments());
+      if (frame == nullptr || frame->size() != 4) {
+        result->Success(flutter::EncodableValue(false));
+        return;
+      }
+      const auto at = [&](size_t i) {
+        return static_cast<int>(std::get<double>((*frame)[i]));
+      };
+      SetWindowLongPtr(window_, GWL_STYLE, WS_POPUP);
+      SetWindowLongPtr(window_, GWL_EXSTYLE,
+                       WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_LAYERED);
+      SetLayeredWindowAttributes(window_, 0, 0, LWA_ALPHA);
+      SetWindowPos(window_, HWND_TOPMOST, at(0), at(1), at(2), at(3),
+                   SWP_FRAMECHANGED | SWP_SHOWWINDOW | SWP_NOACTIVATE);
+      result->Success(flutter::EncodableValue(true));
+      return;
+    }
+    if (call.method_name() == "revealCover") {
+      SetLayeredWindowAttributes(window_, 0, 255, LWA_ALPHA);
+      ShowWindow(window_, SW_SHOW);
+      SetForegroundWindow(window_);
+      result->Success(flutter::EncodableValue(true));
+      return;
+    }
+    if (call.method_name() == "hideCover") {
+      ShowWindow(window_, SW_HIDE);
+      SetLayeredWindowAttributes(window_, 0, 0, LWA_ALPHA);
+      result->Success(flutter::EncodableValue(true));
+      return;
+    }
+
+    // Kept for the next screenshot, without a screen's worth of surface: its
+    // next frame gives that back, and it hides after.
+    if (call.method_name() == "shrinkCover") {
+      SetLayeredWindowAttributes(window_, 0, 0, LWA_ALPHA);
+      SetWindowPos(window_, nullptr, 0, 0, 1, 1,
+                   SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+      result->Success(flutter::EncodableValue(true));
+      return;
+    }
+
     // Password managers set this format on what they copy; it must not be
     // remembered in the clipboard history.
     if (call.method_name() == "clipboardIsSensitive") {

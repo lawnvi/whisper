@@ -12,9 +12,9 @@ class _Backend extends ScreenshotBackend {
   Future<bool> Function() capture = () async => true;
 
   @override
-  Future<bool> captureRegion() {
+  Future<ScreenshotResult> captureRegion() async {
     captures++;
-    return capture();
+    return ScreenshotResult(copied: await capture());
   }
 
   @override

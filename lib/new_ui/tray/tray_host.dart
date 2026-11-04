@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
+import 'package:whisper/helper/main_window_calls.dart';
 import 'package:flutter/services.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:whisper/new_ui/tray/tray_model.dart';
@@ -56,7 +57,7 @@ class TrayPanelHost {
     _window = window;
     final me = await WindowController.fromCurrentEngine();
     _myId = me.windowId;
-    await me.setWindowMethodHandler(_onCall);
+    MainWindowCalls.on('trayAction', _onCall);
     // The child's engine takes a moment; it answers once its handler is up.
     for (var i = 0; i < 100; i++) {
       try {
@@ -74,16 +75,14 @@ class TrayPanelHost {
     await Future<void>.delayed(const Duration(milliseconds: 60));
   }
 
-  Future<dynamic> _onCall(MethodCall call) async {
-    if (call.method != 'trayAction') return null;
-    final args = Map<String, dynamic>.from(call.arguments as Map);
+  Future<void> _onCall(Object? arguments) async {
+    final args = Map<String, dynamic>.from(arguments! as Map);
     final action = args['action'] as String;
     if (action == 'closed') {
       _visible = false;
-      return null;
+      return;
     }
     onAction(action, args['value']);
-    return null;
   }
 
   void update(TrayState state) {

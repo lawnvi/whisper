@@ -382,6 +382,66 @@ abstract class AppLocalizations {
   /// **'复制'**
   String get screenshotConfirm;
 
+  /// No description provided for @screenshotMarkUp.
+  ///
+  /// In zh, this message translates to:
+  /// **'标注'**
+  String get screenshotMarkUp;
+
+  /// No description provided for @captureRect.
+  ///
+  /// In zh, this message translates to:
+  /// **'框'**
+  String get captureRect;
+
+  /// No description provided for @captureEllipse.
+  ///
+  /// In zh, this message translates to:
+  /// **'圈'**
+  String get captureEllipse;
+
+  /// No description provided for @captureArrow.
+  ///
+  /// In zh, this message translates to:
+  /// **'箭头'**
+  String get captureArrow;
+
+  /// No description provided for @capturePen.
+  ///
+  /// In zh, this message translates to:
+  /// **'画笔'**
+  String get capturePen;
+
+  /// No description provided for @captureText.
+  ///
+  /// In zh, this message translates to:
+  /// **'文字'**
+  String get captureText;
+
+  /// No description provided for @captureMosaic.
+  ///
+  /// In zh, this message translates to:
+  /// **'马赛克'**
+  String get captureMosaic;
+
+  /// No description provided for @captureUndo.
+  ///
+  /// In zh, this message translates to:
+  /// **'撤销'**
+  String get captureUndo;
+
+  /// No description provided for @captureRedo.
+  ///
+  /// In zh, this message translates to:
+  /// **'重做'**
+  String get captureRedo;
+
+  /// No description provided for @captureSave.
+  ///
+  /// In zh, this message translates to:
+  /// **'存为文件'**
+  String get captureSave;
+
   /// No description provided for @diagTitle.
   ///
   /// In zh, this message translates to:

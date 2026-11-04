@@ -547,6 +547,36 @@ SpringDescription whisperSpring(double response, double dampingRatio) {
   );
 }
 
+/// What a screenshot is marked up with (surfaces.md「截图标注」). Sizes are on
+/// screen: the marks stay as heavy as they look, however large the picture is.
+abstract final class WhisperCapture {
+  static const colors = <Color>[
+    Radix.red9,
+    Radix.amber9,
+    Radix.green9,
+    Radix.blue9,
+    Radix.black,
+    Radix.white,
+  ];
+  static const strokes = <double>[2, 4, 7];
+  static const fonts = <double>[14, 18, 26];
+  static const mosaics = <double>[14, 24, 40];
+
+  /// A mosaic block, in points of the screen it was taken on.
+  static const block = 9.0;
+
+  /// Around the selection, as on the overlay it takes over from.
+  static const dim = Color(0x5C000000);
+  static const selectionStroke = 2.0, handle = 3.5, handleStroke = 1.5;
+
+  /// The selection's size in pixels, above its top left corner. The same on the
+  /// overlays of each platform, which show it first.
+  static const sizeLabelFill = Color(0xA6000000);
+  static const sizeLabelHeight = 22.0,
+      sizeLabelGap = 4.0,
+      sizeLabelPadding = 8.0;
+}
+
 abstract final class WhisperSprings {
   static final follow = whisperSpring(.15, 1);
   static final snappy = whisperSpring(.28, .9);

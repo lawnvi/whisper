@@ -47,6 +47,8 @@ import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:toastification/toastification.dart';
+import 'package:whisper/new_ui/capture/capture_flow.dart';
+import 'package:whisper/new_ui/capture/capture_overlay.dart';
 import 'package:whisper/new_ui/shell/shell_window_chrome.dart';
 import 'package:whisper/new_ui/tray/tray_panel.dart';
 import 'package:whisper/theme/app_theme.dart';
@@ -118,6 +120,13 @@ Future<void> main(List<String> arguments) async {
     // A small window: it has no use for the main window's GPU budget.
     unawaited(applyImageMemoryBudget(background: true));
     runApp(const TrayPanelApp());
+    return;
+  }
+  if (arguments.length >= 3 &&
+      arguments[0] == 'multi_window' &&
+      arguments[2] == captureOverlayArgument) {
+    WidgetsFlutterBinding.ensureInitialized();
+    unawaited(startCaptureOverlay());
     return;
   }
   _recordWhatGoesWrong();
@@ -271,6 +280,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         final screenshot = DesktopScreenshotController.shared;
+        screenshot.onMarkUp = markUpScreenshot;
+        screenshot.onPrepare = prepareScreenshotOverlay;
+        screenshot.onPicture = loadScreenshotOverlay;
+        screenshot.onAbandon = abandonScreenshotOverlay;
         screenshot.onNotice = (notice) {
           final context = appNavigatorKey.currentContext;
           if (context == null) return;

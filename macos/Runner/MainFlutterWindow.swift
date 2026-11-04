@@ -118,10 +118,20 @@ final class WindowMaterialView: NSVisualEffectView {
   override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
+/// A window over a whole screen, menu bar and all, that can take the keyboard
+/// although it has no title bar: the screenshot overlay's.
+final class CaptureCoverPanel: NSPanel {
+  override var canBecomeKey: Bool { true }
+  override var canBecomeMain: Bool { false }
+  override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }
+}
+
 /// The redesigned UI's tray panel: a window of its own, with its own engine,
 /// that shows the desktop through a rounded material.
 enum PanelMaterial {
   private static var channels: [FlutterMethodChannel] = []
+  private static var coverPanel: CaptureCoverPanel?
+  private static var coverOrigin: NSWindow?
 
   static func register(with controller: FlutterViewController) {
     let channel = FlutterMethodChannel(
@@ -146,6 +156,57 @@ enum PanelMaterial {
         material.maskImage = roundedMask(radius: radius)
         controller.view.addSubview(material, positioned: .below, relativeTo: nil)
         result(true)
+      case "coverDisplay":
+        let frame = (call.arguments as? [Double]) ?? []
+        guard frame.count == 4 else { result(false); return }
+        let rect = NSRect(x: frame[0], y: frame[1], width: frame[2], height: frame[3])
+        // Its own panel, for the keyboard without taking the app in front out of
+        // being in front, as the selection overlay does. The plugin's window has a
+        // title bar and can't become one: the view moves over, before it has drawn
+        // anything, for then this doesn't hold up the main thread.
+        let panel = CaptureCoverPanel(contentRect: rect,
+          styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        panel.isReleasedWhenClosed = false
+        panel.level = NSWindow.Level(rawValue: NSWindow.Level.screenSaver.rawValue + 1)
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.animationBehavior = .none
+        panel.hidesOnDeactivate = false
+        panel.hasShadow = false
+        panel.isOpaque = true
+        panel.acceptsMouseMovedEvents = true
+        window.orderOut(nil)
+        window.contentViewController = nil
+        panel.contentViewController = controller
+        coverPanel = panel
+        coverOrigin = window
+        // Getting ready above the selection overlay, which keeps the mouse.
+        panel.ignoresMouseEvents = true
+        panel.alphaValue = 0
+        panel.setFrame(rect, display: true)
+        panel.orderFrontRegardless()
+        result(true)
+      case "revealCover":
+        window.ignoresMouseEvents = false
+        window.alphaValue = 1
+        window.orderFrontRegardless()
+        window.makeKey()
+        window.makeFirstResponder(controller.view)
+        result(true)
+      case "hideCover":
+        window.orderOut(nil)
+        window.alphaValue = 0
+        result(true)
+      case "closeCover":
+        // A whole engine is not kept for long for what is done now and then.
+        result(true)
+        DispatchQueue.main.async {
+          coverPanel?.orderOut(nil)
+          coverPanel?.contentViewController = nil
+          coverPanel = nil
+          coverOrigin?.close()
+          coverOrigin = nil
+          channels.removeAll { $0 === channel }
+        }
       default:
         result(FlutterMethodNotImplemented)
       }

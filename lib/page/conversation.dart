@@ -16,6 +16,7 @@ import 'package:whisper/audio/audio_group_coordinator.dart';
 import 'package:whisper/audio/audio_protocol.dart';
 import 'package:whisper/helper/toast.dart';
 import 'package:whisper/helper/transfer_failure_message.dart';
+import 'package:whisper/new_ui/capture/capture_flow.dart';
 import 'package:whisper/state/self_notes.dart';
 import 'package:whisper/state/conversation_history_pager.dart';
 import 'package:whisper/state/message_deletion.dart';
@@ -1635,6 +1636,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
       onClearClipboardFiles: _clearPendingClipboardFiles,
       onSendClipboardImages: _sendPendingClipboardImages,
       onRemoveClipboardImage: _removePendingClipboardImage,
+      onEditClipboardImage: _markUpPendingClipboardImage,
       composerHint: l10n.shellComposerHint(device.name),
       disabledHint: l10n.shellComposerOffline(device.name),
     );
@@ -1801,6 +1803,24 @@ class _SendMessageScreen extends State<SendMessageScreen>
         });
       }
     }
+  }
+
+  /// The picture on its way out, marked up: the marked-up one goes instead.
+  Future<void> _markUpPendingClipboardImage(int index) async {
+    final draft = _pendingClipboardImages[index];
+    final marked = await markUpDraftImage(
+      Navigator.of(context),
+      bytes: draft.bytes.isEmpty ? null : draft.bytes,
+      path: draft.path,
+      doneLabel: l10n.confirm,
+    );
+    if (marked == null || !mounted) return;
+    setState(() {
+      _pendingClipboardImages = [
+        for (final item in _pendingClipboardImages)
+          identical(item, draft) ? marked : item,
+      ];
+    });
   }
 
   Future<void> _sendPendingClipboardImages() async {

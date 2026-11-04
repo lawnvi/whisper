@@ -11,6 +11,7 @@ final class ScreenshotPlugin: NSObject, FlutterPlugin {
   private var hotKeyID: UInt32 = 0
   private var shortcut: NSDictionary?
   private var captureSession: ScreenshotSession?
+  private var heldSession: ScreenshotSession?
   private static let signature: OSType = 0x57534350
 
   static func register(with registrar: FlutterPluginRegistrar) {
@@ -49,6 +50,10 @@ final class ScreenshotPlugin: NSObject, FlutterPlugin {
     switch call.method {
     case "setShortcut": setShortcut(call.arguments as? [String: Any], result: result)
     case "captureRegion": captureRegion(call.arguments as? [String: String] ?? [:], result: result)
+    case "closeOverlay":
+      heldSession?.closeHeld()
+      heldSession = nil
+      result(nil)
     default: result(FlutterMethodNotImplemented)
     }
   }
@@ -122,7 +127,11 @@ final class ScreenshotPlugin: NSObject, FlutterPlugin {
     guard CGPreflightScreenCaptureAccess() || CGRequestScreenCaptureAccess() else {
       result(FlutterError(code: "permission-denied", message: nil, details: nil)); return
     }
-    let session = ScreenshotSession(labels: labels) { [weak self] value in
+    let session = ScreenshotSession(labels: labels, onSnapshot: { [weak self] picture in
+      self?.channel.invokeMethod("snapshot", arguments: picture)
+    }) { [weak self] value in
+      // A map: the panels stay until the app's window has taken over from them.
+      if value is [String: Any] { self?.heldSession = self?.captureSession }
       self?.captureSession = nil
       result(value)
     }
@@ -158,6 +167,9 @@ private final class ScreenshotSession {
   private var original = CGRect.zero
   private var operation = 0
   private var actionScreen = CGRect.zero
+  private var held = false
+  private var sentAhead: NSScreen?
+  private let onSnapshot: ([String: Any]) -> Void
   private weak var previousKeyWindow: NSWindow?
   private(set) var selection = CGRect.zero
   private(set) var selected = false
@@ -165,8 +177,10 @@ private final class ScreenshotSession {
   var dragging: Bool { operation != 0 }
   private let move = 16, create = 32
 
-  init(labels: [String: String], completion: @escaping FlutterResult) {
+  init(labels: [String: String], onSnapshot: @escaping ([String: Any]) -> Void,
+       completion: @escaping FlutterResult) {
     self.labels = labels
+    self.onSnapshot = onSnapshot
     self.completion = completion
   }
 
@@ -227,6 +241,8 @@ private final class ScreenshotSession {
     config.width = Int(screen.frame.width * screen.backingScaleFactor)
     config.height = Int(screen.frame.height * screen.backingScaleFactor)
     config.showsCursor = false
+    // Automatic may settle for less than the panel's pixels.
+    config.captureResolution = .best
     let filter = SCContentFilter(display: display, excludingWindows: [])
     SCScreenshotManager.captureImage(contentFilter: filter, configuration: config) {
       [weak self] image, _ in
@@ -304,6 +320,7 @@ private final class ScreenshotSession {
     panels[active].makeKey()
     panels[active].makeFirstResponder(panels[active].contentView?.subviews.first)
     NSCursor.crosshair.set()
+    sendAhead(active)
   }
 
   func hitTest(_ point: CGPoint) -> Int {
@@ -372,6 +389,7 @@ private final class ScreenshotSession {
     selected = selection.width >= 2 && selection.height >= 2
     if !selected { selection = .zero }
     actionScreen = displays.first(where: { $0.frame.contains(point) })?.frame ?? displays[0].frame
+    if selected && handOff() { redraw(); return }
     updateCursor()
     redraw()
   }
@@ -407,25 +425,41 @@ private final class ScreenshotSession {
     }
   }
 
-  func confirm() {
-    guard selected, !dragging else { return }
+  /// The selection in the pixels of the sharpest screen it is on. A selection
+  /// made with a trackpad is in fractions of a point: drawn as it is, every pixel
+  /// would be resampled and the whole picture would go soft.
+  private func selectedPixels() -> (context: CGContext, width: Int, height: Int, scale: CGFloat)? {
     let intersections = displays.filter { $0.frame.intersects(selection) }
-    guard let scale = intersections.map(\.scale).max() else { return }
-    let width = Int(ceil(selection.width * scale)), height = Int(ceil(selection.height * scale))
+    guard let scale = intersections.map(\.scale).max() else { return nil }
+    let grid = { (value: CGFloat) in (value * scale).rounded() / scale }
+    let left = grid(selection.minX), right = grid(selection.maxX)
+    let bottom = grid(selection.minY), top = grid(selection.maxY)
+    let snapped = CGRect(x: left, y: bottom, width: right - left, height: top - bottom)
+    let width = Int((snapped.width * scale).rounded()), height = Int((snapped.height * scale).rounded())
     guard width > 0, height > 0, Int64(width) * Int64(height) <= 128 * 1024 * 1024,
           let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8,
-            bytesPerRow: 0, space: CGColorSpace(name: CGColorSpace.sRGB)!,
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { fail(); return }
+            bytesPerRow: width * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
     for display in intersections {
-      let area = display.frame.intersection(selection)
-      let crop = CGRect(x: (area.minX - display.frame.minX) * display.scale,
-        y: (display.frame.maxY - area.maxY) * display.scale,
-        width: area.width * display.scale, height: area.height * display.scale).integral
-      guard let image = display.image.cropping(to: crop) else { fail(); return }
-      context.draw(image, in: CGRect(x: (area.minX - selection.minX) * scale,
-        y: (area.minY - selection.minY) * scale, width: area.width * scale, height: area.height * scale))
+      let area = display.frame.intersection(snapped)
+      guard area.width > 0, area.height > 0 else { continue }
+      let crop = CGRect(x: ((area.minX - display.frame.minX) * display.scale).rounded(),
+        y: ((display.frame.maxY - area.maxY) * display.scale).rounded(),
+        width: (area.width * display.scale).rounded(),
+        height: (area.height * display.scale).rounded())
+      guard let image = display.image.cropping(to: crop) else { return nil }
+      // One to one needs no filter. Only a part on a less sharp screen is scaled.
+      context.interpolationQuality = display.scale == scale ? .none : .high
+      context.draw(image, in: CGRect(x: ((area.minX - snapped.minX) * scale).rounded(),
+        y: ((area.minY - snapped.minY) * scale).rounded(),
+        width: (area.width * scale).rounded(), height: (area.height * scale).rounded()))
     }
-    guard let image = context.makeImage(),
+    return (context, width, height, scale)
+  }
+
+  func confirm() {
+    guard selected, !dragging else { return }
+    guard let pixels = selectedPixels(), let image = pixels.context.makeImage(),
           let data = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]) else {
       fail(); return
     }
@@ -433,6 +467,82 @@ private final class ScreenshotSession {
     pasteboard.clearContents()
     if pasteboard.setData(data, forType: .png) { finish(true) }
     else { finish(FlutterError(code: "clipboard-failed", message: nil, details: nil)) }
+  }
+
+  /// The screen as tightly packed RGBA rows, for the app's own window.
+  private static func rgba(of image: CGImage) -> Data? {
+    let width = image.width, height = image.height
+    guard let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8,
+            bytesPerRow: width * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+    context.interpolationQuality = .none
+    context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+    guard let bytes = context.data else { return nil }
+    return Data(bytes: bytes, count: width * height * 4)
+  }
+
+  private func describe(_ display: ScreenshotDisplay) -> [String: Any] {
+    let frame = display.frame
+    return [
+      "width": display.image.width,
+      "height": display.image.height,
+      "scale": Double(display.scale),
+      "frame": [frame.minX, frame.minY, frame.width, frame.height].map { Double($0) },
+    ]
+  }
+
+  /// The screen the selection will most likely be on goes ahead, while it is being
+  /// made, so that the tools can be up the moment the mouse is let go.
+  private func sendAhead(_ index: Int) {
+    let display = displays[index]
+    let screen = display.screen
+    DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+      guard let rgba = Self.rgba(of: display.image) else { return }
+      DispatchQueue.main.async {
+        guard let self = self, self.completion != nil else { return }
+        var picture = self.describe(display)
+        picture["rgba"] = FlutterStandardTypedData(bytes: rgba)
+        self.sentAhead = screen
+        self.onSnapshot(picture)
+      }
+    }
+  }
+
+  /// A selection on one screen goes over to the app's own window, which puts its
+  /// tools beside it. These panels stay until that window is up: see [closeHeld].
+  private func handOff() -> Bool {
+    guard let display = displays.first(where: { $0.frame.contains(selection) }),
+          displays.filter({ $0.frame.intersects(selection) }).count == 1 else { return false }
+    var map = describe(display)
+    if sentAhead !== display.screen {
+      guard let rgba = Self.rgba(of: display.image) else { return false }
+      map["rgba"] = FlutterStandardTypedData(bytes: rgba)
+    }
+    let frame = display.frame
+    // From the top left of that screen, as the window sees it.
+    map["selection"] = [selection.minX - frame.minX, frame.maxY - selection.maxY,
+                        selection.width, selection.height].map { Double($0) }
+    let completion = self.completion
+    self.completion = nil
+    timeout?.cancel()
+    held = true
+    panels.forEach { ($0.contentView?.subviews.first as? ScreenshotCanvas)?.hold() }
+    NSCursor.arrow.set()
+    completion?(map)
+    // In case that window never comes: nothing else closes these.
+    DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in self?.closeHeld() }
+    return true
+  }
+
+  func closeHeld() {
+    guard held else { return }
+    held = false
+    if let observer = screenObserver { NotificationCenter.default.removeObserver(observer) }
+    screenObserver = nil
+    panels.forEach { $0.close() }
+    panels.removeAll()
+    displays.removeAll()
+    windowFrames.removeAll()
   }
 
   func cancel() { finish(false) }
@@ -464,10 +574,13 @@ private final class ScreenshotCanvas: NSView, NSViewToolTipOwner {
   private let dimLayer = CAShapeLayer()
   private let selectionLayer = CAShapeLayer()
   private let handlesLayer = CAShapeLayer()
+  private let sizeBackground = CALayer()
+  private let sizeText = CATextLayer()
   private var previousHintSelected = false
   private var previousToolbar = CGRect.null
   private var previousHover = 0
-  private let accent = NSColor(srgbRed: 0.145, green: 0.388, blue: 0.922, alpha: 1)
+  private var holding = false
+  private let accent = NSColor(srgbRed: 0, green: 0.565, blue: 1, alpha: 1)
   private var dark: Bool { session.labels["appearance"] == "dark" }
   private var textColor: NSColor {
     dark ? NSColor(calibratedWhite: 0.90, alpha: 1) : NSColor(srgbRed: 0.39, green: 0.45, blue: 0.54, alpha: 1)
@@ -490,6 +603,15 @@ private final class ScreenshotCanvas: NSView, NSViewToolTipOwner {
     handlesLayer.fillColor = NSColor.white.cgColor
     handlesLayer.strokeColor = accent.cgColor
     handlesLayer.lineWidth = 1.5
+    sizeBackground.backgroundColor = NSColor(calibratedWhite: 0, alpha: 0.65).cgColor
+    sizeBackground.cornerRadius = 6
+    sizeBackground.isHidden = true
+    sizeText.font = NSFont.systemFont(ofSize: 12, weight: .medium)
+    sizeText.fontSize = 12
+    sizeText.foregroundColor = NSColor.white.cgColor
+    sizeText.alignmentMode = .center
+    sizeText.contentsScale = display.scale
+    sizeBackground.addSublayer(sizeText)
   }
   override func viewDidMoveToSuperview() {
     super.viewDidMoveToSuperview()
@@ -500,6 +622,7 @@ private final class ScreenshotCanvas: NSView, NSViewToolTipOwner {
       shape.frame = bounds
       backdrop.insertSublayer(shape, below: annotations)
     }
+    backdrop.insertSublayer(sizeBackground, below: annotations)
     refreshSelection()
   }
   required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -524,6 +647,9 @@ private final class ScreenshotCanvas: NSView, NSViewToolTipOwner {
   private func local(_ rect: CGRect) -> CGRect {
     rect.offsetBy(dx: -display.frame.minX, dy: -display.frame.minY)
   }
+
+  /// Only the picture and the selection, until the window that takes over is up.
+  func hold() { holding = true; needsDisplay = true }
 
   func updateActionHints() {
     let rect = session.selected && !session.dragging ? local(session.actionRect) : .null
@@ -560,6 +686,7 @@ private final class ScreenshotCanvas: NSView, NSViewToolTipOwner {
     dimLayer.path = dim
     selectionLayer.path = hasSelection ? CGPath(rect: rect, transform: nil) : nil
     handlesLayer.path = handles
+    layOutSize(rect, visible: hasSelection && bounds.contains(CGPoint(x: rect.minX, y: rect.maxY)))
     CATransaction.commit()
 
     let toolbar = session.selected && !session.dragging ? local(session.actionRect) : .null
@@ -574,7 +701,28 @@ private final class ScreenshotCanvas: NSView, NSViewToolTipOwner {
     previousHintSelected = session.selected
   }
 
+  /// The size in pixels, as the app's own window goes on to show it: above the top
+  /// left corner, or just inside at the top of the screen.
+  private func layOutSize(_ rect: CGRect, visible: Bool) {
+    sizeBackground.isHidden = !visible
+    guard visible else { return }
+    let selection = session.selection
+    let width = Int((selection.maxX * display.scale).rounded() - (selection.minX * display.scale).rounded())
+    let height = Int((selection.maxY * display.scale).rounded() - (selection.minY * display.scale).rounded())
+    let text = "\(width) × \(height)"
+    let font = NSFont.systemFont(ofSize: 12, weight: .medium)
+    let textWidth = ceil((text as NSString).size(withAttributes: [.font: font]).width)
+    let size = CGSize(width: textWidth + 16, height: 22)
+    let above = rect.maxY + 4
+    let y = above + size.height <= bounds.height - 4 ? above : rect.maxY - size.height - 4
+    let x = max(4, min(rect.minX, bounds.width - size.width - 4))
+    sizeBackground.frame = CGRect(origin: CGPoint(x: x, y: y), size: size)
+    sizeText.frame = CGRect(x: 0, y: 3, width: size.width, height: 16)
+    sizeText.string = text
+  }
+
   override func draw(_ dirtyRect: NSRect) {
+    if holding { return }
     let hint = session.labels[session.selected ? "adjustHint" : "hint"] ?? ""
     let hintWidth = min(bounds.width - 32, max(280, CGFloat(hint.count) * 13))
     let hintRect = CGRect(x: (bounds.width - hintWidth) / 2, y: bounds.height - 64,

@@ -10,10 +10,64 @@ import 'package:whisper/helper/screenshot_shortcut.dart';
 
 enum ScreenshotNotice { copied, permissionDenied, unavailable, failed }
 
+/// One screen as it was: opaque, tightly packed RGBA rows.
+class ScreenshotPicture {
+  const ScreenshotPicture({
+    required this.width,
+    required this.height,
+    required this.rgba,
+    required this.scale,
+    required this.frame,
+  });
+
+  final int width, height;
+  final Uint8List rgba;
+
+  /// Pixels to a point on that screen.
+  final double scale;
+
+  /// Where that screen is, as the platform's windows are placed: x, y, width,
+  /// height.
+  final List<double> frame;
+
+  factory ScreenshotPicture.fromMap(Map<Object?, Object?> map) =>
+      ScreenshotPicture(
+        width: map['width']! as int,
+        height: map['height']! as int,
+        rgba: map['rgba']! as Uint8List,
+        scale: (map['scale']! as num).toDouble(),
+        frame: (map['frame']! as List)
+            .cast<num>()
+            .map((v) => v.toDouble())
+            .toList(),
+      );
+}
+
+/// How the overlay ended: cancelled, with the picture on the clipboard, or with
+/// a selection for the app's own window to take over.
+class ScreenshotResult {
+  const ScreenshotResult({this.copied = false, this.selection, this.picture});
+
+  final bool copied;
+
+  /// x, y, width, height in points, from the top left of its screen.
+  final List<double>? selection;
+
+  /// That screen. Null when it was sent ahead, with [ScreenshotBackend.onSnapshot].
+  final ScreenshotPicture? picture;
+}
+
 abstract class ScreenshotBackend {
   void Function()? onShortcut;
+
+  /// The screen the selection is probably on, while it is being made.
+  void Function(ScreenshotPicture)? onSnapshot;
   Map<String, String> captureLabels = const {};
-  Future<bool> captureRegion();
+  Future<ScreenshotResult> captureRegion();
+
+  /// A selection was handed over: the overlay stays until the window that takes
+  /// over is up, so that nothing on screen changes.
+  Future<void> closeOverlay() async {}
   Future<String?> setShortcut(ScreenshotShortcut? shortcut, String description);
   Future<void> close();
 }
@@ -25,6 +79,11 @@ class NativeScreenshotBackend extends ScreenshotBackend {
   NativeScreenshotBackend() {
     channel.setMethodCallHandler((call) async {
       if (call.method == 'shortcutPressed') onShortcut?.call();
+      if (call.method == 'snapshot') {
+        onSnapshot?.call(
+          ScreenshotPicture.fromMap(call.arguments as Map<Object?, Object?>),
+        );
+      }
     });
     if (Platform.isLinux &&
         (Platform.environment['XDG_SESSION_TYPE'] == 'wayland' ||
@@ -34,10 +93,30 @@ class NativeScreenshotBackend extends ScreenshotBackend {
   }
 
   @override
-  Future<bool> captureRegion() async => _portal != null
-      ? _portal!.captureRegion()
-      : await channel.invokeMethod<bool>('captureRegion', captureLabels) ??
-            false;
+  Future<ScreenshotResult> captureRegion() async {
+    // The compositor does the selecting, with nothing of ours on screen: the
+    // picture is marked up after pasting it, from the composer.
+    if (_portal != null) {
+      return ScreenshotResult(copied: await _portal!.captureRegion());
+    }
+    final result = await channel.invokeMethod<Object?>(
+      'captureRegion',
+      captureLabels,
+    );
+    if (result is! Map) return ScreenshotResult(copied: result == true);
+    return ScreenshotResult(
+      selection: (result['selection']! as List)
+          .cast<num>()
+          .map((v) => v.toDouble())
+          .toList(),
+      picture: result['rgba'] == null
+          ? null
+          : ScreenshotPicture.fromMap(result.cast<Object?, Object?>()),
+    );
+  }
+
+  @override
+  Future<void> closeOverlay() => channel.invokeMethod<void>('closeOverlay');
 
   @override
   Future<String?> setShortcut(
@@ -105,6 +184,24 @@ class DesktopScreenshotController extends ChangeNotifier {
   String _description = 'Whisper';
   Future<void>? _initialization;
   void Function(ScreenshotNotice)? onNotice;
+
+  /// Takes over from the overlay and, once the picture is marked up, puts it on
+  /// the clipboard. Says whether it did: cancelling is not a failure, and needs
+  /// no notice either. [picture] unless it came with [onPicture] before this.
+  /// [closeOverlay] once it is on screen.
+  Future<bool> Function(
+    List<double> selection,
+    ScreenshotPicture? picture,
+    Future<void> Function() closeOverlay,
+  )?
+  onMarkUp;
+
+  /// Gets ready for [onMarkUp], while the selection is being made.
+  Future<void> Function()? onPrepare;
+  void Function(ScreenshotPicture)? onPicture;
+
+  /// Ended without a selection: whatever was got ready can go.
+  void Function()? onAbandon;
 
   String get shortcutLabel =>
       systemShortcutLabel ?? shortcut.label(macOS: macOS, windows: windows);
@@ -194,9 +291,23 @@ class DesktopScreenshotController extends ChangeNotifier {
     capturing = true;
     notifyListeners();
     try {
-      if (await _backend.captureRegion()) {
-        onNotice?.call(ScreenshotNotice.copied);
-      }
+      _backend.onSnapshot = (picture) => onPicture?.call(picture);
+      final prepare = onPrepare?.call();
+      // A window coming up during the selection would end it, where losing the
+      // keyboard does. On a Mac it takes no keyboard.
+      if (!macOS) await prepare;
+      final result = await _backend.captureRegion();
+      final selection = result.selection;
+      if (selection == null) onAbandon?.call();
+      final copied = selection == null
+          ? result.copied
+          : await onMarkUp?.call(
+                  selection,
+                  result.picture,
+                  _backend.closeOverlay,
+                ) ??
+                false;
+      if (copied) onNotice?.call(ScreenshotNotice.copied);
     } on MissingPluginException {
       onNotice?.call(ScreenshotNotice.unavailable);
     } on PlatformException catch (error) {

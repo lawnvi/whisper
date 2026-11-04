@@ -3,6 +3,7 @@
 
 #include <flutter/method_channel.h>
 #include <flutter/standard_method_codec.h>
+#include <flutter_windows.h>
 #include <dwmapi.h>
 #include <algorithm>
 #include <cstdint>
@@ -44,6 +45,9 @@ class ScreenshotPlugin : public flutter::Plugin {
         adjust_hint_ = Label(call.arguments(), "adjustHint");
         dark_ = Label(call.arguments(), "appearance") == L"dark";
         CaptureRegion(std::move(result));
+      } else if (call.method_name() == "closeOverlay") {
+        CloseHeld();
+        result->Success();
       } else {
         result->NotImplemented();
       }
@@ -53,6 +57,7 @@ class ScreenshotPlugin : public flutter::Plugin {
   ~ScreenshotPlugin() override {
     channel_.SetMethodCallHandler(nullptr);
     Finish(false);
+    CloseHeld();
     if (registered_) UnregisterHotKey(window_, hotkey_id_);
     registrar_->UnregisterTopLevelWindowProcDelegate(delegate_);
   }
@@ -279,6 +284,34 @@ class ScreenshotPlugin : public flutter::Plugin {
     SelectObject(dc, old); DeleteObject(font);
   }
 
+  // The size in pixels, as the app's own window goes on to show it: above the top
+  // left corner, or just inside at the top of the screen.
+  void DrawSizeLabel(HDC dc) const {
+    const RECT rect = Selection();
+    const LONG width = rect.right - rect.left, height = rect.bottom - rect.top;
+    if (width <= 0 || height <= 0) return;
+    const std::wstring text = std::to_wstring(width) + L" \u00d7 " + std::to_wstring(height);
+    const double s = UiScale();
+    const auto font = CreateFontW(-static_cast<int>(12 * s), 0, 0, 0, FW_MEDIUM,
+        FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+        CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
+    const auto old = SelectObject(dc, font);
+    SIZE extent{};
+    GetTextExtentPoint32W(dc, text.c_str(), static_cast<int>(text.size()), &extent);
+    const double w = extent.cx + 16 * s, h = 22 * s, gap = 4 * s;
+    const double above = rect.top - h - gap;
+    const double top = above >= gap ? above : rect.top + gap;
+    const double left = std::max(gap, std::min<double>(rect.left, width_ - w - gap));
+    const CaptureRect label{left, top, left + w, top + h};
+    FillRounded(dc, label, RGB(40, 40, 40), static_cast<int>(6 * s));
+    SetBkMode(dc, TRANSPARENT);
+    SetTextColor(dc, RGB(255, 255, 255));
+    auto r = NativeRect(label);
+    DrawTextW(dc, text.c_str(), -1, &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    SelectObject(dc, old);
+    DeleteObject(font);
+  }
+
   COLORREF TextColor() const { return dark_ ? RGB(230, 230, 230) : RGB(100, 116, 139); }
   COLORREF SurfaceColor() const { return dark_ ? RGB(31, 31, 31) : RGB(248, 250, 252); }
 
@@ -317,7 +350,7 @@ class ScreenshotPlugin : public flutter::Plugin {
       BitBlt(dc, rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top,
              snapshot_dc_, rect.left, rect.top, SRCCOPY);
       const auto old_brush = SelectObject(dc, GetStockObject(NULL_BRUSH));
-      const auto pen = CreatePen(PS_SOLID, static_cast<int>(2 * s), RGB(37, 99, 235));
+      const auto pen = CreatePen(PS_SOLID, static_cast<int>(2 * s), RGB(0, 144, 255));
       const auto old_pen = SelectObject(dc, pen);
       Rectangle(dc, rect.left, rect.top, rect.right, rect.bottom);
       SelectObject(dc, old_pen); DeleteObject(pen);
@@ -325,7 +358,7 @@ class ScreenshotPlugin : public flutter::Plugin {
       for (double x : {selected.left, (selected.left + selected.right) / 2, selected.right}) {
         for (double y : {selected.top, (selected.top + selected.bottom) / 2, selected.bottom}) {
           if (x == (selected.left + selected.right) / 2 && y == (selected.top + selected.bottom) / 2) continue;
-          FillCircle(dc, {x, y}, 4.25 * s, RGB(37, 99, 235));
+          FillCircle(dc, {x, y}, 4.25 * s, RGB(0, 144, 255));
           FillCircle(dc, {x, y}, 2.75 * s, RGB(255, 255, 255));
         }
       }
@@ -334,9 +367,10 @@ class ScreenshotPlugin : public flutter::Plugin {
     const double hint_width = std::min(600 * s, monitor.width() - 32 * s);
     CaptureRect hint{monitor.left + (monitor.width() - hint_width) / 2, monitor.top + 24 * s,
       monitor.left + (monitor.width() + hint_width) / 2, monitor.top + 58 * s};
-    FillRounded(dc, hint, SurfaceColor(), static_cast<int>(9 * s));
-    DrawTextLabel(dc, selection_.selected() ? adjust_hint_ : hint_, hint, 13);
-    if (selection_.selected() && !selection_.dragging()) {
+    if (!held_) FillRounded(dc, hint, SurfaceColor(), static_cast<int>(9 * s));
+    if (!held_) DrawTextLabel(dc, selection_.selected() ? adjust_hint_ : hint_, hint, 13);
+    DrawSizeLabel(dc);
+    if (selection_.selected() && !selection_.dragging() && !held_) {
       const auto toolbar = Toolbar();
       FillRounded(dc, toolbar, SurfaceColor(), static_cast<int>(12 * s));
       CaptureRect cancel{toolbar.left + 4 * s, toolbar.top + 4 * s, toolbar.left + 40 * s, toolbar.bottom - 4 * s};
@@ -352,7 +386,7 @@ class ScreenshotPlugin : public flutter::Plugin {
       LineTo(dc, static_cast<int>(cx + 4 * s), static_cast<int>(cy - 4 * s));
       SelectObject(dc, old_pen); DeleteObject(pen);
       const double x = (confirm.left + confirm.right) / 2, y = (confirm.top + confirm.bottom) / 2;
-      pen = CreatePen(PS_SOLID, std::max(1, static_cast<int>(1.6 * s)), RGB(37, 99, 235));
+      pen = CreatePen(PS_SOLID, std::max(1, static_cast<int>(1.6 * s)), RGB(0, 144, 255));
       old_pen = SelectObject(dc, pen);
       MoveToEx(dc, static_cast<int>(x - 3 * s), static_cast<int>(y - 7 * s), nullptr);
       LineTo(dc, static_cast<int>(x + 5 * s), static_cast<int>(y - 7 * s));
@@ -400,12 +434,63 @@ class ScreenshotPlugin : public flutter::Plugin {
     return copied;
   }
 
-  void Finish(bool copy, const char* error = nullptr) {
-    if (!pending_) return;
+  // A selection on one screen goes over to the app's own window, which puts its
+  // tools beside it. All of that screen goes, for the selection can still change.
+  // The overlay stays until that window is up: see CloseHeld.
+  bool HandOff() {
+    const RECT rect = Selection();
+    const RECT on_screen{rect.left + origin_.x, rect.top + origin_.y,
+                         rect.right + origin_.x, rect.bottom + origin_.y};
+    const HMONITOR monitor = MonitorFromRect(&on_screen, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO info{};
+    info.cbSize = sizeof(info);
+    if (!pending_ || !GetMonitorInfo(monitor, &info)) return false;
+    const RECT& m = info.rcMonitor;
+    if (on_screen.left < m.left || on_screen.top < m.top ||
+        on_screen.right > m.right || on_screen.bottom > m.bottom) return false;
+    const LONG left = m.left - origin_.x, top = m.top - origin_.y;
+    const LONG width = m.right - m.left, height = m.bottom - m.top;
+    std::vector<uint8_t> rgba(static_cast<size_t>(width) * height * 4);
+    for (LONG row = 0; row < height; ++row) {
+      const auto* source = pixels_ + static_cast<size_t>(top + row) * width_ + left;
+      auto* target = rgba.data() + static_cast<size_t>(row) * width * 4;
+      for (LONG column = 0; column < width; ++column) {
+        const uint32_t pixel = source[column];
+        target[column * 4] = static_cast<uint8_t>((pixel >> 16) & 0xFF);
+        target[column * 4 + 1] = static_cast<uint8_t>((pixel >> 8) & 0xFF);
+        target[column * 4 + 2] = static_cast<uint8_t>(pixel & 0xFF);
+        // A screen capture leaves its alpha undefined.
+        target[column * 4 + 3] = 0xFF;
+      }
+    }
+    const double scale = FlutterDesktopGetDpiForMonitor(monitor) / 96.0;
+    flutter::EncodableMap map;
+    map[Value("width")] = Value(static_cast<int32_t>(width));
+    map[Value("height")] = Value(static_cast<int32_t>(height));
+    map[Value("scale")] = Value(scale);
+    map[Value("rgba")] = Value(std::move(rgba));
+    // Where the window goes is in pixels: windows are placed in those here.
+    map[Value("frame")] = Value(flutter::EncodableList{
+        Value(static_cast<double>(m.left)), Value(static_cast<double>(m.top)),
+        Value(static_cast<double>(width)), Value(static_cast<double>(height))});
+    map[Value("selection")] = Value(flutter::EncodableList{
+        Value((on_screen.left - m.left) / scale), Value((on_screen.top - m.top) / scale),
+        Value((rect.right - rect.left) / scale), Value((rect.bottom - rect.top) / scale)});
+    held_ = true;
+    SetTimer(overlay_, 1, 10000, nullptr);
     auto result = std::move(pending_);
-    const bool copied = copy && CopySelection();
+    result->Success(Value(std::move(map)));
+    return true;
+  }
+
+  void CloseHeld() {
+    if (!held_) return;
+    held_ = false;
+    CloseOverlay();
+  }
+
+  void CloseOverlay() {
     const HWND overlay = overlay_;
-    const bool restore_focus = overlay && GetForegroundWindow() == overlay;
     overlay_ = nullptr;
     selection_.Reset(0, 0);
     window_frames_.clear();
@@ -428,6 +513,14 @@ class ScreenshotPlugin : public flutter::Plugin {
     bitmap_ = nullptr;
     old_bitmap_ = nullptr;
     pixels_ = nullptr;
+  }
+
+  void Finish(bool copy, const char* error = nullptr) {
+    if (!pending_) return;
+    auto result = std::move(pending_);
+    const bool copied = copy && CopySelection();
+    const bool restore_focus = overlay_ && GetForegroundWindow() == overlay_;
+    CloseOverlay();
     if (restore_focus && IsWindow(foreground_)) SetForegroundWindow(foreground_);
     if (error) result->Error(error);
     else if (copy && !copied) result->Error("clipboard-failed");
@@ -444,7 +537,12 @@ class ScreenshotPlugin : public flutter::Plugin {
     switch (message) {
       case WM_PAINT: self->Paint(window); return 0;
       case WM_ERASEBKGND: return 1;
+      case WM_TIMER:
+        // In case the window that takes over never comes.
+        if (wparam == 1) self->CloseHeld();
+        return 0;
       case WM_LBUTTONDOWN: {
+        if (self->held_) return 0;
         self->pointer_ = self->CursorPoint();
         if (self->selection_.selected() && self->Toolbar().contains(self->pointer_)) {
           self->Finish(self->pointer_.x >= self->Toolbar().left + 42 * self->UiScale());
@@ -461,6 +559,7 @@ class ScreenshotPlugin : public flutter::Plugin {
         return 0;
       }
       case WM_MOUSEMOVE:
+        if (self->held_) return 0;
         self->pointer_ = self->CursorPoint();
         self->selection_.Update(self->pointer_);
         self->UpdateCursor();
@@ -471,10 +570,12 @@ class ScreenshotPlugin : public flutter::Plugin {
           self->pointer_ = self->action_point_ = self->CursorPoint();
           self->selection_.End(self->pointer_);
           ReleaseCapture();
+          if (self->selection_.selected()) self->HandOff();
           InvalidateRect(window, nullptr, FALSE);
         }
         return 0;
       case WM_KEYDOWN:
+        if (self->held_) return 0;
         if (wparam == VK_ESCAPE) self->Finish(false);
         else if (wparam == VK_RETURN && self->selection_.selected() && !self->selection_.dragging()) self->Finish(true);
         return 0;
@@ -482,9 +583,11 @@ class ScreenshotPlugin : public flutter::Plugin {
       case WM_RBUTTONDOWN:
       case WM_CLOSE:
       case WM_DISPLAYCHANGE:
+        if (self->held_) return 0;
         self->Finish(false); return 0;
       case WM_ACTIVATE:
-        if (LOWORD(wparam) == WA_INACTIVE) self->Finish(false);
+        // The window taking over takes the keyboard from it, as it should.
+        if (LOWORD(wparam) == WA_INACTIVE && !self->held_) self->Finish(false);
         return 0;
       case WM_DPICHANGED: return 0;
     }
@@ -516,6 +619,7 @@ class ScreenshotPlugin : public flutter::Plugin {
   CapturePoint pointer_, action_point_;
   std::wstring hint_, adjust_hint_;
   bool dark_ = false;
+  bool held_ = false;
   std::unique_ptr<Result> pending_;
 };
 }  // namespace

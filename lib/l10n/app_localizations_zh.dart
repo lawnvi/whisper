@@ -155,6 +155,36 @@ class AppLocalizationsZh extends AppLocalizations {
   String get screenshotConfirm => '复制';
 
   @override
+  String get screenshotMarkUp => '标注';
+
+  @override
+  String get captureRect => '框';
+
+  @override
+  String get captureEllipse => '圈';
+
+  @override
+  String get captureArrow => '箭头';
+
+  @override
+  String get capturePen => '画笔';
+
+  @override
+  String get captureText => '文字';
+
+  @override
+  String get captureMosaic => '马赛克';
+
+  @override
+  String get captureUndo => '撤销';
+
+  @override
+  String get captureRedo => '重做';
+
+  @override
+  String get captureSave => '存为文件';
+
+  @override
   String get diagTitle => '诊断信息';
 
   @override

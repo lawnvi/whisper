@@ -31,6 +31,10 @@ class ScreenshotPlugin {
     const char* method = fl_method_call_get_name(call);
     if (std::strcmp(method, "setShortcut") == 0) SetShortcut(call);
     else if (std::strcmp(method, "captureRegion") == 0) CaptureRegion(call);
+    else if (std::strcmp(method, "closeOverlay") == 0) {
+      CloseHeld();
+      fl_method_call_respond_success(call, nullptr, nullptr);
+    }
     else fl_method_call_respond_not_implemented(call, nullptr);
   }
 
@@ -189,7 +193,7 @@ class ScreenshotPlugin {
       cairo_clip(cr);
       self->DrawSnapshot(cr);
       cairo_restore(cr);
-      cairo_set_source_rgb(cr, 0.145, 0.388, 0.922);
+      cairo_set_source_rgb(cr, 0, 0.565, 1);
       cairo_set_line_width(cr, 2);
       cairo_rectangle(cr, rect.left, rect.top, rect.width(), rect.height());
       cairo_stroke(cr);
@@ -199,7 +203,7 @@ class ScreenshotPlugin {
           cairo_new_sub_path(cr);
           cairo_arc(cr, x, y, 3.5, 0, 2 * G_PI);
           cairo_set_source_rgb(cr, 1, 1, 1); cairo_fill_preserve(cr);
-          cairo_set_source_rgb(cr, 0.145, 0.388, 0.922);
+          cairo_set_source_rgb(cr, 0, 0.565, 1);
           cairo_set_line_width(cr, 1.5); cairo_stroke(cr);
         }
       }
@@ -208,10 +212,13 @@ class ScreenshotPlugin {
     const double hint_width = std::min(600.0, monitor.width() - 32);
     CaptureRect hint{monitor.left + (monitor.width() - hint_width) / 2,
       monitor.top + 24, monitor.left + (monitor.width() + hint_width) / 2, monitor.top + 58};
-    RoundedRect(cr, hint, 9);
-    self->SetSurface(cr); cairo_fill(cr);
-    self->DrawText(cr, self->selection_.selected() ? self->adjust_hint_ : self->hint_, hint, 13);
-    if (self->selection_.selected() && !self->selection_.dragging()) {
+    if (!self->held_) {
+      RoundedRect(cr, hint, 9);
+      self->SetSurface(cr); cairo_fill(cr);
+    }
+    if (!self->held_) self->DrawText(cr, self->selection_.selected() ? self->adjust_hint_ : self->hint_, hint, 13);
+    self->DrawSizeLabel(cr);
+    if (self->selection_.selected() && !self->selection_.dragging() && !self->held_) {
       const auto toolbar = self->Toolbar();
       RoundedRect(cr, toolbar, 12);
       self->SetSurface(cr); cairo_fill_preserve(cr);
@@ -224,7 +231,7 @@ class ScreenshotPlugin {
       }
       if (confirm.contains(self->pointer_)) {
         RoundedRect(cr, confirm, 7);
-        cairo_set_source_rgba(cr, 0.145, 0.388, 0.922, self->dark_ ? 0.20 : 0.10);
+        cairo_set_source_rgba(cr, 0, 0.565, 1, self->dark_ ? 0.20 : 0.10);
         cairo_fill(cr);
       }
       const double cx = (cancel.left + cancel.right) / 2, cy = (cancel.top + cancel.bottom) / 2;
@@ -232,11 +239,39 @@ class ScreenshotPlugin {
       cairo_move_to(cr, cx - 4, cy - 4); cairo_line_to(cr, cx + 4, cy + 4);
       cairo_move_to(cr, cx - 4, cy + 4); cairo_line_to(cr, cx + 4, cy - 4); cairo_stroke(cr);
       const double x = (confirm.left + confirm.right) / 2, y = (confirm.top + confirm.bottom) / 2;
-      cairo_set_source_rgb(cr, 0.145, 0.388, 0.922);
+      cairo_set_source_rgb(cr, 0, 0.565, 1);
       cairo_move_to(cr, x - 3, y - 7); cairo_line_to(cr, x + 5, y - 7); cairo_line_to(cr, x + 5, y + 3); cairo_stroke(cr);
       RoundedRect(cr, {x - 6, y - 4, x + 3, y + 7}, 1.5); cairo_stroke(cr);
     }
     return TRUE;
+  }
+
+  // The size in pixels, as the app's own window goes on to show it: above the top
+  // left corner, or just inside at the top of the screen.
+  void DrawSizeLabel(cairo_t* cr) {
+    const auto rect = selection_.rect();
+    if (rect.width() <= 0 || rect.height() <= 0) return;
+    const double scale = static_cast<double>(gdk_pixbuf_get_width(snapshot_)) / width_;
+    const int width = static_cast<int>(std::ceil(rect.right * scale)) - static_cast<int>(std::floor(rect.left * scale));
+    const int height = static_cast<int>(std::ceil(rect.bottom * scale)) - static_cast<int>(std::floor(rect.top * scale));
+    const std::string text = std::to_string(width) + " \xC3\x97 " + std::to_string(height);
+    g_autoptr(PangoLayout) layout = gtk_widget_create_pango_layout(overlay_, text.c_str());
+    auto* font = pango_font_description_from_string("Sans Medium");
+    pango_font_description_set_absolute_size(font, 12 * PANGO_SCALE);
+    pango_layout_set_font_description(layout, font);
+    pango_font_description_free(font);
+    int text_width = 0, text_height = 0;
+    pango_layout_get_pixel_size(layout, &text_width, &text_height);
+    const double w = text_width + 16, h = 22, gap = 4;
+    const double above = rect.top - h - gap;
+    const double top = above >= gap ? above : rect.top + gap;
+    const double left = std::max(gap, std::min(rect.left, width_ - w - gap));
+    RoundedRect(cr, {left, top, left + w, top + h}, 6);
+    cairo_set_source_rgba(cr, 0, 0, 0, 0.65);
+    cairo_fill(cr);
+    cairo_set_source_rgb(cr, 1, 1, 1);
+    cairo_move_to(cr, left + 8, top + (h - text_height) / 2);
+    pango_cairo_show_layout(cr, layout);
   }
 
   void SetSurface(cairo_t* cr) const {
@@ -314,6 +349,7 @@ class ScreenshotPlugin {
 
   static gboolean OnButtonPress(GtkWidget*, GdkEventButton* event, gpointer data) {
     auto* self = static_cast<ScreenshotPlugin*>(data);
+    if (self->held_) return TRUE;
     if (event->button == 3) { self->Finish(false); return TRUE; }
     if (event->button == 1) {
       const CapturePoint point{event->x, event->y};
@@ -334,6 +370,7 @@ class ScreenshotPlugin {
 
   static gboolean Motion(GtkWidget*, GdkEventMotion* event, gpointer data) {
     auto* self = static_cast<ScreenshotPlugin*>(data);
+    if (self->held_) return TRUE;
     self->pointer_ = {event->x, event->y};
     self->selection_.Update(self->pointer_);
     self->UpdateCursor();
@@ -347,6 +384,7 @@ class ScreenshotPlugin {
       self->pointer_ = self->action_point_ = {event->x, event->y};
       self->selection_.End(self->pointer_);
       self->UpdateCursor();
+      if (self->selection_.selected()) self->HandOff();
       gtk_widget_queue_draw(self->overlay_);
     }
     return TRUE;
@@ -354,6 +392,7 @@ class ScreenshotPlugin {
 
   static gboolean OnKeyPress(GtkWidget*, GdkEventKey* event, gpointer data) {
     auto* self = static_cast<ScreenshotPlugin*>(data);
+    if (self->held_) return TRUE;
     if (event->keyval == GDK_KEY_Escape) self->Finish(false);
     else if ((event->keyval == GDK_KEY_Return || event->keyval == GDK_KEY_KP_Enter) &&
              self->selection_.selected() && !self->selection_.dragging()) self->Finish(true);
@@ -369,10 +408,13 @@ class ScreenshotPlugin {
     return TRUE;
   }
   static gboolean GrabBroken(GtkWidget*, GdkEventGrabBroken*, gpointer data) {
+    // Ungrabbing for the window taking over is not losing the selection.
+    if (static_cast<ScreenshotPlugin*>(data)->held_) return TRUE;
     static_cast<ScreenshotPlugin*>(data)->Finish(false);
     return TRUE;
   }
   static void MonitorsChanged(GdkScreen*, gpointer data) {
+    if (static_cast<ScreenshotPlugin*>(data)->held_) return;
     static_cast<ScreenshotPlugin*>(data)->Finish(false);
   }
 
@@ -394,11 +436,71 @@ class ScreenshotPlugin {
     return true;
   }
 
-  void Finish(bool copy, const char* error = nullptr) {
-    if (!pending_) return;
+  // A selection on one screen goes over to the app's own window, which puts its
+  // tools beside it. All of that screen goes, for the selection can still change.
+  // The overlay stays until that window is up: see CloseHeld.
+  bool HandOff() {
+    if (!pending_) return false;
+    const auto rect = selection_.rect();
+    auto* monitor = gdk_display_get_monitor_at_point(gdk_display_get_default(),
+        static_cast<int>(rect.left), static_cast<int>(rect.top));
+    if (!monitor) return false;
+    GdkRectangle g{};
+    gdk_monitor_get_geometry(monitor, &g);
+    if (rect.left < g.x || rect.top < g.y ||
+        rect.right > g.x + g.width || rect.bottom > g.y + g.height) return false;
+    const double scale = static_cast<double>(gdk_pixbuf_get_width(snapshot_)) / width_;
+    const int x = static_cast<int>(g.x * scale), y = static_cast<int>(g.y * scale);
+    const int width = static_cast<int>(g.width * scale), height = static_cast<int>(g.height * scale);
+    const int channels = gdk_pixbuf_get_n_channels(snapshot_);
+    const int stride = gdk_pixbuf_get_rowstride(snapshot_);
+    const guchar* pixels = gdk_pixbuf_read_pixels(snapshot_);
+    std::vector<uint8_t> rgba(static_cast<size_t>(width) * height * 4);
+    for (int row = 0; row < height; ++row) {
+      const guchar* source = pixels + static_cast<size_t>(y + row) * stride + static_cast<size_t>(x) * channels;
+      uint8_t* target = rgba.data() + static_cast<size_t>(row) * width * 4;
+      for (int column = 0; column < width; ++column) {
+        target[column * 4] = source[column * channels];
+        target[column * 4 + 1] = source[column * channels + 1];
+        target[column * 4 + 2] = source[column * channels + 2];
+        target[column * 4 + 3] = 0xFF;
+      }
+    }
+    const double frame[] = {static_cast<double>(g.x), static_cast<double>(g.y),
+                            static_cast<double>(g.width), static_cast<double>(g.height)};
+    const double area[] = {rect.left - g.x, rect.top - g.y, rect.width(), rect.height()};
+    g_autoptr(FlValue) map = fl_value_new_map();
+    fl_value_set_string_take(map, "width", fl_value_new_int(width));
+    fl_value_set_string_take(map, "height", fl_value_new_int(height));
+    fl_value_set_string_take(map, "scale", fl_value_new_float(scale));
+    fl_value_set_string_take(map, "rgba", fl_value_new_uint8_list(rgba.data(), rgba.size()));
+    fl_value_set_string_take(map, "frame", fl_value_new_float_list(frame, 4));
+    fl_value_set_string_take(map, "selection", fl_value_new_float_list(area, 4));
+    held_ = true;
+    if (seat_) gdk_seat_ungrab(seat_);
+    seat_ = nullptr;
+    held_timeout_ = g_timeout_add_seconds(10, [](gpointer data) -> gboolean {
+      auto* self = static_cast<ScreenshotPlugin*>(data);
+      self->held_timeout_ = 0;
+      self->CloseHeld();
+      return G_SOURCE_REMOVE;
+    }, this);
     auto* call = pending_;
     pending_ = nullptr;
-    const bool copied = copy && CopySelection();
+    fl_method_call_respond_success(call, map, nullptr);
+    g_object_unref(call);
+    return true;
+  }
+
+  void CloseHeld() {
+    if (!held_) return;
+    held_ = false;
+    if (held_timeout_) g_source_remove(held_timeout_);
+    held_timeout_ = 0;
+    CloseOverlay();
+  }
+
+  void CloseOverlay() {
     if (monitors_handler_) g_signal_handler_disconnect(gdk_screen_get_default(), monitors_handler_);
     monitors_handler_ = 0;
     if (seat_) gdk_seat_ungrab(seat_);
@@ -408,6 +510,14 @@ class ScreenshotPlugin {
     g_clear_object(&snapshot_);
     selection_.Reset(0, 0);
     window_frames_.clear();
+  }
+
+  void Finish(bool copy, const char* error = nullptr) {
+    if (!pending_) return;
+    auto* call = pending_;
+    pending_ = nullptr;
+    const bool copied = copy && CopySelection();
+    CloseOverlay();
     if (error || (copy && !copied)) {
       fl_method_call_respond_error(call, error ? error : "clipboard-failed", nullptr, nullptr, nullptr);
     } else {
@@ -431,6 +541,8 @@ class ScreenshotPlugin {
   CapturePoint pointer_, action_point_;
   std::string hint_, adjust_hint_, confirm_, cancel_;
   bool dark_ = false;
+  bool held_ = false;
+  guint held_timeout_ = 0;
 };
 }  // namespace
 

@@ -50,6 +50,15 @@ enum WhisperGlyph {
   star,
   eye,
   eyeOff,
+  markRect,
+  markEllipse,
+  markArrow,
+  markPen,
+  markText,
+  markMosaic,
+  undo,
+  redo,
+  download,
 }
 
 const Map<WhisperGlyph, String> _paths = {
@@ -62,6 +71,17 @@ const Map<WhisperGlyph, String> _paths = {
       'M4 8v4h2.5L10 15V5L6.5 8zM13 7.5a3.5 3.5 0 0 1 0 5M15 5.5a6.3 6.3 0 0 1 0 9',
   WhisperGlyph.keyboard:
       'M3 6h14a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1zM5.5 9h.01M8.5 9h.01M11.5 9h.01M14.5 9h.01M6.5 11.5h7',
+  WhisperGlyph.markRect: 'M4.5 5h11a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z',
+  WhisperGlyph.markEllipse: 'M10 4c4.2 0 7 2.6 7 6s-2.8 6-7 6-7-2.6-7-6 2.8-6 7-6z',
+  WhisperGlyph.markArrow: 'M4.5 15.5 15.5 4.5M8.5 4.5h7v7',
+  WhisperGlyph.markPen:
+      'M4 16l.8-3.4L13.2 4.2a1.4 1.4 0 0 1 2 0l.6.6a1.4 1.4 0 0 1 0 2L7.4 15.2zM11.6 5.8l2.6 2.6',
+  WhisperGlyph.markText: 'M4.5 6.5v-2h11v2M10 4.5v11M7.5 15.5h5',
+  WhisperGlyph.markMosaic:
+      'M3.5 3.5h4.3v4.3H3.5zM12.2 3.5h4.3v4.3h-4.3zM7.8 7.8h4.4v4.4H7.8zM3.5 12.2h4.3v4.3H3.5zM12.2 12.2h4.3v4.3h-4.3z',
+  WhisperGlyph.undo: 'M7.5 4.5 4 8l3.5 3.5M4 8h8a4 4 0 0 1 0 8H9.5',
+  WhisperGlyph.redo: 'M12.5 4.5 16 8l-3.5 3.5M16 8H8a4 4 0 0 0 0 8h2.5',
+  WhisperGlyph.download: 'M10 3.5v9.5M6 9.5l4 4 4-4M4 16.5h12',
   WhisperGlyph.clip:
       'M7 4.5H5.5A1.5 1.5 0 0 0 4 6v10a1.5 1.5 0 0 0 1.5 1.5h9A1.5 1.5 0 0 0 16 16V6a1.5 1.5 0 0 0-1.5-1.5H13M7.5 3h5v3h-5z',
   WhisperGlyph.drive:

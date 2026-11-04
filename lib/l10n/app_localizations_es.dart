@@ -163,6 +163,36 @@ class AppLocalizationsEs extends AppLocalizations {
   String get screenshotConfirm => 'Copiar';
 
   @override
+  String get screenshotMarkUp => 'Marcar';
+
+  @override
+  String get captureRect => 'Recuadro';
+
+  @override
+  String get captureEllipse => 'Círculo';
+
+  @override
+  String get captureArrow => 'Flecha';
+
+  @override
+  String get capturePen => 'Lápiz';
+
+  @override
+  String get captureText => 'Texto';
+
+  @override
+  String get captureMosaic => 'Mosaico';
+
+  @override
+  String get captureUndo => 'Deshacer';
+
+  @override
+  String get captureRedo => 'Rehacer';
+
+  @override
+  String get captureSave => 'Guardar como archivo';
+
+  @override
   String get diagTitle => 'Diagnóstico';
 
   @override

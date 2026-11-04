@@ -63,6 +63,9 @@ class ChatComposer extends StatelessWidget {
   final Future<void> Function()? onSendClipboardImages;
   final ValueChanged<int>? onRemoveClipboardImage;
 
+  /// Marks up a picture waiting to be sent.
+  final ValueChanged<int>? onEditClipboardImage;
+
   /// 发给 iMac, or 连接 iMac 后可以发送 with a button to do so.
   final String? composerHint, disabledHint;
 
@@ -90,6 +93,7 @@ class ChatComposer extends StatelessWidget {
     this.onClearClipboardFiles,
     this.onSendClipboardImages,
     this.onRemoveClipboardImage,
+    this.onEditClipboardImage,
     this.composerHint,
     this.disabledHint,
     this.onSyncClipboard,
@@ -345,10 +349,17 @@ class ChatComposer extends StatelessWidget {
                   Positioned.fill(
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(16),
-                      child: _buildClipboardImage(
-                        context,
-                        pendingClipboardImages[index],
-                        colorScheme,
+                      child: Pressable(
+                        onTap: onEditClipboardImage == null
+                            ? null
+                            : () => onEditClipboardImage!(index),
+                        scale: 1,
+                        label: AppLocalizations.of(context)?.screenshotMarkUp,
+                        child: _buildClipboardImage(
+                          context,
+                          pendingClipboardImages[index],
+                          colorScheme,
+                        ),
                       ),
                     ),
                   ),
