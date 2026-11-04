@@ -510,7 +510,7 @@ private class IslandOverlayView(
         val keep = featuredId?.takeIf { id -> next.any { it.id == id } && expanded }
         featuredId = focus ?: keep ?: next.first().id
         val now = featured!!
-        contentDescription = "${now.title}, ${now.text}"
+        contentDescription = listOf(now.title, now.text).filter { it.isNotEmpty() }.joinToString(", ")
         if (leaving) {
             leaving = false
             entered = false
@@ -579,7 +579,7 @@ private class IslandOverlayView(
             onGone(this)
             return
         }
-        animate("appear", appear, 0f, Spring(1f, 0.3f, 0.32f), 320, onEnd = {
+        animate("appear", appear, 0f, Spring(1f, 0.3f, 0.32f), 220, onEnd = {
             if (leaving) {
                 visibility = INVISIBLE
                 onGone(this)
@@ -618,7 +618,7 @@ private class IslandOverlayView(
         pressed = null
         // 收回到最要紧的那件。
         featuredId = items.firstOrNull()?.id
-        animate("expansion", expansion, 0f, Spring(0.9f, 0.38f, 0.5f), 500, onEnd = ::sizeWindow) {
+        animate("expansion", expansion, 0f, Spring(0.9f, 0.38f, 0.5f), 300, onEnd = ::sizeWindow) {
             expansion = it
         }
         reshape()
@@ -802,6 +802,8 @@ private class IslandOverlayView(
             }
             return
         }
+        // 再点一下先收回来:系统不让后台打开应用时,至少有反应。
+        collapse()
         (item.onOpen ?: { IslandOverlay.open(context) }).invoke()
     }
 
@@ -964,7 +966,9 @@ private class IslandOverlayView(
         textPaint.alpha = (alpha * 150) / 255
         val titleBaseline = top + pad + dp(19f)
         val title = TextUtils.ellipsize(item.title, titlePaint, textRight - textLeft, TextUtils.TruncateAt.MIDDLE)
-        canvas.drawText(title, 0, title.length, textLeft, titleBaseline, titlePaint)
+        // A question with no line under it sits level with the figure.
+        val titleY = if (item.text.isEmpty()) titleBaseline + dp(10f) else titleBaseline
+        canvas.drawText(title, 0, title.length, textLeft, titleY, titlePaint)
         val text = TextUtils.ellipsize(item.text, textPaint, textRight - textLeft, TextUtils.TruncateAt.END)
         canvas.drawText(text, 0, text.length, textLeft, titleBaseline + dp(21f), textPaint)
         if (figure.isNotEmpty()) {

@@ -611,6 +611,8 @@ class _DeviceListScreen extends State<DeviceListScreen>
     if (trayPanelSupported) {
       _trayPanel = TrayPanelHost(onAction: _onTrayAction);
       unawaited(_trayPanel!.start().then((_) => _pushTrayState()));
+      // The list lives in memory: start it from what is on the clipboard now.
+      unawaited(_recordClipboard());
     }
   }
 
@@ -2367,7 +2369,11 @@ class _DeviceListScreen extends State<DeviceListScreen>
       connected: session.isConnected,
       paired: _isTrustedDevice(session.device),
       nearby: session.isNearby,
-      offlineSince: session.lastTimestamp > 0
+      // With messages the row has their time at the end of its first line.
+      offlineSince: session.lastTimestamp > 0 && !session.hasHistory
+          ? _formatSessionTime(session.lastTimestamp)
+          : null,
+      lastMessage: session.hasHistory && session.lastTimestamp > 0
           ? _formatSessionTime(session.lastTimestamp)
           : null,
       transferName: moving
@@ -2583,6 +2589,8 @@ class _DeviceListScreen extends State<DeviceListScreen>
         connected: connected,
         paired: _isTrustedDevice(target),
         onClose: close,
+        onSearchHistory: () =>
+            unawaited(showChatSearchSheet(context, peerId: target.uid)),
         statusLine: connected
             ? l10n.shellCardConnected
             : session.isEmpty
@@ -2606,7 +2614,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
             : () => unawaited(_toggleInputMember(target)),
         inputOn: _inputMember(target.uid),
         onDiagnostics: () => _shellOpenConnectionCheck(target),
-        onDisconnect: () => socketManager.disconnectPeer(target.uid),
         onRemove: _removeDevice,
       );
     },
@@ -2657,10 +2664,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     void searchHistory() => unawaited(
       ShellContent.push<void>(
         WhisperPageRoute<void>(
-          builder: (_) => TransferAssistantScreen(
-            peerId: target.uid,
-            peerName: target.name,
-          ),
+          builder: (_) => TransferAssistantScreen(peerId: target.uid),
         ),
       ),
     );
@@ -2700,7 +2704,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
         ],
         onSearchHistory: searchHistory,
         onDiagnostics: diagnostics,
-        onDisconnect: () => socketManager.disconnectPeer(target.uid),
         onRemove: remove,
       );
     }
@@ -2726,7 +2729,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
           : deviceRowText(l10n, _shellFacts(session.first)),
       onSearchHistory: searchHistory,
       onDiagnostics: diagnostics,
-      onDisconnect: () => socketManager.disconnectPeer(target.uid),
       onRemove: remove,
     );
   }
@@ -2817,7 +2819,16 @@ class _DeviceListScreen extends State<DeviceListScreen>
             category: session.device.name.isEmpty
                 ? l10n.shellPaletteMessage
                 : session.device.name,
-            onRun: () => _shellActions.select(session.device.uid),
+            onRun: () {
+              _shellActions.select(session.device.uid);
+              unawaited(
+                showChatSearchSheet(
+                  context,
+                  peerId: session.device.uid,
+                  query: query,
+                ),
+              );
+            },
           ),
         );
       }

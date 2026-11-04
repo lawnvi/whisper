@@ -32,6 +32,188 @@ Future<ShareLink?> showShellLinkCreate(
   return link;
 }
 
+Future<void> showShellLinkEditor(BuildContext context, WidgetBuilder builder) =>
+    isDesktop()
+    ? showShellSheet<void>(context, builder: builder)
+    : showPhoneSheet<void>(context, builder: builder);
+
+/// A field, and 取消 and 完成 under it.
+class _LinkEditor extends StatelessWidget {
+  const _LinkEditor({required this.field, required this.onDone});
+
+  final Widget field;
+  final VoidCallback? onDone;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.shellL10n;
+    final touch = !isDesktop();
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        field,
+        const SizedBox(height: 14),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            ShellButton(
+              touch: touch,
+              label: l10n.cancel,
+              onTap: () => Navigator.of(context).pop(),
+            ),
+            const SizedBox(width: 8),
+            ShellButton(
+              touch: touch,
+              label: l10n.shellDone,
+              kind: ShellButtonKind.primary,
+              onTap: onDone,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class ShellLinkRouteEditor extends StatefulWidget {
+  const ShellLinkRouteEditor({
+    super.key,
+    required this.store,
+    required this.link,
+  });
+
+  final ShareLinkStore store;
+  final ShareLink link;
+
+  @override
+  State<ShellLinkRouteEditor> createState() => _ShellLinkRouteEditorState();
+}
+
+class _ShellLinkRouteEditorState extends State<ShellLinkRouteEditor> {
+  late final _route = TextEditingController(text: widget.link.route);
+  bool _saving = false;
+  String? _problem;
+
+  @override
+  void dispose() {
+    _route.dispose();
+    super.dispose();
+  }
+
+  String _problemText(AppLocalizations l10n, ShareRouteProblem problem) =>
+      switch (problem) {
+        ShareRouteProblem.taken => l10n.shareLinkRouteTaken,
+        ShareRouteProblem.reserved => l10n.shareLinkRouteReserved,
+        ShareRouteProblem.invalid => l10n.shareLinkRouteInvalid,
+      };
+
+  /// A route another link has is said as it is typed. One that is merely too
+  /// short so far waits until 完成.
+  void _changed(AppLocalizations l10n) {
+    final typed = ShareRoutes.normalize(_route.text);
+    var problem = typed.isEmpty ? null : ShareRoutes.check(typed);
+    if (problem == ShareRouteProblem.invalid) problem = null;
+    if (problem == null &&
+        widget.store.links.any(
+          (other) => other.route == typed && other.id != widget.link.id,
+        )) {
+      problem = ShareRouteProblem.taken;
+    }
+    setState(() {
+      _problem = problem == null ? null : _problemText(l10n, problem);
+    });
+  }
+
+  Future<void> _save(AppLocalizations l10n) async {
+    setState(() {
+      _saving = true;
+      _problem = null;
+    });
+    String? failure;
+    try {
+      await widget.store.setRoute(widget.link.id, _route.text);
+    } on ShareRouteException catch (error) {
+      failure = _problemText(l10n, error.problem);
+    } on Object {
+      failure = l10n.shareLinkCreateFailed;
+    }
+    if (!mounted) return;
+    if (failure != null) {
+      setState(() {
+        _saving = false;
+        _problem = failure;
+      });
+      return;
+    }
+    Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.shellL10n;
+    return _LinkEditor(
+      onDone: _saving ? null : () => unawaited(_save(l10n)),
+      field: ShellField(
+        label: l10n.shareLinkRoute,
+        controller: _route,
+        touch: !isDesktop(),
+        error: _problem,
+        inputFormatters: [
+          FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9_\-]')),
+          LengthLimitingTextInputFormatter(ShareRoutes.maxLength),
+        ],
+        onChanged: (_) => _changed(l10n),
+      ),
+    );
+  }
+}
+
+class ShellLinkPasswordEditor extends StatefulWidget {
+  const ShellLinkPasswordEditor({
+    super.key,
+    required this.store,
+    required this.link,
+  });
+
+  final ShareLinkStore store;
+  final ShareLink link;
+
+  @override
+  State<ShellLinkPasswordEditor> createState() =>
+      _ShellLinkPasswordEditorState();
+}
+
+class _ShellLinkPasswordEditorState extends State<ShellLinkPasswordEditor> {
+  final _password = TextEditingController();
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _password.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    setState(() => _saving = true);
+    await widget.store.setPassword(widget.link.id, _password.text);
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) => _LinkEditor(
+    onDone: _saving ? null : () => unawaited(_save()),
+    field: ShellField(
+      label: context.shellL10n.shellLinkPasswordOptional,
+      controller: _password,
+      obscure: true,
+      showLabel: context.shellL10n.shareLinkShowPassword,
+      hideLabel: context.shellL10n.shareLinkHidePassword,
+      touch: !isDesktop(),
+    ),
+  );
+}
+
 class ShellLinkCreate extends StatefulWidget {
   const ShellLinkCreate({
     super.key,
@@ -201,6 +383,8 @@ class _ShellLinkCreateState extends State<ShellLinkCreate> {
           label: l10n.shellLinkPasswordOptional,
           controller: _password,
           obscure: true,
+          showLabel: l10n.shareLinkShowPassword,
+          hideLabel: l10n.shareLinkHidePassword,
           touch: touch,
         ),
         const SizedBox(height: 14),

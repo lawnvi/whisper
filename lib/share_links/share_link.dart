@@ -53,10 +53,10 @@ class ShareLink {
   });
 
   final String id;
-  final String route;
+  String route;
   final String name;
   final List<ShareItem> items;
-  final SharePasswordHash? password;
+  SharePasswordHash? password;
   final DateTime createdAt;
   bool enabled;
   int visits;

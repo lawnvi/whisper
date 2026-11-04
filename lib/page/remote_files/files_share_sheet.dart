@@ -39,10 +39,10 @@ Future<ShareLink?> showShareLinkSheet(
   }
   return showShellLinkCreate(
     context,
-    paths: [for (final item in items) item.absolutePath],
     name: items.length == 1
         ? items.single.name
         : AppLocalizations.of(context)!.shareLinkDefaultName(items.length),
+    paths: [for (final item in items) item.absolutePath],
     store: store,
   );
 }

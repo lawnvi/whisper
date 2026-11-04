@@ -434,6 +434,10 @@ class _ShellDevicePageBodyState extends State<_ShellDevicePageBody> {
                             : WhisperTabView(
                                 index: page.tab,
                                 itemCount: 3,
+                                contentKey: (device, session.isConnected),
+                                heavyPages: true,
+                                resetKey: session.isConnected,
+                                keptPages: const {0},
                                 itemBuilder: (context, i) => switch (i) {
                                   0 => actions.buildConversation(
                                     context,

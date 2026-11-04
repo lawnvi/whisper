@@ -7,6 +7,32 @@ import 'package:flutter/services.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:whisper/theme/whisper_ui.dart';
 
+/// A whole page pushed over the window, on the desktop: the window's own buttons
+/// stay on top of everything, so what it has at the top goes below them.
+class WhisperUnderWindowButtons extends StatelessWidget {
+  const WhisperUnderWindowButtons({super.key, required this.child});
+
+  /// Clears the traffic lights and the buttons of Windows and Linux.
+  static const inset = 40.0;
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final media = MediaQuery.of(context);
+    if (kIsWeb ||
+        !(Platform.isMacOS || Platform.isWindows || Platform.isLinux)) {
+      return child;
+    }
+    return MediaQuery(
+      data: media.copyWith(
+        padding: media.padding.copyWith(top: media.padding.top + inset),
+      ),
+      child: child,
+    );
+  }
+}
+
 /// The redesigned UI's window: no system title bar, and a system material where
 /// the platform has one. See DESIGN.md「平台」and flutter.md「隐藏标题栏和云母」.
 abstract final class WhisperWindow {

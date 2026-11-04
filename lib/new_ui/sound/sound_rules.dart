@@ -76,13 +76,6 @@ AudioSyncQuality? soundHeaderQuality(Iterable<SoundMemberPhase> phases) {
   return worst;
 }
 
-/// Milliseconds, with one decimal only when it has one.
-String formatAudioMillis(int micros) {
-  final ms = micros / 1000;
-  if (ms == ms.roundToDouble()) return ms.round().toString();
-  return ms.toStringAsFixed(1);
-}
-
 /// Who is checked, on which channel. `surfaces.md`「声道默认值」: the first is
 /// stereo; a second splits the two into left and right unless somebody has
 /// touched a channel; back to stereo at one; from the third on, stereo.
@@ -116,8 +109,10 @@ class SoundMembers {
     if (_roles.remove(peerId) == null) return;
     if (_roles.isEmpty) {
       _touched = false;
-    } else if (_roles.length == 1 && !_touched) {
+    } else if (_roles.length == 1) {
+      // A lone device has no channel to pick: it plays everything.
       _roles[_roles.keys.single] = AudioChannelRole.stereo;
+      _touched = false;
     }
   }
 
@@ -143,4 +138,11 @@ class SoundMembers {
     _roles.removeWhere((peer, _) => !playing.containsKey(peer) && !keep(peer));
     _roles.addAll(playing);
   }
+}
+
+/// Milliseconds, with one decimal only when it has one.
+String formatAudioMillis(int micros) {
+  final ms = micros / 1000;
+  if (ms == ms.roundToDouble()) return ms.round().toString();
+  return ms.toStringAsFixed(1);
 }

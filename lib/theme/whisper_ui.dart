@@ -51,6 +51,13 @@ class WhisperColors extends ThemeExtension<WhisperColors> {
     required this.sidebarSelected,
     required this.sidebarVeil,
     required this.scrim,
+    required this.deviceName,
+    required this.deviceMuted,
+    required this.deviceOn,
+    required this.deviceNear,
+    required this.deviceOff,
+    required this.deviceOffDot,
+    required this.deviceSelected,
   });
 
   static const light = WhisperColors(
@@ -82,10 +89,17 @@ class WhisperColors extends ThemeExtension<WhisperColors> {
     fill: Radix.slateA3,
     fill2: Radix.slateA4,
     selected: Radix.slateA5,
-    sidebarSolid: Radix.slate2,
+    sidebarSolid: Radix.white,
     sidebarSelected: Radix.whiteA8,
-    sidebarVeil: Radix.whiteA8,
+    sidebarVeil: Radix.white,
     scrim: Radix.blackA5,
+    deviceName: Color(0xFF0F172A),
+    deviceMuted: Color(0xFF64748B),
+    deviceOn: Color(0xFF03A9F4),
+    deviceNear: Color(0xFF4CAF50),
+    deviceOff: Color(0xFFE0E0E0),
+    deviceOffDot: Color(0xFF9E9E9E),
+    deviceSelected: Color(0x142563EB),
   );
 
   static const dark = WhisperColors(
@@ -121,6 +135,13 @@ class WhisperColors extends ThemeExtension<WhisperColors> {
     sidebarSelected: Radix.whiteA3,
     sidebarVeil: Radix.whiteA0,
     scrim: Radix.blackA7,
+    deviceName: Color(0xFFE2E8F0),
+    deviceMuted: Color(0xFF8A8F98),
+    deviceOn: Color(0xFF03A9F4),
+    deviceNear: Color(0xFF4CAF50),
+    deviceOff: Color(0xFF616161),
+    deviceOffDot: Color(0xFF9E9E9E),
+    deviceSelected: Radix.whiteA2,
   );
 
   final Color canvas, content, group, raised, bubble;
@@ -150,6 +171,11 @@ class WhisperColors extends ThemeExtension<WhisperColors> {
 
   /// Over the macOS material, which goes grey on a dark wallpaper.
   final Color sidebarVeil;
+
+  /// The device list keeps the colours it had before the redesign: the user
+  /// looked at both. Not Radix, and only here. See decisions.md.
+  final Color deviceName, deviceMuted, deviceOn, deviceNear;
+  final Color deviceOff, deviceOffDot, deviceSelected;
 
   /// `panel`'s tint, for what draws its own blur: the file menu.
   Color get panelTint => this == WhisperColors.dark
@@ -196,6 +222,13 @@ class WhisperColors extends ThemeExtension<WhisperColors> {
     sidebarSolid: sidebarSolid,
     sidebarSelected: sidebarSelected,
     sidebarVeil: sidebarVeil,
+    deviceName: deviceName,
+    deviceMuted: deviceMuted,
+    deviceOn: deviceOn,
+    deviceNear: deviceNear,
+    deviceOff: deviceOff,
+    deviceOffDot: deviceOffDot,
+    deviceSelected: deviceSelected,
     scrim: scrim,
   );
 
@@ -235,6 +268,13 @@ class WhisperColors extends ThemeExtension<WhisperColors> {
       sidebarSolid: l(sidebarSolid, other.sidebarSolid),
       sidebarSelected: l(sidebarSelected, other.sidebarSelected),
       sidebarVeil: l(sidebarVeil, other.sidebarVeil),
+      deviceName: l(deviceName, other.deviceName),
+      deviceMuted: l(deviceMuted, other.deviceMuted),
+      deviceOn: l(deviceOn, other.deviceOn),
+      deviceNear: l(deviceNear, other.deviceNear),
+      deviceOff: l(deviceOff, other.deviceOff),
+      deviceOffDot: l(deviceOffDot, other.deviceOffDot),
+      deviceSelected: l(deviceSelected, other.deviceSelected),
       scrim: l(scrim, other.scrim),
     );
   }
@@ -450,25 +490,16 @@ abstract final class WhisperShadow {
 /// The screens in the keyboard and mouse arrangement. They are pictures of real
 /// screens, so they look the same in both themes.
 abstract final class WhisperScreens {
-  static const menuBar = Radix.whiteA6;
-  static const shadeTop = Radix.blackA2;
-  static const shadeBottom = Radix.blackA5;
-  static const label = Radix.white;
   static const pointerFill = Radix.black;
   static const pointerStroke = Radix.white;
 
   static const shadow = [
-    BoxShadow(color: Radix.blackA4, blurRadius: 8, offset: Offset(0, 2)),
-    BoxShadow(color: Radix.blackA4, spreadRadius: .5),
+    BoxShadow(color: Radix.blackA2, blurRadius: 6, offset: Offset(0, 1)),
   ];
 
   /// While it is held.
   static const lifted = [
     BoxShadow(color: Radix.blackA5, blurRadius: 22, offset: Offset(0, 14)),
-  ];
-
-  static const labelShadow = [
-    Shadow(color: Radix.blackA5, blurRadius: 2, offset: Offset(0, 1)),
   ];
 
   static const pointerShadow = Shadow(
@@ -892,14 +923,28 @@ class WhisperTabView extends StatefulWidget {
     required this.index,
     required this.itemBuilder,
     required this.itemCount,
-    this.blur = true,
+    this.contentKey,
+    this.heavyPages = false,
+    this.resetKey,
+    this.keptPages = const {},
   });
 
   final int index, itemCount;
   final IndexedWidgetBuilder itemBuilder;
 
-  /// Turn off where blur drops frames. Direction stays.
-  final bool blur;
+  /// Building a page for the first time takes longer than a frame. With this,
+  /// the old page leaves first and the new one is built while nothing is moving,
+  /// then comes in.
+  final bool heavyPages;
+
+  /// When this changes the pages start over: those not on screen are built again
+  /// only when they are next opened. Except [keptPages].
+  final Object? resetKey;
+  final Set<int> keptPages;
+
+  /// What the pages are built from, when that is all they depend on. Switching
+  /// tabs then leaves the pages alone instead of rebuilding every one of them.
+  final Object? contentKey;
 
   @override
   State<WhisperTabView> createState() => _WhisperTabViewState();
@@ -913,11 +958,54 @@ class _WhisperTabViewState extends State<WhisperTabView> {
   /// Which side each page leaves to and comes from.
   final Map<int, double> _side = {};
 
+  final Map<int, Widget> _built = {};
+  Object? _builtFor;
+
+  /// The time for the leaving page and the segment's thumb to get most of the
+  /// way there.
+  static const _firstBuildDelay = Duration(milliseconds: 170);
+  late final Set<int> _ready = {widget.index};
+  Timer? _readyTimer;
+
+  void _makeReady() {
+    _readyTimer?.cancel();
+    if (_ready.contains(widget.index)) return;
+    if (!widget.heavyPages) {
+      _ready.add(widget.index);
+      return;
+    }
+    _readyTimer = Timer(_firstBuildDelay, () {
+      if (mounted) setState(() => _ready.add(widget.index));
+    });
+  }
+
+  @override
+  void dispose() {
+    _readyTimer?.cancel();
+    super.dispose();
+  }
+
+  Widget _page(BuildContext context, int i) {
+    final key = widget.contentKey;
+    if (key == null) return widget.itemBuilder(context, i);
+    if (key != _builtFor) {
+      _built.clear();
+      _builtFor = key;
+    }
+    return _built[i] ??= widget.itemBuilder(context, i);
+  }
+
   @override
   void didUpdateWidget(WhisperTabView old) {
     super.didUpdateWidget(old);
+    if (widget.resetKey != old.resetKey) {
+      _ready.retainWhere(
+        (i) => i == widget.index || widget.keptPages.contains(i),
+      );
+    }
     if (widget.index == old.index) return;
     _visited.add(widget.index);
+    _makeReady();
     _entries[widget.index] = (_entries[widget.index] ?? 0) + 1;
     for (final i in _visited) {
       if (i != widget.index) _side[i] = i < widget.index ? -1 : 1;
@@ -935,13 +1023,19 @@ class _WhisperTabViewState extends State<WhisperTabView> {
           KeyedSubtree(
             key: ValueKey(i),
             child: SpringBuilder(
-              value: i == widget.index ? 1 : 0,
+              value: i == widget.index && _ready.contains(i) ? 1 : 0,
               from: i == _first ? null : 0,
               animateWhenReduced: true,
-              child: _TabEntry(
-                entry: _entries[i] ?? 0,
-                child: Builder(
-                  builder: (context) => widget.itemBuilder(context, i),
+              // Its own layer: while it slides and fades, the page is not painted
+              // again.
+              child: RepaintBoundary(
+                child: _TabEntry(
+                  entry: _entries[i] ?? 0,
+                  child: Builder(
+                    builder: (context) => _ready.contains(i)
+                        ? _page(context, i)
+                        : const SizedBox.shrink(),
+                  ),
                 ),
               ),
               builder: (context, raw, child) {
@@ -949,8 +1043,6 @@ class _WhisperTabViewState extends State<WhisperTabView> {
                 final p = raw.clamp(0.0, 1.0);
                 final side = _side[i] ?? 0;
                 final motion = reduced ? 0.0 : 1.0;
-                final from = current ? .985 : .97;
-                final sigma = widget.blur ? 10 * (1 - p) * motion : 0.0;
                 // Same widgets in every state: only the values change.
                 return Offstage(
                   offstage: !current && p <= .001,
@@ -960,21 +1052,11 @@ class _WhisperTabViewState extends State<WhisperTabView> {
                       ignoring: !current,
                       child: Opacity(
                         opacity: p,
-                        child: ImageFiltered(
-                          enabled: sigma > .01,
-                          imageFilter: ImageFilter.blur(
-                            sigmaX: sigma,
-                            sigmaY: sigma,
-                          ),
-                          child: FractionalTranslation(
-                            translation: Offset(
-                              side * .09 * (1 - p) * motion,
-                              0,
-                            ),
-                            child: Transform.scale(
-                              scale: 1 - (1 - from) * (1 - p) * motion,
-                              child: child,
-                            ),
+                        child: FractionalTranslation(
+                          translation: Offset(side * .09 * (1 - p) * motion, 0),
+                          child: WhisperGlassPause(
+                            paused: p < .99,
+                            child: child!,
                           ),
                         ),
                       ),
@@ -1545,6 +1627,25 @@ class _WhisperProgressBarState extends State<WhisperProgressBar>
 
 enum GlassKind { sidebar, control, panel }
 
+/// Glass under this does not blur for now: what it would blur is moving anyway,
+/// and a page in motion cannot afford a backdrop filter on every frame.
+class WhisperGlassPause extends InheritedWidget {
+  const WhisperGlassPause({
+    super.key,
+    required this.paused,
+    required super.child,
+  });
+
+  final bool paused;
+
+  static bool of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<WhisperGlassPause>()?.paused ??
+      false;
+
+  @override
+  bool updateShouldNotify(WhisperGlassPause old) => paused != old.paused;
+}
+
 /// Glass inside the window shows the window's own content, so it blurs on every
 /// platform (DESIGN.md「平台」). Set this false once, at startup, where the GPU
 /// cannot keep up: glass then falls back to the opaque canvas.
@@ -1608,6 +1709,7 @@ class WhisperGlass extends StatelessWidget {
       (GlassKind.panel, true) => (const Color(0xB8212225), 44.0, 1.9),
     };
     final blurs = whisperGlassBlurs;
+    final paused = WhisperGlassPause.of(context);
     final surface = DecoratedBox(
       // No blur: fall back to the opaque canvas so text stays readable.
       decoration: ShapeDecoration(
@@ -1616,7 +1718,7 @@ class WhisperGlass extends StatelessWidget {
       ),
       child: child,
     );
-    if (!blurs || !blur) return surface;
+    if (!blurs || !blur || paused) return surface;
     return ClipPath(
       clipper: ShapeBorderClipper(shape: shape),
       child: BackdropFilter(
@@ -1682,14 +1784,14 @@ class WhisperBubble extends StatelessWidget {
 
 enum DevicePresence { connected, nearby, away }
 
-/// The device list has one order. Getting worse never moves a row: a device
-/// that goes offline stays where it is, and its slot still counts as its old
-/// rank. Getting better moves it up, to just below its new rank's rows. A new
-/// device goes in the same way, so it never pushes down a connected row.
+/// The device list has one order: connected, then nearby, then away. A device
+/// that gets better goes to the end of its new rank's rows, so it never pushes
+/// down a connected row. One that gets worse goes to the start of its new rank's
+/// rows, the shortest way down. Inside a rank nothing else moves.
 class StableDeviceOrder {
   final List<String> _order = [];
 
-  /// The best rank each row has been placed at.
+  /// The rank each row is placed at.
   final Map<String, int> _placed = {};
 
   static int _rank(DevicePresence p) => switch (p) {
@@ -1698,10 +1800,13 @@ class StableDeviceOrder {
     DevicePresence.away => 2,
   };
 
-  void _insert(String id, int rank) {
+  void _place(String id, int rank, {required bool first}) {
     _order.remove(id);
     _placed[id] = rank;
-    final at = _order.indexWhere((other) => _placed[other]! > rank);
+    final at = _order.indexWhere((other) {
+      final placed = _placed[other]!;
+      return first ? placed >= rank : placed > rank;
+    });
     _order.insert(at < 0 ? _order.length : at, id);
   }
 
@@ -1712,7 +1817,8 @@ class StableDeviceOrder {
       for (final id in devices.keys) {
         if (_rank(devices[id]!) != r) continue;
         final placed = _placed[id];
-        if (placed == null || r < placed) _insert(id, r);
+        if (placed == r) continue;
+        _place(id, r, first: placed != null && r > placed);
       }
     }
     return List.unmodifiable(_order);

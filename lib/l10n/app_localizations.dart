@@ -688,12 +688,6 @@ abstract class AppLocalizations {
   /// **'断开连接并删除与该设备的所有消息，不可恢复'**
   String get deleteDeviceDesc;
 
-  /// No description provided for @brokeConnectTitle.
-  ///
-  /// In zh, this message translates to:
-  /// **'断开连接'**
-  String get brokeConnectTitle;
-
   /// No description provided for @connectFailed.
   ///
   /// In zh, this message translates to:
@@ -1129,7 +1123,7 @@ abstract class AppLocalizations {
   /// No description provided for @remoteInputScrollMultiplierTitle.
   ///
   /// In zh, this message translates to:
-  /// **'键鼠共享滚轮速度'**
+  /// **'滚轮速度'**
   String get remoteInputScrollMultiplierTitle;
 
   /// No description provided for @audioShareUnsupportedCapture.
@@ -2938,12 +2932,6 @@ abstract class AppLocalizations {
   /// **'{device} 请求访问你的文件'**
   String remoteFilesPromptTitle(String device);
 
-  /// No description provided for @remoteFilesPromptBodyPhone.
-  ///
-  /// In zh, this message translates to:
-  /// **'允许后，它能看到这台手机的内部存储，并在里面拷贝、新建、重命名和删除文件。删除的文件不能恢复。'**
-  String get remoteFilesPromptBodyPhone;
-
   /// No description provided for @remoteFilesDeny.
   ///
   /// In zh, this message translates to:
@@ -2955,12 +2943,6 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'允许'**
   String get remoteFilesAllowOnce;
-
-  /// No description provided for @remoteFilesAllowAlways.
-  ///
-  /// In zh, this message translates to:
-  /// **'始终允许'**
-  String get remoteFilesAllowAlways;
 
   /// No description provided for @windowStreamTouchBlockedTitle.
   ///
@@ -3766,23 +3748,11 @@ abstract class AppLocalizations {
   /// **'链接后缀'**
   String get shareLinkRoute;
 
-  /// Switch that makes the generated route 4 characters long
-  ///
-  /// In zh, this message translates to:
-  /// **'简短后缀'**
-  String get shareLinkShortRoute;
-
   /// Label of the optional password field; also the placeholder of the password box on the web page
   ///
   /// In zh, this message translates to:
   /// **'密码'**
   String get shareLinkPassword;
-
-  /// Primary button of the share-link sheet
-  ///
-  /// In zh, this message translates to:
-  /// **'创建链接'**
-  String get shareLinkCreate;
 
   /// Error under the route field
   ///
@@ -4522,23 +4492,11 @@ abstract class AppLocalizations {
   /// **'允许修改我的文件'**
   String get deviceFilesAllowChanges;
 
-  /// Switch in the 'wants to browse your files' prompt: whether the other device may also create, rename, delete and change files. Remembered for that device.
-  ///
-  /// In zh, this message translates to:
-  /// **'允许修改文件'**
-  String get remoteFilesPromptAllowChanges;
-
   /// Toast when trying to change files on a device whose user allows reading only.
   ///
   /// In zh, this message translates to:
   /// **'{device} 只允许读取文件'**
   String remoteFilesReadOnlyHost(String device);
-
-  /// Prompt body on a phone when 'Allow changes' is off.
-  ///
-  /// In zh, this message translates to:
-  /// **'允许后，它能看到这台手机的内部存储，打开和拷出里面的文件，但不能改动。'**
-  String get remoteFilesPromptBodyReadOnlyPhone;
 
   /// Android settings row: the island drawn over other apps while Whisper is in the background
   ///
@@ -4834,12 +4792,6 @@ abstract class AppLocalizations {
   /// **'修改我的文件'**
   String get shellCardChange;
 
-  /// No description provided for @shellCardAddress.
-  ///
-  /// In zh, this message translates to:
-  /// **'地址'**
-  String get shellCardAddress;
-
   /// No description provided for @shellCardDiagnostics.
   ///
   /// In zh, this message translates to:
@@ -5062,17 +5014,11 @@ abstract class AppLocalizations {
   /// **'按下快捷键…'**
   String get shellSettingsPressShortcut;
 
-  /// No description provided for @shellSettingsAllowClipboard.
+  /// No description provided for @shellSettingsClipboardSync.
   ///
   /// In zh, this message translates to:
-  /// **'允许访问剪贴板'**
-  String get shellSettingsAllowClipboard;
-
-  /// No description provided for @shellSettingsAutoClipboard.
-  ///
-  /// In zh, this message translates to:
-  /// **'自动同步剪贴板'**
-  String get shellSettingsAutoClipboard;
+  /// **'同步剪贴板'**
+  String get shellSettingsClipboardSync;
 
   /// No description provided for @shellSettingsPlaybackGain.
   ///
@@ -5152,18 +5098,6 @@ abstract class AppLocalizations {
   /// **'正在播放到 {count} 台设备'**
   String soundHeroPlaying(int count);
 
-  /// No description provided for @soundChannelLeft.
-  ///
-  /// In zh, this message translates to:
-  /// **'左'**
-  String get soundChannelLeft;
-
-  /// No description provided for @soundChannelRight.
-  ///
-  /// In zh, this message translates to:
-  /// **'右'**
-  String get soundChannelRight;
-
   /// No description provided for @soundShareThisDevice.
   ///
   /// In zh, this message translates to:
@@ -5199,23 +5133,6 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'只能单独播放'**
   String get soundMemberSoloOnly;
-
-  /// No description provided for @soundSyncNumbers.
-  ///
-  /// In zh, this message translates to:
-  /// **'网络 {network}ms · 抖动 {jitter}ms · 缓冲 {buffer}ms · 晚包 {late}'**
-  String soundSyncNumbers(
-    String network,
-    String jitter,
-    String buffer,
-    int late,
-  );
-
-  /// No description provided for @soundSyncNumbersPending.
-  ///
-  /// In zh, this message translates to:
-  /// **'网络 — · 抖动 — · 缓冲 — · 晚包 —'**
-  String get soundSyncNumbersPending;
 
   /// No description provided for @soundPermissionNeeded.
   ///
@@ -5451,12 +5368,6 @@ abstract class AppLocalizations {
   /// **'没有开启的链接'**
   String get shellLinksServiceIdle;
 
-  /// No description provided for @shellLinksFoot.
-  ///
-  /// In zh, this message translates to:
-  /// **'使用普通 HTTP，密码只能防止随意打开。'**
-  String get shellLinksFoot;
-
   /// No description provided for @shellLinksEmptyTitle.
   ///
   /// In zh, this message translates to:
@@ -5466,7 +5377,7 @@ abstract class AppLocalizations {
   /// No description provided for @shellLinksEmptyBody.
   ///
   /// In zh, this message translates to:
-  /// **'选择文件生成链接，对方用浏览器打开即可下载。'**
+  /// **'选择文件或文件夹生成链接，对方用浏览器打开即可下载。'**
   String get shellLinksEmptyBody;
 
   /// No description provided for @shellLinksChoose.
@@ -5799,12 +5710,6 @@ abstract class AppLocalizations {
   /// **'端口'**
   String get phoneConnectPort;
 
-  /// No description provided for @shellLinkCreateTitle.
-  ///
-  /// In zh, this message translates to:
-  /// **'共享「{name}」'**
-  String shellLinkCreateTitle(String name);
-
   /// No description provided for @shellLinkPasswordOptional.
   ///
   /// In zh, this message translates to:
@@ -5906,6 +5811,89 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'重新检查'**
   String get connectionCheckAgain;
+
+  /// No description provided for @soundSyncNumbers.
+  ///
+  /// In zh, this message translates to:
+  /// **'网络 {network}ms · 抖动 {jitter}ms · 缓冲 {buffer}ms · 晚包 {late}'**
+  String soundSyncNumbers(
+    String network,
+    String jitter,
+    String buffer,
+    int late,
+  );
+
+  /// No description provided for @soundSyncNumbersPending.
+  ///
+  /// In zh, this message translates to:
+  /// **'网络 — · 抖动 — · 缓冲 — · 晚包 —'**
+  String get soundSyncNumbersPending;
+
+  /// No description provided for @shellLinkCreateTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'共享「{name}」'**
+  String shellLinkCreateTitle(String name);
+
+  /// Switch that makes the generated route 4 characters long
+  ///
+  /// In zh, this message translates to:
+  /// **'简短后缀'**
+  String get shareLinkShortRoute;
+
+  /// Primary button of the share-link sheet
+  ///
+  /// In zh, this message translates to:
+  /// **'创建链接'**
+  String get shareLinkCreate;
+
+  /// Tooltip of the eye button in the password field
+  ///
+  /// In zh, this message translates to:
+  /// **'显示密码'**
+  String get shareLinkShowPassword;
+
+  /// Tooltip of the eye button in the password field while the password is visible
+  ///
+  /// In zh, this message translates to:
+  /// **'隐藏密码'**
+  String get shareLinkHidePassword;
+
+  /// Row label in share link details: how much data the link served
+  ///
+  /// In zh, this message translates to:
+  /// **'已发送'**
+  String get shareLinkSentLabel;
+
+  /// No description provided for @shellLinksChooseAny.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择'**
+  String get shellLinksChooseAny;
+
+  /// No description provided for @shellSelfCopy.
+  ///
+  /// In zh, this message translates to:
+  /// **'拷贝连接信息'**
+  String get shellSelfCopy;
+
+  /// No description provided for @shellSelfCopied.
+  ///
+  /// In zh, this message translates to:
+  /// **'已拷贝'**
+  String get shellSelfCopied;
+
+  /// Shown instead of an address when this device has no LAN address
+  ///
+  /// In zh, this message translates to:
+  /// **'没有连上局域网，其他设备暂时打不开'**
+  String get shareLinkNoNetwork;
+
+  /// No description provided for @screenshotShortcutReset.
+  ///
+  /// In zh, this message translates to:
+  /// **'恢复默认快捷键'**
+  String get screenshotShortcutReset;
 }
 
 class _AppLocalizationsDelegate

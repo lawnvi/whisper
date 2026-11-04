@@ -1,23 +1,21 @@
-import 'package:whisper/theme/whisper_ui.dart';
 import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' show BoxWidthStyle;
 
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:whisper/helper/toast.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/model/LocalDatabase.dart';
+import 'package:whisper/new_ui/phone/phone_parts.dart';
+import 'package:whisper/new_ui/shell/shell_parts.dart';
 import 'package:whisper/theme/app_theme.dart';
+import 'package:whisper/theme/whisper_icons.dart';
+import 'package:whisper/theme/whisper_ui.dart';
 
 const Key transferAssistantSearchFieldKey = ValueKey<String>(
   'transfer-assistant-search',
-);
-
-const Key transferAssistantFavoritesFilterKey = ValueKey<String>(
-  'transfer-assistant-favorites-filter',
 );
 
 Key transferAssistantMessageFavoriteKey(int messageId) =>
@@ -36,18 +34,45 @@ Future<void> _copyTextToClipboard(String text) {
   return Clipboard.setData(ClipboardData(text: text));
 }
 
+/// Over the window on the desktop, where a page would hide everything else.
+Future<void> showChatSearchSheet(
+  BuildContext context, {
+  required String peerId,
+  String query = '',
+}) => showShellSheet<void>(
+  context,
+  width: 520,
+  scrolls: false,
+  builder: (context) => LayoutBuilder(
+    builder: (context, constraints) => SizedBox(
+      height: math.min(600, constraints.maxHeight),
+      child: TransferAssistantScreen(
+        peerId: peerId,
+        initialQuery: query,
+        inSheet: true,
+      ),
+    ),
+  ),
+);
+
 class TransferAssistantScreen extends StatefulWidget {
   TransferAssistantScreen({
     super.key,
     required this.peerId,
-    required this.peerName,
+    this.initialQuery = '',
+    this.inSheet = false,
     LocalDatabase? database,
     Future<void> Function(String)? copyText,
   }) : database = database ?? LocalDatabase(),
        copyText = copyText ?? _copyTextToClipboard;
 
   final String peerId;
-  final String peerName;
+
+  /// What to search for from the start: a result picked in the palette.
+  final String initialQuery;
+
+  /// In [showChatSearchSheet]: pointer sizes, and a title of its own.
+  final bool inSheet;
   final LocalDatabase database;
   final Future<void> Function(String) copyText;
 
@@ -58,7 +83,6 @@ class TransferAssistantScreen extends StatefulWidget {
 
 class _TransferAssistantScreenState extends State<TransferAssistantScreen> {
   final TextEditingController _searchController = TextEditingController();
-  final FocusNode _searchFocus = FocusNode();
   final Set<int> _mutatingFavoriteIds = <int>{};
 
   Timer? _searchDebounce;
@@ -78,6 +102,8 @@ class _TransferAssistantScreenState extends State<TransferAssistantScreen> {
   @override
   void initState() {
     super.initState();
+    _searchController.text = widget.initialQuery;
+    _query = widget.initialQuery.trim();
     unawaited(_load(showProgress: false));
   }
 
@@ -86,7 +112,6 @@ class _TransferAssistantScreenState extends State<TransferAssistantScreen> {
     _requestGeneration++;
     _searchDebounce?.cancel();
     _searchController.dispose();
-    _searchFocus.dispose();
     super.dispose();
   }
 
@@ -250,187 +275,93 @@ class _TransferAssistantScreenState extends State<TransferAssistantScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final theme = Theme.of(context);
-    final palette = context.wc;
-    return Scaffold(
-      backgroundColor: palette.canvas,
-      appBar: AppBar(
-        backgroundColor: palette.canvas,
-        leading: MediaQuery.withNoTextScaling(
-          child: CupertinoNavigationBarBackButton(
-            previousPageTitle: '',
-            onPressed: () => Navigator.of(context).maybePop(),
-            color: theme.colorScheme.onSurface,
-          ),
-        ),
-        toolbarHeight: math.max(
-          kToolbarHeight,
-          MediaQuery.textScalerOf(context).scale(20) +
-              MediaQuery.textScalerOf(context).scale(14) +
-              8,
-        ),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(
-              l10n.transferAssistantTitle,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            if (widget.peerName.isNotEmpty)
-              Text(
-                widget.peerName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall?.copyWith(color: palette.ink2),
-              ),
-          ],
-        ),
-      ),
-      body: SafeArea(
-        top: false,
-        child: Align(
-          alignment: Alignment.topCenter,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(
-              maxWidth: WhisperUi.settingsMaxWidth,
-            ),
-            child: Column(
-              children: <Widget>[
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-                  child: TextField(
-                    key: transferAssistantSearchFieldKey,
-                    controller: _searchController,
-                    focusNode: _searchFocus,
-                    onChanged: _onSearchChanged,
-                    onSubmitted: (_) => _searchFocus.unfocus(),
-                    onTapOutside: (_) => _searchFocus.unfocus(),
-                    textInputAction: TextInputAction.search,
-                    style: theme.textTheme.bodyLarge,
-                    decoration: InputDecoration(
-                      hintText: l10n.transferAssistantSearchHint,
-                      hintStyle: TextStyle(color: palette.ink2),
-                      prefixIcon: Icon(
-                        CupertinoIcons.search,
-                        size: 20,
-                        color: palette.ink2,
-                      ),
-                      suffixIcon: _searchController.text.isEmpty
-                          ? null
-                          : IconButton(
-                              tooltip: l10n.transferAssistantClearSearch,
-                              onPressed: _clearSearch,
-                              icon: const Icon(
-                                CupertinoIcons.xmark_circle_fill,
-                                size: 19,
-                              ),
-                              color: palette.ink2,
-                            ),
-                      filled: true,
-                      fillColor: palette.raised,
-                      contentPadding: const EdgeInsets.symmetric(vertical: 14),
-                      border: _searchBorder(),
-                      enabledBorder: _searchBorder(),
-                      focusedBorder: _searchBorder(
-                        theme.colorScheme.primary.withValues(alpha: 0.5),
-                      ),
+    final c = context.wc;
+    final inSheet = widget.inSheet;
+    final type = WhisperType(touch: !inSheet);
+    final body = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (inSheet)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 12, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    l10n.transferAssistantTitle,
+                    style: TextStyle(
+                      fontSize: type.head,
+                      fontWeight: FontWeight.w600,
+                      color: c.ink,
                     ),
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 4, 16, 4),
-                  child: Row(
-                    children: <Widget>[
-                      Expanded(
-                        child: Text(
-                          _isSearching
-                              ? l10n.transferAssistantSearchResults
-                              : _favoritesOnly
-                              ? l10n.transferAssistantFavorites
-                              : l10n.transferAssistantRecent,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.labelLarge?.copyWith(
-                            color: palette.ink2,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Align(
-                          alignment: Alignment.centerRight,
-                          child: FilterChip(
-                            key: transferAssistantFavoritesFilterKey,
-                            label: Text(
-                              l10n.transferAssistantFavorites,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            avatar: _AnimatedHistoryIcon(
-                              icon: _favoritesOnly
-                                  ? Icons.star_rounded
-                                  : Icons.star_border_rounded,
-                              size: 16,
-                              color: _favoritesOnly
-                                  ? theme.colorScheme.primary
-                                  : palette.ink2,
-                            ),
-                            selected: _favoritesOnly,
-                            showCheckmark: false,
-                            onSelected: _setFavoritesOnly,
-                            backgroundColor: palette.raised,
-                            selectedColor: theme.colorScheme.primary.withValues(
-                              alpha: 0.1,
-                            ),
-                            labelStyle: theme.textTheme.labelLarge?.copyWith(
-                              color: _favoritesOnly
-                                  ? theme.colorScheme.primary
-                                  : palette.ink2,
-                            ),
-                            side: BorderSide.none,
-                            materialTapTargetSize: MaterialTapTargetSize.padded,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                SizedBox(
-                  height: 2,
-                  child: _loading
-                      ? LinearProgressIndicator(
-                          color: theme.colorScheme.primary,
-                          backgroundColor: Colors.transparent,
-                        )
-                      : null,
-                ),
-                Expanded(
-                  child: _HistoryResultsTransition(
-                    loading: _loading,
-                    child: _buildContent(l10n),
-                  ),
+                ShellIconButton(
+                  glyph: WhisperGlyph.x,
+                  label: l10n.shellDone,
+                  onTap: () => Navigator.of(context).pop(),
                 ),
               ],
             ),
           ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 2, 16, 8),
+          child: PhoneSearchField(
+            fieldKey: transferAssistantSearchFieldKey,
+            controller: _searchController,
+            hint: l10n.transferAssistantSearchHint,
+            onChanged: _onSearchChanged,
+            onClear: _clearSearch,
+            clearLabel: l10n.transferAssistantClearSearch,
+            touch: !inSheet,
+            radius: WhisperRadius.capsule,
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          child: LiquidSegmented<bool>(
+            segments: {
+              false: l10n.transferAssistantAllMessages,
+              true: l10n.transferAssistantFavorites,
+            },
+            selected: _favoritesOnly,
+            onChanged: _setFavoritesOnly,
+            expand: true,
+            height: inSheet ? 30 : 36,
+            fontSize: type.note,
+            hitExtend: inSheet ? 0 : 6,
+          ),
+        ),
+        Expanded(
+          child: _HistoryResultsTransition(
+            loading: _loading,
+            child: _buildContent(l10n),
+          ),
+        ),
+      ],
+    );
+    if (inSheet) {
+      return Material(type: MaterialType.transparency, child: body);
+    }
+    return PhonePage(
+      title: l10n.transferAssistantTitle,
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(
+            maxWidth: WhisperUi.settingsMaxWidth,
+          ),
+          child: body,
         ),
       ),
     );
   }
 
-  OutlineInputBorder _searchBorder([Color? color]) => OutlineInputBorder(
-    borderRadius: BorderRadius.circular(16),
-    borderSide: color == null ? BorderSide.none : BorderSide(color: color),
-  );
-
   Widget _buildContent(AppLocalizations l10n) {
     if (_loadError != null) {
       return _EmptyState(
-        icon: CupertinoIcons.exclamationmark_circle,
+        touch: !widget.inSheet,
+        glyph: WhisperGlyph.warn,
         message: l10n.transferAssistantLoadFailed,
         actionLabel: l10n.retry,
         onAction: () => unawaited(_load()),
@@ -442,22 +373,23 @@ class _TransferAssistantScreenState extends State<TransferAssistantScreen> {
     // Keep the last result and its highlight while a new query is pending.
     final query = _loadedQuery;
     final favoritesOnly = _loadedFavoritesOnly;
-    final messages = _messages;
     final isSearching = query.isNotEmpty;
-    final favorites = _favorites
-        .where(
-          (item) => item.content.toLowerCase().contains(query.toLowerCase()),
-        )
-        .toList(growable: false);
-    final count = favoritesOnly ? favorites.length : messages.length;
-    if (count == 0) {
+    final rows = favoritesOnly
+        ? [
+            for (final favorite in _favorites)
+              if (favorite.content.toLowerCase().contains(query.toLowerCase()))
+                _favoriteRow(favorite, query),
+          ]
+        : [for (final result in _messages) _messageRow(result, l10n, query)];
+    if (rows.isEmpty) {
       return _EmptyState(
         key: ValueKey<(bool, String)>((favoritesOnly, query)),
-        icon: isSearching
-            ? CupertinoIcons.search
+        touch: !widget.inSheet,
+        glyph: isSearching
+            ? WhisperGlyph.search
             : favoritesOnly
-            ? Icons.star_border_rounded
-            : CupertinoIcons.chat_bubble_text,
+            ? WhisperGlyph.star
+            : WhisperGlyph.chat,
         message: isSearching
             ? l10n.transferAssistantNoResults
             : favoritesOnly
@@ -475,38 +407,43 @@ class _TransferAssistantScreenState extends State<TransferAssistantScreen> {
             : null,
       );
     }
+    // In the order they came, so a day stays together even if a clock jumped.
+    final byDay = <String, List<_HistoryRowData>>{};
+    for (final row in rows) {
+      (byDay[_dayLabel(row.timestamp, l10n)] ??= []).add(row);
+    }
+    final days = byDay.entries.toList(growable: false);
     return ListView.builder(
       key: ValueKey<(bool, String)>((favoritesOnly, query)),
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-      itemCount: count,
+      padding: EdgeInsets.fromLTRB(
+        16,
+        0,
+        16,
+        24 + MediaQuery.paddingOf(context).bottom,
+      ),
+      itemCount: days.length,
       itemBuilder: (context, index) {
-        final radius = BorderRadius.vertical(
-          top: index == 0 ? const Radius.circular(18) : Radius.zero,
-          bottom: index == count - 1 ? const Radius.circular(18) : Radius.zero,
-        );
-        return Material(
-          key: ValueKey<int>(
-            favoritesOnly
-                ? favorites[index].sourceMessageId
-                : messages[index].message.id,
-          ),
-          color: context.wc.raised,
-          borderRadius: radius,
-          clipBehavior: Clip.antiAlias,
+        final MapEntry(key: day, value: inDay) = days[index];
+        return Padding(
+          padding: EdgeInsets.only(top: index == 0 ? 0 : 20),
           child: Column(
-            children: <Widget>[
-              if (favoritesOnly)
-                _buildFavoriteTile(favorites[index], query)
-              else
-                _buildMessageTile(messages[index], l10n, query),
-              if (index < count - 1)
-                Divider(
-                  height: 1,
-                  indent: 16,
-                  endIndent: 16,
-                  color: context.wc.sep.withValues(alpha: 0.6),
-                ),
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (day.isNotEmpty) ShellGroupLabel(day, touch: !widget.inSheet),
+              ShellGroup(
+                inset: 14,
+                flat: widget.inSheet,
+                children: [
+                  for (final row in inDay)
+                    _HistoryTextTile(
+                      key: ValueKey<int>(row.id),
+                      data: row,
+                      query: query,
+                      touch: !widget.inSheet,
+                    ),
+                ],
+              ),
             ],
           ),
         );
@@ -514,7 +451,7 @@ class _TransferAssistantScreenState extends State<TransferAssistantScreen> {
     );
   }
 
-  Widget _buildMessageTile(
+  _HistoryRowData _messageRow(
     TextMessageSearchResult result,
     AppLocalizations l10n,
     String query,
@@ -523,11 +460,12 @@ class _TransferAssistantScreenState extends State<TransferAssistantScreen> {
     final direction = message.sender == widget.peerId
         ? l10n.transferAssistantIncoming
         : l10n.transferAssistantOutgoing;
-    final metadata = '$direction · ${_formatTimestamp(message.timestamp)}';
-    return _HistoryTextTile(
+    final time = _formatTime(message.timestamp);
+    return _HistoryRowData(
+      id: message.id,
       text: message.content ?? '',
-      query: query,
-      metadata: metadata,
+      metadata: time.isEmpty ? direction : '$direction · $time',
+      timestamp: message.timestamp,
       isFavorite: result.isFavorite,
       copyKey: transferAssistantMessageCopyKey(message.id),
       onCopy: () => _copy(message.content ?? ''),
@@ -538,12 +476,12 @@ class _TransferAssistantScreenState extends State<TransferAssistantScreen> {
     );
   }
 
-  Widget _buildFavoriteTile(FavoriteTextData favorite, String query) {
-    final metadata = _formatTimestamp(favorite.sourceTimestamp);
-    return _HistoryTextTile(
+  _HistoryRowData _favoriteRow(FavoriteTextData favorite, String query) {
+    return _HistoryRowData(
+      id: favorite.sourceMessageId,
       text: favorite.content,
-      query: query,
-      metadata: metadata,
+      metadata: _formatTime(favorite.sourceTimestamp),
+      timestamp: favorite.sourceTimestamp,
       isFavorite: true,
       copyKey: transferAssistantFavoriteCopyKey(favorite.sourceMessageId),
       onCopy: () => _copy(favorite.content),
@@ -554,14 +492,53 @@ class _TransferAssistantScreenState extends State<TransferAssistantScreen> {
     );
   }
 
-  String _formatTimestamp(int timestamp) {
-    if (timestamp <= 0) {
-      return '';
-    }
-    return DateFormat.yMd(
+  String _formatTime(int timestamp) {
+    if (timestamp <= 0) return '';
+    return DateFormat.Hm(
       Localizations.localeOf(context).toLanguageTag(),
-    ).add_Hm().format(DateTime.fromMillisecondsSinceEpoch(timestamp * 1000));
+    ).format(DateTime.fromMillisecondsSinceEpoch(timestamp * 1000));
   }
+
+  String _dayLabel(int timestamp, AppLocalizations l10n) {
+    if (timestamp <= 0) return '';
+    final at = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
+    final now = DateTime.now();
+    final days = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).difference(DateTime(at.year, at.month, at.day)).inDays;
+    if (days == 0) return l10n.shellToday;
+    if (days == 1) return l10n.shellYesterday;
+    final locale = Localizations.localeOf(context).toLanguageTag();
+    return (at.year == now.year
+            ? DateFormat.MMMEd(locale)
+            : DateFormat.yMMMEd(locale))
+        .format(at);
+  }
+}
+
+/// One message or saved text, the way a row shows it.
+class _HistoryRowData {
+  const _HistoryRowData({
+    required this.id,
+    required this.text,
+    required this.metadata,
+    required this.timestamp,
+    required this.isFavorite,
+    required this.copyKey,
+    required this.favoriteKey,
+    required this.onCopy,
+    required this.onFavorite,
+  });
+
+  final int id;
+  final String text, metadata;
+  final int timestamp;
+  final bool isFavorite;
+  final Key copyKey, favoriteKey;
+  final Future<bool> Function() onCopy;
+  final VoidCallback? onFavorite;
 }
 
 class _HistoryResultsTransition extends StatelessWidget {
@@ -612,40 +589,73 @@ class _HistoryResultsTransition extends StatelessWidget {
   }
 }
 
-class _AnimatedHistoryIcon extends StatelessWidget {
-  const _AnimatedHistoryIcon({
-    required this.icon,
-    required this.color,
-    this.size = 20,
+/// A small icon button at the end of a row: wide enough for a thumb, not as tall
+/// as a line of its own.
+class _RowAction extends StatelessWidget {
+  const _RowAction({
+    super.key,
+    required this.glyph,
+    required this.label,
+    required this.onTap,
+    this.color,
+    this.filled = false,
+    this.turns = 0,
+    this.touch = true,
   });
 
-  final IconData icon;
-  final Color color;
-  final double size;
+  final bool touch;
+  final WhisperGlyph glyph;
+  final String label;
+  final VoidCallback? onTap;
+  final Color? color;
+  final bool filled;
+  final double turns;
 
   @override
   Widget build(BuildContext context) {
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
-    return SizedBox.square(
-      dimension: size,
-      child: AnimatedSwitcher(
-        duration: reduceMotion
-            ? Duration.zero
-            : const Duration(milliseconds: 180),
-        switchInCurve: Curves.easeOutCubic,
-        switchOutCurve: Curves.easeInCubic,
-        transitionBuilder: (child, animation) => FadeTransition(
-          opacity: animation,
-          child: ScaleTransition(
-            scale: Tween<double>(begin: 0.86, end: 1).animate(animation),
-            child: child,
+    return Tooltip(
+      message: label,
+      child: Pressable(
+        onTap: onTap,
+        radius: WhisperRadius.xs,
+        label: label,
+        child: SizedBox(
+          width: touch ? 44 : 30,
+          height: touch ? 40 : 28,
+          child: Center(
+            child: AnimatedRotation(
+              turns: turns,
+              duration: reduceMotion
+                  ? Duration.zero
+                  : const Duration(milliseconds: 180),
+              curve: Curves.easeInOutCubic,
+              child: AnimatedSwitcher(
+                duration: reduceMotion
+                    ? Duration.zero
+                    : const Duration(milliseconds: 180),
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                transitionBuilder: (child, animation) => FadeTransition(
+                  opacity: animation,
+                  child: ScaleTransition(
+                    scale: Tween<double>(
+                      begin: 0.86,
+                      end: 1,
+                    ).animate(animation),
+                    child: child,
+                  ),
+                ),
+                child: WhisperIcon(
+                  glyph,
+                  key: ValueKey<(WhisperGlyph, bool)>((glyph, filled)),
+                  size: touch ? 17 : 15,
+                  filled: filled,
+                  color: color ?? context.wc.ink2,
+                ),
+              ),
+            ),
           ),
-        ),
-        child: Icon(
-          icon,
-          key: ValueKey<IconData>(icon),
-          size: size,
-          color: color,
         ),
       ),
     );
@@ -654,24 +664,15 @@ class _AnimatedHistoryIcon extends StatelessWidget {
 
 class _HistoryTextTile extends StatefulWidget {
   const _HistoryTextTile({
-    required this.text,
+    super.key,
+    required this.data,
     required this.query,
-    required this.metadata,
-    required this.isFavorite,
-    required this.copyKey,
-    required this.favoriteKey,
-    required this.onCopy,
-    required this.onFavorite,
+    this.touch = true,
   });
 
-  final String text;
+  final _HistoryRowData data;
   final String query;
-  final String metadata;
-  final bool isFavorite;
-  final Key copyKey;
-  final Key favoriteKey;
-  final Future<bool> Function() onCopy;
-  final VoidCallback? onFavorite;
+  final bool touch;
 
   @override
   State<_HistoryTextTile> createState() => _HistoryTextTileState();
@@ -687,136 +688,107 @@ class _HistoryTextTileState extends State<_HistoryTextTile> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final palette = context.wc;
+    final c = context.wc;
     final l10n = AppLocalizations.of(context)!;
-    final style = theme.textTheme.bodyLarge!.copyWith(height: 1.4);
+    final touch = widget.touch;
+    final type = WhisperType(touch: touch);
+    final data = widget.data;
+    final style = TextStyle(fontSize: type.body, height: 1.4, color: c.ink);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 12, 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final painter = TextPainter(
-                text: TextSpan(text: widget.text, style: style),
-                textDirection: Directionality.of(context),
-                textScaler: MediaQuery.textScalerOf(context),
-                maxLines: 2,
-              )..layout(maxWidth: constraints.maxWidth);
-              final canExpand = painter.didExceedMaxLines;
-              painter.dispose();
-              final showFullText = _expanded || !canExpand;
-              final toggleLabel = _expanded
-                  ? l10n.transferAssistantCollapseMessage
-                  : l10n.transferAssistantExpandMessage;
-              final content = showFullText
-                  ? SelectableText.rich(
-                      _highlightText(
-                        widget.text,
-                        widget.query,
-                        theme.colorScheme,
-                      ),
+      padding: EdgeInsets.fromLTRB(14, touch ? 11 : 9, 4, touch ? 2 : 4),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final painter = TextPainter(
+            text: TextSpan(text: data.text, style: style),
+            textDirection: Directionality.of(context),
+            textScaler: MediaQuery.textScalerOf(context),
+            maxLines: 2,
+          )..layout(maxWidth: constraints.maxWidth - 10);
+          final canExpand = painter.didExceedMaxLines;
+          painter.dispose();
+          final showFullText = _expanded || !canExpand;
+          final toggleLabel = _expanded
+              ? l10n.transferAssistantCollapseMessage
+              : l10n.transferAssistantExpandMessage;
+          final content = showFullText
+              ? SelectableText.rich(
+                  _highlightText(data.text, widget.query, c),
+                  style: style,
+                  selectionWidthStyle: BoxWidthStyle.tight,
+                )
+              : Semantics(
+                  button: true,
+                  hint: toggleLabel,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: _toggleExpanded,
+                    child: Text.rich(
+                      _highlightedPreview(data.text, widget.query, c),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                       style: style,
-                      selectionWidthStyle: BoxWidthStyle.tight,
-                    )
-                  : Semantics(
-                      button: true,
-                      hint: toggleLabel,
-                      child: InkWell(
-                        onTap: _toggleExpanded,
-                        child: Text.rich(
-                          _highlightedPreview(
-                            widget.text,
-                            widget.query,
-                            theme.colorScheme,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: style,
-                        ),
+                    ),
+                  ),
+                );
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(right: 10),
+                child: MediaQuery.disableAnimationsOf(context)
+                    ? content
+                    : AnimatedSize(
+                        duration: const Duration(milliseconds: 180),
+                        curve: Curves.easeInOutCubic,
+                        alignment: Alignment.topLeft,
+                        child: content,
                       ),
-                    );
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
+              ),
+              Row(
+                children: [
                   Expanded(
-                    child: MediaQuery.disableAnimationsOf(context)
-                        ? content
-                        : AnimatedSize(
-                            duration: const Duration(milliseconds: 180),
-                            curve: Curves.easeInOutCubic,
-                            alignment: Alignment.topLeft,
-                            child: content,
-                          ),
+                    child: Text(
+                      data.metadata,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: type.note, color: c.ink2),
+                    ),
                   ),
                   if (canExpand)
-                    IconButton(
-                      tooltip: toggleLabel,
-                      onPressed: _toggleExpanded,
-                      constraints: const BoxConstraints(
-                        minWidth: 48,
-                        minHeight: 48,
-                      ),
-                      iconSize: 18,
-                      color: palette.ink2,
-                      icon: AnimatedRotation(
-                        turns: _expanded ? 0.5 : 0,
-                        duration: MediaQuery.disableAnimationsOf(context)
-                            ? Duration.zero
-                            : const Duration(milliseconds: 180),
-                        curve: Curves.easeInOutCubic,
-                        child: const Icon(Icons.expand_more_rounded),
-                      ),
+                    _RowAction(
+                      glyph: WhisperGlyph.right,
+                      label: toggleLabel,
+                      onTap: _toggleExpanded,
+                      turns: _expanded ? .75 : .25,
+                      touch: touch,
                     ),
-                ],
-              );
-            },
-          ),
-          Row(
-            children: <Widget>[
-              Expanded(
-                child: Text(
-                  widget.metadata,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: palette.ink2,
+                  _AnimatedCopyButton(
+                    buttonKey: data.copyKey,
+                    onCopy: data.onCopy,
+                    touch: touch,
                   ),
-                ),
-              ),
-              const SizedBox(width: 4),
-              _AnimatedCopyButton(
-                buttonKey: widget.copyKey,
-                onCopy: widget.onCopy,
-              ),
-              IconButton(
-                key: widget.favoriteKey,
-                tooltip: widget.isFavorite
-                    ? l10n.transferAssistantUnfavorite
-                    : l10n.transferAssistantFavorite,
-                onPressed: widget.onFavorite,
-                constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-                iconSize: 20,
-                color: widget.isFavorite
-                    ? theme.colorScheme.primary
-                    : palette.ink2,
-                icon: _AnimatedHistoryIcon(
-                  icon: widget.isFavorite
-                      ? Icons.star_rounded
-                      : Icons.star_border_rounded,
-                  color: widget.isFavorite
-                      ? theme.colorScheme.primary
-                      : palette.ink2,
-                ),
+                  _RowAction(
+                    key: data.favoriteKey,
+                    glyph: WhisperGlyph.star,
+                    label: data.isFavorite
+                        ? l10n.transferAssistantUnfavorite
+                        : l10n.transferAssistantFavorite,
+                    onTap: data.onFavorite,
+                    filled: data.isFavorite,
+                    color: data.isFavorite ? c.accent : null,
+                    touch: touch,
+                  ),
+                ],
               ),
             ],
-          ),
-        ],
+          );
+        },
       ),
     );
   }
 }
 
-TextSpan _highlightedPreview(String text, String query, ColorScheme colors) {
+TextSpan _highlightedPreview(String text, String query, WhisperColors c) {
   var preview = text.replaceAll(RegExp(r'\s+'), ' ').trim();
   final pattern = query.isEmpty
       ? null
@@ -831,10 +803,10 @@ TextSpan _highlightedPreview(String text, String query, ColorScheme colors) {
   if (characters.length > 220) {
     preview += '…';
   }
-  return _highlightText(preview, query, colors);
+  return _highlightText(preview, query, c);
 }
 
-TextSpan _highlightText(String text, String query, ColorScheme colors) {
+TextSpan _highlightText(String text, String query, WhisperColors c) {
   if (query.isEmpty) {
     return TextSpan(text: text);
   }
@@ -846,11 +818,7 @@ TextSpan _highlightText(String text, String query, ColorScheme colors) {
     spans.add(
       TextSpan(
         text: text.substring(match.start, match.end),
-        style: TextStyle(
-          color: colors.primary,
-          backgroundColor: colors.primary.withValues(alpha: 0.1),
-          fontWeight: FontWeight.w600,
-        ),
+        style: TextStyle(color: c.onTint, backgroundColor: c.tintActive),
       ),
     );
     offset = match.end;
@@ -860,8 +828,13 @@ TextSpan _highlightText(String text, String query, ColorScheme colors) {
 }
 
 class _AnimatedCopyButton extends StatefulWidget {
-  const _AnimatedCopyButton({required this.buttonKey, required this.onCopy});
+  const _AnimatedCopyButton({
+    required this.buttonKey,
+    required this.onCopy,
+    this.touch = true,
+  });
 
+  final bool touch;
   final Key buttonKey;
   final Future<bool> Function() onCopy;
 
@@ -912,36 +885,30 @@ class _AnimatedCopyButtonState extends State<_AnimatedCopyButton> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final colorScheme = Theme.of(context).colorScheme;
-    final palette = context.wc;
-    final tooltip = _copied
+    final c = context.wc;
+    final label = _copied
         ? l10n.transferAssistantCopied
         : _copyFailed
         ? l10n.transferAssistantCopyFailed
         : l10n.transferAssistantCopy;
     return Semantics(
       liveRegion: true,
-      value: _copied || _copyFailed ? tooltip : null,
-      child: SizedBox.square(
-        dimension: 48,
-        child: IconButton(
-          key: widget.buttonKey,
-          tooltip: tooltip,
-          onPressed: _copying ? null : _handleCopy,
-          style: IconButton.styleFrom(foregroundColor: palette.ink2),
-          icon: _AnimatedHistoryIcon(
-            icon: _copied
-                ? Icons.check_rounded
-                : _copyFailed
-                ? Icons.error_outline_rounded
-                : Icons.content_copy_rounded,
-            color: _copied
-                ? palette.ok
-                : _copyFailed
-                ? colorScheme.error
-                : palette.ink2,
-          ),
-        ),
+      value: _copied || _copyFailed ? label : null,
+      child: _RowAction(
+        key: widget.buttonKey,
+        glyph: _copied
+            ? WhisperGlyph.check
+            : _copyFailed
+            ? WhisperGlyph.warn
+            : WhisperGlyph.copy,
+        label: label,
+        onTap: _copying ? null : _handleCopy,
+        touch: widget.touch,
+        color: _copied
+            ? c.accentText
+            : _copyFailed
+            ? c.bad
+            : null,
       ),
     );
   }
@@ -950,41 +917,52 @@ class _AnimatedCopyButtonState extends State<_AnimatedCopyButton> {
 class _EmptyState extends StatelessWidget {
   const _EmptyState({
     super.key,
-    required this.icon,
+    required this.glyph,
     required this.message,
     this.actionLabel,
     this.onAction,
+    this.touch = true,
   });
 
-  final IconData icon;
+  final bool touch;
+  final WhisperGlyph glyph;
   final String message;
   final String? actionLabel;
   final VoidCallback? onAction;
 
   @override
   Widget build(BuildContext context) {
-    final palette = context.wc;
+    final c = context.wc;
+    final type = WhisperType(touch: touch);
     return LayoutBuilder(
       builder: (context, constraints) => SingleChildScrollView(
         child: ConstrainedBox(
-          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+          constraints: BoxConstraints(minHeight: constraints.maxHeight * .7),
           child: Padding(
             padding: const EdgeInsets.all(24),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
-              children: <Widget>[
-                Icon(icon, size: 36, color: palette.ink2),
-                const SizedBox(height: 16),
+              children: [
+                WhisperIcon(glyph, size: 28, color: c.ink3),
+                const SizedBox(height: 12),
                 Text(
                   message,
                   textAlign: TextAlign.center,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodyMedium?.copyWith(color: palette.ink2),
+                  style: TextStyle(fontSize: type.body, color: c.ink2),
                 ),
-                if (actionLabel != null) ...<Widget>[
+                if (actionLabel != null) ...[
                   const SizedBox(height: 8),
-                  TextButton(onPressed: onAction, child: Text(actionLabel!)),
+                  touch
+                      ? PhoneButton(
+                          label: actionLabel!,
+                          onTap: onAction,
+                          kind: PhoneButtonKind.quiet,
+                        )
+                      : ShellButton(
+                          label: actionLabel!,
+                          onTap: onAction,
+                          kind: ShellButtonKind.quiet,
+                        ),
                 ],
               ],
             ),

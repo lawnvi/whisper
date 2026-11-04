@@ -305,7 +305,7 @@ class ShellIsland extends StatefulWidget {
 }
 
 class _ShellIslandState extends State<ShellIsland> implements IslandControls {
-  static const _openWidth = 372.0, _compactHeight = 34.0, _compactMax = 320.0;
+  static const _openWidth = 372.0, _compactHeight = 34.0, _compactMax = 260.0;
 
   Size _measured = const Size(120, _compactHeight);
 
@@ -364,7 +364,8 @@ class _ShellIslandState extends State<ShellIsland> implements IslandControls {
       buttonsLeft: widget.buttonsLeft,
       buttonsBottom: widget.buttonsBottom,
     );
-    final spring = WhisperSprings.expressive;
+    // Lively on the way in; going small or away it has nothing left to say.
+    final spring = expanded ? WhisperSprings.expressive : WhisperSprings.snappy;
     return SpringBuilder(
       value: origin.dx,
       spring: spring,
@@ -510,7 +511,7 @@ class _ShellIslandState extends State<ShellIsland> implements IslandControls {
         behavior: HitTestBehavior.opaque,
         onTap: widget.center.tap,
         child: SizedBox(
-          width: 260,
+          width: 200,
           height: _compactHeight,
           child: presenter.compact(context),
         ),
@@ -530,26 +531,31 @@ class _ShellIslandState extends State<ShellIsland> implements IslandControls {
   /// `.isl-e`, a `.mo` for each.
   Widget _open(BuildContext context, IslandActivity featured) {
     final activities = [featured, ...widget.center.others];
-    return SizedBox(
-      width: _openWidth,
-      child: Padding(
-        padding: const EdgeInsets.all(10),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            for (final activity in activities)
-              if (activity.presenter is MomentPresenter)
-                _Moment(
-                  moment: (activity.presenter as MomentPresenter).moment(
-                    context,
-                  ),
-                )
-              else
-                activity == featured
-                    ? activity.presenter.featured(context, this)
-                    : activity.presenter.row(context, this),
-          ],
+    // Tapped again it goes small. Its buttons keep their own taps.
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: widget.center.tap,
+      child: SizedBox(
+        width: _openWidth,
+        child: Padding(
+          padding: const EdgeInsets.all(10),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (final activity in activities)
+                if (activity.presenter is MomentPresenter)
+                  _Moment(
+                    moment: (activity.presenter as MomentPresenter).moment(
+                      context,
+                    ),
+                  )
+                else
+                  activity == featured
+                      ? activity.presenter.featured(context, this)
+                      : activity.presenter.row(context, this),
+            ],
+          ),
         ),
       ),
     );

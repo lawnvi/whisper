@@ -1,12 +1,11 @@
 import 'package:whisper/new_ui/phone/phone_parts.dart' show PhoneSheetFrame;
 import 'package:whisper/new_ui/shell/shell_parts.dart'
-    show ShellButton, ShellButtonKind, ShellGroup, ShellRow, ShellSwitch;
+    show ShellButton, ShellButtonKind;
 import 'package:whisper/new_ui/shell/shell_requests.dart';
 import 'package:whisper/theme/whisper_ui.dart';
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:window_manager/window_manager.dart';
@@ -22,9 +21,9 @@ import '../../remote_files/mount/remote_mounts.dart';
 import 'files_icons.dart';
 
 /// Asks "‹device› wants to browse your files" over the whole app whenever
-/// [FileBrowseHost] has a request. Allow once, always allow (remembered for
-/// that device) or don't allow; silence for a minute is a no. A switch says
-/// whether it may also change them, remembered for that device too.
+/// [FileBrowseHost] has a request. Allow or don't; silence for a minute is a
+/// no. Allowing from here only lets it read: what a device may do for good is
+/// set in its card.
 class FileBrowsePromptHost extends StatefulWidget {
   const FileBrowsePromptHost({
     super.key,
@@ -94,7 +93,7 @@ class _FileBrowsePromptHostState extends State<FileBrowsePromptHost> {
         askFileBrowse(
           l10n,
           request,
-          _gate.decide,
+          (decision) => unawaited(_answer(request, decision)),
           device: WsSvrManager().remoteProfileFor(request.peerId)?.device,
         );
       }
@@ -112,7 +111,7 @@ class _FileBrowsePromptHostState extends State<FileBrowsePromptHost> {
     if (!Platform.isAndroid) {
       NotificationHelper().showNotification(
         title: l10n.remoteFilesPromptTitle(request.deviceName),
-        body: l10n.remoteFilesPromptBodyPhone,
+        body: '',
       );
       return;
     }
@@ -121,13 +120,22 @@ class _FileBrowsePromptHostState extends State<FileBrowsePromptHost> {
 
   static String _askId(FileBrowseRequest request) => 'browse:${request.peerId}';
 
-  Future<void> _ask(FileBrowseRequest request, AppLocalizations l10n) async {
-    final readOnly = await FileBrowseHost.shared.permissions.isReadOnly(
-      request.peerId,
-    );
-    if (!identical(_gate.pending, request)) {
-      return;
+  /// An allow from the question is read-only for this device, also if it was
+  /// once allowed to change files. The answer is dropped when the question is
+  /// no longer the one on screen.
+  Future<void> _answer(
+    FileBrowseRequest request,
+    FileBrowseDecision decision,
+  ) async {
+    if (decision == FileBrowseDecision.once) {
+      await FileBrowseHost.shared.setReadOnly(request.peerId, true);
     }
+    if (identical(_gate.pending, request)) {
+      _gate.decide(decision);
+    }
+  }
+
+  Future<void> _ask(FileBrowseRequest request, AppLocalizations l10n) async {
     await IslandAsks.shared.ask(
       id: _askId(request),
       glyph: 'folder',
@@ -137,24 +145,17 @@ class _FileBrowsePromptHostState extends State<FileBrowsePromptHost> {
           .remoteProfileFor(request.peerId)
           ?.device
           .platform,
-      text: readOnly
-          ? l10n.remoteFilesPromptBodyReadOnlyPhone
-          : l10n.remoteFilesPromptBodyPhone,
       buttons: [
         IslandAskButton('deny', l10n.remoteFilesDeny, role: 'decline'),
         IslandAskButton('once', l10n.remoteFilesAllowOnce, role: 'accept'),
       ],
       channelName: l10n.notificationChannelRequests,
-      // Answered as it is set for this device ("允许修改文件" stays).
       onAnswer: (button) {
-        if (!identical(_gate.pending, request)) {
-          return;
-        }
         switch (button) {
           case 'deny':
-            _gate.decide(FileBrowseDecision.deny);
+            unawaited(_answer(request, FileBrowseDecision.deny));
           case 'once':
-            _gate.decide(FileBrowseDecision.once);
+            unawaited(_answer(request, FileBrowseDecision.once));
         }
       },
     );
@@ -179,7 +180,8 @@ class _FileBrowsePromptHostState extends State<FileBrowsePromptHost> {
                   child: _PromptCard(
                     key: ValueKey(request),
                     request: request,
-                    onDecide: _gate.decide,
+                    onDecide: (decision) =>
+                        unawaited(_answer(request, decision)),
                   ),
                 ),
               ),
@@ -190,52 +192,18 @@ class _FileBrowsePromptHostState extends State<FileBrowsePromptHost> {
   }
 }
 
-class _PromptCard extends StatefulWidget {
+class _PromptCard extends StatelessWidget {
   const _PromptCard({super.key, required this.request, required this.onDecide});
 
   final FileBrowseRequest request;
   final ValueChanged<FileBrowseDecision> onDecide;
 
+  /// `.sheet`: the question and its two answers.
   @override
-  State<_PromptCard> createState() => _PromptCardState();
-}
-
-class _PromptCardState extends State<_PromptCard> {
-  /// "允许修改文件", as last set for this device.
-  bool _allowChanges = true;
-
-  @override
-  void initState() {
-    super.initState();
-    unawaited(_load());
-  }
-
-  Future<void> _load() async {
-    final readOnly = await FileBrowseHost.shared.permissions.isReadOnly(
-      widget.request.peerId,
-    );
-    if (mounted) {
-      setState(() => _allowChanges = !readOnly);
-    }
-  }
-
-  Future<void> _decide(FileBrowseDecision decision) async {
-    if (decision == FileBrowseDecision.once ||
-        decision == FileBrowseDecision.always) {
-      await FileBrowseHost.shared.setReadOnly(
-        widget.request.peerId,
-        !_allowChanges,
-      );
-    }
-    widget.onDecide(decision);
-  }
-
-  /// `.sheet`: a title, one line, the switch, the three answers.
-  Widget _buildNew(BuildContext context) {
+  Widget build(BuildContext context) {
     final c = context.wc;
     final l10n = AppLocalizations.of(context)!;
     const type = WhisperType(touch: true);
-    final request = widget.request;
     Widget answer(
       String label,
       FileBrowseDecision decision, {
@@ -247,7 +215,7 @@ class _PromptCardState extends State<_PromptCard> {
         kind: kind,
         large: true,
         touch: true,
-        onTap: () => unawaited(_decide(decision)),
+        onTap: () => onDecide(decision),
       ),
     );
     return Column(
@@ -264,35 +232,12 @@ class _PromptCardState extends State<_PromptCard> {
             color: c.ink,
           ),
         ),
-        const SizedBox(height: 6),
-        Text(
-          _allowChanges
-              ? l10n.remoteFilesPromptBodyPhone
-              : l10n.remoteFilesPromptBodyReadOnlyPhone,
-          style: TextStyle(fontSize: type.note, height: 1.45, color: c.ink2),
-        ),
-        const SizedBox(height: 14),
-        ShellGroup(
-          children: [
-            ShellRow(
-              touch: true,
-              label: l10n.remoteFilesPromptAllowChanges,
-              trailing: ShellSwitch(
-                touch: true,
-                label: l10n.remoteFilesPromptAllowChanges,
-                value: _allowChanges,
-                onChanged: (value) => setState(() => _allowChanges = value),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 12),
         answer(
           l10n.remoteFilesAllowOnce,
           FileBrowseDecision.once,
           kind: ShellButtonKind.primary,
         ),
-        answer(l10n.remoteFilesAllowAlways, FileBrowseDecision.always),
         answer(
           l10n.remoteFilesDeny,
           FileBrowseDecision.deny,
@@ -300,10 +245,5 @@ class _PromptCardState extends State<_PromptCard> {
         ),
       ],
     );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return _buildNew(context);
   }
 }

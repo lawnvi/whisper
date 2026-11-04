@@ -10,6 +10,7 @@ import 'package:path/path.dart' as p;
 import '../../helper/file.dart';
 import '../../helper/toast.dart';
 import '../../l10n/app_localizations.dart';
+import '../../remote_files/fs_browser.dart';
 import '../../remote_files/fs_host_files.dart';
 import '../../remote_files/fs_protocol.dart';
 import '../../remote_files/mount/remote_mounts.dart';
@@ -18,6 +19,7 @@ import 'files_copy_island.dart';
 import 'files_desktop.dart';
 import 'files_icons.dart';
 import 'files_model.dart';
+import 'package:whisper/page/remote_files/files_drag.dart';
 
 /// Every connected device's files in one place, like Finder with the other
 /// devices under "位置": browse them, drag or copy and paste between this
@@ -42,9 +44,21 @@ class _RemoteFilesPageState extends State<RemoteFilesPage> {
     controller: _controller,
     context: () => context,
   );
+  late final _bridge = (controller: _controller, actions: _actions);
+
+  @override
+  void initState() {
+    super.initState();
+    if (isDesktop() || WhisperLayout.touchPlatform) {
+      FilesDropBridge.current.value = _bridge;
+    }
+  }
 
   @override
   void dispose() {
+    if (identical(FilesDropBridge.current.value, _bridge)) {
+      FilesDropBridge.current.value = null;
+    }
     _controller.dispose();
     super.dispose();
   }
@@ -61,6 +75,62 @@ class _RemoteFilesPageState extends State<RemoteFilesPage> {
     }
     return PhoneFilesView(controller: _controller, actions: _actions);
   }
+}
+
+/// The files page on screen, for what lies outside it: the device list takes
+/// files dragged out of the page, the way the page's own sidebar used to.
+abstract final class FilesDropBridge {
+  static final current =
+      ValueNotifier<({FilesController controller, FilesActions actions})?>(
+        null,
+      );
+}
+
+/// A device in the list, when files can be dropped on it: they go to its first
+/// place, once that device's places are known.
+class FilesDropBridgeTarget extends StatelessWidget {
+  const FilesDropBridgeTarget({
+    super.key,
+    required this.peerId,
+    required this.radius,
+    required this.child,
+  });
+
+  final String peerId;
+  final double radius;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder(
+    valueListenable: FilesDropBridge.current,
+    child: child,
+    builder: (context, bridge, child) {
+      if (bridge == null) return child!;
+      return AnimatedBuilder(
+        animation: bridge.controller,
+        child: child,
+        builder: (context, child) {
+          final device = bridge.controller.deviceById(peerId);
+          final places = device?.browser?.places ?? const <FsPlace>[];
+          if (places.isEmpty) return child!;
+          return FilesDropTarget(
+            controller: bridge.controller,
+            target: FilesLocation(peerId, places.first.root, places.first.path),
+            onItems: (items, target) =>
+                unawaited(bridge.actions.copy(items, target)),
+            builder: (context, dropping) => DecoratedBox(
+              position: DecorationPosition.foreground,
+              decoration: BoxDecoration(
+                color: dropping ? context.wc.tintActive : null,
+                borderRadius: BorderRadius.circular(radius),
+              ),
+              child: child,
+            ),
+          );
+        },
+      );
+    },
+  );
 }
 
 /// What both layouts do the same way: copying, editing and saying why

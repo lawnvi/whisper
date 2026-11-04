@@ -355,8 +355,6 @@ class _PhoneConnectPageState extends State<PhoneConnectPage>
                 child: WhisperTabView(
                   index: _tab,
                   itemCount: 3,
-                  // A camera is a platform view: blurring it is not possible.
-                  blur: false,
                   itemBuilder: (context, index) => switch (index) {
                     _qrTab => _buildQr(l10n),
                     _scanTab => _buildScan(l10n),

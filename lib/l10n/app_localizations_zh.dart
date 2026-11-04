@@ -336,9 +336,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deleteDeviceDesc => '断开连接并删除与该设备的所有消息，不可恢复';
 
   @override
-  String get brokeConnectTitle => '断开连接';
-
-  @override
   String get connectFailed => '连接失败';
 
   @override
@@ -568,7 +565,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get audioShareStart => '把本机声音共享给对方';
 
   @override
-  String get remoteInputScrollMultiplierTitle => '键鼠共享滚轮速度';
+  String get remoteInputScrollMultiplierTitle => '滚轮速度';
 
   @override
   String get audioShareUnsupportedCapture => '当前设备不支持系统音频采集';
@@ -1594,17 +1591,10 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get remoteFilesPromptBodyPhone =>
-      '允许后，它能看到这台手机的内部存储，并在里面拷贝、新建、重命名和删除文件。删除的文件不能恢复。';
-
-  @override
   String get remoteFilesDeny => '拒绝';
 
   @override
   String get remoteFilesAllowOnce => '允许';
-
-  @override
-  String get remoteFilesAllowAlways => '始终允许';
 
   @override
   String windowStreamTouchBlockedTitle(String device) {
@@ -2102,13 +2092,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get shareLinkRoute => '链接后缀';
 
   @override
-  String get shareLinkShortRoute => '简短后缀';
-
-  @override
   String get shareLinkPassword => '密码';
-
-  @override
-  String get shareLinkCreate => '创建链接';
 
   @override
   String get shareLinkRouteTaken => '此后缀已被其他链接使用';
@@ -2519,16 +2503,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deviceFilesAllowChanges => '允许修改我的文件';
 
   @override
-  String get remoteFilesPromptAllowChanges => '允许修改文件';
-
-  @override
   String remoteFilesReadOnlyHost(String device) {
     return '$device 只允许读取文件';
   }
-
-  @override
-  String get remoteFilesPromptBodyReadOnlyPhone =>
-      '允许后，它能看到这台手机的内部存储，打开和拷出里面的文件，但不能改动。';
 
   @override
   String get islandOverlay => '后台悬浮提示';
@@ -2694,9 +2671,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get shellCardChange => '修改我的文件';
 
   @override
-  String get shellCardAddress => '地址';
-
-  @override
   String get shellCardDiagnostics => '连接诊断';
 
   @override
@@ -2816,10 +2790,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get shellSettingsPressShortcut => '按下快捷键…';
 
   @override
-  String get shellSettingsAllowClipboard => '允许访问剪贴板';
-
-  @override
-  String get shellSettingsAutoClipboard => '自动同步剪贴板';
+  String get shellSettingsClipboardSync => '同步剪贴板';
 
   @override
   String get shellSettingsPlaybackGain => '播放音量';
@@ -2880,12 +2851,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get soundChannelLeft => '左';
-
-  @override
-  String get soundChannelRight => '右';
-
-  @override
   String get soundShareThisDevice => '共享本机声音';
 
   @override
@@ -2904,19 +2869,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get soundMemberSoloOnly => '只能单独播放';
-
-  @override
-  String soundSyncNumbers(
-    String network,
-    String jitter,
-    String buffer,
-    int late,
-  ) {
-    return '网络 ${network}ms · 抖动 ${jitter}ms · 缓冲 ${buffer}ms · 晚包 $late';
-  }
-
-  @override
-  String get soundSyncNumbersPending => '网络 — · 抖动 — · 缓冲 — · 晚包 —';
 
   @override
   String get soundPermissionNeeded => '需要允许屏幕与系统录音';
@@ -3064,13 +3016,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get shellLinksServiceIdle => '没有开启的链接';
 
   @override
-  String get shellLinksFoot => '使用普通 HTTP，密码只能防止随意打开。';
-
-  @override
   String get shellLinksEmptyTitle => '没有链接';
 
   @override
-  String get shellLinksEmptyBody => '选择文件生成链接，对方用浏览器打开即可下载。';
+  String get shellLinksEmptyBody => '选择文件或文件夹生成链接，对方用浏览器打开即可下载。';
 
   @override
   String get shellLinksChoose => '选择文件';
@@ -3278,11 +3227,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get phoneConnectPort => '端口';
 
   @override
-  String shellLinkCreateTitle(String name) {
-    return '共享「$name」';
-  }
-
-  @override
   String get shellLinkPasswordOptional => '密码（可不填）';
 
   @override
@@ -3336,4 +3280,52 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get connectionCheckAgain => '重新检查';
+
+  @override
+  String soundSyncNumbers(
+    String network,
+    String jitter,
+    String buffer,
+    int late,
+  ) {
+    return '网络 ${network}ms · 抖动 ${jitter}ms · 缓冲 ${buffer}ms · 晚包 $late';
+  }
+
+  @override
+  String get soundSyncNumbersPending => '网络 — · 抖动 — · 缓冲 — · 晚包 —';
+
+  @override
+  String shellLinkCreateTitle(String name) {
+    return '共享「$name」';
+  }
+
+  @override
+  String get shareLinkShortRoute => '简短后缀';
+
+  @override
+  String get shareLinkCreate => '创建链接';
+
+  @override
+  String get shareLinkShowPassword => '显示密码';
+
+  @override
+  String get shareLinkHidePassword => '隐藏密码';
+
+  @override
+  String get shareLinkSentLabel => '已发送';
+
+  @override
+  String get shellLinksChooseAny => '选择';
+
+  @override
+  String get shellSelfCopy => '拷贝连接信息';
+
+  @override
+  String get shellSelfCopied => '已拷贝';
+
+  @override
+  String get shareLinkNoNetwork => '没有连上局域网，其他设备暂时打不开';
+
+  @override
+  String get screenshotShortcutReset => '恢复默认快捷键';
 }

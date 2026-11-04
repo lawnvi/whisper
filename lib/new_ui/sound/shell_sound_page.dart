@@ -13,6 +13,7 @@ import 'package:whisper/new_ui/sound/sound_controller.dart';
 import 'package:whisper/new_ui/sound/sound_rules.dart';
 import 'package:whisper/state/chat_session_list.dart';
 import 'package:whisper/theme/whisper_device_art.dart';
+import 'package:whisper/theme/whisper_icons.dart';
 import 'package:whisper/theme/whisper_ui.dart';
 import 'package:whisper/widget/island/island_home.dart';
 
@@ -121,7 +122,6 @@ class _ShellSoundPageState extends State<ShellSoundPage> {
                                           controller: _controller,
                                           selfDevice: widget.selfDevice,
                                           sessions: widget.sessions,
-                                          narrow: column < _narrowColumn,
                                         ),
                                 ),
                               ),
@@ -155,13 +155,11 @@ class _SourceView extends StatelessWidget {
     required this.controller,
     required this.selfDevice,
     required this.sessions,
-    required this.narrow,
   });
 
   final ShellSoundController controller;
   final DeviceData? selfDevice;
   final List<ChatSessionItem> sessions;
-  final bool narrow;
 
   @override
   Widget build(BuildContext context) {
@@ -173,9 +171,9 @@ class _SourceView extends StatelessWidget {
     ];
     final live = rows.where((row) => row.checked && row.live).toList();
     final quality = controller.headerQuality(live);
-    final solo = live.any((row) => row.phase == SoundRowPhase.soloPlaying);
     final permission = controller.permissionNeeded;
     final failure = controller.failure;
+    final solo = live.any((row) => row.phase == SoundRowPhase.soloPlaying);
     final subtitle = permission
         ? l10n.soundPermissionNeeded
         : failure != null
@@ -192,6 +190,11 @@ class _SourceView extends StatelessWidget {
             AudioSyncQuality.good => l10n.audioGroupSyncGood,
             _ => l10n.audioGroupSyncCalibrating,
           };
+    final trouble =
+        permission ||
+        failure != null ||
+        quality == AudioSyncQuality.fair ||
+        quality == AudioSyncQuality.unstable;
     final self = selfDevice;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -210,13 +213,20 @@ class _SourceView extends StatelessWidget {
               ? l10n.soundHeroIdleTitle
               : l10n.soundHeroPlaying(live.length),
           subtitle: subtitle,
+          warning: trouble,
           action: permission
               ? ShareButton(
                   label: l10n.shareOpenSettings,
                   large: true,
                   onTap: () => unawaited(controller.openPermission()),
                 )
-              : null,
+              : _PlayButton(
+                  label: l10n.soundShareThisDevice,
+                  playing: controller.on,
+                  onTap: controller.hasMembers
+                      ? () => unawaited(controller.setOn(!controller.on))
+                      : null,
+                ),
         ),
         const SizedBox(height: 18),
         ShareGroup(
@@ -239,28 +249,10 @@ class _SourceView extends StatelessWidget {
               _MemberRow(
                 key: ValueKey(row.device.uid),
                 row: row,
-                narrow: narrow,
                 controller: controller,
               ),
           ],
         ),
-        if (controller.hasMembers) ...[
-          const SizedBox(height: 18),
-          ShareGroup(
-            children: [
-              _LabelRow(
-                label: l10n.soundShareThisDevice,
-                trailing: ShareSwitch(
-                  label: l10n.soundShareThisDevice,
-                  value: controller.on,
-                  onChanged: permission
-                      ? null
-                      : (on) => unawaited(controller.setOn(on)),
-                ),
-              ),
-            ],
-          ),
-        ],
       ],
     );
   }
@@ -274,6 +266,7 @@ class _Hero extends StatelessWidget {
     required this.live,
     required this.title,
     this.subtitle,
+    this.warning = false,
     this.action,
   });
 
@@ -281,6 +274,7 @@ class _Hero extends StatelessWidget {
   final bool live;
   final String title;
   final String? subtitle;
+  final bool warning;
   final Widget? action;
 
   @override
@@ -319,7 +313,7 @@ class _Hero extends StatelessWidget {
               fontSize: type.body,
               height: 1.4,
               leadingDistribution: TextLeadingDistribution.even,
-              color: c.ink2,
+              color: warning ? c.warn : c.ink2,
             ),
           ),
           if (action != null) ...[const SizedBox(height: 12), action!],
@@ -447,51 +441,62 @@ class _WavePainter extends CustomPainter {
       old.off != off;
 }
 
-/// `.row`: a label and a control, 40 high.
-class _LabelRow extends StatelessWidget {
-  const _LabelRow({required this.label, required this.trailing});
+/// `.row-a`: 60 high whatever its state, so that nothing moves as a device
+/// joins, finds its sync or drops out.
+/// Shares this device's sound or stops it: one round button under the words,
+/// in reach however many devices are listed. Nothing to play with none checked.
+class _PlayButton extends StatelessWidget {
+  const _PlayButton({
+    required this.label,
+    required this.playing,
+    required this.onTap,
+  });
 
   final String label;
-  final Widget trailing;
+  final bool playing;
+  final VoidCallback? onTap;
 
   @override
-  Widget build(BuildContext context) => ConstrainedBox(
-    constraints: const BoxConstraints(minHeight: 40),
-    child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: const WhisperType(touch: false).body,
-                color: context.wc.ink,
+  Widget build(BuildContext context) {
+    final c = context.wc;
+    final on = onTap != null;
+    return Tooltip(
+      message: label,
+      child: Semantics(
+        toggled: playing,
+        child: Pressable(
+          key: const ValueKey('sound-play'),
+          onTap: onTap,
+          radius: WhisperRadius.capsule,
+          label: label,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: on ? c.accent : c.fill,
+              shape: BoxShape.circle,
+            ),
+            child: SizedBox.square(
+              dimension: 48,
+              child: Center(
+                child: WhisperIcon(
+                  playing ? WhisperGlyph.pause : WhisperGlyph.play,
+                  size: 20,
+                  weight: 2,
+                  filled: !playing,
+                  color: on ? c.onAccent : c.ink3,
+                ),
               ),
             ),
           ),
-          const SizedBox(width: 10),
-          trailing,
-        ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
 
-/// `.row-a`: 60 high whatever its state, so that nothing moves as a device
-/// joins, finds its sync or drops out.
 class _MemberRow extends StatelessWidget {
-  const _MemberRow({
-    super.key,
-    required this.row,
-    required this.narrow,
-    required this.controller,
-  });
+  const _MemberRow({super.key, required this.row, required this.controller});
 
   final SoundRow row;
-  final bool narrow;
   final ShellSoundController controller;
 
   @override
@@ -517,29 +522,16 @@ class _MemberRow extends StatelessWidget {
               ),
               const SizedBox(width: 10),
               Expanded(child: _MemberText(row: row)),
-              _Reveal(
-                visible: channel != null,
-                child: Padding(
+              if (channel != null)
+                Padding(
                   padding: const EdgeInsets.only(left: 10),
-                  child: channel == null
-                      ? const SizedBox.shrink()
-                      : narrow
-                      ? _ChannelPopup(
-                          device: device,
-                          channel: channel,
-                          onChanged: (role) => unawaited(
-                            controller.setChannel(device.uid, role),
-                          ),
-                        )
-                      : _ChannelSegments(
-                          device: device,
-                          channel: channel,
-                          onChanged: (role) => unawaited(
-                            controller.setChannel(device.uid, role),
-                          ),
-                        ),
+                  child: _ChannelPopup(
+                    device: device,
+                    channel: channel,
+                    onChanged: (role) =>
+                        unawaited(controller.setChannel(device.uid, role)),
+                  ),
                 ),
-              ),
               const SizedBox(width: 7),
               ShareCheck(
                 label: l10n.soundCheckLabel(device.name),
@@ -554,47 +546,6 @@ class _MemberRow extends StatelessWidget {
       ),
     );
   }
-}
-
-/// Grows sideways from nothing, on the smooth spring, keeping its last content
-/// while it goes. A row never changes height for it.
-class _Reveal extends StatefulWidget {
-  const _Reveal({required this.visible, required this.child});
-
-  final bool visible;
-  final Widget child;
-
-  @override
-  State<_Reveal> createState() => _RevealState();
-}
-
-class _RevealState extends State<_Reveal> {
-  late Widget _shown = widget.child;
-
-  @override
-  void didUpdateWidget(_Reveal old) {
-    super.didUpdateWidget(old);
-    if (widget.visible) _shown = widget.child;
-  }
-
-  @override
-  Widget build(BuildContext context) => SpringBuilder(
-    value: widget.visible ? 1 : 0,
-    spring: WhisperSprings.snappy,
-    child: _shown,
-    builder: (context, t, child) {
-      final p = t.clamp(0.0, 1.0);
-      if (p <= 0) return const SizedBox.shrink();
-      if (p >= 1) return child!;
-      return ClipRect(
-        child: Align(
-          alignment: Alignment.centerRight,
-          widthFactor: p,
-          child: Opacity(opacity: p, child: child),
-        ),
-      );
-    },
-  );
 }
 
 class _MemberText extends StatelessWidget {
@@ -690,15 +641,6 @@ class _MemberText extends StatelessWidget {
   }
 }
 
-/// The two names a channel has: short in the row, whole in the menu.
-String _shortChannel(AppLocalizations l10n, AudioChannelRole role) =>
-    switch (role) {
-      AudioChannelRole.left => l10n.soundChannelLeft,
-      AudioChannelRole.right => l10n.soundChannelRight,
-      AudioChannelRole.stereo => l10n.audioGroupRoleStereo,
-      AudioChannelRole.mono => l10n.audioGroupRoleMono,
-    };
-
 String _fullChannel(AppLocalizations l10n, AudioChannelRole role) =>
     switch (role) {
       AudioChannelRole.left => l10n.audioGroupRoleLeft,
@@ -714,40 +656,8 @@ const _channelOrder = [
   AudioChannelRole.mono,
 ];
 
-class _ChannelSegments extends StatelessWidget {
-  const _ChannelSegments({
-    required this.device,
-    required this.channel,
-    required this.onChanged,
-  });
-
-  final DeviceData device;
-  final AudioChannelRole channel;
-  final ValueChanged<AudioChannelRole> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = context.shellL10n;
-    return Semantics(
-      label: l10n.soundChannelLabel(device.name, _fullChannel(l10n, channel)),
-      child: LiquidSegmented<AudioChannelRole>(
-        height: 36,
-        padding: 3,
-        minSegmentWidth: 42,
-        fontSize: const WhisperType(touch: false).note,
-        segments: {
-          for (final role in _channelOrder) role: _shortChannel(l10n, role),
-        },
-        selected: channel,
-        onChanged: onChanged,
-      ),
-    );
-  }
-}
-
-/// `.popb`: in a narrow window the channels fold into a button so that the name
-/// keeps its room.
-class _ChannelPopup extends StatefulWidget {
+/// `.popb`: which channel a device plays, between two or more of them.
+class _ChannelPopup extends StatelessWidget {
   const _ChannelPopup({
     required this.device,
     required this.channel,
@@ -759,71 +669,20 @@ class _ChannelPopup extends StatefulWidget {
   final ValueChanged<AudioChannelRole> onChanged;
 
   @override
-  State<_ChannelPopup> createState() => _ChannelPopupState();
-}
-
-class _ChannelPopupState extends State<_ChannelPopup> {
-  Future<void> _open(BuildContext context) async {
+  Widget build(BuildContext context) {
     final l10n = context.shellL10n;
-    final box = context.findRenderObject()! as RenderBox;
-    final anchor = box.localToGlobal(Offset.zero) & box.size;
-    final picked = await showShareMenu<AudioChannelRole>(
-      context,
-      anchor: anchor,
+    return SharePopupButton<AudioChannelRole>(
+      text: _fullChannel(l10n, channel),
+      label: l10n.soundChannelLabel(device.name, _fullChannel(l10n, channel)),
       items: [
         for (final role in _channelOrder)
           ShareMenuItem(
             value: role,
             label: _fullChannel(l10n, role),
-            checked: role == widget.channel,
+            checked: role == channel,
           ),
       ],
-    );
-    if (picked != null) widget.onChanged(picked);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.wc;
-    final l10n = context.shellL10n;
-    return ShareHover(
-      builder: (context, hover) => Pressable(
-        radius: WhisperRadius.s,
-        label: l10n.soundChannelLabel(
-          widget.device.name,
-          _fullChannel(l10n, widget.channel),
-        ),
-        onTap: () => unawaited(_open(context)),
-        child: Container(
-          height: 28,
-          padding: const EdgeInsets.fromLTRB(11, 0, 8, 0),
-          decoration: BoxDecoration(
-            color: Color.lerp(c.fill, c.fill2, hover),
-            borderRadius: BorderRadius.circular(WhisperRadius.s),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                _fullChannel(l10n, widget.channel),
-                maxLines: 1,
-                style: TextStyle(
-                  fontSize: const WhisperType(touch: false).note,
-                  fontWeight: FontWeight.w500,
-                  color: c.ink,
-                ),
-              ),
-              const SizedBox(width: 6),
-              ShareGlyphIcon(
-                ShareGlyph.updown,
-                size: 12,
-                stroke: 2,
-                color: c.ink2,
-              ),
-            ],
-          ),
-        ),
-      ),
+      onPicked: onChanged,
     );
   }
 }

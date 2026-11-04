@@ -52,6 +52,7 @@ import 'package:whisper/window_stream/linux/gnome_helper_tile.dart';
 import 'package:whisper/window_stream/linux/gnome_shell_helper.dart';
 import 'package:whisper/window_stream/remote/window_stream_host.dart';
 import 'package:whisper/new_ui/shell/shell_touch.dart' show shellPageShowsBack;
+import 'package:whisper/helper/screenshot_shortcut.dart';
 
 part '../new_ui/settings/settings_layout.dart';
 
@@ -264,6 +265,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void initState() {
     super.initState();
     unawaited(_initialize());
+    // Listening is what makes it ask the system, which only macOS can answer.
+    if (_watchesMacPermissions) {
+      _macPermissions.addListener(_onMacPermissions);
+    }
+  }
+
+  MacPermissions get _macPermissions =>
+      widget.macPermissions ?? MacPermissions.shared;
+
+  bool get _watchesMacPermissions =>
+      widget.macPermissions != null || MacPermissions.supported;
+
+  void _onMacPermissions() {
+    if (mounted) setState(() {});
   }
 
   AppUpdateManager get _updateManager =>
@@ -283,6 +298,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   void dispose() {
+    if (_watchesMacPermissions) {
+      _macPermissions.removeListener(_onMacPermissions);
+    }
     _handleOpeningTransition(AnimationStatus.dismissed);
     super.dispose();
   }
@@ -853,17 +871,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
-  Future<void> _commitPlaybackGain(double value) async {
-    await LocalSetting().setAudioSharePlaybackGain(value);
-    AudioShareCoordinator.shared.updatePlaybackGain(value);
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _audioSharePlaybackGain = value;
-    });
-  }
-
   Future<void> _commitScrollMultiplier(double value) async {
     await LocalSetting().setRemoteInputScrollMultiplier(value);
     RemoteInputCoordinator.shared.updateScrollMultiplier(value);
@@ -872,6 +879,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
     setState(() {
       _remoteInputScrollMultiplier = value;
+    });
+  }
+
+  Future<void> _commitPlaybackGain(double value) async {
+    await LocalSetting().setAudioSharePlaybackGain(value);
+    AudioShareCoordinator.shared.updatePlaybackGain(value);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _audioSharePlaybackGain = value;
     });
   }
 

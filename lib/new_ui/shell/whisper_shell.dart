@@ -200,9 +200,7 @@ class _WhisperShellState extends State<WhisperShell> {
                         SizedBox(
                           width: _sidebarWidth,
                           child: ColoredBox(
-                            color: material
-                                ? (mac ? c.sidebarVeil : Colors.transparent)
-                                : c.sidebarSolid,
+                            color: material ? c.sidebarVeil : c.sidebarSolid,
                             child: ShellSidebar(
                               data: widget.data,
                               actions: widget.actions,

@@ -522,6 +522,72 @@ class ShareGroup extends StatelessWidget {
   }
 }
 
+/// `.popb`: what is set, and a menu of what it can be.
+class SharePopupButton<T> extends StatelessWidget {
+  const SharePopupButton({
+    super.key,
+    required this.text,
+    required this.label,
+    required this.items,
+    required this.onPicked,
+  });
+
+  final String text, label;
+  final List<ShareMenuItem<T>> items;
+  final ValueChanged<T> onPicked;
+
+  Future<void> _open(BuildContext context) async {
+    final box = context.findRenderObject()! as RenderBox;
+    final picked = await showShareMenu<T>(
+      context,
+      anchor: box.localToGlobal(Offset.zero) & box.size,
+      items: items,
+    );
+    if (picked != null) onPicked(picked);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.wc;
+    return ShareHover(
+      builder: (context, hover) => Pressable(
+        radius: WhisperRadius.s,
+        label: label,
+        onTap: () => unawaited(_open(context)),
+        child: Container(
+          height: 28,
+          padding: const EdgeInsets.fromLTRB(11, 0, 8, 0),
+          decoration: BoxDecoration(
+            color: Color.lerp(c.fill, c.fill2, hover),
+            borderRadius: BorderRadius.circular(WhisperRadius.s),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                text,
+                maxLines: 1,
+                style: TextStyle(
+                  fontSize: const WhisperType(touch: false).note,
+                  fontWeight: FontWeight.w500,
+                  color: c.ink,
+                ),
+              ),
+              const SizedBox(width: 6),
+              ShareGlyphIcon(
+                ShareGlyph.updown,
+                size: 12,
+                stroke: 2,
+                color: c.ink2,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 @immutable
 class ShareMenuItem<T> {
   const ShareMenuItem({

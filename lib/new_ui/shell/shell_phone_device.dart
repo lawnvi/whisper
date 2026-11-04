@@ -15,7 +15,6 @@ class ShellPhoneDevicePage extends StatelessWidget {
     required this.entries,
     required this.onSearchHistory,
     required this.onDiagnostics,
-    required this.onDisconnect,
     required this.onRemove,
     this.onBack,
   });
@@ -24,7 +23,6 @@ class ShellPhoneDevicePage extends StatelessWidget {
   final bool connected;
   final List<ShellDeviceEntry> entries;
   final VoidCallback onSearchHistory, onDiagnostics;
-  final Future<void> Function() onDisconnect;
   final Future<void> Function(String uid) onRemove;
 
   /// Where back goes when this is not a page of its own in a navigator.
@@ -64,7 +62,6 @@ class ShellPhoneDevicePage extends StatelessWidget {
         entries: entries,
         onSearchHistory: onSearchHistory,
         onDiagnostics: onDiagnostics,
-        onDisconnect: onDisconnect,
         onRemove: onRemove,
       ),
     );

@@ -42,7 +42,6 @@ class ShellDeviceCard extends StatefulWidget {
     required this.statusLine,
     required this.paired,
     required this.onDiagnostics,
-    required this.onDisconnect,
     required this.onRemove,
     this.onSound,
     this.onInput,
@@ -69,7 +68,6 @@ class ShellDeviceCard extends StatefulWidget {
   /// Null when it has none: a phone has no keyboard to take over.
   final VoidCallback? onSound, onInput;
   final VoidCallback onDiagnostics;
-  final Future<void> Function() onDisconnect;
   final Future<void> Function(String uid) onRemove;
   final bool soundOn, inputOn, soundEnabled;
   final String? soundStatus, inputStatus;
@@ -362,12 +360,12 @@ class _ShellDeviceCardState extends State<ShellDeviceCard> {
                       ),
                   ],
                 ),
-                if (touch && widget.onSearchHistory != null) ...[
+                if (widget.onSearchHistory != null) ...[
                   const SizedBox(height: 20),
                   ShellGroup(
                     children: [
                       ShellRow(
-                        touch: true,
+                        touch: touch,
                         label: l10n.shellPhoneSearchHistory,
                         chevron: true,
                         onTap: widget.onSearchHistory,
@@ -375,32 +373,19 @@ class _ShellDeviceCardState extends State<ShellDeviceCard> {
                     ],
                   ),
                 ],
-                const SizedBox(height: 20),
-                ShellGroup(
-                  children: [
-                    ShellRow(
-                      touch: touch,
-                      label: l10n.shellCardAddress,
-                      trailing: Text(
-                        '${device.host}:${device.port}',
-                        style: TextStyle(fontSize: 12, color: c.ink2),
-                      ),
-                    ),
-                    ShellRow(
-                      touch: touch,
-                      label: l10n.shellCardDiagnostics,
-                      chevron: true,
-                      onTap: widget.onDiagnostics,
-                    ),
-                    if (on)
+                if (!on) ...[
+                  const SizedBox(height: 20),
+                  ShellGroup(
+                    children: [
                       ShellRow(
                         touch: touch,
-                        label: l10n.shellCardDisconnect,
-                        color: c.bad,
-                        onTap: () => unawaited(widget.onDisconnect()),
+                        label: l10n.shellCardDiagnostics,
+                        chevron: true,
+                        onTap: widget.onDiagnostics,
                       ),
-                  ],
-                ),
+                    ],
+                  ),
+                ],
                 if (!on && !_nearby(device)) ...[
                   const SizedBox(height: 20),
                   Align(

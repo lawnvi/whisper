@@ -234,7 +234,6 @@ class _PreviewState extends State<_Preview> {
                       ],
                       onSearchHistory: () {},
                       onDiagnostics: () {},
-                      onDisconnect: nothing,
                       onRemove: (_) async {},
                     )
                   : ShellDeviceCard(
@@ -247,7 +246,6 @@ class _PreviewState extends State<_Preview> {
                       deviceLoader: (_) async => d,
                       onSearchHistory: () {},
                       onDiagnostics: () {},
-                      onDisconnect: nothing,
                       onRemove: (_) async {},
                     );
             },

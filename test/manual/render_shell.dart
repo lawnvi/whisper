@@ -18,11 +18,13 @@ import 'package:whisper/new_ui/tray/tray_panel.dart';
 import 'package:whisper/state/chat_session_list.dart';
 import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/theme/whisper_icons.dart';
+import 'package:whisper/new_ui/phone/phone_parts.dart';
+import 'package:whisper/new_ui/settings/settings_controls.dart';
 import 'package:whisper/theme/whisper_ui.dart';
 import 'package:whisper/theme/whisper_window.dart';
 import 'package:whisper/widget/context_menu_region.dart';
 
-import 'support/golden_support.dart';
+import '../support/golden_support.dart';
 
 DeviceData _device(String uid, String name, String platform, {int id = 1}) =>
     DeviceData(
@@ -503,11 +505,11 @@ void main() {
     const a = TrayClip(text: 'aaa', line: '这台 · 17:42');
     const b = TrayClip(text: 'b', line: '这台 · 17:44');
 
-    testWidgets('one row is only what the send module already says', (
-      tester,
-    ) async {
-      await pumpTray(tester, const [b]);
+    testWidgets('it shows from the first thing copied', (tester) async {
+      await pumpTray(tester, const []);
       expect(find.text('最近的剪贴板'), findsNothing);
+      await pumpTray(tester, const [b]);
+      expect(find.text('最近的剪贴板'), findsOneWidget);
     });
 
     testWidgets('pressing a row ticks it for a moment, and nothing moves', (
@@ -640,8 +642,8 @@ void main() {
                     TrayMoment(
                       id: 'a',
                       title: 'iMac 想浏览你的文件',
-                      detail: '这次允许或者拒绝',
-                      answers: ['这次允许', '始终允许', '拒绝'],
+                      detail: '',
+                      answers: ['允许', '拒绝'],
                     ),
                     TrayMoment(
                       id: 'b',
@@ -680,9 +682,154 @@ void main() {
       expect(tester.takeException(), isNull);
       await _render(tester, 'tray');
       await tester.tap(find.text('iMac').first);
-      await tester.tap(find.text('这次允许'));
+      await tester.tap(find.text('允许'));
       await tester.pump(const Duration(seconds: 1));
       expect(actions, containsAll(['send', 'answer']));
+    });
+
+    for (final (name, state) in [
+      ('tray-empty', const TrayState(current: 'http://192.168.31.8:10003/k7qm')),
+      (
+        'tray-nearby',
+        const TrayState(
+          current: 'http://192.168.31.8:10003/k7qm',
+          nearby: [
+            TrayDevice(id: 'a', name: 'iMac', platform: 'macos', order: 1),
+            TrayDevice(id: 'b', name: 'Xiaomi 16', platform: 'android', order: 2),
+          ],
+          clips: [TrayClip(text: 'http://192.168.31.8:10003/k7qm', line: '这台 · 17:42')],
+        ),
+      ),
+    ]) {
+      testWidgets('the tray with nothing connected: $name', (tester) async {
+        await pumpOver(
+          tester,
+          SizedBox(
+            width: 340,
+            child: Material(
+              type: MaterialType.transparency,
+              child: SingleChildScrollView(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Radix.slate3,
+                    borderRadius: BorderRadius.circular(WhisperRadius.tray),
+                  ),
+                  child: TrayPanelBody(
+                    state: state,
+                    onAction: (action, [value]) {},
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const Size(420, 860),
+        );
+        expect(tester.takeException(), isNull);
+        // The clipboard line is there either way: the same shape as with a target.
+        expect(find.text('http://192.168.31.8:10003/k7qm'), findsWidgets);
+        expect(find.text('剪贴板'), findsOneWidget);
+        await _render(tester, name);
+      });
+    }
+
+    testWidgets('licences start below the window buttons', (tester) async {
+      await pumpOver(
+        tester,
+        Builder(
+          builder: (context) => TextButton(
+            onPressed: () => Navigator.of(context).push<void>(
+              WhisperPageRoute<void>(
+                builder: (_) =>
+                    const WhisperUnderWindowButtons(child: LicensePage()),
+              ),
+            ),
+            child: const Text('open'),
+          ),
+        ),
+        const Size(900, 700),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 2));
+      // What the page's app bar goes by, to start below the status bar.
+      expect(
+        MediaQuery.paddingOf(tester.element(find.byType(LicensePage))).top,
+        greaterThanOrEqualTo(WhisperUnderWindowButtons.inset),
+      );
+    });
+
+    testWidgets('the about sheet, a row pressed', (tester) async {
+      await pumpOver(
+        tester,
+        Center(
+          child: SizedBox(
+            width: 380,
+            child: Material(
+              color: Radix.white,
+              child: SettingsScope(
+                touch: false,
+                page: false,
+                child: SettingsAboutSheet(
+                  icon: const SizedBox(height: 64),
+                  name: 'Whisper',
+                  description: '局域网协作',
+                  version: '版本 0.0.58',
+                  doneLabel: '完成',
+                  links: [
+                    ('官方网站', () {}),
+                    ('GitHub 源代码', () {}),
+                    ('查看许可', () {}),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        const Size(480, 500),
+      );
+      final finger = await tester.startGesture(
+        tester.getCenter(find.text('官方网站')),
+      );
+      await tester.pump(const Duration(seconds: 1));
+      await _render(tester, 'about-pressed');
+      await finger.cancel();
+    });
+
+    testWidgets('the fields', (tester) async {
+      await pumpOver(
+        tester,
+        Material(
+          type: MaterialType.transparency,
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              children: [
+                PhoneSearchField(
+                  controller: TextEditingController(text: '发版'),
+                  hint: '搜索',
+                  onChanged: (_) {},
+                  onClear: () {},
+                  clearLabel: '清除',
+                  radius: WhisperRadius.capsule,
+                ),
+                const SizedBox(height: 16),
+                ShellField(
+                  label: '密码',
+                  controller: TextEditingController(text: 'secret'),
+                  obscure: true,
+                  showLabel: '显示',
+                  hideLabel: '隐藏',
+                ),
+              ],
+            ),
+          ),
+        ),
+        const Size(420, 260),
+      );
+      await _render(tester, 'fields-hidden');
+      await tester.tap(find.byTooltip('显示'));
+      await tester.pump(const Duration(seconds: 1));
+      await _render(tester, 'fields-shown');
     });
 
     testWidgets('the palette', (tester) async {

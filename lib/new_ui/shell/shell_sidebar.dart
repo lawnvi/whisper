@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:whisper/page/remote_files/remote_files_page.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/new_ui/shell/device_row_status.dart';
 import 'package:whisper/new_ui/shell/shell_data.dart';
@@ -267,7 +268,7 @@ class ShellDeviceRows extends StatelessWidget {
   Widget build(BuildContext context) {
     // Two lines of text grow with the system's text size. The row stays one
     // height throughout, or the selection could not slide by index.
-    final rowHeight = MediaQuery.textScalerOf(context).scale(touch ? 68 : 54);
+    final rowHeight = MediaQuery.textScalerOf(context).scale(touch ? 72 : 60);
     final step = rowHeight + _gap;
     final selectedIndex = rows.indexWhere(
       (row) => row.device.uid == selectedPeerId,
@@ -295,17 +296,18 @@ class ShellDeviceRows extends StatelessWidget {
               spring: WhisperSprings.smooth,
               child: ContextMenuRegion(
                 items: contextActions(row.device),
-                child: _DeviceRow(
-                  session: row,
-                  height: rowHeight,
-                  facts: factsFor(row),
-                  paired: isPaired(row.device),
-                  selected: row.device.uid == selectedPeerId,
-                  second: second,
-                  touch: touch,
-                  edgeToEdge: edgeToEdge,
-                  first: i == 0,
-                  onTap: () => onSelect(row.device.uid),
+                child: FilesDropBridgeTarget(
+                  peerId: row.device.uid,
+                  radius: touch ? WhisperRadius.l : WhisperRadius.m,
+                  child: _DeviceRow(
+                    session: row,
+                    height: rowHeight,
+                    facts: factsFor(row),
+                    selected: row.device.uid == selectedPeerId,
+                    touch: touch,
+                    edgeToEdge: edgeToEdge,
+                    onTap: () => onSelect(row.device.uid),
+                  ),
                 ),
               ),
               builder: (context, top, child) => Positioned(
@@ -328,28 +330,14 @@ class _SelectionBackground extends StatelessWidget {
   final bool touch;
 
   @override
-  Widget build(BuildContext context) {
-    final radius = touch ? WhisperRadius.l : WhisperRadius.m;
-    final brightness = Theme.of(context).brightness;
-    return CustomPaint(
-      painter: WhisperOutsideShadow(
-        shadows: WhisperShadow.sidebarSelected(brightness),
-        radius: radius,
+  Widget build(BuildContext context) => DecoratedBox(
+    decoration: BoxDecoration(
+      color: context.wc.deviceSelected,
+      borderRadius: BorderRadius.circular(
+        touch ? WhisperRadius.l : WhisperRadius.m,
       ),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: context.wc.sidebarSelected,
-          borderRadius: BorderRadius.circular(radius),
-          border: Border(
-            top: BorderSide(
-              width: .5,
-              color: WhisperShadow.highlight(brightness),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+    ),
+  );
 }
 
 class _DeviceRow extends StatelessWidget {
@@ -357,42 +345,31 @@ class _DeviceRow extends StatelessWidget {
     required this.session,
     required this.height,
     required this.facts,
-    required this.paired,
     required this.selected,
-    required this.second,
     required this.onTap,
     this.touch = false,
     this.edgeToEdge = false,
-    this.first = false,
   });
 
   final ChatSessionItem session;
   final double height;
   final DeviceRowFacts facts;
-  final bool paired, selected, touch, edgeToEdge, first;
-  final Color second;
+  final bool selected, touch, edgeToEdge;
   final VoidCallback onTap;
-
-  DeviceArtState get _artState {
-    if (session.isConnected) return DeviceArtState.normal;
-    if (!session.isNearby) return DeviceArtState.offline;
-    return paired ? DeviceArtState.nearby : DeviceArtState.normal;
-  }
 
   @override
   Widget build(BuildContext context) {
     final c = context.wc;
     final l10n = context.shellL10n;
-    final type = WhisperType(touch: touch);
     final device = session.device;
     final live = deviceRowLineIsLive(deviceRowLine(facts));
-    // What is gone steps back, words too: nearby and offline read differently at
-    // a glance, before the words are read. Not while its row is the chosen one.
-    final gone = !session.isConnected && !session.isNearby && !selected;
-    // Every device in the same tile: a tall phone beside a wide computer does not
-    // line up on its own. 1.25 times on touch.
-    final big = touch ? 1.25 : 1.0;
-    final row = Pressable(
+    final avatar = touch ? 48.0 : 38.0;
+    final state = session.isConnected
+        ? c.deviceOn
+        : session.isNearby
+        ? c.deviceNear
+        : null;
+    return Pressable(
       key: ShellFlyTargets.keyFor(device.uid),
       onTap: onTap,
       radius: edgeToEdge
@@ -406,76 +383,94 @@ class _DeviceRow extends StatelessWidget {
         height: height,
         child: Padding(
           padding: edgeToEdge
-              ? const EdgeInsets.fromLTRB(18, 0, 16, 0)
-              : EdgeInsets.symmetric(horizontal: touch ? 12 : 9),
+              ? const EdgeInsets.fromLTRB(16, 0, 16, 0)
+              : const EdgeInsets.symmetric(horizontal: 10),
           child: Row(
             children: [
               Tooltip(
                 message: touch ? '' : deviceSystemName(device.platform) ?? '',
                 child: Container(
-                  width: touch ? 44 : 36,
-                  height: touch ? 44 : 36,
+                  width: avatar,
+                  height: avatar,
                   alignment: Alignment.center,
-                  decoration: ShapeDecoration(
-                    color: c.fill,
-                    shape: RoundedSuperellipseBorder(
-                      borderRadius: BorderRadius.circular(
-                        edgeToEdge
-                            ? WhisperRadius.m
-                            : touch
-                            ? WhisperRadius.s
-                            : WhisperRadius.xs,
-                      ),
-                    ),
+                  decoration: BoxDecoration(
+                    color: state ?? c.deviceOff,
+                    shape: BoxShape.circle,
                   ),
-                  child: deviceArtFor(
-                    device,
-                    size: (deviceKindOf(device).handheld ? 24 : 26) * big,
-                    state: _artState,
-                    paired: paired,
+                  child: Text(
+                    session.avatarLabel.toUpperCase(),
+                    style: TextStyle(
+                      fontSize: touch ? 20 : 16,
+                      fontWeight: FontWeight.w600,
+                      height: 1,
+                      color: Radix.white,
+                    ),
                   ),
                 ),
               ),
-              SizedBox(
-                width: edgeToEdge
-                    ? 14
-                    : touch
-                    ? 12
-                    : 10,
-              ),
+              SizedBox(width: touch ? 14 : 11),
               Expanded(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      device.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: type.body,
-                        fontWeight: FontWeight.w500,
-                        color: gone ? second : c.ink,
-                        height: 1.25,
-                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            device.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: touch ? 17 : 14,
+                              fontWeight: FontWeight.w600,
+                              color: c.deviceName,
+                              height: 1.25,
+                            ),
+                          ),
+                        ),
+                        if (facts.lastMessage case final time?) ...[
+                          const SizedBox(width: 6),
+                          Text(
+                            time,
+                            maxLines: 1,
+                            style: TextStyle(
+                              fontSize: touch ? 12 : 11,
+                              height: 1.25,
+                              color: c.deviceMuted,
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
-                    SizedBox(height: touch ? 4 : 3),
-                    Text(
-                      deviceRowText(l10n, facts),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: type.note,
-                        height: 1.25,
-                        fontWeight: live ? FontWeight.w500 : FontWeight.w400,
-                        color: live
-                            ? c.accentText
-                            : gone && second != c.ink2Glass
-                            ? c.ink3
-                            : gone
-                            ? c.ink2
-                            : second,
-                      ),
+                    SizedBox(height: touch ? 5 : 4),
+                    Row(
+                      children: [
+                        Container(
+                          width: 7,
+                          height: 7,
+                          decoration: BoxDecoration(
+                            color: state ?? c.deviceOffDot,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            deviceRowText(l10n, facts),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: touch ? 13 : 12,
+                              height: 1.25,
+                              fontWeight: live
+                                  ? FontWeight.w500
+                                  : FontWeight.w400,
+                              color: live ? c.accentText : c.deviceMuted,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -484,21 +479,6 @@ class _DeviceRow extends StatelessWidget {
           ),
         ),
       ),
-    );
-    if (!edgeToEdge || first) return row;
-    // A phone's rows are tall and have no hover: a line parts them, lined up
-    // with the text.
-    return Stack(
-      children: [
-        row,
-        Positioned(
-          left: 76,
-          right: 0,
-          top: 0,
-          height: 1 / MediaQuery.devicePixelRatioOf(context),
-          child: IgnorePointer(child: ColoredBox(color: c.sep)),
-        ),
-      ],
     );
   }
 }

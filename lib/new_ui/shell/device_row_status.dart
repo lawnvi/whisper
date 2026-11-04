@@ -8,6 +8,7 @@ class DeviceRowFacts {
     this.paired = false,
     this.nearby = false,
     this.offlineSince,
+    this.lastMessage,
     this.transferName,
     this.transferPercent,
     this.soundHere = false,
@@ -22,6 +23,9 @@ class DeviceRowFacts {
 
   /// Written after 离线, already formatted.
   final String? offlineSince;
+
+  /// When the last message was: at the end of the row's first line.
+  final String? lastMessage;
   final String? transferName;
   final int? transferPercent;
 

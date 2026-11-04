@@ -7,6 +7,7 @@ import 'dart:ui' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:whisper/audio/audio_protocol.dart';
 import 'package:whisper/new_ui/input/input_rules.dart';
 import 'package:whisper/new_ui/input/shell_input_page.dart';
@@ -107,7 +108,9 @@ void main() {
 
       await _drive(tester, () => world.report(imacDevice.uid));
       await settle(tester);
-      expect(find.text('同步良好'), findsWidgets);
+      // The row and the header both say how it is going, with the numbers.
+      expect(find.text('同步良好'), findsNWidgets(2));
+      expect(find.textContaining('抖动'), findsOneWidget);
       expect(height(), 60);
 
       await _drive(tester, () => world.reject(imacDevice.uid));
@@ -120,7 +123,8 @@ void main() {
       final world = await _sound(tester);
       await tester.tap(_check('iMac'));
       await settle(tester);
-      double switchTop() => tester.getTopLeft(find.byType(ShareSwitch)).dy;
+      final play = find.byKey(const ValueKey('sound-play'));
+      double switchTop() => tester.getTopLeft(play).dy;
       final before = switchTop();
 
       await _drive(tester, () => world.accept(imacDevice.uid));
@@ -129,7 +133,7 @@ void main() {
       await _drive(tester, () => world.report(imacDevice.uid));
       await settle(tester);
       expect(switchTop(), before);
-      await tester.tap(find.byType(ShareSwitch));
+      await tester.tap(play);
       await settle(tester);
       expect(switchTop(), before);
       await tester.pumpWidget(const SizedBox());
@@ -144,12 +148,19 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     });
 
-    testWidgets('the channels are in the row, and tapping one sets it', (
+    testWidgets('one device has no channel; two pick theirs from a menu', (
       tester,
     ) async {
-      final world = await _sound(tester);
+      final world = await _sound(tester, size: _narrow);
       await tester.tap(_check('iMac'));
       await settle(tester);
+      expect(find.text('立体声'), findsNothing);
+
+      await tester.tap(_check('Xiaomi 16'));
+      await settle(tester);
+      await tester.tap(find.text('左声道'));
+      await settle(tester);
+      expect(find.text('立体声'), findsOneWidget);
       await tester.tap(find.text('单声道'));
       await settle(tester);
       expect(world.controller.channelOf(imacDevice.uid), AudioChannelRole.mono);
@@ -157,42 +168,30 @@ void main() {
         world.sentGroup.last.$2.action,
         AudioGroupControlAction.groupUpdate,
       );
-      await tester.pumpWidget(const SizedBox());
-    });
-
-    testWidgets('narrow, they fold into a menu', (tester) async {
-      final world = await _sound(tester, size: _narrow);
-      await tester.tap(_check('iMac'));
-      await settle(tester);
-      expect(find.byType(LiquidSegmented<AudioChannelRole>), findsNothing);
-
-      await tester.tap(find.text('立体声'));
-      await settle(tester);
-      expect(find.text('左声道'), findsOneWidget);
-      await tester.tap(find.text('单声道'));
-      await settle(tester);
-      expect(world.controller.channelOf(imacDevice.uid), AudioChannelRole.mono);
-      expect(find.text('左声道'), findsNothing);
+      expect(find.text('立体声'), findsNothing);
 
       await tester.tap(find.text('单声道'));
       await settle(tester);
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await settle(tester);
-      expect(find.text('左声道'), findsNothing);
+      expect(find.text('立体声'), findsNothing);
       expect(world.controller.channelOf(imacDevice.uid), AudioChannelRole.mono);
       await tester.pumpWidget(const SizedBox());
     });
 
-    testWidgets('the master switch appears with members and keeps them', (
+    testWidgets('the play button works with members, and stopping keeps them', (
       tester,
     ) async {
       final world = await _sound(tester);
-      expect(find.byType(ShareSwitch), findsNothing);
+      final play = find.byKey(const ValueKey('sound-play'));
+      await tester.tap(play);
+      await settle(tester);
+      expect(world.group.session, isNull, reason: 'no one to play to yet');
       await tester.tap(_check('iMac'));
       await settle(tester);
-      expect(find.byType(ShareSwitch), findsOneWidget);
+      expect(world.group.session, isNotNull);
 
-      await tester.tap(find.byType(ShareSwitch));
+      await tester.tap(play);
       await settle(tester);
       expect(world.group.session, isNull);
       expect(find.text('已停止'), findsOneWidget);
@@ -472,6 +471,7 @@ void main() {
           sendControl: (_) {},
         );
       });
+      SharedPreferences.setMockInitialValues({});
       await pumpContent(
         tester,
         ShellInputPage(

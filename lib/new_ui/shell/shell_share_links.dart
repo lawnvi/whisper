@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -6,8 +7,10 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:whisper/helper/helper.dart';
 import 'package:whisper/helper/whisper_file_picker.dart';
 import 'package:whisper/l10n/app_localizations.dart';
+import 'package:whisper/new_ui/shell/shell_link_create.dart';
 import 'package:whisper/new_ui/shell/shell_parts.dart';
 import 'package:whisper/page/remote_files/files_share_sheet.dart';
 import 'package:whisper/share_links/share_link.dart';
@@ -16,20 +19,31 @@ import 'package:whisper/theme/whisper_icons.dart';
 import 'package:whisper/theme/whisper_ui.dart';
 import 'package:whisper/widget/context_menu_region.dart';
 
-/// Picks files and makes a link of them.
+/// The system's panel can take files and folders at once only on macOS.
+bool get shellPickerTakesBoth => Platform.isMacOS;
+
+/// Picks what to share and makes a link of it. Several can be picked.
 Future<void> shellNewShareLink(BuildContext context) async {
-  final picked = await FilePicker.pickFiles(allowMultiple: true);
-  if (picked == null || !context.mounted) return;
-  final paths = [
-    for (final file in picked.files)
-      if (file.path != null) file.path!,
-  ];
-  if (paths.isEmpty) return;
+  final List<String> paths;
+  if (shellPickerTakesBoth) {
+    paths = await FilePicker.pickFileAndDirectoryPaths() ?? const [];
+  } else {
+    final picked = await FilePicker.pickFiles(allowMultiple: true);
+    paths = [
+      for (final file in picked?.files ?? const <PlatformFile>[])
+        if (file.path != null) file.path!,
+    ];
+  }
+  if (paths.isEmpty || !context.mounted) return;
   await showShareLinkSheet(
     context,
     items: [
       for (final path in paths)
-        ShareSource(absolutePath: path, name: p.basename(path), isDir: false),
+        ShareSource(
+          absolutePath: path,
+          name: p.basename(path),
+          isDir: FileSystemEntity.isDirectorySync(path),
+        ),
     ],
   );
 }
@@ -47,6 +61,7 @@ Future<void> shellNewFolderLink(BuildContext context) async {
 
 /// 新建: what to share is a choice, and a menu keeps both one click away.
 Future<void> showShellNewLinkMenu(BuildContext context) async {
+  if (shellPickerTakesBoth) return shellNewShareLink(context);
   final box = context.findRenderObject() as RenderBox?;
   if (box == null) return;
   final l10n = context.shellL10n;
@@ -65,6 +80,26 @@ Future<void> showShellNewLinkMenu(BuildContext context) async {
         onSelected: () => unawaited(shellNewFolderLink(context)),
       ),
     ],
+  );
+}
+
+/// A device on more than one network: which address the links go out with.
+void _pickAddress(BuildContext context, ShareLinkStore store) {
+  final box = context.findRenderObject() as RenderBox?;
+  if (box == null) return;
+  unawaited(
+    showWhisperActionMenu(
+      context,
+      anchor: box.localToGlobal(Offset.zero) & box.size,
+      items: [
+        for (final address in store.addresses)
+          ContextMenuActionItem(
+            label: address,
+            icon: address == store.address ? Icons.check : Icons.lan_outlined,
+            onSelected: () => store.preferAddress(address),
+          ),
+      ],
+    ),
   );
 }
 
@@ -98,9 +133,16 @@ class _ShellLinksPageState extends State<ShellLinksPage> {
       final links = store.links;
       final service = store.serviceOn;
       final anyOn = links.any((link) => link.enabled);
-      final address = store.addresses.isEmpty ? null : store.addresses.first;
+      final address = store.address;
+      final failed =
+          service && store.serverState.phase == ShareServerPhase.failed;
+      final noNetwork = service && anyOn && address == null;
       final serviceLine = !service
           ? l10n.shellLinksServiceOff
+          : failed
+          ? shareServerFailureText(l10n, store)
+          : noNetwork
+          ? l10n.shareLinkNoNetwork
           : anyOn && address != null
           ? '$address:${store.port}'
           : l10n.shellLinksServiceIdle;
@@ -150,12 +192,22 @@ class _ShellLinksPageState extends State<ShellLinksPage> {
                                   style: TextStyle(
                                     fontSize: type.note,
                                     height: 1.3,
-                                    color: c.ink2,
+                                    color: failed || noNetwork
+                                        ? c.warn
+                                        : c.ink2,
                                   ),
                                 ),
                               ],
                             ),
                           ),
+                          if (failed) ...[
+                            const SizedBox(width: 8),
+                            ShellButton(
+                              touch: touch,
+                              label: l10n.retry,
+                              onTap: () => unawaited(store.retry()),
+                            ),
+                          ],
                           const SizedBox(width: 10),
                           ShellSwitch(
                             touch: touch,
@@ -193,17 +245,6 @@ class _ShellLinksPageState extends State<ShellLinksPage> {
                               ),
                           ],
                         ),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
-                        child: Text(
-                          l10n.shellLinksFoot,
-                          style: TextStyle(
-                            fontSize: type.note,
-                            height: 1.5,
-                            color: c.ink2,
-                          ),
-                        ),
-                      ),
                     ],
                   ),
                 ),
@@ -256,15 +297,18 @@ class _Empty extends StatelessWidget {
             spacing: 8,
             runSpacing: 8,
             children: [
-              ShellButton(
-                touch: touch,
-                large: true,
-                label: l10n.shellLinksChooseFolder,
-                onTap: () => unawaited(shellNewFolderLink(context)),
-              ),
+              if (!shellPickerTakesBoth)
+                ShellButton(
+                  touch: touch,
+                  large: true,
+                  label: l10n.shellLinksChooseFolder,
+                  onTap: () => unawaited(shellNewFolderLink(context)),
+                ),
               ShellFilledButton(
                 touch: touch,
-                label: l10n.shellLinksChoose,
+                label: shellPickerTakesBoth
+                    ? l10n.shellLinksChooseAny
+                    : l10n.shellLinksChoose,
                 onTap: () => unawaited(shellNewShareLink(context)),
               ),
             ],
@@ -509,7 +553,7 @@ Future<void> showShellLinkDetail(
       }
       final url = store.urlFor(current);
       final live = current.enabled && store.serviceOn;
-      final address = store.addresses.isEmpty ? '—' : store.addresses.first;
+      final address = store.address ?? '—';
       final last = current.lastVisitAt;
       Widget value(String text) => Flexible(
         child: Text(
@@ -584,9 +628,26 @@ Future<void> showShellLinkDetail(
                         unawaited(store.setEnabled(current.id, v)),
                   ),
                 ),
+                Builder(
+                  builder: (rowContext) => ShellRow(
+                    label: l10n.shellSelfAddress,
+                    trailing: value(address),
+                    chevron: store.addresses.length > 1,
+                    onTap: store.addresses.length > 1
+                        ? () => _pickAddress(rowContext, store)
+                        : null,
+                  ),
+                ),
                 ShellRow(
-                  label: l10n.shellSelfAddress,
-                  trailing: value(address),
+                  label: l10n.shareLinkRoute,
+                  trailing: value(current.route),
+                  chevron: true,
+                  onTap: () => unawaited(
+                    showShellLinkEditor(
+                      context,
+                      (_) => ShellLinkRouteEditor(store: store, link: current),
+                    ),
+                  ),
                 ),
                 ShellRow(
                   label: l10n.shellLinkPassword,
@@ -594,6 +655,14 @@ Future<void> showShellLinkDetail(
                     current.hasPassword
                         ? l10n.shellLinkPasswordSet
                         : l10n.shellLinkPasswordNone,
+                  ),
+                  chevron: true,
+                  onTap: () => unawaited(
+                    showShellLinkEditor(
+                      context,
+                      (_) =>
+                          ShellLinkPasswordEditor(store: store, link: current),
+                    ),
                   ),
                 ),
                 ShellRow(
@@ -611,6 +680,10 @@ Future<void> showShellLinkDetail(
                 ShellRow(
                   label: l10n.shellLinkDownloadsLabel,
                   trailing: value(l10n.shellLinkVisitsCount(current.downloads)),
+                ),
+                ShellRow(
+                  label: l10n.shareLinkSentLabel,
+                  trailing: value(formatSize(current.bytesServed)),
                 ),
               ],
             ),

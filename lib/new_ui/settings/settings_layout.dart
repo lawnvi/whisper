@@ -205,10 +205,10 @@ extension _RedesignedSettings on _SettingsScreenState {
         glyph: WhisperGlyph.globe,
         color: c.accent,
         rows: [
-          _portRow(l10n),
           _autoConnectRow(l10n),
           if (desktop) _castRow(l10n),
           if (android) ..._androidConnectionRows(l10n),
+          _portRow(l10n),
         ],
       ),
       if (desktop)
@@ -247,8 +247,7 @@ extension _RedesignedSettings on _SettingsScreenState {
               value: WindowStreamHost.shared.sharingAllowed,
               onChanged: _setWindowSharing,
             ),
-          _allowClipboardRow(l10n),
-          _autoClipboardRow(l10n),
+          _clipboardRow(l10n),
           _gainRow(l10n),
           if (desktop) _scrollSpeedRow(l10n),
         ],
@@ -307,14 +306,13 @@ extension _RedesignedSettings on _SettingsScreenState {
               ]),
               const SizedBox(height: 18),
               group(l10n.shellSettingsConnection, [
-                _portRow(l10n),
                 _autoConnectRow(l10n),
                 if (android) ..._androidConnectionRows(l10n),
+                _portRow(l10n),
               ]),
               const SizedBox(height: 18),
               group(l10n.shellSettingsClipboardNotifications, [
-                _allowClipboardRow(l10n),
-                _autoClipboardRow(l10n),
+                _clipboardRow(l10n),
                 if (android) ..._pushNotificationRows(l10n),
                 _ignoreNotificationsRow(l10n),
                 _copyCodeRow(l10n),
@@ -728,6 +726,33 @@ extension _RedesignedSettings on _SettingsScreenState {
           ),
         ),
       ),
+      AnimatedBuilder(
+        animation: screenshot,
+        builder: (context, _) {
+          final standard = ScreenshotShortcut.defaultFor(
+            macOS: screenshot.macOS,
+          );
+          return SettingsCollapse(
+            visible: screenshot.enabled && screenshot.shortcut != standard,
+            child: SettingsRow(
+              title: l10n.screenshotShortcutReset,
+              onTap: screenshot.configuring
+                  ? null
+                  : () => unawaited(
+                      screenshot
+                          .configure(standard, enabled: true)
+                          .catchError((Object error) => _say(error.toString())),
+                    ),
+              trailing: SettingsDisclosure(
+                value: standard.label(
+                  macOS: screenshot.macOS,
+                  windows: Platform.isWindows,
+                ),
+              ),
+            ),
+          );
+        },
+      ),
     ];
   }
 
@@ -830,7 +855,7 @@ extension _RedesignedSettings on _SettingsScreenState {
 
   /// A permission macOS does not report has no row.
   List<Widget> _macPermissionRows(AppLocalizations l10n) {
-    final permissions = widget.macPermissions ?? MacPermissions.shared;
+    final permissions = _macPermissions;
     Widget row(MacPermission permission, String title) => AnimatedBuilder(
       animation: permissions,
       builder: (context, _) {
@@ -859,31 +884,18 @@ extension _RedesignedSettings on _SettingsScreenState {
     ];
   }
 
-  Widget _allowClipboardRow(AppLocalizations l10n) => SettingsSwitchRow(
-    title: l10n.shellSettingsAllowClipboard,
-    value: device?.clipboard ?? false,
-    onChanged: _setClipboard,
-  );
-
-  Widget _autoClipboardRow(AppLocalizations l10n) => SettingsSwitchRow(
-    title: l10n.shellSettingsAutoClipboard,
-    value: _clipboardAutoSync,
-    onChanged: _setClipboardAutoSync,
+  /// One switch: allowed and sent on its own go together.
+  Widget _clipboardRow(AppLocalizations l10n) => SettingsSwitchRow(
+    title: l10n.shellSettingsClipboardSync,
+    value: (device?.clipboard ?? false) && _clipboardAutoSync,
+    onChanged: (value) async {
+      await _setClipboard(value);
+      await _setClipboardAutoSync(value);
+    },
   );
 
   String _multiplier(AppLocalizations l10n, double value) =>
       l10n.shellSettingsMultiplier(value.toStringAsFixed(1));
-
-  Widget _gainRow(AppLocalizations l10n) => SettingsSliderRow(
-    title: l10n.shellSettingsPlaybackGain,
-    valueLabel: _multiplier(l10n, _audioSharePlaybackGain),
-    value: _audioSharePlaybackGain,
-    min: 1,
-    max: 3,
-    divisions: 20,
-    onChanged: (value) => _update(() => _audioSharePlaybackGain = value),
-    onChangeEnd: (value) => unawaited(_commitPlaybackGain(value)),
-  );
 
   Widget _scrollSpeedRow(AppLocalizations l10n) => SettingsSliderRow(
     title: l10n.remoteInputScrollMultiplierTitle,
@@ -894,6 +906,17 @@ extension _RedesignedSettings on _SettingsScreenState {
     divisions: 25,
     onChanged: (value) => _update(() => _remoteInputScrollMultiplier = value),
     onChangeEnd: (value) => unawaited(_commitScrollMultiplier(value)),
+  );
+
+  Widget _gainRow(AppLocalizations l10n) => SettingsSliderRow(
+    title: l10n.shellSettingsPlaybackGain,
+    valueLabel: _multiplier(l10n, _audioSharePlaybackGain),
+    value: _audioSharePlaybackGain,
+    min: 1,
+    max: 3,
+    divisions: 20,
+    onChanged: (value) => _update(() => _audioSharePlaybackGain = value),
+    onChangeEnd: (value) => unawaited(_commitPlaybackGain(value)),
   );
 
   Widget _ignoreNotificationsRow(AppLocalizations l10n) => SettingsSwitchRow(
@@ -1014,15 +1037,20 @@ extension _RedesignedSettings on _SettingsScreenState {
                   MaterialLocalizations.of(
                     sheetContext,
                   ).viewLicensesButtonLabel,
-                  () => showLicensePage(
-                    context: sheetContext,
-                    applicationName: 'Whisper',
-                    applicationVersion: l10n.shellSettingsAboutVersion(
-                      _version,
-                    ),
-                    applicationIcon: _buildAboutIcon(48),
-                    applicationLegalese: 'Copyright © 2026 lawnvi',
-                  ),
+                  () => Navigator.of(sheetContext, rootNavigator: true)
+                      .push<void>(
+                        WhisperPageRoute<void>(
+                          builder: (context) => WhisperUnderWindowButtons(
+                            child: LicensePage(
+                              applicationName: 'Whisper',
+                              applicationVersion: l10n
+                                  .shellSettingsAboutVersion(_version),
+                              applicationIcon: _buildAboutIcon(48),
+                              applicationLegalese: 'Copyright © 2026 lawnvi',
+                            ),
+                          ),
+                        ),
+                      ),
                 ),
               ],
             ),

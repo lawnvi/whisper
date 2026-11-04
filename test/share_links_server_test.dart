@@ -429,6 +429,69 @@ void main() {
     expect(icon.body, [0x89, 0x50, 0x4e, 0x47]);
   });
 
+  test('a new address replaces the old one, and is kept', () async {
+    final link = await store.create(paths: [folder], route: 'first');
+    await store.create(paths: [folder], route: 'taken');
+    expect((await _send('GET', url('/first'))).status, 200);
+
+    await expectLater(
+      store.setRoute(link.id, 'taken'),
+      throwsA(isA<ShareRouteException>()),
+    );
+    await expectLater(
+      store.setRoute(link.id, 'a'),
+      throwsA(isA<ShareRouteException>()),
+    );
+    expect(link.route, 'first');
+
+    await store.setRoute(link.id, 'Second');
+    expect(link.route, 'second');
+    expect((await _send('GET', url('/first'))).status, 404);
+    expect((await _send('GET', url('/second'))).status, 200);
+
+    await store.shutdown();
+    final again = makeStore();
+    addTearDown(again.dispose);
+    await again.initialize();
+    expect(again.linkById(link.id)?.route, 'second');
+    await again.shutdown();
+  });
+
+  test('a new password shuts out whoever was let in', () async {
+    final link = await store.create(
+      paths: [folder],
+      route: 'locked',
+      password: 'sesame',
+    );
+    final login = await _send(
+      'POST',
+      url('/locked/login'),
+      form: 'password=sesame&next=%2Flocked%2F',
+    );
+    final cookie = login.headers['set-cookie']!.single.split(';').first;
+    Future<int> visit() async => (await _send(
+      'GET',
+      url('/locked'),
+      headers: {'cookie': cookie},
+    )).status;
+    expect(await visit(), 200);
+
+    await store.setPassword(link.id, 'open-sesame');
+    expect(await visit(), 401);
+
+    await store.setPassword(link.id, null);
+    expect(link.hasPassword, isFalse);
+    expect((await _send('GET', url('/locked'))).status, 200);
+
+    await store.setPassword(link.id, 'again');
+    await store.shutdown();
+    final again = makeStore();
+    addTearDown(again.dispose);
+    await again.initialize();
+    expect(again.linkById(link.id)?.hasPassword, isTrue);
+    await again.shutdown();
+  });
+
   test('passwords: login page, wrong guesses, cookie per link', () async {
     final locked = await store.create(
       paths: [movie],

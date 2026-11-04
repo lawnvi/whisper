@@ -173,7 +173,6 @@
   "close": "Close",
   "deleteDeviceTitle": "Delete {device}",
   "deleteDeviceDesc": "Disconnect and clear all messages for this device. This cannot be undone.",
-  "brokeConnectTitle": "Disconnect",
   "connectFailed": "Connection Failed",
   "connectAlreadyInProgress": "Connection already in progress",
   "startServerFailed": "Failed to Start Server",
@@ -260,7 +259,7 @@
   "audioShareCaptureActiveStop": "Capture side: sharing this device's audio, click to stop",
   "audioSharePlaybackActiveStop": "Playback side: playing shared audio, click to stop",
   "audioShareStart": "Share this device's audio",
-  "remoteInputScrollMultiplierTitle": "Keyboard and mouse scroll speed",
+  "remoteInputScrollMultiplierTitle": "Scroll speed",
   "audioShareUnsupportedCapture": "This device does not support system audio capture",
   "audioGroupSelectSinks": "Select playback devices",
   "audioGroupStart": "Start synced playback",
@@ -770,10 +769,8 @@
       }
     }
   },
-  "remoteFilesPromptBodyPhone": "If you allow it, it can see this phone's internal storage and copy, create, rename and delete files there. Deleted files can't be recovered.",
   "remoteFilesDeny": "Don't allow",
   "remoteFilesAllowOnce": "Allow",
-  "remoteFilesAllowAlways": "Always allow",
   "windowStreamTouchBlockedTitle": "{device} isn't responding to touch",
   "@windowStreamTouchBlockedTitle": {
     "placeholders": {
@@ -1306,17 +1303,9 @@
   "@shareLinkRoute": {
     "description": "Label of the field for the path part of the link, e.g. the 'k7qm' in http://host:port/k7qm"
   },
-  "shareLinkShortRoute": "Short suffix",
-  "@shareLinkShortRoute": {
-    "description": "Switch that makes the generated route 4 characters long"
-  },
   "shareLinkPassword": "Password",
   "@shareLinkPassword": {
     "description": "Label of the optional password field; also the placeholder of the password box on the web page"
-  },
-  "shareLinkCreate": "Create Link",
-  "@shareLinkCreate": {
-    "description": "Primary button of the share-link sheet"
   },
   "shareLinkRouteTaken": "Another link already uses this suffix",
   "@shareLinkRouteTaken": {
@@ -1848,10 +1837,6 @@
   "@deviceFilesAllowChanges": {
     "description": "Device page switch under 'Always allow browsing my files'. Off, this device may open and copy my files but not create, rename, delete or change them, in its file browser or where it mounts them."
   },
-  "remoteFilesPromptAllowChanges": "Allow changes",
-  "@remoteFilesPromptAllowChanges": {
-    "description": "Switch in the 'wants to browse your files' prompt: whether the other device may also create, rename, delete and change files. Remembered for that device."
-  },
   "remoteFilesReadOnlyHost": "{device} only allows reading its files",
   "@remoteFilesReadOnlyHost": {
     "description": "Toast when trying to change files on a device whose user allows reading only.",
@@ -1860,10 +1845,6 @@
         "type": "String"
       }
     }
-  },
-  "remoteFilesPromptBodyReadOnlyPhone": "If you allow it, it can see this phone's internal storage and open and copy files from it, but not change them.",
-  "@remoteFilesPromptBodyReadOnlyPhone": {
-    "description": "Prompt body on a phone when 'Allow changes' is off."
   },
   "islandOverlay": "Background alerts",
   "@islandOverlay": {
@@ -1987,7 +1968,6 @@
   "shellCardTrust": "Accept connections automatically",
   "shellCardBrowse": "Browse my files",
   "shellCardChange": "Change my files",
-  "shellCardAddress": "Address",
   "shellCardDiagnostics": "Connection diagnostics",
   "shellCardDisconnect": "Disconnect",
   "shellCardRemove": "Delete device",
@@ -2053,8 +2033,7 @@
   "shellSettingsKeepAlive": "Stay connected in background",
   "shellSettingsScreenshotEnabled": "Enable screenshot shortcut",
   "shellSettingsPressShortcut": "Press a shortcut…",
-  "shellSettingsAllowClipboard": "Allow clipboard access",
-  "shellSettingsAutoClipboard": "Sync clipboard automatically",
+  "shellSettingsClipboardSync": "Sync clipboard",
   "shellSettingsPlaybackGain": "Playback volume",
   "shellSettingsCopyCode": "Copy verification codes to clipboard",
   "shellSettingsVersion": "Version",
@@ -2075,8 +2054,6 @@
       }
     }
   },
-  "soundChannelLeft": "Left",
-  "soundChannelRight": "Right",
   "soundShareThisDevice": "Share this device's sound",
   "soundMemberStopped": "Stopped",
   "soundMemberNotConnected": "Not connected",
@@ -2090,24 +2067,6 @@
   },
   "soundMemberBusy": "It's playing other sound",
   "soundMemberSoloOnly": "Can only play on its own",
-  "soundSyncNumbers": "Network {network}ms · Jitter {jitter}ms · Buffer {buffer}ms · Late {late}",
-  "@soundSyncNumbers": {
-    "placeholders": {
-      "network": {
-        "type": "String"
-      },
-      "jitter": {
-        "type": "String"
-      },
-      "buffer": {
-        "type": "String"
-      },
-      "late": {
-        "type": "int"
-      }
-    }
-  },
-  "soundSyncNumbersPending": "Network — · Jitter — · Buffer — · Late —",
   "soundPermissionNeeded": "Needs Screen & System Audio Recording",
   "soundCheckLabel": "Play sound on {device}",
   "@soundCheckLabel": {
@@ -2236,7 +2195,6 @@
   "shellPaletteEmpty": "Nothing found",
   "shellLinksServiceOff": "File service is off",
   "shellLinksServiceIdle": "No links are on, so the service isn't running",
-  "shellLinksFoot": "Uses plain HTTP. The password only keeps casual visitors out.",
   "shellLinksEmptyTitle": "No links yet",
   "shellLinksEmptyBody": "Choose files to make a link. Others open it in a browser to download.",
   "shellLinksChoose": "Choose files",
@@ -2409,14 +2367,6 @@
     }
   },
   "phoneConnectPort": "Port",
-  "shellLinkCreateTitle": "Share “{name}”",
-  "@shellLinkCreateTitle": {
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
   "shellLinkPasswordOptional": "Password (optional)",
   "shellAppsShownOn": "Runs here, shown on {device}",
   "@shellAppsShownOn": {
@@ -2440,5 +2390,59 @@
   "connectionCheckConnected": "The connection is working.",
   "connectionCheckOneWay": "The connection is working, but this device can't reach its port: the other device made this connection. If it drops, connect again from there.",
   "connectionCheckReady": "The network and Whisper on that device are fine. You can connect.",
-  "connectionCheckAgain": "Check again"
+  "connectionCheckAgain": "Check again",
+  "soundSyncNumbers": "Network {network}ms · Jitter {jitter}ms · Buffer {buffer}ms · Late {late}",
+  "@soundSyncNumbers": {
+    "placeholders": {
+      "network": {
+        "type": "String"
+      },
+      "jitter": {
+        "type": "String"
+      },
+      "buffer": {
+        "type": "String"
+      },
+      "late": {
+        "type": "int"
+      }
+    }
+  },
+  "soundSyncNumbersPending": "Network — · Jitter — · Buffer — · Late —",
+  "shellLinkCreateTitle": "Share “{name}”",
+  "@shellLinkCreateTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "shareLinkShortRoute": "Short suffix",
+  "@shareLinkShortRoute": {
+    "description": "Switch that makes the generated route 4 characters long"
+  },
+  "shareLinkCreate": "Create Link",
+  "@shareLinkCreate": {
+    "description": "Primary button of the share-link sheet"
+  },
+  "shareLinkShowPassword": "Show Password",
+  "@shareLinkShowPassword": {
+    "description": "Tooltip of the eye button in the password field"
+  },
+  "shareLinkHidePassword": "Hide Password",
+  "@shareLinkHidePassword": {
+    "description": "Tooltip of the eye button in the password field while the password is visible"
+  },
+  "shareLinkSentLabel": "Data Sent",
+  "@shareLinkSentLabel": {
+    "description": "Row label in share link details: how much data the link served"
+  },
+  "shellLinksChooseAny": "Choose",
+  "shellSelfCopy": "Copy connection info",
+  "shellSelfCopied": "Copied",
+  "shareLinkNoNetwork": "Not connected to a local network, so other devices can't open it yet",
+  "@shareLinkNoNetwork": {
+    "description": "Shown instead of an address when this device has no LAN address"
+  },
+  "screenshotShortcutReset": "Restore default shortcut"
 }

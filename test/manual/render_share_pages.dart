@@ -10,13 +10,14 @@ import 'dart:ui' show PointerDeviceKind;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:whisper/audio/audio_protocol.dart';
 import 'package:whisper/new_ui/input/shell_input_page.dart';
 import 'package:whisper/new_ui/sound/shell_sound_page.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
 
-import 'support/golden_support.dart';
-import 'support/share_page_fixtures.dart';
+import '../support/golden_support.dart';
+import '../support/share_page_fixtures.dart';
 
 const _window = Size(876, 690);
 const _regular = Size(524, 690);
@@ -362,6 +363,7 @@ void main() {
   });
 
   testWidgets('being controlled', (tester) async {
+    SharedPreferences.setMockInitialValues({});
     for (final brightness in Brightness.values) {
       final world = InputWorld();
       addTearDown(world.dispose);

@@ -20,9 +20,9 @@ import 'package:whisper/new_ui/shell/shell_island_sources.dart'
 import 'package:whisper/new_ui/shell/shell_window_chrome.dart'
     show shellIslandPlacement;
 
-/// The app's island on phones: one black capsule level with a front camera in the
-/// middle of the screen, around it, as if the hole had grown; without such a
-/// camera, just under the status bar. It shows what is going on, with a small circle beside it for a second activity. Tap it to open
+/// The app's island on phones: one black capsule just under the status bar. It
+/// shows what is going on, with a small circle beside it for a second activity.
+/// Tap it to open
 /// the card that lists everything with its actions; swipe it up to put it
 /// away. Hidden in the background, where system notifications take over.
 class IslandHost extends StatefulWidget {
@@ -52,11 +52,16 @@ class _IslandHostState extends State<IslandHost> with TickerProviderStateMixin {
     stiffness: 290,
     damping: 24,
   );
-  static const _compactHeight = 36.0;
 
-  /// Around the camera: as tall as fits in the status bar, and no wider than what
-  /// the clock and the icons leave free.
-  static const _cameraHeight = 32.0, _cameraWidth = 176.0;
+  /// Going small or away: no bounce, and quickly.
+  static const _settle = SpringDescription(
+    mass: 1,
+    stiffness: 520,
+    damping: 46,
+  );
+  static const _compactHeight = 36.0;
+  static const _compactWidth = 176.0;
+
   static const _circle = 36.0;
   static const _gap = 6.0;
 
@@ -224,9 +229,12 @@ class _IslandHostState extends State<IslandHost> with TickerProviderStateMixin {
           .catchError((Object _) {});
       return;
     }
+    final spring = identical(controller, _stage) && target < controller.value
+        ? _settle
+        : _spring;
     await controller
         .animateWith(
-          SpringSimulation(_spring, controller.value, target, velocity),
+          SpringSimulation(spring, controller.value, target, velocity),
         )
         .orCancel
         .catchError((Object _) {});
@@ -319,22 +327,15 @@ class _IslandHostState extends State<IslandHost> with TickerProviderStateMixin {
     final placement = shellIslandPlacement.value;
     final left = media.padding.left;
     final area = media.size.width - left - media.padding.right;
-    // Level with the camera when there is one in the middle, and narrow enough
-    // there to leave the clock and the icons either side alone. Otherwise under
-    // the status bar, which it would cover.
-    final camera = placement == null
-        ? islandCamera(media.displayFeatures, media.size.width)
-        : null;
-    final pill = camera == null ? _compactHeight : _cameraHeight;
-    final top = camera == null
-        ? media.padding.top + 6
-        : math.max(2.0, camera.center.dy - pill / 2);
+    // Under the status bar: over it the clock and icons would show through, the
+    // camera would cover part of it, and the system would take the tap.
+    const pill = _compactHeight;
+    final top = media.padding.top + 6;
     final openWidth = math.min(area - 16, 420.0);
     final secondary = frame.secondary;
     final compactWidth = math.min(
-      camera == null ? 240.0 : _cameraWidth,
-      (camera == null ? area - 32 : _cameraWidth) -
-          (secondary == null ? 0 : pill + _gap),
+      _compactWidth,
+      area - 32 - (secondary == null ? 0 : pill + _gap),
     );
     return AnimatedBuilder(
       animation: Listenable.merge([_stage, _drag, _split, _height]),
@@ -359,7 +360,7 @@ class _IslandHostState extends State<IslandHost> with TickerProviderStateMixin {
         final shown = (s * 2.5).clamp(0.0, 1.0);
         final compactContent = (1 - (s - 1).abs() * 2.6).clamp(0.0, 1.0);
         final openContent = ((s - 1.55) / 0.45).clamp(0.0, 1.0);
-        final circle = camera == null ? _circle : pill;
+        const circle = _circle;
         final splitWidth = (circle + _gap) * split.clamp(0.0, 1.0);
         final islandLeft = left + (area - width - splitWidth) / 2;
         // Beside a sidebar the small island is in the toolbar's row, or under
@@ -536,18 +537,6 @@ class _IslandHostState extends State<IslandHost> with TickerProviderStateMixin {
       child: body,
     );
   }
-}
-
-/// A front camera in the middle of the top of the screen, if there is one.
-Rect? islandCamera(List<ui.DisplayFeature> features, double width) {
-  for (final feature in features) {
-    if (feature.type != ui.DisplayFeatureType.cutout) continue;
-    final bounds = feature.bounds;
-    if (bounds.isEmpty || bounds.top > 60) continue;
-    if ((bounds.center.dx - width / 2).abs() > width * .12) continue;
-    return bounds;
-  }
-  return null;
 }
 
 class _Frame {

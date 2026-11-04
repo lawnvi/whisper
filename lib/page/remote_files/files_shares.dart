@@ -183,27 +183,6 @@ class _Header extends StatelessWidget {
   }
 }
 
-class _Footer extends StatelessWidget {
-  const _Footer(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 7, 16, 0),
-      child: Text(
-        text,
-        style: TextStyle(
-          color: FlowSpaceColors.of(context).secondaryLabel,
-          fontSize: 12.5,
-          height: 1.4,
-        ),
-      ),
-    );
-  }
-}
-
 /// A rounded group of rows with inset hairlines between them.
 class _Group extends StatelessWidget {
   const _Group({required this.children, required this.grouped});

@@ -166,7 +166,49 @@ class _FlowSpacePageState extends State<FlowSpacePage> {
     final source = view?.source;
     final peerId = source == null ? widget.focusPeerId : _sendPeerOf(source);
     if (view == null || source == null) {
-      return const Center(child: CupertinoActivityIndicator());
+      final blocking = _newBlocking(touch: false);
+      if (blocking != null) return blocking;
+      final target = _controller.selectedTarget;
+      if (target == null) {
+        return const Center(child: CupertinoActivityIndicator());
+      }
+      // It cannot be a source, but windows can be sent there: an iPad.
+      return SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Text(
+                l10n.windowStreamSendTo(target.name),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: type.note,
+                  fontWeight: FontWeight.w600,
+                  color: c.ink2,
+                ),
+              ),
+            ),
+            ShellSendWindows(
+              deviceName: target.name,
+              available: WsSvrManager().canOfferWindowsTo(target.peerId),
+              onSend: (window, from, picture) => unawaited(
+                _send(
+                  cardId: _targetCardId(target),
+                  name: target.name,
+                  hue: _targetHue(target),
+                  peerId: target.peerId,
+                  window: window,
+                  from: from,
+                  picture: picture,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
     }
     final name = source.info.name;
     final apps = view.apps;
@@ -205,7 +247,6 @@ class _FlowSpacePageState extends State<FlowSpacePage> {
               app.id.toLowerCase().contains(query),
         )
         .toList();
-    final phoneSource = !_isLandscapeSource(source);
     final hosted = peerId == null
         ? const <({String sessionId, String title})>[]
         : WindowStreamHost.shared.hostedFor(peerId);
@@ -295,7 +336,7 @@ class _FlowSpacePageState extends State<FlowSpacePage> {
             ),
           ),
         ),
-        if (phoneSource && apps != null) ...[
+        if (apps != null) ...[
           SizedBox(height: 34, child: _buildSearchField(context)),
           const SizedBox(height: 12),
         ],
@@ -426,7 +467,7 @@ class _FlowSpacePageState extends State<FlowSpacePage> {
     final view = _controller.selectedView;
     final source = view?.source;
     final target = _controller.selectedTarget;
-    final blocking = _newPhoneBlocking();
+    final blocking = _newBlocking(touch: true);
     Widget body;
     if (blocking != null) {
       body = blocking;
@@ -468,7 +509,7 @@ class _FlowSpacePageState extends State<FlowSpacePage> {
             ? null
             : _failureText(source.state.value.failure!.reason, source),
         search: !_isLandscapeSource(source) && apps != null
-            ? PhoneAppsSearch(
+            ? PhoneSearchField(
                 controller: _searchController,
                 hint: l10n.windowStreamSearchApps,
                 onChanged: (value) => setState(() => _query = value),
@@ -633,10 +674,10 @@ class _FlowSpacePageState extends State<FlowSpacePage> {
 
   /// Nothing to show yet: the same cases as [_buildBlocking], in the new words
   /// and at a finger's size.
-  Widget? _newPhoneBlocking() {
+  Widget? _newBlocking({required bool touch}) {
     Widget state(String title, String body, {Widget? action}) =>
         ShellDeviceState(
-          touch: true,
+          touch: touch,
           art: const SizedBox.shrink(),
           title: title,
           body: body,
@@ -666,10 +707,16 @@ class _FlowSpacePageState extends State<FlowSpacePage> {
             : l10n.windowStreamNoDevicesHintMobile,
         action: adbFailure == null
             ? null
-            : PhoneButton(
+            : touch
+            ? PhoneButton(
                 label: l10n.windowStreamRetry,
                 kind: PhoneButtonKind.primary,
                 large: true,
+                onTap: () => unawaited(_coordinator.retry()),
+              )
+            : ShellButton(
+                label: l10n.windowStreamRetry,
+                kind: ShellButtonKind.primary,
                 onTap: () => unawaited(_coordinator.retry()),
               ),
       );

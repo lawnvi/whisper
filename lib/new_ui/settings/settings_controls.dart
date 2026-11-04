@@ -156,16 +156,16 @@ class SettingsGroup extends StatelessWidget {
         shape: shape,
         shadows: page ? WhisperShadow.e1(Theme.of(context).brightness) : null,
       ),
-      child: page
-          // A pressed row must not reach past the corners.
-          ? ClipPath(
-              clipper: ShapeBorderClipper(shape: shape),
-              child: rows,
-            )
-          : Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: rows,
-            ),
+      // A pressed or hovered row must not reach past the corners.
+      child: ClipPath(
+        clipper: ShapeBorderClipper(shape: shape),
+        child: page
+            ? rows
+            : Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: rows,
+              ),
+      ),
     );
   }
 }
@@ -1766,20 +1766,27 @@ class SettingsAboutSheet extends StatelessWidget {
             ),
             shadows: scope.page ? WhisperShadow.e1(brightness) : null,
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (final (i, (label, open)) in links.indexed)
-                _RowLine(
-                  show: scope.page && i > 0,
-                  child: SettingsRow(
-                    title: label,
-                    onTap: open,
-                    minHeight: scope.touch ? 48 : 40,
-                    inset: _rowInsetPage,
+          child: ClipPath(
+            clipper: ShapeBorderClipper(
+              shape: RoundedSuperellipseBorder(
+                borderRadius: BorderRadius.circular(WhisperRadius.m),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (final (i, (label, open)) in links.indexed)
+                  _RowLine(
+                    show: scope.page && i > 0,
+                    child: SettingsRow(
+                      title: label,
+                      onTap: open,
+                      minHeight: scope.touch ? 48 : 40,
+                      inset: _rowInsetPage,
+                    ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
         ),
         const SizedBox(height: 14),

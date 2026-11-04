@@ -171,7 +171,6 @@
     }
   },
   "deleteDeviceDesc": "Desconecta y borra todos los mensajes de este dispositivo. No se puede recuperar.",
-  "brokeConnectTitle": "Desconectar",
   "connectFailed": "Error de conexión",
   "connectAlreadyInProgress": "La conexión ya está en curso",
   "startServerFailed": "No se pudo iniciar el servidor",
@@ -258,7 +257,7 @@
   "audioShareCaptureActiveStop": "Captura: compartiendo el audio de este dispositivo, clic para detener",
   "audioSharePlaybackActiveStop": "Reproduccion: reproduciendo audio compartido, clic para detener",
   "audioShareStart": "Compartir el audio de este dispositivo con el otro",
-  "remoteInputScrollMultiplierTitle": "Velocidad de desplazamiento compartido",
+  "remoteInputScrollMultiplierTitle": "Velocidad de desplazamiento",
   "audioShareUnsupportedCapture": "Este dispositivo no admite captura de audio del sistema",
   "audioGroupSelectSinks": "Seleccionar dispositivos de reproduccion",
   "audioGroupStart": "Iniciar reproduccion sincronizada",
@@ -698,10 +697,8 @@
   "remoteFilesPlaceMovies": "Películas",
   "remoteFilesPlaceMusic": "Música",
   "remoteFilesPromptTitle": "{device} quiere explorar tus archivos",
-  "remoteFilesPromptBodyPhone": "Si lo permites, podrá ver el almacenamiento interno de este teléfono y copiar, crear, renombrar y eliminar archivos allí. Lo eliminado no se puede recuperar.",
   "remoteFilesDeny": "No permitir",
   "remoteFilesAllowOnce": "Permitir",
-  "remoteFilesAllowAlways": "Permitir siempre",
   "windowStreamTouchBlockedTitle": "{device} no responde al tacto",
   "windowStreamTouchBlockedBody": "Una página que {app} dejó en segundo plano cubre la pantalla del teléfono y los toques no llegan. Cerrar esa página lo arregla; {app} sigue instalada con su cuenta e historial.",
   "windowStreamTouchBlockedFix": "Cerrar esa página",
@@ -836,9 +833,7 @@
   "shareLinkMenuCreate": "Crear enlace para compartir…",
   "shareLinkDefaultName": "{count, plural, =1{1 elemento} other{{count} elementos}}",
   "shareLinkRoute": "Sufijo del enlace",
-  "shareLinkShortRoute": "Sufijo corto",
   "shareLinkPassword": "Contraseña",
-  "shareLinkCreate": "Crear enlace",
   "shareLinkRouteTaken": "Otro enlace ya usa este sufijo",
   "shareLinkRouteInvalid": "Usa de 2 a 32 caracteres: minúsculas, números, - o _",
   "shareLinkRouteReserved": "Este sufijo está reservado. Prueba otro.",
@@ -962,9 +957,7 @@
   "remoteFilesNoAnswerDetail": "La pregunta en ese dispositivo caducó. Asegúrate de que haya alguien allí e inténtalo de nuevo.",
   "remoteFilesNotAsked": "{device} debe permitir explorar sus archivos",
   "deviceFilesAllowChanges": "Permitir cambios en mis archivos",
-  "remoteFilesPromptAllowChanges": "Permitir cambios",
   "remoteFilesReadOnlyHost": "{device} solo permite leer sus archivos",
-  "remoteFilesPromptBodyReadOnlyPhone": "Si lo permites, podrá ver el almacenamiento interno de este teléfono y abrir y copiar sus archivos, pero no cambiarlos.",
   "islandOverlay": "Avisos en segundo plano",
   "islandOverlayOn": "Activada",
   "islandOverlayOff": "Desactivada",
@@ -1056,7 +1049,6 @@
   "shellCardTrust": "Aceptar conexiones automáticamente",
   "shellCardBrowse": "Explorar mis archivos",
   "shellCardChange": "Modificar mis archivos",
-  "shellCardAddress": "Dirección",
   "shellCardDiagnostics": "Diagnóstico de conexión",
   "shellCardDisconnect": "Desconectar",
   "shellCardRemove": "Eliminar dispositivo",
@@ -1122,8 +1114,7 @@
   "shellSettingsKeepAlive": "Mantener la conexión en segundo plano",
   "shellSettingsScreenshotEnabled": "Activar atajo de captura",
   "shellSettingsPressShortcut": "Pulsa un atajo…",
-  "shellSettingsAllowClipboard": "Permitir acceso al portapapeles",
-  "shellSettingsAutoClipboard": "Sincronizar el portapapeles automáticamente",
+  "shellSettingsClipboardSync": "Sincronizar el portapapeles",
   "shellSettingsPlaybackGain": "Volumen de reproducción",
   "shellSettingsCopyCode": "Copiar códigos de verificación al portapapeles",
   "shellSettingsVersion": "Versión",
@@ -1144,8 +1135,6 @@
       }
     }
   },
-  "soundChannelLeft": "Izq.",
-  "soundChannelRight": "Der.",
   "soundShareThisDevice": "Compartir el sonido de este dispositivo",
   "soundMemberStopped": "Detenido",
   "soundMemberNotConnected": "No conectado",
@@ -1159,24 +1148,6 @@
   },
   "soundMemberBusy": "Está reproduciendo otro sonido",
   "soundMemberSoloOnly": "Solo puede sonar por separado",
-  "soundSyncNumbers": "Red {network}ms · Variación {jitter}ms · Búfer {buffer}ms · Tardíos {late}",
-  "@soundSyncNumbers": {
-    "placeholders": {
-      "network": {
-        "type": "String"
-      },
-      "jitter": {
-        "type": "String"
-      },
-      "buffer": {
-        "type": "String"
-      },
-      "late": {
-        "type": "int"
-      }
-    }
-  },
-  "soundSyncNumbersPending": "Red — · Variación — · Búfer — · Tardíos —",
   "soundPermissionNeeded": "Necesita Grabación de pantalla y audio del sistema",
   "soundCheckLabel": "Reproducir sonido en {device}",
   "@soundCheckLabel": {
@@ -1305,7 +1276,6 @@
   "shellPaletteEmpty": "Sin resultados",
   "shellLinksServiceOff": "El servicio de archivos está desactivado",
   "shellLinksServiceIdle": "No hay enlaces activos, el servicio no se está ejecutando",
-  "shellLinksFoot": "Usa HTTP sin cifrar. La contraseña solo evita visitas casuales.",
   "shellLinksEmptyTitle": "Aún no hay enlaces",
   "shellLinksEmptyBody": "Elige archivos para crear un enlace. Otros lo abren en el navegador para descargar.",
   "shellLinksChoose": "Elegir archivos",
@@ -1478,14 +1448,6 @@
     }
   },
   "phoneConnectPort": "Puerto",
-  "shellLinkCreateTitle": "Compartir «{name}»",
-  "@shellLinkCreateTitle": {
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
   "shellLinkPasswordOptional": "Contraseña (opcional)",
   "shellAppsShownOn": "Se ejecuta aquí, se muestra en {device}",
   "@shellAppsShownOn": {
@@ -1509,5 +1471,41 @@
   "connectionCheckConnected": "La conexión funciona.",
   "connectionCheckOneWay": "La conexión funciona, pero este dispositivo no llega a su puerto: la conexión la inició el otro. Si se corta, vuelve a conectar desde allí.",
   "connectionCheckReady": "La red y Whisper en ese dispositivo funcionan. Puedes conectar.",
-  "connectionCheckAgain": "Comprobar de nuevo"
+  "connectionCheckAgain": "Comprobar de nuevo",
+  "soundSyncNumbers": "Red {network}ms · Variación {jitter}ms · Búfer {buffer}ms · Tardíos {late}",
+  "@soundSyncNumbers": {
+    "placeholders": {
+      "network": {
+        "type": "String"
+      },
+      "jitter": {
+        "type": "String"
+      },
+      "buffer": {
+        "type": "String"
+      },
+      "late": {
+        "type": "int"
+      }
+    }
+  },
+  "soundSyncNumbersPending": "Red — · Variación — · Búfer — · Tardíos —",
+  "shellLinkCreateTitle": "Compartir «{name}»",
+  "@shellLinkCreateTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "shareLinkShortRoute": "Sufijo corto",
+  "shareLinkCreate": "Crear enlace",
+  "shareLinkShowPassword": "Mostrar contraseña",
+  "shareLinkHidePassword": "Ocultar contraseña",
+  "shareLinkSentLabel": "Datos enviados",
+  "shellLinksChooseAny": "Elegir",
+  "shellSelfCopy": "Copiar datos de conexión",
+  "shellSelfCopied": "Copiado",
+  "shareLinkNoNetwork": "Sin conexión a una red local: otros dispositivos aún no pueden abrirlo",
+  "screenshotShortcutReset": "Restaurar atajo predeterminado"
 }

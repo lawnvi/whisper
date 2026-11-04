@@ -93,6 +93,7 @@ class _TrayPanelAppState extends State<TrayPanelApp> with WindowListener {
             maxHeight: (a['maxHeight'] as num).toDouble(),
           );
           await _place();
+          if (Platform.isMacOS) await windowManager.setOpacity(0);
           await windowManager.show();
           await windowManager.focus();
           if (mounted) {
@@ -101,6 +102,7 @@ class _TrayPanelAppState extends State<TrayPanelApp> with WindowListener {
               _shownCount++;
             });
           }
+          unawaited(_fadeWindowIn());
           // On Windows a window resized while hidden goes on showing what it drew
           // at its old size, until it is resized again while it can be seen.
           if (Platform.isWindows) {
@@ -115,6 +117,16 @@ class _TrayPanelAppState extends State<TrayPanelApp> with WindowListener {
       }
       return null;
     });
+  }
+
+  /// macOS draws the material behind the content, whole and at once, however
+  /// the content comes in. So the window itself fades, and they arrive together.
+  Future<void> _fadeWindowIn() async {
+    if (!Platform.isMacOS) return;
+    for (var step = 1; step <= 8; step++) {
+      await Future<void>.delayed(const Duration(milliseconds: 14));
+      await windowManager.setOpacity(step / 8);
+    }
   }
 
   void _scheduleFit() {
@@ -188,14 +200,14 @@ class _TrayPanelAppState extends State<TrayPanelApp> with WindowListener {
               key: ValueKey(_shownCount),
               value: _shown ? 1 : 0,
               from: 0,
-              spring: WhisperSprings.smooth,
+              spring: WhisperSprings.snappy,
               animateWhenReduced: true,
               builder: (context, t, child) => Opacity(
                 opacity: t.clamp(0.0, 1.0),
                 child: Transform.translate(
-                  offset: Offset(0, (up ? 10 : -10) * (1 - t)),
+                  offset: Offset(0, (up ? 6 : -6) * (1 - t)),
                   child: Transform.scale(
-                    scale: .9 + .1 * t.clamp(0.0, 1.0),
+                    scale: .98 + .02 * t.clamp(0.0, 1.0),
                     alignment: up
                         ? Alignment.bottomCenter
                         : Alignment.topCenter,
@@ -292,129 +304,16 @@ class _TrayPanelBodyState extends State<TrayPanelBody> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _Module(
-            child: state.targets.isEmpty
-                ? _noTargets(context, l10n)
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(0, 0, 0, 8),
-                        child: Row(
-                          children: [
-                            SizedBox.square(
-                              dimension: _lead,
-                              child: Center(
-                                child: state.currentImage
-                                    ? Container(
-                                        width: 22,
-                                        height: 22,
-                                        decoration: BoxDecoration(
-                                          borderRadius: BorderRadius.circular(
-                                            5,
-                                          ),
-                                          gradient: const LinearGradient(
-                                            colors: [
-                                              Radix.indigo9,
-                                              Radix.violet9,
-                                            ],
-                                          ),
-                                        ),
-                                      )
-                                    : WhisperIcon(
-                                        WhisperGlyph.clip,
-                                        size: 17,
-                                        color: c.ink2Glass,
-                                      ),
-                              ),
-                            ),
-                            const SizedBox(width: _leadGap),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    state.current.isEmpty
-                                        ? l10n.shellTrayClipboardEmpty
-                                        : state.current,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontSize: type.note,
-                                      height: 1.3,
-                                      fontWeight: FontWeight.w500,
-                                      color: c.ink,
-                                    ),
-                                  ),
-                                  Text(
-                                    l10n.shellTrayClipboard,
-                                    style: TextStyle(
-                                      fontSize: type.note,
-                                      color: c.ink2Glass,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            _TrayIcon(
-                              glyph: WhisperGlyph.camera,
-                              size: 15,
-                              label: l10n.shellTrayScreenshot,
-                              onTap: () => on('screenshot'),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Row(
-                        children: [
-                          for (final device in state.targets)
-                            Expanded(
-                              child: _Target(
-                                device: device,
-                                flash: _flash == device.id,
-                                onTap: () => _sendTo(device),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ],
-                  ),
-          ),
           for (final moment in state.moments) ...[
-            const SizedBox(height: 8),
             _Module(
               padding: moment.progress == null
                   ? const EdgeInsets.all(10)
                   : const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               child: _MomentView(moment: moment, onAction: on),
             ),
-          ],
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: _Tile(
-                  glyph: WhisperGlyph.speaker,
-                  title: l10n.shellSound,
-                  status: state.soundStatus,
-                  on: state.soundOn,
-                  onTap: () => on('openSound'),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _Tile(
-                  glyph: WhisperGlyph.keyboard,
-                  title: l10n.shellInput,
-                  status: state.inputStatus,
-                  on: state.inputOn,
-                  onTap: () => on('openInput'),
-                ),
-              ),
-            ],
-          ),
-          if (state.flows.isNotEmpty) ...[
             const SizedBox(height: 8),
+          ],
+          if (state.flows.isNotEmpty) ...[
             _Module(
               child: Column(
                 children: [
@@ -450,9 +349,117 @@ class _TrayPanelBodyState extends State<TrayPanelBody> {
                 ],
               ),
             ),
+            const SizedBox(height: 8),
           ],
-          // One row would only repeat what the send module already says.
-          if (state.clips.length > 1) ...[
+          _Module(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(0, 0, 0, 8),
+                  child: Row(
+                    children: [
+                      SizedBox.square(
+                        dimension: _lead,
+                        child: Center(
+                          child: state.currentImage
+                              ? Container(
+                                  width: 22,
+                                  height: 22,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(5),
+                                    gradient: const LinearGradient(
+                                      colors: [Radix.indigo9, Radix.violet9],
+                                    ),
+                                  ),
+                                )
+                              : WhisperIcon(
+                                  WhisperGlyph.clip,
+                                  size: 17,
+                                  color: c.ink2Glass,
+                                ),
+                        ),
+                      ),
+                      const SizedBox(width: _leadGap),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              state.current.isEmpty
+                                  ? l10n.shellTrayClipboardEmpty
+                                  : state.current,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: type.note,
+                                height: 1.3,
+                                fontWeight: FontWeight.w500,
+                                color: c.ink,
+                              ),
+                            ),
+                            Text(
+                              l10n.shellTrayClipboard,
+                              style: TextStyle(
+                                fontSize: type.note,
+                                color: c.ink2Glass,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      _TrayIcon(
+                        glyph: WhisperGlyph.camera,
+                        size: 15,
+                        label: l10n.shellTrayScreenshot,
+                        onTap: () => on('screenshot'),
+                      ),
+                    ],
+                  ),
+                ),
+                if (state.targets.isNotEmpty)
+                  Row(
+                    children: [
+                      for (final device in state.targets)
+                        Expanded(
+                          child: _Target(
+                            device: device,
+                            flash: _flash == device.id,
+                            onTap: () => _sendTo(device),
+                          ),
+                        ),
+                    ],
+                  )
+                else
+                  _noTargets(context, l10n),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: _Tile(
+                  glyph: WhisperGlyph.speaker,
+                  title: l10n.shellSound,
+                  status: state.soundStatus,
+                  on: state.soundOn,
+                  onTap: () => on('openSound'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _Tile(
+                  glyph: WhisperGlyph.keyboard,
+                  title: l10n.shellInput,
+                  status: state.inputStatus,
+                  on: state.inputOn,
+                  onTap: () => on('openInput'),
+                ),
+              ),
+            ],
+          ),
+          if (state.clips.isNotEmpty) ...[
             const SizedBox(height: 8),
             _Module(
               padding: const EdgeInsets.all(4),
@@ -552,40 +559,43 @@ class _TrayPanelBodyState extends State<TrayPanelBody> {
     const type = WhisperType(touch: false);
     final nearby = widget.state.nearby;
     if (nearby.isEmpty) {
-      return Column(
+      return Row(
         children: [
-          Text(
-            l10n.shellTrayNoDevice,
-            style: TextStyle(fontSize: type.note, color: c.ink2Glass),
+          SizedBox.square(
+            dimension: _lead,
+            child: Center(
+              child: WhisperIcon(
+                WhisperGlyph.plus,
+                size: 15,
+                color: c.ink2Glass,
+              ),
+            ),
           ),
-          const SizedBox(height: 8),
-          _FilledButton(
+          const SizedBox(width: _leadGap),
+          Expanded(
+            child: Text(
+              l10n.shellTrayNoDevice,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: type.note, color: c.ink2Glass),
+            ),
+          ),
+          _TextButton(
             label: l10n.shellAddDevice,
             onTap: () => widget.onAction('connectNew'),
           ),
         ],
       );
     }
-    return Column(
+    return Row(
       children: [
         for (final device in nearby.take(3))
-          ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 34),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    device.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: type.note, color: c.ink),
-                  ),
-                ),
-                _TextButton(
-                  label: l10n.shellConnect,
-                  onTap: () => widget.onAction('connect', device.id),
-                ),
-              ],
+          Expanded(
+            child: _Target(
+              device: device,
+              flash: false,
+              action: l10n.shellConnect,
+              onTap: () => widget.onAction('connect', device.id),
             ),
           ),
       ],
@@ -625,11 +635,15 @@ class _Target extends StatelessWidget {
     required this.device,
     required this.flash,
     required this.onTap,
+    this.action,
   });
 
   final TrayDevice device;
   final bool flash;
   final VoidCallback onTap;
+
+  /// What a tap does when it is not simply sending there: 连接.
+  final String? action;
 
   @override
   Widget build(BuildContext context) {
@@ -672,6 +686,12 @@ class _Target extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(fontSize: type.tiny, color: c.ink),
               ),
+              if (action != null)
+                Text(
+                  action!,
+                  maxLines: 1,
+                  style: TextStyle(fontSize: type.tiny, color: c.accentText),
+                ),
             ],
           ),
         ),
@@ -861,17 +881,18 @@ class _TwoLines extends StatelessWidget {
             color: c.ink,
           ),
         ),
-        Text(
-          second,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            fontSize: type.tiny,
-            height: 1.3,
-            color: c.ink2Glass,
-            fontFeatures: const [FontFeature.tabularFigures()],
+        if (second.isNotEmpty)
+          Text(
+            second,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: type.tiny,
+              height: 1.3,
+              color: c.ink2Glass,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
           ),
-        ),
       ],
     );
   }

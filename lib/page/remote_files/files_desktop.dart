@@ -513,6 +513,16 @@ class _FinderViewState extends State<FinderView> {
     // to add or take away items.
     if (_touchDevice) ...[
       FilesMenuItem(
+        label: _selecting ? l10n.remoteFilesDone : l10n.remoteFilesSelect,
+        icon: _selecting
+            ? CupertinoIcons.checkmark_alt
+            : CupertinoIcons.checkmark_circle,
+        onSelected: () {
+          setState(() => _selecting = !_selecting);
+          if (!_selecting) controller.clearSelection();
+        },
+      ),
+      FilesMenuItem(
         label: l10n.remoteFilesSelectAll,
         icon: CupertinoIcons.checkmark_circle,
         onSelected: () {

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:whisper/helper/helper.dart';
 import 'package:whisper/helper/local.dart';
@@ -31,6 +32,23 @@ class _ShellSelfPanelState extends State<ShellSelfPanel> {
   PairingInvite? _invite;
   String? _fingerprint;
   bool _loaded = false;
+  bool _copied = false;
+  Timer? _copiedReset;
+
+  @override
+  void dispose() {
+    _copiedReset?.cancel();
+    super.dispose();
+  }
+
+  void _copy(String text) {
+    unawaited(Clipboard.setData(ClipboardData(text: text)));
+    setState(() => _copied = true);
+    _copiedReset?.cancel();
+    _copiedReset = Timer(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _copied = false);
+    });
+  }
 
   @override
   void initState() {
@@ -150,6 +168,13 @@ class _ShellSelfPanelState extends State<ShellSelfPanel> {
       actions: Row(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
+          if (invite != null) ...[
+            ShellButton(
+              label: _copied ? l10n.shellSelfCopied : l10n.shellSelfCopy,
+              onTap: () => _copy(invite.encode()),
+            ),
+            const SizedBox(width: 8),
+          ],
           ShellButton(
             label: l10n.shellEnterAddress,
             onTap: () {

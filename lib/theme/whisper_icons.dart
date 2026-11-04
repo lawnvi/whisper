@@ -47,6 +47,9 @@ enum WhisperGlyph {
   bell,
   sliders,
   plane,
+  star,
+  eye,
+  eyeOff,
 }
 
 const Map<WhisperGlyph, String> _paths = {
@@ -74,6 +77,12 @@ const Map<WhisperGlyph, String> _paths = {
   WhisperGlyph.plus: 'M10 4v12M4 10h12',
   WhisperGlyph.x: 'M5 5l10 10M15 5 5 15',
   WhisperGlyph.check: 'M4 10.5l4 4 8-9',
+  WhisperGlyph.eye:
+      'M2.6 10c1.7-3.1 4.2-4.7 7.4-4.7s5.7 1.6 7.4 4.7c-1.7 3.1-4.2 4.7-7.4 4.7S4.3 13.1 2.6 10zM10 12a2 2 0 1 0 0-4 2 2 0 0 0 0 4z',
+  WhisperGlyph.eyeOff:
+      'M2.8 8.2c1.8 2.7 4.2 4.1 7.2 4.1s5.4-1.4 7.2-4.1M10 12.3v2.6M5.9 11.2l-1.4 2.1M14.1 11.2l1.4 2.1',
+  WhisperGlyph.star:
+      'M10 2.8l2.2 4.6 5 .7-3.6 3.5.9 5L10 14.2l-4.5 2.4.9-5-3.6-3.5 5-.7z',
   WhisperGlyph.out: 'M10 13V4M6 7.5l4-4 4 4M4 16.5h12',
   WhisperGlyph.pause: 'M7 5v10M13 5v10',
   WhisperGlyph.play: 'M7 4.5v11l9-5.5z',
@@ -234,10 +243,14 @@ class WhisperIcon extends StatelessWidget {
     this.size = 16,
     this.weight = 1.6,
     this.color,
+    this.filled = false,
   });
 
   final WhisperGlyph glyph;
   final double size, weight;
+
+  /// The inside painted too, for a shape that shows it is on: the star.
+  final bool filled;
 
   /// The surrounding icon colour when null.
   final Color? color;
@@ -250,21 +263,29 @@ class WhisperIcon extends StatelessWidget {
         whisperGlyphPath(glyph),
         weight,
         color ?? IconTheme.of(context).color ?? Radix.black,
+        filled: filled,
       ),
     ),
   );
 }
 
 class _StrokePainter extends CustomPainter {
-  const _StrokePainter(this.path, this.weight, this.color);
+  const _StrokePainter(
+    this.path,
+    this.weight,
+    this.color, {
+    this.filled = false,
+  });
 
   final Path path;
   final double weight;
   final Color color;
+  final bool filled;
 
   @override
   void paint(Canvas canvas, Size size) {
     canvas.scale(size.width / 20);
+    if (filled) canvas.drawPath(path, Paint()..color = color);
     canvas.drawPath(
       path,
       Paint()
@@ -278,7 +299,10 @@ class _StrokePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_StrokePainter old) =>
-      old.path != path || old.weight != weight || old.color != color;
+      old.path != path ||
+      old.weight != weight ||
+      old.color != color ||
+      old.filled != filled;
 }
 
 /// A sheet of white paper with a folded corner: every file, every kind.

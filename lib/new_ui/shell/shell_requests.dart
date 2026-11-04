@@ -34,8 +34,8 @@ class RequestIslandSource extends IslandListSource {
   void ask({
     required String id,
     required String title,
-    required String detail,
     required List<IslandAnswer> answers,
+    String detail = '',
     Widget? art,
     String? code,
     bool warning = false,
@@ -78,8 +78,8 @@ class RequestIslandSource extends IslandListSource {
 class RequestPresenter extends IslandPresenter with MomentViews {
   const RequestPresenter({
     required this.title,
-    required this.detail,
     required this.answers,
+    this.detail = '',
     this.art,
     this.code,
     this.warning = false,
@@ -120,7 +120,8 @@ class RequestPresenter extends IslandPresenter with MomentViews {
   Widget glyph(BuildContext context, double size) => _leading;
 
   @override
-  String describe(BuildContext context) => [title, detail, ?code].join(' ');
+  String describe(BuildContext context) =>
+      [title, if (detail.isNotEmpty) detail, ?code].join(' ');
 }
 
 /// A device asks to browse this one's files.
@@ -139,17 +140,12 @@ void askFileBrowse(
   RequestIslandSource.shared.ask(
     id: id,
     title: l10n.remoteFilesPromptTitle(request.deviceName),
-    detail: l10n.remoteFilesPromptBodyPhone,
     art: device == null ? null : deviceArtFor(device, size: 48),
     answers: [
       IslandAnswer(
         l10n.remoteFilesAllowOnce,
         () => answer(FileBrowseDecision.once),
         primary: true,
-      ),
-      IslandAnswer(
-        l10n.remoteFilesAllowAlways,
-        () => answer(FileBrowseDecision.always),
       ),
       IslandAnswer(l10n.remoteFilesDeny, () => answer(FileBrowseDecision.deny)),
     ],

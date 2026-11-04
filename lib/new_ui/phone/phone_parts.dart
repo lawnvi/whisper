@@ -160,6 +160,120 @@ class PhonePage extends StatelessWidget {
   );
 }
 
+/// `.search` on touch: 44 to look at, 48 to hit. With [onClear], a × once there
+/// is something to clear.
+class PhoneSearchField extends StatefulWidget {
+  const PhoneSearchField({
+    super.key,
+    required this.controller,
+    required this.hint,
+    required this.onChanged,
+    this.fieldKey = const ValueKey('apps-search'),
+    this.onClear,
+    this.clearLabel,
+    this.touch = true,
+    this.radius = WhisperRadius.s,
+  });
+
+  final bool touch;
+  final double radius;
+
+  final TextEditingController controller;
+  final String hint;
+  final ValueChanged<String> onChanged;
+  final Key fieldKey;
+  final VoidCallback? onClear;
+  final String? clearLabel;
+
+  @override
+  State<PhoneSearchField> createState() => _PhoneSearchFieldState();
+}
+
+class _PhoneSearchFieldState extends State<PhoneSearchField> {
+  final _focus = FocusNode();
+
+  @override
+  void dispose() {
+    _focus.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.wc;
+    final type = WhisperType(touch: widget.touch);
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: _focus.requestFocus,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: c.fill,
+            borderRadius: BorderRadius.circular(widget.radius),
+          ),
+          child: Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: widget.radius > WhisperRadius.s ? 14 : 11,
+              vertical: widget.touch ? 10 : 7,
+            ),
+            child: Row(
+              children: [
+                WhisperIcon(WhisperGlyph.search, size: 15, color: c.ink2),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    key: widget.fieldKey,
+                    controller: widget.controller,
+                    focusNode: _focus,
+                    onChanged: widget.onChanged,
+                    onTapOutside: (_) => _focus.unfocus(),
+                    textInputAction: TextInputAction.search,
+                    cursorColor: c.accent,
+                    style: TextStyle(fontSize: type.body, color: c.ink),
+                    decoration: InputDecoration(
+                      isCollapsed: true,
+                      filled: false,
+                      contentPadding: EdgeInsets.zero,
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      hintText: widget.hint,
+                      hintStyle: TextStyle(fontSize: type.body, color: c.ink3),
+                    ),
+                  ),
+                ),
+                if (widget.onClear != null)
+                  ValueListenableBuilder(
+                    valueListenable: widget.controller,
+                    builder: (context, value, _) => value.text.isEmpty
+                        ? const SizedBox.shrink()
+                        : Tooltip(
+                            message: widget.clearLabel ?? '',
+                            child: Pressable(
+                              onTap: widget.onClear,
+                              radius: WhisperRadius.xs,
+                              label: widget.clearLabel,
+                              child: Padding(
+                                padding: const EdgeInsets.only(left: 8),
+                                child: WhisperIcon(
+                                  WhisperGlyph.x,
+                                  size: 15,
+                                  color: c.ink2,
+                                ),
+                              ),
+                            ),
+                          ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 enum PhoneButtonKind { normal, primary, quiet, danger }
 
 /// `.btn` at touch size: 44 high, 48 when large, 16 at each side. Its label
@@ -393,10 +507,15 @@ class ShellField extends StatefulWidget {
     this.hint,
     this.touch = true,
     this.obscure = false,
+    this.showLabel,
+    this.hideLabel,
   });
 
   final String label;
   final String? error, hint;
+
+  /// With both, an [obscure] field has an eye that shows what was typed.
+  final String? showLabel, hideLabel;
   final TextEditingController controller;
   final FocusNode? focusNode;
   final Key? fieldKey;
@@ -412,6 +531,7 @@ class ShellField extends StatefulWidget {
 
 class _ShellFieldState extends State<ShellField> {
   late FocusNode _focus = widget.focusNode ?? FocusNode();
+  bool _revealed = false;
 
   @override
   void initState() {
@@ -476,35 +596,63 @@ class _ShellFieldState extends State<ShellField> {
                   )
                 : null,
           ),
-          child: TextField(
-            key: widget.fieldKey,
-            controller: widget.controller,
-            focusNode: _focus,
-            autofocus: widget.autofocus,
-            obscureText: widget.obscure,
-            keyboardType: widget.keyboardType,
-            inputFormatters: widget.inputFormatters,
-            textInputAction: widget.textInputAction,
-            autocorrect: false,
-            enableSuggestions: false,
-            onSubmitted: widget.onSubmitted,
-            onChanged: widget.onChanged,
-            cursorColor: c.accent,
-            // Every border by name: a theme's would come through otherwise.
-            decoration: InputDecoration(
-              isCollapsed: true,
-              filled: false,
-              contentPadding: EdgeInsets.zero,
-              border: InputBorder.none,
-              enabledBorder: InputBorder.none,
-              focusedBorder: InputBorder.none,
-              errorBorder: InputBorder.none,
-              focusedErrorBorder: InputBorder.none,
-              disabledBorder: InputBorder.none,
-              hintText: widget.hint,
-              hintStyle: TextStyle(fontSize: type.body, color: c.ink3),
-            ),
-            style: TextStyle(fontSize: type.body, color: c.ink),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  key: widget.fieldKey,
+                  controller: widget.controller,
+                  focusNode: _focus,
+                  autofocus: widget.autofocus,
+                  obscureText: widget.obscure && !_revealed,
+                  keyboardType: widget.keyboardType,
+                  inputFormatters: widget.inputFormatters,
+                  textInputAction: widget.textInputAction,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  onSubmitted: widget.onSubmitted,
+                  onChanged: widget.onChanged,
+                  cursorColor: c.accent,
+                  // Every border by name: a theme's would come through otherwise.
+                  decoration: InputDecoration(
+                    isCollapsed: true,
+                    filled: false,
+                    contentPadding: EdgeInsets.zero,
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    errorBorder: InputBorder.none,
+                    focusedErrorBorder: InputBorder.none,
+                    disabledBorder: InputBorder.none,
+                    hintText: widget.hint,
+                    hintStyle: TextStyle(fontSize: type.body, color: c.ink3),
+                  ),
+                  style: TextStyle(fontSize: type.body, color: c.ink),
+                ),
+              ),
+              if (widget.obscure &&
+                  widget.showLabel != null &&
+                  widget.hideLabel != null)
+                Tooltip(
+                  message: _revealed ? widget.hideLabel! : widget.showLabel!,
+                  child: Pressable(
+                    onTap: () => setState(() => _revealed = !_revealed),
+                    radius: WhisperRadius.xs,
+                    label: _revealed ? widget.hideLabel : widget.showLabel,
+                    scale: 1,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(10, 2, 2, 2),
+                      child: WhisperIcon(
+                        // What it is now: shut while hidden, open while shown.
+                        _revealed ? WhisperGlyph.eye : WhisperGlyph.eyeOff,
+                        size: 18,
+                        weight: 1.4,
+                        color: c.ink2,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
         if (error != null) ...[

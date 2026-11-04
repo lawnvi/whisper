@@ -182,7 +182,6 @@
     }
   },
   "deleteDeviceDesc": "断开连接并删除与该设备的所有消息，不可恢复",
-  "brokeConnectTitle": "断开连接",
   "connectFailed": "连接失败",
   "connectAlreadyInProgress": "连接正在进行中",
   "startServerFailed": "服务启动失败",
@@ -283,7 +282,7 @@
   "audioShareCaptureActiveStop": "采集端：正在共享本机声音，点击停止",
   "audioSharePlaybackActiveStop": "播放端：正在作为扬声器播放，点击停止",
   "audioShareStart": "把本机声音共享给对方",
-  "remoteInputScrollMultiplierTitle": "键鼠共享滚轮速度",
+  "remoteInputScrollMultiplierTitle": "滚轮速度",
   "audioShareUnsupportedCapture": "当前设备不支持系统音频采集",
   "audioGroupSelectSinks": "选择播放设备",
   "audioGroupStart": "开始同步播放",
@@ -868,10 +867,8 @@
       }
     }
   },
-  "remoteFilesPromptBodyPhone": "允许后，它能看到这台手机的内部存储，并在里面拷贝、新建、重命名和删除文件。删除的文件不能恢复。",
   "remoteFilesDeny": "拒绝",
   "remoteFilesAllowOnce": "允许",
-  "remoteFilesAllowAlways": "始终允许",
   "windowStreamTouchBlockedTitle": "{device} 无法操作",
   "@windowStreamTouchBlockedTitle": {
     "placeholders": {
@@ -1395,17 +1392,9 @@
   "@shareLinkRoute": {
     "description": "Label of the field for the path part of the link, e.g. the 'k7qm' in http://host:port/k7qm"
   },
-  "shareLinkShortRoute": "简短后缀",
-  "@shareLinkShortRoute": {
-    "description": "Switch that makes the generated route 4 characters long"
-  },
   "shareLinkPassword": "密码",
   "@shareLinkPassword": {
     "description": "Label of the optional password field; also the placeholder of the password box on the web page"
-  },
-  "shareLinkCreate": "创建链接",
-  "@shareLinkCreate": {
-    "description": "Primary button of the share-link sheet"
   },
   "shareLinkRouteTaken": "此后缀已被其他链接使用",
   "@shareLinkRouteTaken": {
@@ -1954,10 +1943,6 @@
   "@deviceFilesAllowChanges": {
     "description": "Device page switch under 'Always allow browsing my files'. Off, this device may open and copy my files but not create, rename, delete or change them, in its file browser or where it mounts them."
   },
-  "remoteFilesPromptAllowChanges": "允许修改文件",
-  "@remoteFilesPromptAllowChanges": {
-    "description": "Switch in the 'wants to browse your files' prompt: whether the other device may also create, rename, delete and change files. Remembered for that device."
-  },
   "remoteFilesReadOnlyHost": "{device} 只允许读取文件",
   "@remoteFilesReadOnlyHost": {
     "description": "Toast when trying to change files on a device whose user allows reading only.",
@@ -1966,10 +1951,6 @@
         "type": "String"
       }
     }
-  },
-  "remoteFilesPromptBodyReadOnlyPhone": "允许后，它能看到这台手机的内部存储，打开和拷出里面的文件，但不能改动。",
-  "@remoteFilesPromptBodyReadOnlyPhone": {
-    "description": "Prompt body on a phone when 'Allow changes' is off."
   },
   "islandOverlay": "后台悬浮提示",
   "@islandOverlay": {
@@ -2093,7 +2074,6 @@
   "shellCardTrust": "自动接受连接",
   "shellCardBrowse": "浏览我的文件",
   "shellCardChange": "修改我的文件",
-  "shellCardAddress": "地址",
   "shellCardDiagnostics": "连接诊断",
   "shellCardDisconnect": "断开连接",
   "shellCardRemove": "删除设备",
@@ -2159,8 +2139,7 @@
   "shellSettingsKeepAlive": "后台保持连接",
   "shellSettingsScreenshotEnabled": "启用截图快捷键",
   "shellSettingsPressShortcut": "按下快捷键…",
-  "shellSettingsAllowClipboard": "允许访问剪贴板",
-  "shellSettingsAutoClipboard": "自动同步剪贴板",
+  "shellSettingsClipboardSync": "同步剪贴板",
   "shellSettingsPlaybackGain": "播放音量",
   "shellSettingsCopyCode": "验证码写入剪贴板",
   "shellSettingsVersion": "版本",
@@ -2223,8 +2202,6 @@
       }
     }
   },
-  "soundChannelLeft": "左",
-  "soundChannelRight": "右",
   "soundShareThisDevice": "共享本机声音",
   "soundMemberStopped": "已停止",
   "soundMemberNotConnected": "未连接",
@@ -2238,24 +2215,6 @@
   },
   "soundMemberBusy": "正在播放其他来源",
   "soundMemberSoloOnly": "只能单独播放",
-  "soundSyncNumbers": "网络 {network}ms · 抖动 {jitter}ms · 缓冲 {buffer}ms · 晚包 {late}",
-  "@soundSyncNumbers": {
-    "placeholders": {
-      "network": {
-        "type": "String"
-      },
-      "jitter": {
-        "type": "String"
-      },
-      "buffer": {
-        "type": "String"
-      },
-      "late": {
-        "type": "int"
-      }
-    }
-  },
-  "soundSyncNumbersPending": "网络 — · 抖动 — · 缓冲 — · 晚包 —",
   "soundPermissionNeeded": "需要允许屏幕与系统录音",
   "soundCheckLabel": "把声音播放到 {device}",
   "@soundCheckLabel": {
@@ -2384,9 +2343,8 @@
   "shellPaletteEmpty": "没有找到",
   "shellLinksServiceOff": "文件服务已关闭",
   "shellLinksServiceIdle": "没有开启的链接",
-  "shellLinksFoot": "使用普通 HTTP，密码只能防止随意打开。",
   "shellLinksEmptyTitle": "没有链接",
-  "shellLinksEmptyBody": "选择文件生成链接，对方用浏览器打开即可下载。",
+  "shellLinksEmptyBody": "选择文件或文件夹生成链接，对方用浏览器打开即可下载。",
   "shellLinksChoose": "选择文件",
   "shellLinksNew": "新建",
   "shellLinkOff": "已关闭",
@@ -2564,14 +2522,6 @@
     }
   },
   "phoneConnectPort": "端口",
-  "shellLinkCreateTitle": "共享「{name}」",
-  "@shellLinkCreateTitle": {
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
   "shellLinkPasswordOptional": "密码（可不填）",
   "shellAppsShownOn": "运行于本机，显示于 {device}",
   "@shellAppsShownOn": {
@@ -2602,5 +2552,59 @@
   "connectionCheckConnected": "连接正常。",
   "connectionCheckOneWay": "连接正常。本机无法连接对方端口，当前连接由对方发起，断开后需从对方重新连接。",
   "connectionCheckReady": "网络和对方的 Whisper 都正常，可以连接。",
-  "connectionCheckAgain": "重新检查"
+  "connectionCheckAgain": "重新检查",
+  "soundSyncNumbers": "网络 {network}ms · 抖动 {jitter}ms · 缓冲 {buffer}ms · 晚包 {late}",
+  "@soundSyncNumbers": {
+    "placeholders": {
+      "network": {
+        "type": "String"
+      },
+      "jitter": {
+        "type": "String"
+      },
+      "buffer": {
+        "type": "String"
+      },
+      "late": {
+        "type": "int"
+      }
+    }
+  },
+  "soundSyncNumbersPending": "网络 — · 抖动 — · 缓冲 — · 晚包 —",
+  "shellLinkCreateTitle": "共享「{name}」",
+  "@shellLinkCreateTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "shareLinkShortRoute": "简短后缀",
+  "@shareLinkShortRoute": {
+    "description": "Switch that makes the generated route 4 characters long"
+  },
+  "shareLinkCreate": "创建链接",
+  "@shareLinkCreate": {
+    "description": "Primary button of the share-link sheet"
+  },
+  "shareLinkShowPassword": "显示密码",
+  "@shareLinkShowPassword": {
+    "description": "Tooltip of the eye button in the password field"
+  },
+  "shareLinkHidePassword": "隐藏密码",
+  "@shareLinkHidePassword": {
+    "description": "Tooltip of the eye button in the password field while the password is visible"
+  },
+  "shareLinkSentLabel": "已发送",
+  "@shareLinkSentLabel": {
+    "description": "Row label in share link details: how much data the link served"
+  },
+  "shellLinksChooseAny": "选择",
+  "shellSelfCopy": "拷贝连接信息",
+  "shellSelfCopied": "已拷贝",
+  "shareLinkNoNetwork": "没有连上局域网，其他设备暂时打不开",
+  "@shareLinkNoNetwork": {
+    "description": "Shown instead of an address when this device has no LAN address"
+  },
+  "screenshotShortcutReset": "恢复默认快捷键"
 }

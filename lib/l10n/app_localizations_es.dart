@@ -353,9 +353,6 @@ class AppLocalizationsEs extends AppLocalizations {
       'Desconecta y borra todos los mensajes de este dispositivo. No se puede recuperar.';
 
   @override
-  String get brokeConnectTitle => 'Desconectar';
-
-  @override
   String get connectFailed => 'Error de conexión';
 
   @override
@@ -603,8 +600,7 @@ class AppLocalizationsEs extends AppLocalizations {
       'Compartir el audio de este dispositivo con el otro';
 
   @override
-  String get remoteInputScrollMultiplierTitle =>
-      'Velocidad de desplazamiento compartido';
+  String get remoteInputScrollMultiplierTitle => 'Velocidad de desplazamiento';
 
   @override
   String get audioShareUnsupportedCapture =>
@@ -1729,17 +1725,10 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get remoteFilesPromptBodyPhone =>
-      'Si lo permites, podrá ver el almacenamiento interno de este teléfono y copiar, crear, renombrar y eliminar archivos allí. Lo eliminado no se puede recuperar.';
-
-  @override
   String get remoteFilesDeny => 'No permitir';
 
   @override
   String get remoteFilesAllowOnce => 'Permitir';
-
-  @override
-  String get remoteFilesAllowAlways => 'Permitir siempre';
 
   @override
   String windowStreamTouchBlockedTitle(String device) {
@@ -2259,13 +2248,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get shareLinkRoute => 'Sufijo del enlace';
 
   @override
-  String get shareLinkShortRoute => 'Sufijo corto';
-
-  @override
   String get shareLinkPassword => 'Contraseña';
-
-  @override
-  String get shareLinkCreate => 'Crear enlace';
 
   @override
   String get shareLinkRouteTaken => 'Otro enlace ya usa este sufijo';
@@ -2711,16 +2694,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get deviceFilesAllowChanges => 'Permitir cambios en mis archivos';
 
   @override
-  String get remoteFilesPromptAllowChanges => 'Permitir cambios';
-
-  @override
   String remoteFilesReadOnlyHost(String device) {
     return '$device solo permite leer sus archivos';
   }
-
-  @override
-  String get remoteFilesPromptBodyReadOnlyPhone =>
-      'Si lo permites, podrá ver el almacenamiento interno de este teléfono y abrir y copiar sus archivos, pero no cambiarlos.';
 
   @override
   String get islandOverlay => 'Avisos en segundo plano';
@@ -2893,9 +2869,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get shellCardChange => 'Modificar mis archivos';
 
   @override
-  String get shellCardAddress => 'Dirección';
-
-  @override
   String get shellCardDiagnostics => 'Diagnóstico de conexión';
 
   @override
@@ -3016,11 +2989,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get shellSettingsPressShortcut => 'Pulsa un atajo…';
 
   @override
-  String get shellSettingsAllowClipboard => 'Permitir acceso al portapapeles';
-
-  @override
-  String get shellSettingsAutoClipboard =>
-      'Sincronizar el portapapeles automáticamente';
+  String get shellSettingsClipboardSync => 'Sincronizar el portapapeles';
 
   @override
   String get shellSettingsPlaybackGain => 'Volumen de reproducción';
@@ -3089,12 +3058,6 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get soundChannelLeft => 'Izq.';
-
-  @override
-  String get soundChannelRight => 'Der.';
-
-  @override
   String get soundShareThisDevice => 'Compartir el sonido de este dispositivo';
 
   @override
@@ -3113,20 +3076,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get soundMemberSoloOnly => 'Solo puede sonar por separado';
-
-  @override
-  String soundSyncNumbers(
-    String network,
-    String jitter,
-    String buffer,
-    int late,
-  ) {
-    return 'Red ${network}ms · Variación ${jitter}ms · Búfer ${buffer}ms · Tardíos $late';
-  }
-
-  @override
-  String get soundSyncNumbersPending =>
-      'Red — · Variación — · Búfer — · Tardíos —';
 
   @override
   String get soundPermissionNeeded =>
@@ -3269,10 +3218,6 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get shellLinksServiceIdle =>
       'No hay enlaces activos, el servicio no se está ejecutando';
-
-  @override
-  String get shellLinksFoot =>
-      'Usa HTTP sin cifrar. La contraseña solo evita visitas casuales.';
 
   @override
   String get shellLinksEmptyTitle => 'Aún no hay enlaces';
@@ -3512,11 +3457,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get phoneConnectPort => 'Puerto';
 
   @override
-  String shellLinkCreateTitle(String name) {
-    return 'Compartir «$name»';
-  }
-
-  @override
   String get shellLinkPasswordOptional => 'Contraseña (opcional)';
 
   @override
@@ -3572,4 +3512,54 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get connectionCheckAgain => 'Comprobar de nuevo';
+
+  @override
+  String soundSyncNumbers(
+    String network,
+    String jitter,
+    String buffer,
+    int late,
+  ) {
+    return 'Red ${network}ms · Variación ${jitter}ms · Búfer ${buffer}ms · Tardíos $late';
+  }
+
+  @override
+  String get soundSyncNumbersPending =>
+      'Red — · Variación — · Búfer — · Tardíos —';
+
+  @override
+  String shellLinkCreateTitle(String name) {
+    return 'Compartir «$name»';
+  }
+
+  @override
+  String get shareLinkShortRoute => 'Sufijo corto';
+
+  @override
+  String get shareLinkCreate => 'Crear enlace';
+
+  @override
+  String get shareLinkShowPassword => 'Mostrar contraseña';
+
+  @override
+  String get shareLinkHidePassword => 'Ocultar contraseña';
+
+  @override
+  String get shareLinkSentLabel => 'Datos enviados';
+
+  @override
+  String get shellLinksChooseAny => 'Elegir';
+
+  @override
+  String get shellSelfCopy => 'Copiar datos de conexión';
+
+  @override
+  String get shellSelfCopied => 'Copiado';
+
+  @override
+  String get shareLinkNoNetwork =>
+      'Sin conexión a una red local: otros dispositivos aún no pueden abrirlo';
+
+  @override
+  String get screenshotShortcutReset => 'Restaurar atajo predeterminado';
 }

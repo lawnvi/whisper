@@ -539,7 +539,9 @@ class ShellSoundController extends ChangeNotifier {
     final peer = device.uid;
     final group = _backend.supportsGroupSink(peer);
     final checked = _members.contains(peer);
-    final channel = checked && group && peer != _soloPeer
+    // A channel only means something between two or more devices.
+    final channel =
+        checked && group && peer != _soloPeer && _members.length >= 2
         ? _members.roleOf(peer)
         : null;
     SoundRow row(

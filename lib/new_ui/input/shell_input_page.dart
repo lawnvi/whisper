@@ -3,11 +3,13 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:whisper/helper/local.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/new_ui/input/input_controller.dart';
 import 'package:whisper/new_ui/input/input_rules.dart';
 import 'package:whisper/new_ui/share/share_parts.dart';
 import 'package:whisper/new_ui/shell/shell_parts.dart';
+import 'package:whisper/remote_input/remote_input_coordinator.dart';
 import 'package:whisper/remote_input/remote_input_layout.dart';
 import 'package:whisper/state/chat_session_list.dart';
 import 'package:whisper/theme/whisper_device_art.dart';
@@ -669,9 +671,6 @@ class _ScreenBlockState extends State<_ScreenBlock> {
     final name = screen.isSelf
         ? (widget.selfName.isEmpty ? screen.name : widget.selfName)
         : screen.name;
-    final wall = screen.isSelf
-        ? DeviceWallpaper.self
-        : deviceArtFor(screen.device!, size: 1).wallpaper;
     final height = screen.bounds.height * scale;
     final status = _statusText(context);
     final block = Stack(
@@ -689,7 +688,8 @@ class _ScreenBlockState extends State<_ScreenBlock> {
               for (final display in screen.displays)
                 _Display(
                   rect: _displayRect(display, screen.bounds, scale),
-                  wall: wall,
+                  self: screen.isSelf,
+                  selected: widget.selected,
                   lifted: lifted.clamp(0.0, 1.0),
                 ),
             ],
@@ -723,22 +723,6 @@ class _ScreenBlockState extends State<_ScreenBlock> {
             ),
           ),
         ),
-        // `.scr.sel::after`: 3 out from the screen, 2.5 thick.
-        if (widget.selected)
-          Positioned(
-            left: -5.5,
-            top: -5.5,
-            right: -5.5,
-            bottom: -5.5,
-            child: IgnorePointer(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(WhisperRadius.xs + 5.5),
-                  border: Border.all(color: c.accent, width: 2.5),
-                ),
-              ),
-            ),
-          ),
         if (_focused && !widget.selected)
           Positioned(
             left: -3,
@@ -845,8 +829,7 @@ class _Label extends StatelessWidget {
       fontWeight: weight,
       height: 1.25,
       leadingDistribution: TextLeadingDistribution.even,
-      color: WhisperScreens.label,
-      shadows: WhisperScreens.labelShadow,
+      color: context.wc.ink,
     ),
   );
 }
@@ -855,63 +838,41 @@ class _Label extends StatelessWidget {
 class _Display extends StatelessWidget {
   const _Display({
     required this.rect,
-    required this.wall,
+    required this.self,
+    required this.selected,
     required this.lifted,
   });
 
   final Rect rect;
-  final DeviceWallpaper wall;
+  final bool self, selected;
   final double lifted;
 
   @override
   Widget build(BuildContext context) {
+    final c = context.wc;
     final radius = BorderRadius.circular(WhisperRadius.xs);
-    Widget screen = DecoratedBox(
-      decoration: BoxDecoration(
-        borderRadius: radius,
-        boxShadow: [
-          ...WhisperScreens.shadow,
-          for (final shadow in WhisperScreens.lifted)
-            shadow.copyWith(
-              color: shadow.color.withValues(alpha: shadow.color.a * lifted),
-            ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: radius,
-        child: DecoratedBox(
-          decoration: BoxDecoration(gradient: wall.gradient),
-          child: LayoutBuilder(
-            builder: (context, constraints) => Stack(
-              fit: StackFit.expand,
-              children: [
-                Align(
-                  alignment: Alignment.topCenter,
-                  child: SizedBox(
-                    height: math.max(4, constraints.maxHeight * .07),
-                    width: double.infinity,
-                    child: const ColoredBox(color: WhisperScreens.menuBar),
-                  ),
-                ),
-                const DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        WhisperScreens.shadeTop,
-                        WhisperScreens.shadeBottom,
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
+    return Positioned.fromRect(
+      rect: rect,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: self ? c.tint : c.raised,
+          borderRadius: radius,
+          // On the screen itself, so there is no gap to it.
+          border: Border.all(
+            color: selected ? c.accent : c.border,
+            width: selected ? 2 : .5,
+            strokeAlign: BorderSide.strokeAlignInside,
           ),
+          boxShadow: [
+            ...WhisperScreens.shadow,
+            for (final shadow in WhisperScreens.lifted)
+              shadow.copyWith(
+                color: shadow.color.withValues(alpha: shadow.color.a * lifted),
+              ),
+          ],
         ),
       ),
     );
-    return Positioned.fromRect(rect: rect, child: screen);
   }
 }
 
@@ -1217,6 +1178,7 @@ class _ExitHint extends StatelessWidget {
 }
 
 /// `.empty`: this device is being controlled, and can only stop that.
+
 class _Controlled extends StatelessWidget {
   const _Controlled({
     required this.peerId,

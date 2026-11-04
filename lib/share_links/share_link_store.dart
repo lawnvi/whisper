@@ -223,9 +223,23 @@ class ShareLinkStore extends ChangeNotifier implements ShareServerSource {
     return null;
   }
 
+  String? _preferredAddress;
+
+  /// The address links are given with: the one picked, while this device still
+  /// has it, or else the likeliest one.
+  String? get address => _addresses.contains(_preferredAddress)
+      ? _preferredAddress
+      : (_addresses.isEmpty ? null : _addresses.first);
+
+  /// For a device on more than one network.
+  void preferAddress(String address) {
+    _preferredAddress = address;
+    notifyListeners();
+  }
+
   /// `http://<address>:<port>/<route>`.
   String urlFor(ShareLink link, [String? address]) {
-    final host = address ?? (_addresses.isEmpty ? null : _addresses.first);
+    final host = address ?? this.address;
     return 'http://${host ?? '127.0.0.1'}:$port/${link.route}';
   }
 
@@ -314,6 +328,45 @@ class ShareLinkStore extends ChangeNotifier implements ShareServerSource {
     await _persist();
     _notify();
     await _reconcile();
+  });
+
+  /// A new address for a link. The old one stops working, and what was being
+  /// downloaded through it stops too. Throws [ShareRouteException] for a route
+  /// that cannot be used.
+  Future<void> setRoute(String id, String route) => _enqueue(() async {
+    await _ensureLoaded();
+    final link = linkById(id);
+    final typed = ShareRoutes.normalize(route);
+    if (link == null || link.route == typed) {
+      return;
+    }
+    final problem = ShareRoutes.check(typed);
+    if (problem != null) {
+      throw ShareRouteException(problem, typed);
+    }
+    if (_links.any((other) => other.route == typed)) {
+      throw ShareRouteException(ShareRouteProblem.taken, typed);
+    }
+    link.route = typed;
+    server.dropLink(id);
+    await _persist();
+    _notify();
+  });
+
+  /// Sets a link's password, or takes it off with null or an empty one. Whoever
+  /// was let in has to ask again: their cookie is signed with the old salt.
+  Future<void> setPassword(String id, String? password) => _enqueue(() async {
+    await _ensureLoaded();
+    final link = linkById(id);
+    if (link == null) {
+      return;
+    }
+    link.password = password == null || password.isEmpty
+        ? null
+        : await SharePasswordHash.create(password);
+    server.dropLink(id);
+    await _persist();
+    _notify();
   });
 
   Future<void> remove(String id) => _enqueue(() async {

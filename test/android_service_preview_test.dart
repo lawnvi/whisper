@@ -103,7 +103,7 @@ const _settings = SettingsPresentation(
   launchAtStartup: false,
   androidBackgroundKeepAlive: true,
   audioSharePlaybackGain: 1.0,
-  remoteInputScrollMultiplier: 1.0,
+  remoteInputScrollMultiplier: 1,
   themeMode: ThemeMode.system,
   isAndroid: true,
   isDesktop: false,

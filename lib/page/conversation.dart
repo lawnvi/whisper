@@ -1191,7 +1191,6 @@ class _SendMessageScreen extends State<SendMessageScreen>
                 ? l10n.connectedNow
                 : l10n.deviceFeatureNeedsConnection,
           ),
-          onDisconnect: () => socketManager.disconnectPeer(device.uid),
           onRemove: (uid) async {
             final delete = widget.onDeviceDeleted;
             if (delete == null) {
@@ -1528,9 +1527,9 @@ class _SendMessageScreen extends State<SendMessageScreen>
   Future<void> _openTransferAssistant() {
     return Navigator.push<void>(
       context,
-      MaterialPageRoute<void>(
+      WhisperPageRoute<void>(
         builder: (context) =>
-            TransferAssistantScreen(peerId: device.uid, peerName: device.name),
+            TransferAssistantScreen(peerId: device.uid),
       ),
     );
   }
@@ -1937,18 +1936,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
 
   void _toggleConnection() {
     if (_isConnectedSession) {
-      showConfirmationDialog(
-        context,
-        title: AppLocalizations.of(context)?.brokeConnectTitle ?? "断开连接",
-        description:
-            '${AppLocalizations.of(context)?.disconnect ?? "断开"} ${device.name}',
-        confirmButtonText: AppLocalizations.of(context)?.confirm ?? '确定',
-        cancelButtonText: AppLocalizations.of(context)?.cancel ?? '取消',
-        onConfirm: () async {
-          _connectionAttempts.cancel('peer:${device.uid}');
-          await socketManager.disconnectPeer(device.uid);
-        },
-      );
+      _connectionAttempts.cancel('peer:${device.uid}');
+      unawaited(socketManager.disconnectPeer(device.uid));
       return;
     }
     if (_canToggleConnection) {
@@ -2669,8 +2658,19 @@ class _SendMessageScreen extends State<SendMessageScreen>
         verifying: transfer?.state == FileTransferState.verifying,
         progress: transfer?.progress ?? 0,
         statusKey: (failed, transfer?.state),
-        statusText: (progress) =>
-            _fileStatusText(message, transfer, progressOverride: progress),
+        statusText: (progress) {
+          final status = _fileStatusText(
+            message,
+            transfer,
+            progressOverride: progress,
+          );
+          final speed = _speed.trim();
+          return isActiveTransfer &&
+                  transfer.transferId == _activeTransferId &&
+                  speed.isNotEmpty
+              ? '$status · $speed'
+              : status;
+        },
         cardColor: cardColor,
         borderColor: cardBorderColor,
         animationDuration: _transferProgressAnimationDuration,

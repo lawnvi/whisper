@@ -855,7 +855,7 @@ class _PhoneFilesViewState extends State<PhoneFilesView> {
                         ),
                         Expanded(
                           child: crumbs.isEmpty
-                              ? _count(l10n, ready, expand: true)
+                              ? const SizedBox.shrink()
                               : _ScrollsToEnd(
                                   child: Row(
                                     children: [
@@ -941,22 +941,6 @@ class _PhoneFilesViewState extends State<PhoneFilesView> {
   }
 
   /// `.cnt`: at the right of the room there is, and gone first when there is none.
-  Widget _count(AppLocalizations l10n, bool ready, {bool expand = false}) {
-    if (!ready) return const SizedBox.shrink();
-    const type = WhisperType(touch: true);
-    return Padding(
-      padding: const EdgeInsets.only(left: 12),
-      child: Text(
-        l10n.shellFilesCount(controller.entries.length),
-        maxLines: 1,
-        softWrap: false,
-        overflow: expand ? TextOverflow.fade : TextOverflow.clip,
-        textAlign: TextAlign.end,
-        style: TextStyle(fontSize: type.note, color: context.wc.ink2),
-      ),
-    );
-  }
-
   /// While several are being picked: all of them, how many, done.
   Widget _selectingRow(AppLocalizations l10n) {
     final c = context.wc;

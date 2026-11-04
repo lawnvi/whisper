@@ -80,13 +80,14 @@ void main() {
       expect(members.roles, {'b': AudioChannelRole.stereo});
     });
 
-    test('not when somebody has touched a channel', () {
+    test('also when somebody had picked a channel: nothing to pick alone', () {
       final members = SoundMembers()
         ..add('a')
         ..add('b')
         ..setRole('b', AudioChannelRole.mono)
         ..remove('a');
-      expect(members.roles, {'b': AudioChannelRole.mono});
+      expect(members.roles, {'b': AudioChannelRole.stereo});
+      expect(members.touched, isFalse);
     });
 
     test('a third device is stereo and leaves the other two alone', () {
@@ -177,12 +178,6 @@ void main() {
       );
       expect(soundHeaderQuality([]), isNull);
       expect(soundHeaderQuality([SoundMemberPhase.failed]), isNull);
-    });
-
-    test('numbers read as the row writes them', () {
-      expect(formatAudioMillis(2000), '2');
-      expect(formatAudioMillis(1500), '1.5');
-      expect(formatAudioMillis(0), '0');
     });
   });
 
@@ -356,6 +351,24 @@ void main() {
       );
     });
 
+    test('a channel is there to pick only between two or more', () async {
+      await world.controller.toggle(imacDevice.uid);
+      expect(
+        world.controller.rowFor(imacDevice, connected: true).channel,
+        isNull,
+      );
+      await world.controller.toggle(xiaomiDevice.uid);
+      expect(
+        world.controller.rowFor(imacDevice, connected: true).channel,
+        AudioChannelRole.left,
+      );
+      await world.controller.toggle(xiaomiDevice.uid);
+      expect(
+        world.controller.rowFor(imacDevice, connected: true).channel,
+        isNull,
+      );
+    });
+
     test('off stops the group and keeps who was checked', () async {
       await world.controller.toggle(imacDevice.uid);
       await world.controller.toggle(xiaomiDevice.uid);
@@ -399,7 +412,6 @@ void main() {
       final row = world.controller.rowFor(imacDevice, connected: true);
       expect(row.phase, SoundRowPhase.stopped);
       expect(row.checked, isTrue);
-      expect(row.channel, AudioChannelRole.stereo);
     });
 
     test('unchecking the last one turns it all off and forgets', () async {

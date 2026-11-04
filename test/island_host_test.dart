@@ -2,6 +2,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:whisper/new_ui/shell/shell_island.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/widget/island/island_activity.dart';
 import 'package:whisper/widget/island/island_center.dart';
@@ -194,57 +195,70 @@ void main() {
     await tester.pump(const Duration(seconds: 10));
   });
 
-  group('a camera in the middle of the screen', () {
-    const camera = ui.DisplayFeature(
-      bounds: Rect.fromLTWH(190, 8, 32, 32),
-      type: ui.DisplayFeatureType.cutout,
-      state: ui.DisplayFeatureState.unknown,
-    );
-
-    test('only one in the middle at the top counts', () {
-      expect(islandCamera(const [camera], 412), camera.bounds);
-      expect(islandCamera(const [], 412), isNull);
-      // A corner hole, or a fold.
-      const corner = ui.DisplayFeature(
-        bounds: Rect.fromLTWH(20, 8, 32, 32),
+  testWidgets('it stays under the status bar, whatever the camera does', (
+    tester,
+  ) async {
+    await pumpHost(tester);
+    tester.view.padding = const FakeViewPadding(top: 138);
+    tester.view.displayFeatures = const [
+      ui.DisplayFeature(
+        bounds: Rect.fromLTWH(190, 0, 32, 46),
         type: ui.DisplayFeatureType.cutout,
         state: ui.DisplayFeatureState.unknown,
-      );
-      const fold = ui.DisplayFeature(
-        bounds: Rect.fromLTWH(190, 0, 32, 800),
-        type: ui.DisplayFeatureType.fold,
-        state: ui.DisplayFeatureState.postureFlat,
-      );
-      expect(islandCamera(const [corner, fold], 412), isNull);
-    });
-
-    testWidgets(
-      'the small island goes around it, narrow enough for the clock',
-      (tester) async {
-        await pumpHost(tester);
-        tester.view.displayFeatures = const [
-          ui.DisplayFeature(
-            bounds: Rect.fromLTWH(190, 8, 32, 32),
-            type: ui.DisplayFeatureType.cutout,
-            state: ui.DisplayFeatureState.unknown,
-          ),
-        ];
-        source.put(islandActivity('copy', arrival: IslandArrival.quiet));
-        await settle(tester);
-        final pill = tester.getRect(
-          find
-              .ancestor(
-                of: find.text('compact:copy'),
-                matching: find.byType(DecoratedBox),
-              )
-              .first,
-        );
-        expect(pill.center.dy, closeTo(24, 1));
-        expect(pill.center.dx, closeTo(206, 1));
-        expect(pill.width, lessThan(177));
-        await tester.pump(const Duration(seconds: 10));
-      },
+      ),
+    ];
+    source.put(islandActivity('copy', arrival: IslandArrival.quiet));
+    await settle(tester);
+    final pill = tester.getRect(
+      find
+          .ancestor(
+            of: find.text('compact:copy'),
+            matching: find.byType(DecoratedBox),
+          )
+          .first,
     );
+    expect(pill.top, closeTo(52, .5), reason: 'the status bar and 6 below it');
+    expect(pill.height, closeTo(36, .5));
+    await tester.tap(find.text('compact:copy'));
+    await settle(tester);
+    expect(center.stage, IslandStage.expanded, reason: 'a tap opens it');
+    await tester.pump(const Duration(seconds: 10));
+  });
+
+  testWidgets('the desktop island goes small when tapped again', (tester) async {
+    tester.view.physicalSize = const Size(1000, 700);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        locale: const Locale('en'),
+        home: Stack(
+          children: [
+            ShellIsland(
+              center: center,
+              windowWidth: 1000,
+              controlsLeft: 800,
+              titleRight: 200,
+              buttonsLeft: 1000,
+              buttonsBottom: 0,
+            ),
+          ],
+        ),
+      ),
+    );
+    source.put(islandActivity('copy', arrival: IslandArrival.quiet));
+    await settle(tester);
+    expect(center.stage, IslandStage.compact);
+    await tester.tap(find.text('compact:copy'));
+    await settle(tester);
+    expect(center.stage, IslandStage.expanded);
+    await tester.tap(find.text('featured:copy '));
+    await settle(tester);
+    expect(center.stage, IslandStage.compact);
+    await tester.pump(const Duration(seconds: 10));
   });
 
   testWidgets('a page may hush the island while it is first built', (
