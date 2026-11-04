@@ -2532,26 +2532,31 @@ class _SendMessageScreen extends State<SendMessageScreen>
     );
     return Align(
       alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: mine ? c.tintHover : c.bubble,
-          borderRadius: BorderRadius.circular(WhisperRadius.bubble),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
-          child: MessageSelectionColors(
-            mine: mine,
-            child: MessageLinkText(
-              text: content,
-              style: style,
-              linkStyle: style.copyWith(
-                color: mine ? c.onTint : c.accentText,
-                decoration: TextDecoration.underline,
-                decorationColor: mine ? c.onTint : c.accentText,
+      child: MessageHoverCopy(
+        text: content,
+        mine: mine,
+        enabled: isDesktop() && !_messageSelectionActive,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: mine ? c.tintHover : c.bubble,
+            borderRadius: BorderRadius.circular(WhisperRadius.bubble),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
+            child: MessageSelectionColors(
+              mine: mine,
+              child: MessageLinkText(
+                text: content,
+                style: style,
+                linkStyle: style.copyWith(
+                  color: mine ? c.onTint : c.accentText,
+                  decoration: TextDecoration.underline,
+                  decorationColor: mine ? c.onTint : c.accentText,
+                ),
+                linksEnabled: !_messageSelectionActive,
+                onOpen: _openMessageLink,
+                textAlign: TextAlign.left,
               ),
-              linksEnabled: !_messageSelectionActive,
-              onOpen: _openMessageLink,
-              textAlign: TextAlign.left,
             ),
           ),
         ),

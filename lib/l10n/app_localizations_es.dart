@@ -193,6 +193,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get captureSave => 'Guardar como archivo';
 
   @override
+  String get messageCopy => 'Copiar';
+
+  @override
   String get diagTitle => 'Diagnóstico';
 
   @override

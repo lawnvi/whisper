@@ -185,6 +185,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get captureSave => '存为文件';
 
   @override
+  String get messageCopy => '复制';
+
+  @override
   String get diagTitle => '诊断信息';
 
   @override

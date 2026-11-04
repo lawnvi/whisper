@@ -74,6 +74,7 @@
   "captureUndo": "Undo",
   "captureRedo": "Redo",
   "captureSave": "Save as file",
+  "messageCopy": "Copy",
   "diagTitle": "Diagnostics",
   "diagDatabase": "Database",
   "diagServer": "Connection service",

@@ -191,6 +191,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get captureSave => 'Save as file';
 
   @override
+  String get messageCopy => 'Copy';
+
+  @override
   String get diagTitle => 'Diagnostics';
 
   @override

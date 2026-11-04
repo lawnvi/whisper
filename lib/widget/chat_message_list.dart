@@ -10,6 +10,7 @@ import 'package:whisper/helper/toast.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/message.dart';
+import 'package:whisper/theme/whisper_icons.dart';
 import 'package:whisper/theme/whisper_ui.dart';
 import 'package:whisper/state/message_deletion.dart';
 import 'package:whisper/widget/message_deletion_dialog.dart';
@@ -23,11 +24,11 @@ double chatListBottomInset({
   required bool touch,
   bool hasComposer = true,
 }) {
-  if (!hasComposer) return touch ? 24.0 : 16.0;
+  if (!hasComposer) return 32.0;
   final usual = touch ? 92.0 : 84.0;
   if (composerHeight == null) return usual;
   final floatsAt = touch ? 24.0 : 16.0;
-  return math.max(usual, composerHeight + floatsAt + 12);
+  return math.max(usual, composerHeight + floatsAt + (touch ? 16 : 24));
 }
 
 class ChatMessageList extends StatefulWidget {
@@ -675,4 +676,157 @@ String formatChatTimestamp(
       ? DateFormat.Md(locale).format(value)
       : DateFormat.yMd(locale).format(value);
   return '$date $time';
+}
+
+/// surfaces.md「气泡」: with a pointer over a text message, a copy icon beside its
+/// bubble, level with the bubble's bottom, on the side with room. It floats, as
+/// nothing may move for it, and stays a moment for the pointer to get across.
+class MessageHoverCopy extends StatefulWidget {
+  const MessageHoverCopy({
+    super.key,
+    required this.text,
+    required this.mine,
+    required this.enabled,
+    required this.child,
+  });
+
+  final String text;
+  final bool mine, enabled;
+  final Widget child;
+
+  @override
+  State<MessageHoverCopy> createState() => _MessageHoverCopyState();
+}
+
+class _MessageHoverCopyState extends State<MessageHoverCopy> {
+  static const _lingers = Duration(milliseconds: 140);
+  static const _target = 24.0, _gap = 2.0, _margin = 8.0;
+
+  final _portal = OverlayPortalController();
+  final _link = LayerLink();
+  Timer? _hide;
+  Timer? _reset;
+  bool _copied = false;
+  bool _onIcon = false;
+
+  /// Up by this much where the bubble goes past the bottom of the window.
+  double _up = 0;
+
+  @override
+  void dispose() {
+    _hide?.cancel();
+    _reset?.cancel();
+    super.dispose();
+  }
+
+  void _enter() {
+    _hide?.cancel();
+    if (!widget.enabled || _portal.isShowing) return;
+    final box = context.findRenderObject();
+    if (box is RenderBox && box.hasSize) {
+      final bottom = box.localToGlobal(box.size.bottomLeft(Offset.zero)).dy;
+      final room = MediaQuery.sizeOf(context).height - bottom;
+      _up = math.max(0, _margin - room);
+    }
+    _portal.show();
+  }
+
+  void _exit() {
+    _hide?.cancel();
+    _hide = Timer(_lingers, () {
+      if (mounted && _portal.isShowing) _portal.hide();
+    });
+  }
+
+  void _copy() {
+    unawaited(copyToClipboard(widget.text));
+    _reset?.cancel();
+    setState(() => _copied = true);
+    _reset = Timer(WhisperLoops.doneHold, () {
+      if (mounted) setState(() => _copied = false);
+    });
+  }
+
+  Widget _icon(BuildContext context) {
+    final c = context.wc;
+    final label = AppLocalizations.of(context)?.messageCopy;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) {
+        _enter();
+        setState(() => _onIcon = true);
+      },
+      onExit: (_) {
+        _exit();
+        setState(() => _onIcon = false);
+      },
+      child: Tooltip(
+        message: label ?? '',
+        child: Semantics(
+          button: true,
+          label: label,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _copy,
+            child: SizedBox.square(
+              dimension: _target,
+              child: Center(
+                child: _copied
+                    ? WhisperIcon(
+                        WhisperGlyph.check,
+                        size: 15,
+                        weight: 2.2,
+                        color: c.ok,
+                      )
+                    : WhisperIcon(
+                        WhisperGlyph.copy,
+                        size: 15,
+                        color: _onIcon ? c.ink : c.ink3,
+                      ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.enabled) {
+      if (_portal.isShowing) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _portal.isShowing) _portal.hide();
+        });
+      }
+      return widget.child;
+    }
+    return OverlayPortal(
+      controller: _portal,
+      overlayChildBuilder: (context) => Align(
+        alignment: Alignment.topLeft,
+        child: CompositedTransformFollower(
+          link: _link,
+          showWhenUnlinked: false,
+          // A message of mine has the edge of the window on its right.
+          targetAnchor: widget.mine
+              ? Alignment.bottomLeft
+              : Alignment.bottomRight,
+          followerAnchor: widget.mine
+              ? Alignment.bottomRight
+              : Alignment.bottomLeft,
+          offset: Offset(widget.mine ? -_gap : _gap, -_up),
+          child: _icon(context),
+        ),
+      ),
+      child: CompositedTransformTarget(
+        link: _link,
+        child: MouseRegion(
+          onEnter: (_) => _enter(),
+          onExit: (_) => _exit(),
+          child: widget.child,
+        ),
+      ),
+    );
+  }
 }

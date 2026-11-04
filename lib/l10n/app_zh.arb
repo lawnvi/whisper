@@ -74,6 +74,7 @@
   "captureUndo": "撤销",
   "captureRedo": "重做",
   "captureSave": "存为文件",
+  "messageCopy": "复制",
   "diagTitle": "诊断信息",
   "diagDatabase": "数据库",
   "diagServer": "连接服务",

@@ -442,6 +442,12 @@ abstract class AppLocalizations {
   /// **'存为文件'**
   String get captureSave;
 
+  /// No description provided for @messageCopy.
+  ///
+  /// In zh, this message translates to:
+  /// **'复制'**
+  String get messageCopy;
+
   /// No description provided for @diagTitle.
   ///
   /// In zh, this message translates to:
