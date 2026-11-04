@@ -1703,4 +1703,4 @@ class WhisperLayout {
 **设备选取器用线条图标**（`DeviceGlyph`，视口 32，描边 2，圆头圆角）。设备列表不用它，用写实设备图，见 `DESIGN.md`「设备是实物」。几何：显示器 `rect(3,5,26,17,r2.5)` 加支架，笔记本 `rect(6.5,7,19,14,r2)` 加底线，手机 `rect(11,3,10,26,r2.5)` 加听筒线。
 
 
-界面测试大多删了（`decisions.md`），`test/whisper_ui_test.dart` 只留设备顺序和窗口尺寸的逻辑。要看样子用 `test/manual/` 的出图脚本：`WHISPER_RENDER_OUT=目录 flutter test test/manual/render_shell.dart`。
+界面测试都删了（`decisions.md`）。要看样子用 `test/manual/` 的出图脚本：`WHISPER_RENDER_OUT=目录 flutter test test/manual/render_shell.dart`。

@@ -78,9 +78,33 @@ CI currently runs `flutter pub get`, `flutter analyze`, and `flutter test` on pu
 
 ## Testing Instructions
 
+Tests are for what would break quietly and cost a lot. They are not a record of the work. Most checks made while working are temporary: run them, then throw them away.
+
+**What stays in `test/`:** if this broke, would someone lose data or security, or would a device do the wrong thing, with nothing on screen to show it?
+- Wire formats and protocols. A format or protocol that changes keeps a test for what older or newer peers do with it.
+- Authentication, trust and security boundaries: tampering, replay, leaving an allowed path, permissions, what a visitor on the LAN can reach.
+- Data safety: transfer integrity and resume, not overwriting or losing someone's files, database migrations.
+- State machines that decide what is sent, started or stopped: connection, transfer, audio, remote input. This counts wherever the logic lives, including behind a page. Logic that only decides what a screen shows does not count.
+- One test per main path over real sockets and real files: connecting, sending a file or folder, mounting, a share link. These catch what unit tests with stand-ins miss, so prefer them to more unit tests of the same path.
+- Stress and performance tests that guard a number. Guard what does not depend on the machine (queue depth, bounds, nothing lost under load) or leave a wide margin. A benchmark that only reports goes in `test/manual/`.
+- A regression test for a real bug that was hard to find and would come back silently. Say in a comment what the bug was.
+
+**What is temporary:** anything else that proves a change works while it is being made, such as a throwaway test, a probe or a script. Run it and delete it before committing. Scripts worth running again by hand go in `test/manual/`, which `flutter test` does not run.
+
+**What does not get written at all:**
+- Layout, colors, sizes, wording or screenshots. Look at the screen instead, with the render scripts in `test/manual/`.
+- The text of source files. The only exceptions are what nothing can run here: release workflows, manifests, native log privacy, FFI entry points, security checks in privileged or native code that tests cannot exercise, and a single workaround whose loss would only show on a platform or network that tests cannot reach, with a comment saying what breaks.
+- Tests that restate the implementation, that only exercise a stand-in, or that cover what another test already covers.
+- Tests of test helpers or of tools that are not shipped.
+
+**Keeping the number down:**
+- A change adds no long-lived test by default, including changes to core code. Add one only if you can say what would break that nothing else would catch. A new or changed wire format always qualifies. Prefer extending an existing test to adding a file.
+- One test per rule, not per input: inputs of the same rule go in one table.
+- UI changes add none, unless the logic behind them is on the list above.
+- When a feature goes, its tests go with it. When a test gets in the way of a refactor without catching a bug, delete it.
+
+**Running them:**
 - Start with the narrowest test that covers the changed behavior.
-- For socket, file transfer, audio, remote input, database, or state-machine changes, add or update focused tests under `test/`.
-- For UI changes, run at least the relevant widget/source test plus `flutter analyze`.
 - Before claiming broad readiness, run `flutter analyze` and `flutter test`.
 - If native platform behavior cannot be verified locally, document the platform, command not run, and residual risk.
 
