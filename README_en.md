@@ -25,6 +25,7 @@ Whisper is a LAN collaboration app. Paired devices connect to each other directl
 | Feature | What it does |
 | --- | --- |
 | **Text and files** | Send them like chat messages; transfers resume and are verified on arrival |
+| **My notes** | A conversation with this device itself, for text and files when nobody else is around; nothing is sent anywhere |
 | **Folders** | Send a whole folder from a desktop, structure and all, without archiving |
 | **File browsing** | Browse, copy, rename or delete the other device's files, with its approval |
 | **Mount on this computer** | Open, edit, create and delete the other device's files in Finder, File Explorer or a Linux file manager |
@@ -36,7 +37,7 @@ Whisper is a LAN collaboration app. Paired devices connect to each other directl
 | **Phone controller** | Turn an Android phone into an air mouse, touchpad, and keyboard |
 | **System audio sharing** | Play a computer's sound on one or more other devices |
 | **Notification forwarding** | Show chosen Android apps' notifications, like codes, on your computer |
-| **Desktop screenshots** | Click a window or drag a region and the capture lands on the clipboard |
+| **Desktop screenshots** | Click a window or drag a region, mark it up right beside the selection (box, circle, arrow, pen, text, mosaic), then copy or save it |
 | **TV casting** | Receive DLNA casts from video apps on your computer (experimental) |
 
 | Audio sharing | Keyboard and mouse sharing |
@@ -60,9 +61,9 @@ iOS / iPadOS: the project has no paid Apple Developer account, so the app is not
 
 1. Install and open Whisper on two devices connected to the same local network.
 2. Select the other device in the device list, then check and confirm the pairing code on both sides.
-3. Open the conversation and start sending. Keyboard/mouse sharing, audio sharing, and the other tools are in the device tools area on desktop.
+3. Open the conversation and start sending. Sound and keyboard/mouse sharing are at the top of the sidebar on desktop.
 
-> The other device is not listed? Select the QR icon above the device list, then scan its code or enter its IP address and port (`10002` by default).
+> The other device is not listed? On desktop select this device's name at the bottom left; on a phone select the plus button. Then scan a QR code or enter the other device's IP address and port (`10002` by default).
 
 ## Everyday actions
 
@@ -70,15 +71,16 @@ iOS / iPadOS: the project has no paid Apple Developer account, so the app is not
 | --- | --- |
 | Send what is on the clipboard | Press `Cmd+Option+V` on macOS, `Ctrl+Alt+V` on Windows / Linux |
 | Send from another app | Use the Android share sheet, or the file context menu on desktop |
-| Send a folder | Drop it into a conversation, or choose "Folder" when attaching |
-| Browse the other device's files | Select "Files" in Device Details (top right); drag files out to copy |
-| Mount the other device's files | Turn on "Mount on this computer" in Device Details; eject to turn off |
+| Send a folder | Drop it into a conversation, or choose "Folder" from `+` in the message box |
+| Browse the other device's files | Switch to "Files" at the top of the conversation; drag files out to copy |
+| Mount the other device's files | Select the info button at the top right, then turn on "Mount"; eject to turn off |
 | Send to a device without Whisper | Right-click or long-press it in "Files", then "Create Share Link…" |
-| Use the other device's windows | Select "Flow" in Device Details, then choose a window or app |
-| Start keyboard/mouse sharing | In the workspace, place the other screen beside yours, then "Start" |
+| Use the other device's windows | Switch to "Apps" at the top of the conversation, then choose a window or app |
+| Play sound on other devices | Select the speaker at the top of the sidebar, check the devices, then press play on the device picture |
+| Start keyboard/mouse sharing | Select the keyboard at the top of the sidebar, place the other screen beside yours, then turn on the switch at the top right |
 | Leave keyboard/mouse sharing | Press `Ctrl+Alt+Esc` (`Control+Option+Esc` on macOS) |
 | Control a computer from a phone | Select "Control computer" in the Android conversation, then start |
-| Take a screenshot | Use the screenshot button or your shortcut on desktop; `Esc` cancels |
+| Take a screenshot | Use the screenshot button in the message box or your shortcut on desktop, then mark it up beside the selection; `Esc` cancels |
 
 The [user guide](docs/user-guide_en.md) covers every feature in full.
 
@@ -114,6 +116,7 @@ On Wayland, keyboard and mouse sharing supports GNOME and KDE Plasma. GNOME asks
 | Pointer stuck on another device | Press `Ctrl+Alt+Esc` (`Control+Option+Esc` on macOS) |
 | Stutter on Windows | Set Settings → System → Projecting to this PC to "Always Off" |
 | No keyboard/mouse on macOS | Grant Accessibility in System Settings, then reopen Whisper |
+| Whisper says it is not running properly | Select "View" on the notice or open "Diagnostics" in Settings to copy, save or report it |
 | Windows lock screen or UAC | Needs the system service from the installer; see the [user guide](docs/user-guide_en.md#windows-lock-screen-and-uac) |
 
 ## Security
