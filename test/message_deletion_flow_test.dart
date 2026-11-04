@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
@@ -420,13 +419,4 @@ void main() {
     expect(await result, isNull);
   });
 
-  test('deleting tells the device list, whose last line may be gone', () {
-    final conversation = File('lib/page/conversation.dart').readAsStringSync();
-    final list = File('lib/page/deviceList.dart').readAsStringSync();
-    expect(conversation, contains('widget.onMessagesDeleted?.call();'));
-    expect(
-      list,
-      contains('onMessagesDeleted: () => unawaited(_refreshDevice())'),
-    );
-  });
 }

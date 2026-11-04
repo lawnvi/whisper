@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -138,22 +137,4 @@ void main() {
     expect(await outcome, TaskCloseOutcome.failed);
   });
 
-  test('the host watches the window and answers the viewer', () {
-    final source = File(
-      'lib/window_stream/remote/window_stream_host.dart',
-    ).readAsStringSync();
-    expect(source, contains('unawaited(_watchClose(message, send, window))'));
-    expect(source, contains('WindowStreamControlAction.closeResult'));
-    expect(source, contains("'outcome': closed ? 'closed' : 'open'"));
-    expect(source, contains('still.modal'));
-  });
-
-  test('the recents card waits while its window closes', () {
-    final page = File(
-      'lib/page/window_stream/flow_space_page.dart',
-    ).readAsStringSync();
-    expect(page, contains('closeTaskAndWait(task)'));
-    expect(page, contains('_closingTasks.contains(_taskKey(source, task))'));
-    expect(page, contains('l10n.windowStreamCloseStillOpen('));
-  });
 }

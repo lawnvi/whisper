@@ -120,24 +120,6 @@ void main() {
     },
   );
 
-  test('Finder draws the progress of a file dragged out', () {
-    // The plugin publishes the destination's progress in thousandths with
-    // no total; the app gives it one before it is published (checked by
-    // hand: a subscriber, as Finder is, saw 25 %, 50 %, 100 %).
-    final window = File(
-      'macos/Runner/MainFlutterWindow.swift',
-    ).readAsStringSync();
-    final install = window.indexOf('FilePromiseProgress.install()');
-    expect(install, isNot(-1));
-    expect(install, lessThan(window.indexOf('RegisterGeneratedPlugins(')));
-    expect(
-      window,
-      contains('kind == .file, fileURL != nil, totalUnitCount == 0'),
-    );
-    expect(window, contains('totalUnitCount = 1000'));
-    expect(window, contains('fileOperationKind = .receiving'));
-  });
-
   group('a folder dragged out to Finder', () {
     Future<void> tree(String root) async {
       await Directory(p.join(root, 'sub')).create(recursive: true);
@@ -181,29 +163,6 @@ void main() {
       expect(Directory(staged).existsSync(), isFalse);
     });
 
-    test('the runner fulfils folder promises over the channel the file '
-        'manager answers', () {
-      final window = File(
-        'macos/Runner/MainFlutterWindow.swift',
-      ).readAsStringSync();
-      final drag = File(
-        'lib/page/remote_files/files_drag.dart',
-      ).readAsStringSync();
-      const channel = "'com.vireen.whisper/folder_promises'";
-      expect(drag, contains(channel));
-      expect(window, contains(channel.replaceAll("'", '"')));
-      final install = window.indexOf('FolderPromises.install()');
-      expect(install, isNot(-1));
-      expect(install, lessThan(window.indexOf('RegisterGeneratedPlugins(')));
-      // The plugin sets the type before the delegate; the swap looks at it.
-      expect(window, contains('fileType == FolderPromises.folderType'));
-      expect(window, contains('static let folderType = "public.folder"'));
-      expect(drag, contains("uniformTypeIdentifiers: ['public.folder']"));
-      for (final method in ["'write'", "'cancel'", "'progress'"]) {
-        expect(drag, contains(method));
-        expect(window, contains(method.replaceAll("'", '"')));
-      }
-    });
   });
 }
 

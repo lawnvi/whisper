@@ -1,5 +1,4 @@
 import 'dart:ffi';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -121,29 +120,4 @@ void main() {
     );
   });
 
-  test('the viewer asks for sound and the worker hands it to the surface', () {
-    final viewer = File(
-      'lib/window_stream/remote/remote_peer_source.dart',
-    ).readAsStringSync();
-    expect(viewer, contains("'audio': true,"));
-    final worker = File(
-      'lib/window_stream/remote/remote_window_worker.dart',
-    ).readAsStringSync();
-    expect(worker, contains('case WindowStreamAudioFormat():'));
-    expect(worker, contains('sink.beginAudio(surface, pcm.length)'));
-  });
-
-  test('one window of an app brings its sound to a viewer, not two', () {
-    final host = File(
-      'lib/window_stream/remote/window_stream_host.dart',
-    ).readAsStringSync();
-    expect(host, contains('_takeSound(stream);'));
-    expect(host, contains('other.audioOn &&'));
-    // The next window of that app takes over when the first one stops.
-    expect(
-      host,
-      contains('if (_sameSound(other, stream) && _takeSound(other))'),
-    );
-    expect(host, contains('if (!stream.audioOn ||'));
-  });
 }

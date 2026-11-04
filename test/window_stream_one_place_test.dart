@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' show Size;
 
@@ -92,22 +91,6 @@ void main() {
       expect(stop.payload['reason'], '');
     });
 
-    test('the viewer finds a window already open here by device, not by '
-        'source object', () {
-      final coordinator = File(
-        'lib/window_stream/window_stream_coordinator.dart',
-      ).readAsStringSync();
-      expect(coordinator, contains('WindowStreamSession? openSessionFor('));
-      expect(
-        coordinator,
-        contains('session.handle.source.info.id == source.info.id'),
-      );
-      expect(coordinator, isNot(contains('identical(session.handle.source')));
-      final page = File(
-        'lib/page/window_stream/flow_space_page.dart',
-      ).readAsStringSync();
-      expect(page, contains('l10n.flowTaskOpenOn('));
-    });
   });
 
   group('picture quality', () {
@@ -195,23 +178,6 @@ void main() {
       expect(landscape.height, 1400);
     });
 
-    test('viewers say their pixel density and desktops resize freely', () {
-      final viewer = File(
-        'lib/window_stream/remote/remote_peer_source.dart',
-      ).readAsStringSync();
-      expect(viewer, contains("'pixelRatio': handle._pixelRatio,"));
-      expect(viewer, contains("'pixelRatio': _pixelRatio,"));
-      final coordinator = File(
-        'lib/window_stream/window_stream_coordinator.dart',
-      ).readAsStringSync();
-      expect(coordinator, contains('handle is RemoteStreamHandle ||'));
-      expect(coordinator, contains('reflow:'));
-      expect(coordinator, contains('handle.setPixelRatio(scale);'));
-      final mac = File(
-        'packages/window_stream_native/macos/Classes/WindowCapture.swift',
-      ).readAsStringSync();
-      expect(mac, contains('viewerPixelRatio > 0'));
-    });
   });
 }
 

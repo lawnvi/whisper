@@ -258,28 +258,4 @@ void main() {
     );
   });
 
-  test('the socket layer gates, checks trust and never blocks on prompts', () {
-    final svr = File('lib/socket/svrmanager.dart').readAsStringSync();
-    final handler = svr.substring(
-      svr.indexOf('case MessageEnum.FileBrowseControl:'),
-      svr.indexOf('case MessageEnum.AudioGroupControl:'),
-    );
-    expect(handler, contains('storedRemote?.auth == true'));
-    expect(
-      handler,
-      contains('unawaited(\n                FileBrowseHost.shared'),
-    );
-    expect(svr, contains('capabilities.remoteFilesV1 == true'));
-    expect(
-      svr,
-      contains('TransferPlacements.shared.onTransferUpdated(snapshot)'),
-    );
-    final policy = File('lib/socket/wire_input_policy.dart').readAsStringSync();
-    expect(policy, contains('MessageEnum.FileBrowseControl => true'));
-  });
-
-  test('every device asks before its files are browsed', () {
-    final main = File('lib/main.dart').readAsStringSync();
-    expect(main, contains('FileBrowsePromptHost(child: content)'));
-  });
 }

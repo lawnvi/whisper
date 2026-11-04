@@ -14,7 +14,6 @@ import 'package:whisper/new_ui/input/shell_input_page.dart';
 import 'package:whisper/new_ui/share/share_parts.dart';
 import 'package:whisper/new_ui/sound/shell_sound_page.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
-import 'package:whisper/theme/whisper_ui.dart';
 
 import 'support/share_page_fixtures.dart';
 

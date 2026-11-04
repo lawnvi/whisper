@@ -51,7 +51,7 @@ CI currently runs `flutter pub get`, `flutter analyze`, and `flutter test` on pu
 - `lib/l10n/`: ARB files and generated Flutter localization classes for Chinese, English, and Spanish.
 - `lib/theme/`: Material 3 theme and `WhisperPalette` tokens.
 - `android/`, `ios/`, `macos/`, `linux/`, `windows/`: native runners and platform plugins.
-- `test/`: Flutter unit/widget/source tests; many tests verify source-level platform integration and protocol behavior.
+- `test/`: Flutter tests of behavior: protocols, transfers, state machines and the logic behind the UI. Don't add tests that assert layout or the text of source files; a few source checks stay for what nothing can run here (release workflows, manifests, native log privacy, FFI entry points). `test/manual/` holds scripts that render screens and aren't part of `flutter test`.
 - `script/`: local build, run, signing, packaging, and focused test helpers.
 - `.github/workflows/`: CI and multi-platform release packaging.
 - `docs/design/`: companions to `DESIGN.md`, starting at `README.md`: per-screen specs, Flutter recipes, migration steps, decisions, the local prototype, reference screenshots and check tools.

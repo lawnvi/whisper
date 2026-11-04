@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -78,17 +77,6 @@ void main() {
 
     expect(decisions, <bool>[true]);
   });
-
-  test(
-    'resolved dialogs detach their pending session cancellation listener',
-    () {
-      final source = File('lib/widget/pairing_dialog.dart').readAsStringSync();
-
-      expect(source, contains('cancellation.asStream().listen'));
-      expect(source, contains('cancellationSubscription?.cancel()'));
-      expect(source, isNot(contains('unawaited(cancellation.then')));
-    },
-  );
 
   testWidgets('shows grouped code with an ungrouped semantic label', (
     tester,

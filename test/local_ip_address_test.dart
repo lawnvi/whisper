@@ -1,4 +1,3 @@
-import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/helper/helper.dart';
@@ -155,9 +154,4 @@ void main() {
     }
   });
 
-  test('desktop enumeration explicitly includes IPv4 link-local addresses', () {
-    final source = File('lib/helper/helper.dart').readAsStringSync();
-    expect(source, contains('type: InternetAddressType.IPv4'));
-    expect(source, contains('includeLinkLocal: true'));
-  });
 }

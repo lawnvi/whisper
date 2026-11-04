@@ -1,5 +1,4 @@
 import 'dart:math' as math;
-import 'dart:io';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -33,26 +32,6 @@ class _CountedState extends State<_Counted> {
 }
 
 void main() {
-  test('building a file message does not ask the disk every time', () {
-    final source = File('lib/page/conversation.dart').readAsStringSync();
-    final build = source.substring(
-      source.indexOf('Widget _buildFileMessage('),
-      source.indexOf('void _openMessageFile('),
-    );
-    expect(build, isNot(contains('existsSync')));
-    expect(build, isNot(contains('typeSync')));
-    expect(source, contains('_knownOnDisk.putIfAbsent'));
-  });
-
-  test('a page of history is not animated in', () {
-    final source = File('lib/page/conversation.dart').readAsStringSync();
-    final insert = source.substring(
-      source.indexOf('void _insertItems('),
-      source.indexOf('TransferSnapshot? _transferForMessage'),
-    );
-    expect(insert, contains('duration: Duration.zero'));
-  });
-
   testWidgets('a new message does not build the others again', (tester) async {
     final controller = ScrollController();
     addTearDown(controller.dispose);

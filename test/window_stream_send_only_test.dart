@@ -1,4 +1,3 @@
-import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/page/window_stream/flow_space_controller.dart';
@@ -89,21 +88,4 @@ void main() {
     expect(controller.selected?.info.name, 'Mac');
   });
 
-  test('an adb phone is a source only while its Whisper is connected', () {
-    final coordinator = File(
-      'lib/window_stream/window_stream_coordinator.dart',
-    ).readAsStringSync();
-    final sources = coordinator.substring(
-      coordinator.indexOf('List<WindowSource> get sources {'),
-      coordinator.indexOf('bool isAdbPhoneConnected('),
-    );
-    expect(sources, contains('isAdbPhoneConnected(device)'));
-    expect(coordinator, contains('WindowStreamViewer.shared.isConnected'));
-    final manager = File('lib/socket/svrmanager.dart').readAsStringSync();
-    expect(
-      manager,
-      contains('WindowStreamViewer.shared.peerDisconnected(peerId);'),
-    );
-    expect(manager, contains('WindowStreamViewer.shared.peerConnected('));
-  });
 }

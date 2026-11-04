@@ -69,7 +69,7 @@ Drift (SQLite) database in `LocalDatabase.dart`. `device.dart`, `message.dart` (
 - All user-facing strings must be localized via ARB; do not hardcode copy in widgets.
 
 ## Testing notes
-`test/` (~105 files) leans heavily on **source-level tests** that assert platform integration and protocol behavior by reading the source, alongside unit/widget tests. When changing socket/transfer/audio/remote-input/db/state-machine code, add or update the focused test and run `flutter analyze` + `flutter test` before claiming readiness. If native platform behavior can't be verified locally, document the platform, the command not run, and the residual risk.
+`test/` tests behavior: protocols, transfers, state machines and the logic behind the UI. Layout and text-of-the-source tests were removed on purpose: don't add them back. A few source checks stay for what nothing can run here (release workflows, manifests, privacy of native logs, the FFI entry points). `test/manual/` holds scripts that render screens to images and are not part of `flutter test`. When changing socket/transfer/audio/remote-input/db/state-machine code, add or update the focused test and run `flutter analyze` + `flutter test` before claiming readiness. If native platform behavior can't be verified locally, document the platform, the command not run, and the residual risk.
 
 ## Conventions
 Conventional Commits with a concrete scope: `feat(remote-input): …`, `fix(db): …`, `chore: …`. Scopes seen here: `remote-input`, `audio`, `db`, `clipboard`, `socket`, `linux`, `windows`, `macos`, `android`, `ios`, `web`, `l10n`, `release`. Do not commit secrets; `keystore/whisper.keystore` is tracked but must not be rotated without approval. `WHISPER_REMOTE_INPUT_TRACE=1` enables verbose remote-input tracing.

@@ -46,13 +46,6 @@ void main() {
     expect(NativeWindowActivity.inputOf({'type': 'text', 'text': ''}), isNull);
   });
 
-  test('pinyin drafts on the phone viewer are not sent as letters', () {
-    final viewer = File(
-      'lib/page/window_stream/viewer/viewer_keyboard.dart',
-    ).readAsStringSync();
-    expect(viewer, contains('composing.isCollapsed'));
-  });
-
   test('the file manager\'s copies are not synced to other devices', () {
     final model = File(
       'lib/page/remote_files/files_model.dart',

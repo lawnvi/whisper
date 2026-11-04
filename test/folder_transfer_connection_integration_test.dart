@@ -10,7 +10,6 @@ import 'package:path/path.dart' as p;
 import 'package:whisper/helper/folder_transfer_store.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/file_transfer.dart';
-import 'package:whisper/model/message.dart';
 import 'package:whisper/socket/device_identity.dart';
 import 'package:whisper/socket/file_transfer_engine.dart';
 import 'package:whisper/socket/file_transfer_v3.dart';

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
@@ -2580,16 +2579,6 @@ void main() {
       },
     );
 
-    test('group playback uses a smaller Dart-side native lead window', () {
-      final source = File(
-        'lib/audio/audio_group_coordinator.dart',
-      ).readAsStringSync();
-
-      expect(source, contains('_nativePlaybackLeadMicros = 35000'));
-      expect(source, contains('_maxPlaybackPumpIntervalMicros = 10000'));
-      expect(source, contains('_playbackPumpDelayMicros(report)'));
-      expect(source, contains('outputLeadMicros: _nativePlaybackLeadMicros'));
-    });
   });
 }
 

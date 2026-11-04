@@ -95,14 +95,4 @@ void main() {
     },
   );
 
-  test('conversation restores transfer metadata after every loaded page', () {
-    final source = File('lib/page/conversation.dart').readAsStringSync();
-    final load = source.substring(
-      source.indexOf('  Future<void> _loadMoreMessages()'),
-      source.indexOf('  _insertItem('),
-    );
-    expect(load, contains('await _loadTransferSnapshotsForMessages(page)'));
-    expect(load, contains('!mounted ||'));
-    expect(load, contains('generation != _history.generation'));
-  });
 }

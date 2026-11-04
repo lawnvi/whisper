@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:drift/drift.dart' show Variable;
 import 'package:drift/native.dart';
@@ -563,54 +562,4 @@ void main() {
     },
   );
 
-  test('socket manager wires persistent retry identity and replay guard', () {
-    final source = File('lib/socket/svrmanager.dart').readAsStringSync();
-
-    expect(source, contains('prepareOutgoingTextWithRetryIdentity('));
-    expect(source, isNot(contains('fetchPendingOutgoingText(')));
-    expect(source, contains('_wireMessageReplayGuard.claim('));
-    expect(source, contains('message = replay.message!'));
-    expect(source, contains('fetchMessagesByUuid'));
-    expect(source, contains('WireMessageReplayDecision.duplicate'));
-    expect(source, contains("'message_uuid_conflict'"));
-    expect(source, contains('_outgoingTextRetries.rememberFailure('));
-    expect(source, contains('alreadyAcknowledged'));
-    expect(source, contains('_outgoingTextSendLocks.synchronized('));
-
-    final textMessageCase = source.substring(
-      source.indexOf('case MessageEnum.Text:'),
-      source.indexOf('case MessageEnum.Notification:'),
-    );
-    expect(
-      textMessageCase.lastIndexOf('_dispatchToAll('),
-      lessThan(textMessageCase.lastIndexOf('await _ackMessage(message)')),
-    );
-
-    final duplicateReplayCase = source.substring(
-      source.indexOf('case WireMessageReplayDecision.duplicate:'),
-      source.indexOf('case WireMessageReplayDecision.conflict:'),
-    );
-    expect(duplicateReplayCase, contains('message = replay.message!'));
-    expect(
-      duplicateReplayCase.indexOf('_dispatchToAll('),
-      lessThan(duplicateReplayCase.indexOf('await _ackMessage(message)')),
-    );
-
-    final textCase = source.substring(
-      source.indexOf('case MessageEnum.Text:'),
-      source.indexOf('case MessageEnum.File:'),
-    );
-    expect(textCase, isNot(contains('insertMessage(message)')));
-
-    final transferSource = File(
-      'lib/socket/file_transfer_engine.dart',
-    ).readAsStringSync();
-    expect(transferSource, contains('await _ackMessage(message);'));
-    expect(
-      RegExp(r'\.admitFileTransfer\(').allMatches(transferSource),
-      hasLength(2),
-    );
-    expect(transferSource, contains('.admitTransferForExistingMessage('));
-    expect(transferSource, isNot(contains('insertMessageReturning(')));
-  });
 }

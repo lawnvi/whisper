@@ -1,4 +1,3 @@
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -36,16 +35,6 @@ void main() {
       expect(preferences.getBool('_no_auth'), isTrue);
     },
   );
-
-  test('local settings no longer expose or read automatic approval', () {
-    final source = File('lib/helper/local.dart').readAsStringSync();
-
-    expect(source, isNot(contains('_noAuth')));
-    expect(source, isNot(contains('_no_auth')));
-    expect(source, isNot(contains('updateNoAuth')));
-    expect(source, isNot(contains('autoApproveNewDevices')));
-    expect(source, contains('auth: false'));
-  });
 
   test(
     'connection profile reuses the saved name without querying native device info',

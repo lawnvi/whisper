@@ -61,22 +61,4 @@ void main() {
     );
   });
 
-  test('the database and received files go through the fallback', () {
-    final database = File('lib/model/LocalDatabase.dart').readAsStringSync();
-    final databaseDirectory = database.substring(
-      database.indexOf('Future<Directory> _databaseDirectory()'),
-      database.indexOf('Future<bool> migrateLegacyMacOSDatabase('),
-    );
-    expect(databaseDirectory, contains('return userDocumentsDirectory();'));
-    expect(databaseDirectory, isNot(contains('getApplicationDocuments')));
-
-    final file = File('lib/helper/file.dart').readAsStringSync();
-    final downloads = file.substring(
-      file.indexOf('Future<Directory> downloadDir()'),
-      file.indexOf('Future<void> writeResumableChunk('),
-    );
-    expect(downloads, contains('dir = await userDownloadsDirectory();'));
-    expect(downloads, contains('return await userDocumentsDirectory();'));
-    expect(downloads, contains('dir.createSync(recursive: true);'));
-  });
 }

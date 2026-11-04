@@ -308,37 +308,6 @@ void main() {
     await server.close();
   });
 
-  test('the coordinator falls back to scrcpy when the agent fails', () {
-    final source = File(
-      'lib/window_stream/window_stream_coordinator.dart',
-    ).readAsStringSync();
-    expect(source, contains('AndroidAgentSource.launch('));
-    expect(
-      source,
-      contains("_diag('agent failed, using scrcpy fallback: \$error');"),
-    );
-    expect(source, contains('if (losses.length >= 3)'));
-  });
-
-  test('a window closes when its app is gone from the phone', () {
-    final source = File(
-      'lib/window_stream/android/agent/android_agent_source.dart',
-    ).readAsStringSync();
-    // Polled while streams run; two empty looks in a row, not one.
-    expect(source, contains('Timer.periodic(const Duration(seconds: 2)'));
-    expect(source, contains('if (_emptyChecks >= 2)'));
-    expect(source, contains('status: StreamStatus.appExited'));
-    final page = File(
-      'lib/page/window_stream/flow_space_page.dart',
-    ).readAsStringSync();
-    // Closing an app from the recents closes its window here too.
-    expect(page, contains('if (outcome == TaskCloseOutcome.closed) {'));
-    expect(
-      page,
-      contains('if (session != null && !session.state.isTerminal) {'),
-    );
-  });
-
   test('process patterns never match the shell that runs them', () {
     expect(shellProcessPattern('com.x.Main'), "'[c]om.x.Main'");
     final pattern = RegExp('[c]om.x.Main');

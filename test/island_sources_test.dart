@@ -11,7 +11,6 @@ import 'package:whisper/window_stream/core/window_stream_models.dart';
 import 'package:whisper/window_stream/remote/remote_peer_source.dart';
 import 'package:whisper/window_stream/remote/window_stream_control.dart';
 
-import 'island_test_support.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

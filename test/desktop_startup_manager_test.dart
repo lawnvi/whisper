@@ -1,4 +1,3 @@
-import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/helper/desktop_startup.dart';
@@ -50,15 +49,4 @@ void main() {
     );
   });
 
-  test('a window is only shown when not started at login', () {
-    final main = File('lib/main.dart').readAsStringSync();
-    expect(
-      main,
-      contains('if (arguments.contains(desktopStartupHiddenArgument))'),
-    );
-    final runner = File(
-      'macos/Runner/MainFlutterWindow.swift',
-    ).readAsStringSync();
-    expect(runner, contains('project.dartEntrypointArguments'));
-  });
 }

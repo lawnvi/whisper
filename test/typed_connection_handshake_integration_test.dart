@@ -7,7 +7,6 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/file_transfer.dart';
-import 'package:whisper/model/message.dart';
 import 'package:whisper/remote_input/remote_input_layout.dart';
 import 'package:whisper/socket/auth_protocol.dart';
 import 'package:whisper/socket/device_identity.dart';

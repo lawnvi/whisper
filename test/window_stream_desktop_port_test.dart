@@ -6,7 +6,6 @@ import 'dart:ui';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:whisper/l10n/app_localizations.dart';
-import 'package:whisper/window_stream/core/window_source.dart';
 import 'package:whisper/window_stream/core/window_stream_models.dart';
 import 'package:whisper/window_stream/remote/remote_peer_source.dart';
 import 'package:whisper/window_stream/remote/window_stream_control.dart';
@@ -415,31 +414,5 @@ void main() {
       viewer.peerGone('host2');
     });
 
-    test('native resize events reach the host, without feedback loops', () {
-      final backend = File(
-        'lib/window_stream/pipeline/surface_backend.dart',
-      ).readAsStringSync();
-      expect(backend, contains('WsnWindowEvent.resized when a > 0 && b > 0'));
-      final coordinator = File(
-        'lib/window_stream/window_stream_coordinator.dart',
-      ).readAsStringSync();
-      expect(
-        coordinator,
-        contains('_onWindowResized(session, Size(width, height), scale)'),
-      );
-      // Whisper peers' windows follow; an adb phone's display takes the
-      // window's shape at its own density.
-      expect(coordinator, contains('handle.setPixelRatio(scale);'));
-      expect(
-        coordinator,
-        contains('!session.source.info.capabilities.resizeReflow'),
-      );
-      expect(coordinator, contains('resizing too often; keeping its size'));
-      final host = File(
-        'lib/window_stream/remote/window_stream_host.dart',
-      ).readAsStringSync();
-      // Every desktop sets the capture callback (it triggers crash rescue).
-      expect(host, contains('if (_isDesktop) {\n      _attachNative();'));
-    });
   });
 }

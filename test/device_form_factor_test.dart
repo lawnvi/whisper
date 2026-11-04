@@ -5,11 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:whisper/helper/device_form_factor.dart';
-import 'package:whisper/helper/helper.dart';
 import 'package:whisper/page/remote_files/files_icons.dart';
 import 'package:whisper/state/peer_profile.dart';
 import 'package:whisper/widget/device_glyph.dart';
-import 'package:whisper/window_stream/core/window_stream_models.dart';
 
 /// iPads and Android tablets say what they are, so they are not drawn as
 /// phones; what they said is kept for when they are away.

@@ -1,4 +1,3 @@
-import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/socket/wire_input_policy.dart';
@@ -33,14 +32,4 @@ void main() {
     );
   });
 
-  test('a late stop for an ended stream keeps the connection', () {
-    // Both ends end a stream at once when the host's window goes away; the
-    // second stop must not count as a protocol violation.
-    final source = File('lib/socket/svrmanager.dart').readAsStringSync();
-    final rule = RegExp(
-      r'if \(control\.isTerminal &&\s*!control\.isInitial &&\s*'
-      r'!_wireControlSessions\.knows\(',
-    );
-    expect(rule.hasMatch(source), isTrue);
-  });
 }

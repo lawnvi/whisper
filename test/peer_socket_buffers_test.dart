@@ -51,29 +51,4 @@ void main() {
     }
   });
 
-  test('only the connection that carries files is widened', () {
-    final manager = File('lib/socket/svrmanager.dart').readAsStringSync();
-    // The chat route, once admitted, before the upgrade.
-    final chat = manager.substring(
-      manager.indexOf('_admission.tryOpenChat(remoteAddress)'),
-      manager.indexOf('final chatHandler = webSocketHandler('),
-    );
-    expect(chat, contains('_acceptedSockets?.claim(connectionInfo)'));
-    expect(chat, contains('widenTransferBuffers(accepted)'));
-    // The connection this device opens to a peer.
-    final outgoing = manager.substring(
-      manager.indexOf('Future<WebSocket> _connectOutgoingWebSocket('),
-    );
-    expect(
-      outgoing.substring(0, outgoing.indexOf('\n  }\n')),
-      contains('widenTransferBuffers(socket);'),
-    );
-    expect('widenTransferBuffers('.allMatches(manager), hasLength(2));
-    // Media (audio, input, live video) keep the system's buffers.
-    final helper = File('lib/socket/no_delay_socket.dart').readAsStringSync();
-    final connect = helper.substring(
-      helper.indexOf('Future<WebSocket> connectNoDelayWebSocket('),
-    );
-    expect(connect, isNot(contains('widenTransferBuffers(')));
-  });
 }

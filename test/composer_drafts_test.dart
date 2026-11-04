@@ -1,4 +1,3 @@
-import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/page/conversation_drafts.dart';
@@ -25,15 +24,4 @@ void main() {
     expect(drafts.of('imac'), isNull);
   });
 
-  test('a conversation comes back with its draft', () {
-    final source = File('lib/page/conversation.dart').readAsStringSync();
-    final restore = source.indexOf('ComposerDrafts.shared.of(device.uid)');
-    final listen = source.indexOf('_textController.addListener');
-    expect(restore, greaterThan(-1));
-    expect(restore, lessThan(listen));
-    final dispose = source.indexOf('void dispose()');
-    final keep = source.indexOf('ComposerDrafts.shared.keep(', dispose);
-    expect(keep, greaterThan(dispose));
-    expect(keep, lessThan(source.indexOf('_textController.dispose()')));
-  });
 }

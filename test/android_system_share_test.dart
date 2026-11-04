@@ -1,5 +1,4 @@
 import 'dart:collection';
-import 'dart:io';
 
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -302,19 +301,6 @@ void main() {
     expect(await database.fetchMessageById(regular.message!.id), isNotNull);
   });
 
-  test('native share staging is scoped to one app process', () {
-    final source = File(
-      'android/app/src/main/kotlin/com/vireen/whisper/'
-      'AndroidSystemSharePlugin.kt',
-    ).readAsStringSync();
-
-    expect(
-      source,
-      contains('ioExecutor.execute { discardPreviousSessionState() }'),
-    );
-    expect(source, contains('.put("sessionId", sessionId)'));
-    expect(source, contains('event.optString("sessionId") != sessionId'));
-  });
 }
 
 Future<FileTransferAdmissionResult> _admitOutgoingTransfer(

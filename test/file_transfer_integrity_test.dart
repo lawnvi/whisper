@@ -13,7 +13,6 @@ import 'package:whisper/model/file_transfer.dart';
 import 'package:whisper/model/message.dart';
 import 'package:whisper/socket/file_transfer_engine.dart';
 import 'package:whisper/socket/file_path_policy.dart';
-import 'package:whisper/socket/file_transfer_source.dart';
 import 'package:whisper/socket/file_transfer_v3.dart';
 import 'package:whisper/socket/peer_connection.dart';
 import 'package:whisper/socket/whisper_frame_v3.dart';

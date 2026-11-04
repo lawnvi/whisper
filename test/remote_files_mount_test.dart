@@ -947,77 +947,6 @@ void main() {
     });
   });
 
-  test('a Windows mount is emptied before it is let go, answering '
-      'everything itself', () {
-    final native = File(
-      'windows/cloud_files/cloud_files_bridge.cpp',
-    ).readAsStringSync();
-    final dart = File(
-      'lib/remote_files/mount/cloud_files_windows.dart',
-    ).readAsStringSync();
-    // Unprovided, a folder never listed cannot be deleted (deleting asks
-    // for its listing): it is emptied still connected, every request
-    // answered in the bridge, none reaching Dart or the device.
-    for (final callback in [
-      'OnFetchPlaceholders',
-      'OnFetchData',
-      'OnNotifyDelete',
-      'OnNotifyRename',
-      'OnOpenCompletion',
-      'OnCancelFetchData',
-    ]) {
-      final body = native.substring(native.indexOf('void CALLBACK $callback('));
-      expect(
-        body.substring(0, body.indexOf('\n}\n')),
-        contains('if (Leaving(info))'),
-        reason: callback,
-      );
-    }
-    final stop = dart.substring(dart.indexOf('Future<void> stop() async {'));
-    expect(
-      stop.indexOf('_bridge.clearAsync('),
-      lessThan(stop.indexOf('_bridge.stop(session)')),
-    );
-    expect(stop, contains("mountLog(\n        'mount: still in Explorer '"));
-    // Left by a run before: provided again just long enough to empty it.
-    expect(
-      File('lib/remote_files/mount/mount_frontend.dart').readAsStringSync(),
-      contains('CloudFilesMount.clearLeftover(folder)'),
-    );
-    expect(native, contains('StartSession(folder.c_str(), L"leftover"'));
-    // An in-sync placeholder is not opened to see whether it is being
-    // written: the antivirus would read it whole, from the device.
-    expect(native, contains('if ((out & 1) == 0 && (out & 6) != 6) {'));
-  });
-
-  test('a Windows mount is in This PC beside the drives', () {
-    final native = File(
-      'windows/cloud_files/cloud_files_bridge.cpp',
-    ).readAsStringSync();
-    final dart = File(
-      'lib/remote_files/mount/cloud_files_windows.dart',
-    ).readAsStringSync();
-    // An item of This PC's for this user alone, showing the folder under
-    // the device's name (a drive letter would carry the disk's label).
-    expect(native, contains(r'Explorer\\MyComputer\\'));
-    expect(native, contains('{0E5AAE11-A475-4c5b-AB00-C66DE400274E}'));
-    expect(native, contains('L"TargetFolderPath", folder'));
-    // Only Whisper's own are taken away, by the folder they show.
-    expect(native, contains('kPcMark'));
-    expect(
-      File('windows/cloud_files/CMakeLists.txt').readAsStringSync(),
-      contains('"shell32.lib" "ole32.lib"'),
-    );
-    expect(dart, contains(r"'$name (Whisper)'.toNativeUtf16()"));
-    // Gone from This PC before the folder is emptied.
-    final stop = dart.substring(dart.indexOf('Future<void> stop() async {'));
-    expect(
-      stop.indexOf('_bridge.pcRemove('),
-      lessThan(stop.indexOf('_bridge.clearAsync(')),
-    );
-    expect(dart, contains('_bridge.pcClear();'));
-  });
-
   test('the Windows bridge and its Dart side agree', () {
     final native = File(
       'windows/cloud_files/cloud_files_bridge.cpp',
@@ -1084,24 +1013,6 @@ void main() {
     final cmake = File('windows/CMakeLists.txt').readAsStringSync();
     expect(cmake, contains('add_subdirectory("cloud_files")'));
     expect(cmake, contains('install(TARGETS whisper_cloud_files'));
-  });
-
-  test('mounts run in a worker that a stuck app thread cannot block', () {
-    final mounts = File(
-      'lib/remote_files/mount/remote_mounts.dart',
-    ).readAsStringSync();
-    expect(mounts, contains('MountWorker.start('));
-    final worker = File(
-      'lib/remote_files/mount/mount_worker.dart',
-    ).readAsStringSync();
-    expect(worker, contains('onExit: exits.sendPort'));
-    expect(worker, contains('errorsAreFatal: false'));
-    expect(worker, contains('MountWorker._patience'));
-    // A mount is never listed by the device it is mounted on.
-    expect(
-      File('lib/remote_files/fs_host_files.dart').readAsStringSync(),
-      contains('excluded()'),
-    );
   });
 
   test('mount options keep a dead mount from hanging or nagging', () {

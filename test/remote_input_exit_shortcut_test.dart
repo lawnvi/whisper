@@ -45,11 +45,4 @@ void main() {
     }
   });
 
-  test('the input page always says how to leave sharing', () {
-    final source = File(
-      'lib/new_ui/input/input_controller.dart',
-    ).readAsStringSync();
-    expect(source, contains('InputFooterExit(remoteInputReleaseHotkeyLabel('));
-    expect(source, contains('releaseHotkey: remoteInputReleaseHotkey,'));
-  });
 }
