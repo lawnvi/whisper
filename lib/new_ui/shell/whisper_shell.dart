@@ -215,7 +215,11 @@ class _WhisperShellState extends State<WhisperShell> {
                         ),
                         SizedBox(
                           width: 1 / MediaQuery.devicePixelRatioOf(context),
-                          child: ColoredBox(color: c.sep),
+                          // Over the content's colour: nothing else is under it,
+                          // and the desktop behind the window would show through.
+                          child: ColoredBox(
+                            color: Color.alphaBlend(c.sidebarEdge, c.content),
+                          ),
                         ),
                         Expanded(
                           child: ColoredBox(

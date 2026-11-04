@@ -43,6 +43,7 @@ class WhisperColors extends ThemeExtension<WhisperColors> {
     required this.bad,
     required this.badSolid,
     required this.sep,
+    required this.sidebarEdge,
     required this.border,
     required this.fill,
     required this.fill2,
@@ -85,6 +86,7 @@ class WhisperColors extends ThemeExtension<WhisperColors> {
     bad: Radix.red11,
     badSolid: Radix.red9,
     sep: Radix.slateA6,
+    sidebarEdge: Radix.slateA3,
     border: Radix.slateA7,
     fill: Radix.slateA3,
     fill2: Radix.slateA4,
@@ -127,6 +129,7 @@ class WhisperColors extends ThemeExtension<WhisperColors> {
     bad: Radix.redDark11,
     badSolid: Radix.redDark9,
     sep: Radix.slateDarkA6,
+    sidebarEdge: Radix.slateDarkA3,
     border: Radix.slateDarkA7,
     fill: Radix.slateDarkA3,
     fill2: Radix.slateDarkA4,
@@ -162,6 +165,10 @@ class WhisperColors extends ThemeExtension<WhisperColors> {
   final Color ok, warn, bad;
   final Color okSolid, warnSolid, badSolid;
   final Color sep, border, fill, fill2, selected;
+
+  /// Between the sidebar and the content: the two are told apart by what they
+  /// are, the line only has to say where one ends.
+  final Color sidebarEdge;
 
   /// The sidebar where the system gives no material: Linux and Windows 10.
   final Color sidebarSolid;
@@ -215,6 +222,7 @@ class WhisperColors extends ThemeExtension<WhisperColors> {
     bad: bad,
     badSolid: badSolid,
     sep: sep,
+    sidebarEdge: sidebarEdge,
     border: border,
     fill: fill,
     fill2: fill2,
@@ -261,6 +269,7 @@ class WhisperColors extends ThemeExtension<WhisperColors> {
       bad: l(bad, other.bad),
       badSolid: l(badSolid, other.badSolid),
       sep: l(sep, other.sep),
+      sidebarEdge: l(sidebarEdge, other.sidebarEdge),
       border: l(border, other.border),
       fill: l(fill, other.fill),
       fill2: l(fill2, other.fill2),
