@@ -110,6 +110,7 @@ Tests are for what would break quietly and cost a lot. They are not a record of 
 
 ## Security And Privacy Notes
 
+- `AppLog` is what users send when something is wrong. Only `PrivacyLog` events and the type, code and place of errors go in. Never pass it `error.toString()`, message text, file names or device names.
 - Authenticated sessions use X25519 and XChaCha20-Poly1305; discovery metadata remains visible and local storage is not encrypted. The implementation has not had an independent cryptographic audit; do not claim complete protection against untrusted peers.
 - Do not add public relay behavior without an explicit design and security review.
 - Do not commit new secrets, tokens, signing identities, private keys, or local credentials.

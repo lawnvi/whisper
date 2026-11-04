@@ -163,6 +163,80 @@ class AppLocalizationsEs extends AppLocalizations {
   String get screenshotConfirm => 'Copiar';
 
   @override
+  String get diagTitle => 'Diagnóstico';
+
+  @override
+  String get diagDatabase => 'Base de datos';
+
+  @override
+  String get diagServer => 'Servicio de conexión';
+
+  @override
+  String get diagDiscovery => 'Detección de dispositivos';
+
+  @override
+  String get diagOk => 'Correcto';
+
+  @override
+  String get diagFailed => 'Error';
+
+  @override
+  String get healthTitle => 'Whisper no funciona correctamente';
+
+  @override
+  String get healthDatabase =>
+      'No se puede abrir la base de datos local. Los chats y dispositivos no están disponibles y no se detectan otros dispositivos.';
+
+  @override
+  String get healthStartup =>
+      'Algo falló al iniciar. No se detectan otros dispositivos y tampoco pueden conectarse a este.';
+
+  @override
+  String get healthServer =>
+      'El servicio de conexión no se inició. Otros dispositivos no pueden conectarse a este.';
+
+  @override
+  String get healthDiscovery =>
+      'La detección de dispositivos no se inició. Puede que no aparezcan los dispositivos cercanos.';
+
+  @override
+  String get diagRestartHint =>
+      'Prueba a reiniciar Whisper. Si no se soluciona, envíanos el diagnóstico.';
+
+  @override
+  String get diagView => 'Ver';
+
+  @override
+  String get diagCopy => 'Copiar';
+
+  @override
+  String get diagCopied => 'Diagnóstico copiado';
+
+  @override
+  String get diagSave => 'Guardar';
+
+  @override
+  String get diagSaved => 'Diagnóstico guardado';
+
+  @override
+  String get diagFeedback => 'Informar';
+
+  @override
+  String get diagFeedbackCopied => 'Diagnóstico copiado. Pégalo en tu informe.';
+
+  @override
+  String get diagPrivacy =>
+      'Sin mensajes, archivos ni nombres de dispositivos: solo la versión del sistema, las direcciones de red de este dispositivo y un registro de lo que hizo la app. Solo sale de este dispositivo si lo envías.';
+
+  @override
+  String get diagOldHistory =>
+      'Los chats de una versión anterior no se pueden leer. Siguen donde estaban y no se han eliminado.';
+
+  @override
+  String get healthOldHistory =>
+      'No se pueden leer los chats de una versión anterior';
+
+  @override
   String get screenshotCopied => 'Captura copiada';
 
   @override

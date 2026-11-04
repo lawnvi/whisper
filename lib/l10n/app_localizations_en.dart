@@ -161,6 +161,80 @@ class AppLocalizationsEn extends AppLocalizations {
   String get screenshotConfirm => 'Copy';
 
   @override
+  String get diagTitle => 'Diagnostics';
+
+  @override
+  String get diagDatabase => 'Database';
+
+  @override
+  String get diagServer => 'Connection service';
+
+  @override
+  String get diagDiscovery => 'Device discovery';
+
+  @override
+  String get diagOk => 'OK';
+
+  @override
+  String get diagFailed => 'Failed';
+
+  @override
+  String get healthTitle => 'Whisper isn\'t working properly';
+
+  @override
+  String get healthDatabase =>
+      'The local database can\'t be opened. Chats and devices are unavailable, and other devices can\'t be found.';
+
+  @override
+  String get healthStartup =>
+      'Something went wrong on startup. Other devices can\'t be found, and they can\'t connect to this one.';
+
+  @override
+  String get healthServer =>
+      'The connection service didn\'t start. Other devices can\'t connect to this one.';
+
+  @override
+  String get healthDiscovery =>
+      'Device discovery didn\'t start. Nearby devices may not show up.';
+
+  @override
+  String get diagRestartHint =>
+      'Try restarting Whisper. If that doesn\'t help, send us the diagnostics.';
+
+  @override
+  String get diagView => 'View';
+
+  @override
+  String get diagCopy => 'Copy';
+
+  @override
+  String get diagCopied => 'Diagnostics copied';
+
+  @override
+  String get diagSave => 'Save';
+
+  @override
+  String get diagSaved => 'Diagnostics saved';
+
+  @override
+  String get diagFeedback => 'Report';
+
+  @override
+  String get diagFeedbackCopied =>
+      'Diagnostics copied. Paste them into your report.';
+
+  @override
+  String get diagPrivacy =>
+      'No messages, files or device names: only the system version, this device\'s network addresses and a record of what the app did. It leaves this device only if you send it.';
+
+  @override
+  String get diagOldHistory =>
+      'Chats from an older version can\'t be read. They are still where they were and have not been deleted.';
+
+  @override
+  String get healthOldHistory => 'Chats from an older version can\'t be read';
+
+  @override
   String get screenshotCopied => 'Screenshot copied';
 
   @override

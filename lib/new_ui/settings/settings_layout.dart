@@ -266,7 +266,7 @@ extension _RedesignedSettings on _SettingsScreenState {
         title: l10n.shellSettingsAbout,
         glyph: WhisperGlyph.info,
         color: WhisperSettingsIcons.about,
-        rows: [_versionRow(l10n), _aboutRow(l10n)],
+        rows: [_versionRow(l10n), _diagnosticsRow(l10n), _aboutRow(l10n)],
       ),
     ];
   }
@@ -318,7 +318,11 @@ extension _RedesignedSettings on _SettingsScreenState {
                 _copyCodeRow(l10n),
               ]),
               const SizedBox(height: 18),
-              group(null, [_versionRow(l10n), _aboutRow(l10n)]),
+              group(null, [
+                _versionRow(l10n),
+                _diagnosticsRow(l10n),
+                _aboutRow(l10n),
+              ]),
             ],
           );
     return Scaffold(
@@ -986,6 +990,12 @@ extension _RedesignedSettings on _SettingsScreenState {
           : null,
     );
   }
+
+  Widget _diagnosticsRow(AppLocalizations l10n) => SettingsRow(
+    title: l10n.diagTitle,
+    onTap: () => unawaited(showDiagnostics(context)),
+    trailing: const SettingsDisclosure(),
+  );
 
   Widget _aboutRow(AppLocalizations l10n) => SettingsRow(
     title: l10n.aboutWhisper,

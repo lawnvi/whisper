@@ -1,3 +1,7 @@
+import 'dart:ui' show PlatformDispatcher;
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
+import 'package:whisper/helper/app_log.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -69,6 +73,26 @@ Future<void> _removeFolderTransferLeftovers() async {
   }
 }
 
+/// The log someone sends when something is wrong (surfaces.md「诊断信息」): also
+/// the errors nothing else caught, which otherwise are gone with the console.
+void _recordWhatGoesWrong() {
+  unawaited(
+    getApplicationSupportDirectory().then(
+      (support) => AppLog.shared.start(Directory(p.join(support.path, 'logs'))),
+      onError: (Object _) {},
+    ),
+  );
+  final flutterError = FlutterError.onError;
+  FlutterError.onError = (details) {
+    AppLog.shared.recordError('flutter', details.exception, details.stack);
+    flutterError?.call(details);
+  };
+  PlatformDispatcher.instance.onError = (error, stack) {
+    AppLog.shared.recordError('uncaught', error, stack);
+    return false;
+  };
+}
+
 Future<void> main(List<String> arguments) async {
   WidgetsFlutterBinding.ensureInitialized();
   try {
@@ -96,6 +120,7 @@ Future<void> main(List<String> arguments) async {
     runApp(const TrayPanelApp());
     return;
   }
+  _recordWhatGoesWrong();
   await applyImageMemoryBudget();
   GpuCacheTrimmer.start();
   // Which devices are tablets, for their icons from the first frame.

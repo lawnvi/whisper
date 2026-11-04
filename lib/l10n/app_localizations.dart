@@ -382,6 +382,138 @@ abstract class AppLocalizations {
   /// **'复制'**
   String get screenshotConfirm;
 
+  /// No description provided for @diagTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'诊断信息'**
+  String get diagTitle;
+
+  /// No description provided for @diagDatabase.
+  ///
+  /// In zh, this message translates to:
+  /// **'数据库'**
+  String get diagDatabase;
+
+  /// No description provided for @diagServer.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接服务'**
+  String get diagServer;
+
+  /// No description provided for @diagDiscovery.
+  ///
+  /// In zh, this message translates to:
+  /// **'发现设备'**
+  String get diagDiscovery;
+
+  /// No description provided for @diagOk.
+  ///
+  /// In zh, this message translates to:
+  /// **'正常'**
+  String get diagOk;
+
+  /// No description provided for @diagFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'出错了'**
+  String get diagFailed;
+
+  /// No description provided for @healthTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'Whisper 没有正常运行'**
+  String get healthTitle;
+
+  /// No description provided for @healthDatabase.
+  ///
+  /// In zh, this message translates to:
+  /// **'本地数据库打不开，聊天记录和设备都用不了，也发现不了其他设备。'**
+  String get healthDatabase;
+
+  /// No description provided for @healthStartup.
+  ///
+  /// In zh, this message translates to:
+  /// **'启动时出错了，发现不了其他设备，其他设备也连不上这台。'**
+  String get healthStartup;
+
+  /// No description provided for @healthServer.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接服务没有启动，其他设备连不上这台。'**
+  String get healthServer;
+
+  /// No description provided for @healthDiscovery.
+  ///
+  /// In zh, this message translates to:
+  /// **'发现设备没有启动，附近的设备可能显示不出来。'**
+  String get healthDiscovery;
+
+  /// No description provided for @diagRestartHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'可以先重启 Whisper。还不行就把诊断信息发给我们。'**
+  String get diagRestartHint;
+
+  /// No description provided for @diagView.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看'**
+  String get diagView;
+
+  /// No description provided for @diagCopy.
+  ///
+  /// In zh, this message translates to:
+  /// **'拷贝'**
+  String get diagCopy;
+
+  /// No description provided for @diagCopied.
+  ///
+  /// In zh, this message translates to:
+  /// **'诊断信息已拷贝'**
+  String get diagCopied;
+
+  /// No description provided for @diagSave.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存'**
+  String get diagSave;
+
+  /// No description provided for @diagSaved.
+  ///
+  /// In zh, this message translates to:
+  /// **'诊断信息已保存'**
+  String get diagSaved;
+
+  /// No description provided for @diagFeedback.
+  ///
+  /// In zh, this message translates to:
+  /// **'反馈问题'**
+  String get diagFeedback;
+
+  /// No description provided for @diagFeedbackCopied.
+  ///
+  /// In zh, this message translates to:
+  /// **'诊断信息已拷贝，粘贴到问题里就行'**
+  String get diagFeedbackCopied;
+
+  /// No description provided for @diagPrivacy.
+  ///
+  /// In zh, this message translates to:
+  /// **'不含消息、文件和设备名，只有系统版本、本机网络地址和运行记录。只有你发出去才会离开这台设备。'**
+  String get diagPrivacy;
+
+  /// No description provided for @diagOldHistory.
+  ///
+  /// In zh, this message translates to:
+  /// **'旧版本的聊天记录读取不了，还在原来的位置，没有被删除。'**
+  String get diagOldHistory;
+
+  /// No description provided for @healthOldHistory.
+  ///
+  /// In zh, this message translates to:
+  /// **'旧版本的聊天记录读取不了'**
+  String get healthOldHistory;
+
   /// No description provided for @screenshotCopied.
   ///
   /// In zh, this message translates to:

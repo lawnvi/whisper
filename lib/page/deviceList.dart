@@ -76,6 +76,8 @@ import 'package:whisper/remote_input/remote_clipboard_transfer.dart';
 import 'package:whisper/remote_input/remote_input_coordinator.dart';
 import 'package:whisper/remote_input/remote_input_peer_activity.dart';
 import 'package:whisper/remote_input/remote_input_workspace_coordinator.dart';
+import 'package:whisper/state/app_health.dart';
+import 'package:whisper/new_ui/shell/shell_diagnostics.dart';
 import 'package:whisper/state/app_shutdown.dart';
 import 'package:whisper/state/android_system_share_inbox.dart';
 import 'package:whisper/state/android_system_share_router.dart';
@@ -352,6 +354,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     unawaited(PhoneStreamIdentity.publish());
     unawaited(_requestPermission());
     _desktopSearchFocusNode.addListener(_handleDesktopSearchFocusChanged);
+    AppHealth.shared.addListener(_healthChanged);
     _audioCoordinator.addListener(_handleDesktopAudioChanged);
     _audioGroupCoordinator.addListener(_handleDesktopAudioChanged);
     ShellSoundController.shared.onMemberStopped = _noteSoundMemberStopped;
@@ -459,7 +462,11 @@ class _DeviceListScreen extends State<DeviceListScreen>
     }
     final isFirst = !_didBootstrapDiscovery;
     _didBootstrapDiscovery = true;
-    _refreshDevice(isFirst: isFirst);
+    if (isFirst) {
+      unawaited(_startUp());
+    } else {
+      _refreshDevice();
+    }
     socketManager.registerEvent(this, uid: device?.uid ?? "", primary: true);
     super.didChangeDependencies();
   }
@@ -675,6 +682,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     socketManager.unregisterEvent(this);
     _desktopSearchFocusNode.removeListener(_handleDesktopSearchFocusChanged);
     _audioCoordinator.removeListener(_handleDesktopAudioChanged);
+    AppHealth.shared.removeListener(_healthChanged);
     _audioGroupCoordinator.removeListener(_handleDesktopAudioChanged);
     ShellSoundController.shared.onMemberStopped = null;
     _remoteInputCoordinator.removeListener(
@@ -1373,7 +1381,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     await windowManager.destroy();
   }
 
-  void _broadcastService({port}) async {
+  Future<void> _broadcastService({port}) async {
     final wifiIP = await getLocalIpAddress();
     if (!mounted) return;
 
@@ -1640,6 +1648,34 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
   void _onCopiesChanged() => unawaited(_refreshDevice());
 
+  /// The first refresh also starts the server and discovery. If it fails, or never
+  /// finishes, the app looks fine and simply finds nobody: it has to say so.
+  Future<void> _startUp() async {
+    await _localNetworkPermissionBootstrap;
+    final stalled = Timer(
+      const Duration(seconds: 20),
+      () => AppHealth.shared.report(AppProblem.startup),
+    );
+    try {
+      await _refreshDevice(isFirst: true);
+      AppHealth.shared.clear(AppProblem.startup);
+    } on Object catch (error, stack) {
+      AppHealth.shared.report(AppHealth.classifyStartup(error), error, stack);
+    } finally {
+      stalled.cancel();
+    }
+    if (AppHealth.shared.oldHistoryUnreadable && mounted) {
+      NoteIslandSource.shared.note(
+        AppLocalizations.of(context)!.healthOldHistory,
+        problem: true,
+      );
+    }
+  }
+
+  void _healthChanged() {
+    if (mounted) setState(() {});
+  }
+
   Future<void> _refreshDevice({isFirst = false}) async {
     if (!mounted) return;
     if (Platform.isIOS) unawaited(_syncClipboardWatcher());
@@ -1750,11 +1786,22 @@ class _DeviceListScreen extends State<DeviceListScreen>
       _broadcastRestartTimer?.cancel();
       _broadcastRestartTimer = Timer(const Duration(milliseconds: 100), () {
         _broadcastRestartTimer = null;
-        _broadcastService();
+        unawaited(
+          _broadcastService().catchError(
+            (Object error, StackTrace stack) =>
+                AppHealth.shared.report(AppProblem.discovery, error, stack),
+          ),
+        );
       });
     }
     if (isFirst && !_isDiscovering) {
-      _discoverService();
+      unawaited(
+        _discoverService().then(
+          (_) => AppHealth.shared.clear(AppProblem.discovery),
+          onError: (Object error, StackTrace stack) =>
+              AppHealth.shared.report(AppProblem.discovery, error, stack),
+        ),
+      );
     }
   }
 
@@ -2250,6 +2297,17 @@ class _DeviceListScreen extends State<DeviceListScreen>
     }
 
     final moments = <String, StatusMoment>{};
+    final problem = AppHealth.shared.worst;
+    if (problem != null) {
+      moments['health'] = StatusMoment(
+        glyph: WhisperGlyph.warn,
+        warning: true,
+        title: l10n.healthTitle,
+        detail: appProblemText(l10n, problem),
+        stopLabel: l10n.diagView,
+        onStop: () => unawaited(showDiagnostics(this.context)),
+      );
+    }
     if (_lanDown) {
       moments['lan'] = StatusMoment(
         glyph: WhisperGlyph.warn,
@@ -3352,6 +3410,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
       socketManager.started = result.isSuccess;
     });
     if (result.isSuccess) {
+      AppHealth.shared.clear(AppProblem.server);
       if (Platform.isAndroid) {
         final keepAliveEnabled = await LocalSetting()
             .androidBackgroundKeepAlive();
@@ -3382,6 +3441,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
       false,
     );
     final error = result.error;
+    AppHealth.shared.report(AppProblem.server, error);
     privacyLog.event(PrivacyEvent.localOperation, <PrivacyField, Object>{
       PrivacyField.kind: DeviceListOperationKind.serverStart,
       PrivacyField.success: false,

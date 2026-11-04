@@ -155,6 +155,72 @@ class AppLocalizationsZh extends AppLocalizations {
   String get screenshotConfirm => '复制';
 
   @override
+  String get diagTitle => '诊断信息';
+
+  @override
+  String get diagDatabase => '数据库';
+
+  @override
+  String get diagServer => '连接服务';
+
+  @override
+  String get diagDiscovery => '发现设备';
+
+  @override
+  String get diagOk => '正常';
+
+  @override
+  String get diagFailed => '出错了';
+
+  @override
+  String get healthTitle => 'Whisper 没有正常运行';
+
+  @override
+  String get healthDatabase => '本地数据库打不开，聊天记录和设备都用不了，也发现不了其他设备。';
+
+  @override
+  String get healthStartup => '启动时出错了，发现不了其他设备，其他设备也连不上这台。';
+
+  @override
+  String get healthServer => '连接服务没有启动，其他设备连不上这台。';
+
+  @override
+  String get healthDiscovery => '发现设备没有启动，附近的设备可能显示不出来。';
+
+  @override
+  String get diagRestartHint => '可以先重启 Whisper。还不行就把诊断信息发给我们。';
+
+  @override
+  String get diagView => '查看';
+
+  @override
+  String get diagCopy => '拷贝';
+
+  @override
+  String get diagCopied => '诊断信息已拷贝';
+
+  @override
+  String get diagSave => '保存';
+
+  @override
+  String get diagSaved => '诊断信息已保存';
+
+  @override
+  String get diagFeedback => '反馈问题';
+
+  @override
+  String get diagFeedbackCopied => '诊断信息已拷贝，粘贴到问题里就行';
+
+  @override
+  String get diagPrivacy => '不含消息、文件和设备名，只有系统版本、本机网络地址和运行记录。只有你发出去才会离开这台设备。';
+
+  @override
+  String get diagOldHistory => '旧版本的聊天记录读取不了，还在原来的位置，没有被删除。';
+
+  @override
+  String get healthOldHistory => '旧版本的聊天记录读取不了';
+
+  @override
   String get screenshotCopied => '截图已复制';
 
   @override

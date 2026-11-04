@@ -5,6 +5,7 @@ import 'dart:developer' as developer;
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
+import 'package:whisper/helper/app_log.dart';
 
 typedef PrivacyLogSink = void Function(String line);
 
@@ -54,17 +55,17 @@ enum PrivacyEvent {
 
 extension on PrivacyEvent {
   String get wireName => switch (this) {
-        PrivacyEvent.audioDiagnostic => 'audio_diagnostic',
-        PrivacyEvent.discoveryState => 'discovery_state',
-        PrivacyEvent.localOperation => 'local_operation',
-        PrivacyEvent.messageReceived => 'message_received',
-        PrivacyEvent.notificationForwarded => 'notification_forwarded',
-        PrivacyEvent.remoteInputDiagnostic => 'remote_input_diagnostic',
-        PrivacyEvent.settingsOperation => 'settings_operation',
-        PrivacyEvent.toastUnavailable => 'toast_unavailable',
-        PrivacyEvent.transferProgress => 'transfer_progress',
-        PrivacyEvent.testEvent => 'test_event',
-      };
+    PrivacyEvent.audioDiagnostic => 'audio_diagnostic',
+    PrivacyEvent.discoveryState => 'discovery_state',
+    PrivacyEvent.localOperation => 'local_operation',
+    PrivacyEvent.messageReceived => 'message_received',
+    PrivacyEvent.notificationForwarded => 'notification_forwarded',
+    PrivacyEvent.remoteInputDiagnostic => 'remote_input_diagnostic',
+    PrivacyEvent.settingsOperation => 'settings_operation',
+    PrivacyEvent.toastUnavailable => 'toast_unavailable',
+    PrivacyEvent.transferProgress => 'transfer_progress',
+    PrivacyEvent.testEvent => 'test_event',
+  };
 }
 
 enum PrivacyField {
@@ -174,6 +175,7 @@ final class PrivacyLog {
 
   static void _developerSink(String line) {
     developer.log(line, name: 'whisper.privacy');
+    AppLog.shared.write(line);
   }
 }
 
