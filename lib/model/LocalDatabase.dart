@@ -942,16 +942,18 @@ class LocalDatabase extends _$LocalDatabase {
         ? 'FROM message_fts '
               'JOIN message AS m ON m.id = message_fts.rowid '
         : 'FROM message AS m ';
+    // This device's own notes, not everything it ever sent.
+    final self = peerUid == await localUUID();
     final filters = <String>[
       'm.type = ?',
-      '(m.sender = ? OR m.receiver = ?)',
+      self ? "(m.sender = ? AND m.receiver = '')" : '(m.sender = ? OR m.receiver = ?)',
       'm.clipboard = 0',
       "COALESCE(m.content, '') <> ''",
     ];
     final variables = <Variable<Object>>[
       Variable<int>(MessageEnum.Text.index),
       Variable<String>(peerUid),
-      Variable<String>(peerUid),
+      if (!self) Variable<String>(peerUid),
     ];
     if (beforeId > 0) {
       filters.add('m.id < ?');

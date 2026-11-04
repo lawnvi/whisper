@@ -162,7 +162,9 @@ class _ShellDevicePageBodyState extends State<_ShellDevicePageBody> {
         color: c.ink,
       ),
     );
-    final known = session.isConnected || page.paired || !session.isNearby;
+    final known =
+        !session.isSelf &&
+        (session.isConnected || page.paired || !session.isNearby);
     return SizedBox(
       height: 50,
       child: Padding(
@@ -235,7 +237,9 @@ class _ShellDevicePageBodyState extends State<_ShellDevicePageBody> {
     const type = WhisperType(touch: true);
     final device = page.device;
     final session = page.session;
-    final known = session.isConnected || page.paired || !session.isNearby;
+    final known =
+        !session.isSelf &&
+        (session.isConnected || page.paired || !session.isNearby);
     return SizedBox(
       height: 50,
       child: Padding(
@@ -372,9 +376,10 @@ class _ShellDevicePageBodyState extends State<_ShellDevicePageBody> {
                                 ),
                               ),
                             ),
-                            if (session.isConnected ||
-                                page.paired ||
-                                !session.isNearby) ...[
+                            if (!session.isSelf &&
+                                (session.isConnected ||
+                                    page.paired ||
+                                    !session.isNearby)) ...[
                               LiquidSegmented<int>(
                                 key: page.controlsKey,
                                 segments: {
@@ -432,8 +437,8 @@ class _ShellDevicePageBodyState extends State<_ShellDevicePageBody> {
                                 session.isNearby
                             ? page._away(context)
                             : WhisperTabView(
-                                index: page.tab,
-                                itemCount: 3,
+                                index: session.isSelf ? 0 : page.tab,
+                                itemCount: session.isSelf ? 1 : 3,
                                 contentKey: (device, session.isConnected),
                                 heavyPages: true,
                                 resetKey: session.isConnected,

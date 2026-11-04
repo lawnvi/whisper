@@ -2350,7 +2350,9 @@ class WsSvrManager {
     await pendingCancellation;
     await _waitForPeerAuthentication(peerId);
     await removal;
-    await _database.clearDevices(<String>[peerId], localPeerId: '');
+    // With this device's own id, 我的记录: everything it ever sent also has that
+    // id as its sender, and only the notes are to go.
+    await _database.clearDevices(<String>[peerId], localPeerId: sender);
     _deletedPeerDiscoverySuppressions.add(peerId);
     // 删除抑制只保护删除事务本身。数据库清理完成后，新拨入应作为
     // 新设备重新配对；解除时推进策略版本，同时淘汰删除期间抢入的会话。

@@ -67,6 +67,7 @@ class ShellActions {
     required this.openShareLinks,
     required this.openSettings,
     required this.openDiagnostics,
+    required this.openSelfNotes,
     required this.buildConversation,
     required this.buildFiles,
     required this.buildApps,
@@ -95,6 +96,9 @@ class ShellActions {
   /// Files were dropped on a connected device in the list.
   final void Function(DeviceData target, List<String> paths) sendDropped;
   final VoidCallback openSound, openInput, openShareLinks, openSettings;
+
+  /// 我的记录: a conversation with this device, for when there is nobody else.
+  final VoidCallback openSelfNotes;
   final ValueChanged<DeviceData> openDiagnostics;
 
   /// The three pages of a device. Built when first shown, then kept.

@@ -3628,6 +3628,15 @@ class AppLocalizationsEs extends AppLocalizations {
   String get shellSelfCopy => 'Copiar datos de conexión';
 
   @override
+  String get shellSelfNotes => 'Mis notas';
+
+  @override
+  String get shellSelfNotesHint => 'Solo en este dispositivo';
+
+  @override
+  String get shellFirstDeviceNotes => 'Envíate algo';
+
+  @override
   String get shellSelfCopied => 'Copiado';
 
   @override

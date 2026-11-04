@@ -107,7 +107,10 @@ class ShellSidebar extends StatelessWidget {
         ),
         Expanded(
           child: rows.isEmpty && !data.loading
-              ? _FirstDevice(onConnect: onOpenSelf)
+              ? _FirstDevice(
+                  onConnect: onOpenSelf,
+                  onNotes: actions.openSelfNotes,
+                )
               : _BottomEdge(
                   child: ScrollConfiguration(
                     behavior: ScrollConfiguration.of(
@@ -205,9 +208,9 @@ class ShellSidebar extends StatelessWidget {
 }
 
 class _FirstDevice extends StatelessWidget {
-  const _FirstDevice({required this.onConnect});
+  const _FirstDevice({required this.onConnect, required this.onNotes});
 
-  final VoidCallback onConnect;
+  final VoidCallback onConnect, onNotes;
 
   @override
   Widget build(BuildContext context) {
@@ -227,6 +230,8 @@ class _FirstDevice extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             ShellFilledButton(label: l10n.shellConnectDevice, onTap: onConnect),
+            const SizedBox(height: 8),
+            ShellButton(label: l10n.shellFirstDeviceNotes, onTap: onNotes),
           ],
         ),
       ),
@@ -376,7 +381,7 @@ class _DeviceRow extends StatelessWidget {
     final device = session.device;
     final live = deviceRowLineIsLive(deviceRowLine(facts));
     final avatar = touch ? 48.0 : 38.0;
-    final state = session.isConnected
+    final state = session.isConnected || session.isSelf
         ? c.deviceOn
         : session.isNearby
         ? c.deviceNear

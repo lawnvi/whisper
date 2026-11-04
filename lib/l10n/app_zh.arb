@@ -2623,6 +2623,9 @@
   },
   "shellLinksChooseAny": "选择",
   "shellSelfCopy": "拷贝连接信息",
+  "shellSelfNotes": "我的记录",
+  "shellSelfNotesHint": "只保存在这台设备上",
+  "shellFirstDeviceNotes": "先给自己发",
   "shellSelfCopied": "已拷贝",
   "shareLinkNoNetwork": "没有连上局域网，其他设备暂时打不开",
   "@shareLinkNoNetwork": {

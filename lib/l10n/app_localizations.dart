@@ -6009,6 +6009,24 @@ abstract class AppLocalizations {
   /// **'拷贝连接信息'**
   String get shellSelfCopy;
 
+  /// No description provided for @shellSelfNotes.
+  ///
+  /// In zh, this message translates to:
+  /// **'我的记录'**
+  String get shellSelfNotes;
+
+  /// No description provided for @shellSelfNotesHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'只保存在这台设备上'**
+  String get shellSelfNotesHint;
+
+  /// No description provided for @shellFirstDeviceNotes.
+  ///
+  /// In zh, this message translates to:
+  /// **'先给自己发'**
+  String get shellFirstDeviceNotes;
+
   /// No description provided for @shellSelfCopied.
   ///
   /// In zh, this message translates to:

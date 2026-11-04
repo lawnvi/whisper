@@ -83,10 +83,21 @@ class ShellPhoneList extends StatelessWidget {
                       art: const SizedBox.shrink(),
                       title: l10n.shellFirstDevice,
                       body: '',
-                      action: ShellFilledButton(
-                        touch: true,
-                        label: l10n.shellConnectDevice,
-                        onTap: () => actions.openPairing(),
+                      action: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          ShellFilledButton(
+                            touch: true,
+                            label: l10n.shellConnectDevice,
+                            onTap: () => actions.openPairing(),
+                          ),
+                          const SizedBox(height: 10),
+                          ShellButton(
+                            touch: true,
+                            label: l10n.shellFirstDeviceNotes,
+                            onTap: actions.openSelfNotes,
+                          ),
+                        ],
                       ),
                     )
                   : SingleChildScrollView(

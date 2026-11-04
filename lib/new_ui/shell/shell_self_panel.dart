@@ -19,10 +19,11 @@ class ShellSelfPanel extends StatefulWidget {
     super.key,
     required this.self,
     required this.onEnterAddress,
+    required this.onOpenNotes,
   });
 
   final DeviceData? self;
-  final VoidCallback onEnterAddress;
+  final VoidCallback onEnterAddress, onOpenNotes;
 
   @override
   State<ShellSelfPanel> createState() => _ShellSelfPanelState();
@@ -160,6 +161,20 @@ class _ShellSelfPanelState extends State<ShellSelfPanel> {
               ShellRow(
                 label: l10n.shellSelfFingerprint,
                 trailing: code(fingerprint ?? '—'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ShellGroup(
+            flat: true,
+            children: [
+              ShellRow(
+                label: l10n.shellSelfNotes,
+                chevron: true,
+                onTap: () {
+                  Navigator.of(context).pop();
+                  widget.onOpenNotes();
+                },
               ),
             ],
           ),

@@ -153,6 +153,7 @@ Future<String> deviceName() async {
 }
 
 Future<bool> isLocalhost(String address) async {
+  if (address == '127.0.0.1' || address == 'localhost') return true;
   try {
     for (var interface in await NetworkInterface.list()) {
       for (var addr in interface.addresses) {

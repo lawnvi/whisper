@@ -44,7 +44,6 @@ class ChatComposer extends StatelessWidget {
   final bool canSend;
   final bool isInputEmpty;
   final bool isLoading;
-  final bool isLocalhost;
   final bool isDesktopStyle;
   final Map<String, bool> keyPressedMap;
   final TextEditingController controller;
@@ -76,7 +75,6 @@ class ChatComposer extends StatelessWidget {
     required this.canSend,
     required this.isInputEmpty,
     required this.isLoading,
-    required this.isLocalhost,
     required this.isDesktopStyle,
     required this.keyPressedMap,
     required this.controller,
@@ -520,7 +518,6 @@ class ChatComposer extends StatelessWidget {
       _showsClipboardImagesPreview && onSendClipboardImages != null;
 
   bool get _showsAttachmentAction =>
-      !isLocalhost &&
       !_hasDraftText &&
       !_showsClipboardFilesPreview &&
       !_showsClipboardImagesPreview;

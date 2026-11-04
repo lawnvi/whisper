@@ -16,6 +16,7 @@ import 'package:whisper/audio/audio_group_coordinator.dart';
 import 'package:whisper/audio/audio_protocol.dart';
 import 'package:whisper/helper/toast.dart';
 import 'package:whisper/helper/transfer_failure_message.dart';
+import 'package:whisper/state/self_notes.dart';
 import 'package:whisper/state/conversation_history_pager.dart';
 import 'package:whisper/state/message_deletion.dart';
 import 'package:whisper/audio/audio_share_coordinator.dart';
@@ -114,7 +115,7 @@ class SendMessageScreen extends StatefulWidget {
   final Future<void> Function(String uid)? onDeviceDeleted;
 
   /// Messages were deleted here: the list's last line may be gone with them.
-  final VoidCallback? onMessagesDeleted;
+  final VoidCallback? onMessagesChanged;
 
   const SendMessageScreen({
     super.key,
@@ -123,7 +124,7 @@ class SendMessageScreen extends StatefulWidget {
     this.chromeless = false,
     this.onBack,
     this.onDeviceDeleted,
-    this.onMessagesDeleted,
+    this.onMessagesChanged,
   });
 
   @override
@@ -709,7 +710,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
     }
 
     await db.deleteMessages(ids);
-    widget.onMessagesDeleted?.call();
+    widget.onMessagesChanged?.call();
     if (!mounted) {
       return;
     }
@@ -888,13 +889,13 @@ class _SendMessageScreen extends State<SendMessageScreen>
   }
 
   Future<void> _handleFileDrop(List<String> paths) async {
-    if (paths.isEmpty || _isLocalhost || !_canSendCurrentDevice) {
+    if (paths.isEmpty || !_canSendCurrentDevice) {
       return;
     }
     try {
       for (final path in paths) {
         final type = await FileSystemEntity.type(path, followLinks: false);
-        if (type == FileSystemEntityType.directory) {
+        if (type == FileSystemEntityType.directory && !_isLocalhost) {
           if (!await _sendFolder(path)) {
             return;
           }
@@ -906,7 +907,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
           }
           return;
         }
-        final sent = await socketManager.sendFileTo(device.uid, path);
+        final sent = await _sendFile(path);
         if (!sent && mounted) {
           showAppToast(l10n.fileDropRejected, tone: AppToastTone.error);
           return;
@@ -1616,7 +1617,6 @@ class _SendMessageScreen extends State<SendMessageScreen>
       canSend: _canSendCurrentDevice,
       isInputEmpty: isInputEmpty,
       isLoading: _isLoading,
-      isLocalhost: _isLocalhost,
       isDesktopStyle: isDesktop(),
       keyPressedMap: keyPressedMap,
       controller: _textController,
@@ -1663,7 +1663,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
   }
 
   Future<String?> _pasteClipboard() async {
-    if (!isDesktop() || !_canSendCurrentDevice || _isLocalhost) {
+    if (!isDesktop() || !_canSendCurrentDevice) {
       return null;
     }
     final generation = ++_clipboardPasteGeneration;
@@ -1757,7 +1757,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
 
   Future<void> _sendPendingClipboardFiles() async {
     final drafts = List<ClipboardFileDraft>.of(_pendingClipboardFiles);
-    if (drafts.isEmpty || !_canSendCurrentDevice || _isLocalhost) {
+    if (drafts.isEmpty || !_canSendCurrentDevice) {
       return;
     }
     setState(() {
@@ -1768,7 +1768,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
     try {
       for (; currentIndex < drafts.length; currentIndex++) {
         final draft = drafts[currentIndex];
-        final sent = await socketManager.sendFileTo(device.uid, draft.path);
+        final sent = await _sendFile(draft.path);
         if (!sent) {
           remaining.addAll(drafts.skip(currentIndex));
           break;
@@ -1805,7 +1805,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
 
   Future<void> _sendPendingClipboardImages() async {
     final drafts = List<ClipboardImageDraft>.of(_pendingClipboardImages);
-    if (drafts.isEmpty || !_canSendCurrentDevice || _isLocalhost) {
+    if (drafts.isEmpty || !_canSendCurrentDevice) {
       return;
     }
     setState(() {
@@ -1815,7 +1815,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
     try {
       var failed = false;
       for (final draft in drafts) {
-        final sent = await socketManager.sendFileTo(device.uid, draft.path);
+        final sent = await _sendFile(draft.path, draft: true);
         if (!sent) {
           failed = true;
           break;
@@ -1855,8 +1855,20 @@ class _SendMessageScreen extends State<SendMessageScreen>
     }
   }
 
+  /// What sending means in 我的记录: it goes in the list, and nowhere else.
+  Future<bool> _sendFile(String path, {bool draft = false}) async {
+    if (!_isLocalhost) return socketManager.sendFileTo(device.uid, path);
+    _noteAdded(await SelfNotes(db).addFile(device.uid, path, draft: draft));
+    return true;
+  }
+
+  void _noteAdded(MessageData note) {
+    if (mounted) onMessage(note);
+    widget.onMessagesChanged?.call();
+  }
+
   Future<void> _pickFilesAndSend() async {
-    if (!_canSendCurrentDevice || _isLocalhost) {
+    if (!_canSendCurrentDevice) {
       return;
     }
     final shouldReconnectAfterPicker = _isConnectedSession;
@@ -1886,7 +1898,18 @@ class _SendMessageScreen extends State<SendMessageScreen>
         }
       }
       for (final item in result) {
-        await socketManager.sendPickedFileTo(device.uid, item);
+        if (_isLocalhost) {
+          _noteAdded(
+            await SelfNotes(db).addFile(
+              device.uid,
+              item.path ?? item.androidContentUri ?? '',
+              name: item.name,
+              size: item.size,
+            ),
+          );
+        } else {
+          await socketManager.sendPickedFileTo(device.uid, item);
+        }
       }
     } catch (error) {
       _logConversationFailure(ConversationOperationKind.pickFiles, error);
@@ -2442,29 +2465,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
         return false;
       }
       if (_isLocalhost) {
-        if (isClipboard) {
-          return true;
-        }
-        final message = MessageData(
-          id: 0,
-          sender: device.uid,
-          receiver: "",
-          name: "",
-          clipboard: isClipboard,
-          size: 0,
-          type: MessageEnum.Text,
-          content: content,
-          message: "",
-          timestamp: DateTime.now().millisecondsSinceEpoch ~/ 1000,
-          acked: true,
-          uuid: LocalUuid.v4(),
-          path: "",
-          md5: "",
-        );
-        await LocalDatabase().insertMessage(message);
-        if (mounted) {
-          onMessage(message);
-        }
+        _noteAdded(await SelfNotes(db).addText(device.uid, content));
         return true;
       }
       if (!socketManager.isConnectedTo(device.uid)) {
@@ -2929,9 +2930,12 @@ class _SendMessageScreen extends State<SendMessageScreen>
     if (TransferPlacements.shared.isQuiet(messageData.uuid)) {
       return;
     }
-    if (_isLocalhost && messageData.receiver.isEmpty ||
-        messageData.sender == device.uid ||
-        messageData.receiver == device.uid) {
+    // Everything sent from here has this device as its sender: only the notes
+    // belong in 我的记录.
+    if (_isLocalhost
+        ? messageData.receiver.isEmpty
+        : messageData.sender == device.uid ||
+              messageData.receiver == device.uid) {
       _insertItem(0, messageData);
       unawaited(_loadTransferSnapshotsForMessages(<MessageData>[messageData]));
     }

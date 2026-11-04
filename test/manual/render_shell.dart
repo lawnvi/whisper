@@ -91,6 +91,7 @@ ShellActions _actions(
   openShareLinks: () {},
   openSettings: () {},
   openDiagnostics: (_) {},
+  openSelfNotes: () {},
   buildConversation: chat,
   buildFiles: (_, _) => const SizedBox.shrink(),
   buildApps: (_, _) => const SizedBox.shrink(),

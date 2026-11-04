@@ -1689,8 +1689,14 @@ class _DeviceListScreen extends State<DeviceListScreen>
     if (isFirst) {
       await db.clearDeviceDiscoveryPresence();
     }
-    var arr = (await db.fetchAllDevice())
+    final stored = (await db.fetchAllDevice())
         .where((item) => !socketManager.shouldSuppressDiscoveredPeer(item.uid))
+        .toList(growable: false);
+    // 我的记录 is not a peer: nothing connects to it or looks for it. Its row only
+    // says that it was opened, and this device is what it is about.
+    final hasSelfNotes = stored.any((item) => item.uid == temp.uid);
+    final arr = stored
+        .where((item) => item.uid != temp.uid)
         .toList(growable: false);
     final storedDevicesByUid = <String, DeviceData>{
       for (final item in arr) item.uid: item,
@@ -1727,6 +1733,11 @@ class _DeviceListScreen extends State<DeviceListScreen>
       }
       newArr.add(item);
     }
+    if (hasSelfNotes) {
+      newArr.add(
+        temp.copyWith(name: AppLocalizations.of(context)!.shellSelfNotes),
+      );
+    }
 
     socketManager.setSender(temp.uid);
 
@@ -1749,6 +1760,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
           : socketManager.receiver,
       connectedPeerIds: socketManager.connectedPeerIds,
       selectedPeerId: _selectedDesktopPeerId,
+      selfUid: temp.uid,
       strings: _sessionPreviewStrings(context),
     );
     final selectedPeerId =
@@ -2404,6 +2416,18 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
   DeviceRowFacts _shellFacts(ChatSessionItem session) {
     final uid = session.device.uid;
+    if (session.isSelf) {
+      return DeviceRowFacts(
+        connected: true,
+        paired: true,
+        lastMessage: session.hasHistory
+            ? _formatSessionTime(session.lastTimestamp)
+            : null,
+        preview: session.hasHistory
+            ? session.preview
+            : AppLocalizations.of(context)!.shellSelfNotesHint,
+      );
+    }
     final transfer = _shellTransfers[uid];
     final moving = switch (transfer?.state) {
       FileTransferState.queued ||
@@ -2586,11 +2610,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
   /// Files dropped on a device in the list: asked first, as the drop may have
   /// landed on the wrong row.
   Future<void> _shellSendDropped(DeviceData target, List<String> paths) async {
-    final send = await showShellDropSend(
-      context,
-      device: target,
-      paths: paths,
-    );
+    final send = await showShellDropSend(context, device: target, paths: paths);
     if (!send || !mounted) return;
     await sendDroppedPaths(
       paths: paths,
@@ -2615,13 +2635,12 @@ class _DeviceListScreen extends State<DeviceListScreen>
     openPairing: ({bool startWithAddress = false}) =>
         _openPairingQr(startWithAddress: startWithAddress),
     removeDevice: _removeDevice,
-    sendDropped: (target, paths) =>
-        unawaited(_shellSendDropped(target, paths)),
+    sendDropped: (target, paths) => unawaited(_shellSendDropped(target, paths)),
     contextActions: (target, {openCard}) {
       final l10n = AppLocalizations.of(context)!;
       return [
         ..._buildSessionContextActions(target),
-        if (openCard != null)
+        if (openCard != null && target.uid != device?.uid)
           ContextMenuActionItem(
             label: l10n.shellCardMenu,
             icon: Icons.info_outline_rounded,
@@ -2634,10 +2653,11 @@ class _DeviceListScreen extends State<DeviceListScreen>
     openShareLinks: _shellOpenShareLinks,
     openSettings: () => unawaited(_shellOpenSettings()),
     openDiagnostics: _shellOpenConnectionCheck,
+    openSelfNotes: () => unawaited(_openSelfNotes()),
     buildConversation: (context, target) => SendMessageScreen(
       key: ValueKey('shell-chat-${target.uid}'),
       device: target,
-      onMessagesDeleted: () => unawaited(_refreshDevice()),
+      onMessagesChanged: () => unawaited(_refreshDevice()),
       embedded: true,
       chromeless: true,
       onDeviceDeleted: _removeDevice,
@@ -2655,6 +2675,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     buildSelfPanel: (context) => ShellSelfPanel(
       self: device,
       onEnterAddress: () => _openPairingQr(startWithAddress: true),
+      onOpenNotes: () => unawaited(_openSelfNotes()),
     ),
     buildCard: (context, target, close) {
       final l10n = AppLocalizations.of(context)!;
@@ -2965,6 +2986,18 @@ class _DeviceListScreen extends State<DeviceListScreen>
     final l10n = AppLocalizations.of(context);
     final isConnected = socketManager.isConnectedTo(deviceItem.uid);
     final inputSessionId = _remoteInputCoordinator.state.sessionId;
+    if (deviceItem.uid == device?.uid) {
+      return [
+        ContextMenuActionItem(
+          label: l10n?.delete ?? '删除',
+          icon: Icons.delete_outline_rounded,
+          destructive: true,
+          onSelected: () async {
+            await _confirmRemoveDevice(deviceItem);
+          },
+        ),
+      ];
+    }
     return [
       if (_isReceivingMobileControl(deviceItem.uid))
         ContextMenuActionItem(
@@ -3255,7 +3288,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
         }
         return;
       }
-      afterAuth(true, device);
+      await _openSelfNotes();
       return;
     }
     if (manual && peerId != null) {
@@ -3541,6 +3574,16 @@ class _DeviceListScreen extends State<DeviceListScreen>
     }
     _shellShowDevice(deviceData.uid);
     return;
+  }
+
+  /// 我的记录: reached from the first device's page, this device's panel, or by
+  /// connecting to its own address.
+  Future<void> _openSelfNotes() async {
+    final me = await LocalSetting().instance();
+    socketManager.releaseDeletedPeerDiscoverySuppression(me.uid);
+    await db.upsertDevice(me);
+    await _refreshDevice();
+    if (mounted) _shellShowDevice(me.uid);
   }
 
   @override

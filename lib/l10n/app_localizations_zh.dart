@@ -3387,6 +3387,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get shellSelfCopy => '拷贝连接信息';
 
   @override
+  String get shellSelfNotes => '我的记录';
+
+  @override
+  String get shellSelfNotesHint => '只保存在这台设备上';
+
+  @override
+  String get shellFirstDeviceNotes => '先给自己发';
+
+  @override
   String get shellSelfCopied => '已拷贝';
 
   @override

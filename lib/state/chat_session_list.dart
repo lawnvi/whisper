@@ -25,6 +25,7 @@ class ChatSessionItem {
     required this.isNearby,
     required this.hasHistory,
     required this.avatarLabel,
+    this.isSelf = false,
   });
 
   final DeviceData device;
@@ -35,6 +36,9 @@ class ChatSessionItem {
   final bool isNearby;
   final bool hasHistory;
   final String avatarLabel;
+
+  /// 我的记录: this device itself, which nothing connects to.
+  final bool isSelf;
 
   bool matches(String query) {
     final normalized = query.trim().toLowerCase();
@@ -61,6 +65,7 @@ class ChatSessionListBuilder {
     String? activePeerId,
     Set<String> connectedPeerIds = const <String>{},
     String? selectedPeerId,
+    String? selfUid,
     required ChatSessionPreviewStrings strings,
   }) {
     final connected = <String>{
@@ -70,6 +75,7 @@ class ChatSessionListBuilder {
     final sessions = devices
         .where(
           (device) =>
+              device.uid == selfUid ||
               connected.contains(device.uid) ||
               device.around == true ||
               device.auth ||
@@ -81,6 +87,7 @@ class ChatSessionListBuilder {
             latestMessage: latestMessages[device.uid],
             connectedPeerIds: connected,
             strings: strings,
+            isSelf: device.uid == selfUid,
           ),
         )
         .toList(growable: false);
@@ -95,15 +102,17 @@ class ChatSessionListBuilder {
         if (timestampCompare != 0) {
           return timestampCompare;
         }
-        return a.device.name
-            .toLowerCase()
-            .compareTo(b.device.name.toLowerCase());
+        return a.device.name.toLowerCase().compareTo(
+          b.device.name.toLowerCase(),
+        );
       });
     return sorted;
   }
 
   static List<ChatSessionItem> filter(
-      List<ChatSessionItem> sessions, String query) {
+    List<ChatSessionItem> sessions,
+    String query,
+  ) {
     return sessions
         .where((item) => item.matches(query))
         .toList(growable: false);
@@ -114,6 +123,7 @@ class ChatSessionListBuilder {
     required MessageData? latestMessage,
     required Set<String> connectedPeerIds,
     required ChatSessionPreviewStrings strings,
+    bool isSelf = false,
   }) {
     final isConnected = connectedPeerIds.contains(device.uid);
     final isNearby = device.around == true;
@@ -134,6 +144,7 @@ class ChatSessionListBuilder {
       isNearby: isNearby,
       hasHistory: hasHistory,
       avatarLabel: _avatarLabel(device.name),
+      isSelf: isSelf,
     );
   }
 
@@ -141,7 +152,7 @@ class ChatSessionListBuilder {
     if (item.isConnected) {
       return 0;
     }
-    if (item.isNearby) {
+    if (item.isNearby || item.isSelf) {
       return 1;
     }
     return 2;
