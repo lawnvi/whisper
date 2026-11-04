@@ -822,7 +822,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
                       child: SizedBox(
                         width: touch
                             ? box.maxWidth - 36
-                            : math.min(620, box.maxWidth - 96),
+                            : math.min(860, box.maxWidth - 48),
                         child: _buildComposer(isDark),
                       ),
                     ),

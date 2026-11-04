@@ -115,8 +115,9 @@ class ChatComposer extends StatelessWidget {
     );
   }
 
-  /// surfaces.md「输入框」: one glass capsule floating over the conversation.
-  /// It shows what it sends and grows upward when there is something to preview.
+  /// surfaces.md「输入框」: glass floating over the conversation, growing upward.
+  /// With a pointer it is a small card whose last line is a toolbar; on a phone
+  /// a capsule, where the room belongs to the keyboard.
   Widget _buildCapsule(BuildContext context) {
     final c = context.wc;
     final touch = !isDesktopStyle;
@@ -136,8 +137,8 @@ class ChatComposer extends StatelessWidget {
           enabled: canSend,
           keyboardType: TextInputType.multiline,
           textInputAction: TextInputAction.newline,
-          minLines: 1,
-          maxLines: 5,
+          minLines: touch ? 1 : 2,
+          maxLines: touch ? 5 : 6,
           selectionWidthStyle: BoxWidthStyle.tight,
           autofocus: isDesktop(),
           autocorrect: true,
@@ -219,22 +220,32 @@ class ChatComposer extends StatelessWidget {
         ],
       ),
     );
-    return DecoratedBox(
-      key: desktopContainerKey,
-      decoration: ShapeDecoration(
-        shape: RoundedSuperellipseBorder(
-          borderRadius: BorderRadius.circular(
-            hasPreview ? WhisperRadius.composer - 5 : WhisperRadius.composer,
-          ),
-        ),
-        shadows: WhisperShadow.e2(Theme.of(context).brightness),
-      ),
-      child: WhisperGlass(
+    final radius = touch
+        ? (hasPreview ? WhisperRadius.composer - 5 : WhisperRadius.composer)
+        : WhisperRadius.l;
+    final shadows = WhisperShadow.e2(Theme.of(context).brightness);
+    Widget lifted(Widget child) => touch
+        ? DecoratedBox(
+            key: desktopContainerKey,
+            decoration: ShapeDecoration(
+              shape: RoundedSuperellipseBorder(
+                borderRadius: BorderRadius.circular(radius),
+              ),
+              shadows: shadows,
+            ),
+            child: child,
+          )
+        // This much glass would go grey over a shadow drawn under it as well.
+        : CustomPaint(
+            key: desktopContainerKey,
+            painter: WhisperOutsideShadow(shadows: shadows, radius: radius),
+            child: child,
+          );
+    return lifted(
+      WhisperGlass(
         kind: GlassKind.control,
         shape: RoundedSuperellipseBorder(
-          borderRadius: BorderRadius.circular(
-            hasPreview ? WhisperRadius.composer - 5 : WhisperRadius.composer,
-          ),
+          borderRadius: BorderRadius.circular(radius),
         ),
         child: Padding(
           padding: const EdgeInsets.all(5),
@@ -253,12 +264,101 @@ class ChatComposer extends StatelessWidget {
                         ? _buildClipboardFilesPreview(context)
                         : _buildClipboardImagesPreview(context),
                   ),
-                row,
+                if (touch)
+                  row
+                else ...[
+                  // The whole card is for writing, not only the text itself.
+                  GestureDetector(
+                    behavior: HitTestBehavior.translucent,
+                    onTap: focusNode.requestFocus,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(6, 7, 6, 8),
+                      child: field,
+                    ),
+                  ),
+                  _buildToolbar(context),
+                ],
               ],
             ),
           ),
         ),
       ),
+    );
+  }
+
+  /// The card's last line. Everything has its place whatever is written above
+  /// it: what makes something to send is on the left, what sends on the right.
+  Widget _buildToolbar(BuildContext context) {
+    final c = context.wc;
+    final localizations = AppLocalizations.of(context);
+    final ready =
+        _hasDraftText ||
+        _showsClipboardFilesPreview ||
+        _showsClipboardImagesPreview;
+    return Row(
+      children: [
+        if (isDesktop()) const ScreenshotButton(capsule: true),
+        if (clipboardEnabled) ...[
+          const SizedBox(width: 2),
+          _ClipboardButton(
+            key: clipboardButtonKey,
+            label: localizations?.menuClipboard ?? '',
+            touch: false,
+            send: isLoading
+                ? null
+                : onSyncClipboard ??
+                      () async {
+                        await onSendClipboard();
+                        return true;
+                      },
+          ),
+        ],
+        const Spacer(),
+        Builder(
+          builder: (buttonContext) => Pressable(
+            key: attachmentButtonKey,
+            onTap: isLoading ? null : () => _handleAttach(buttonContext),
+            radius: WhisperRadius.capsule,
+            label: localizations?.attachFile,
+            child: SizedBox.square(
+              dimension: 28,
+              child: Center(
+                child: WhisperIcon(
+                  WhisperGlyph.plus,
+                  size: 17,
+                  color: c.ink2Glass,
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 4),
+        Pressable(
+          key: sendButtonKey,
+          onTap: isLoading || !ready ? null : () => _handleSend(),
+          radius: WhisperRadius.capsule,
+          scale: .94,
+          label: localizations?.confirm,
+          child: AnimatedContainer(
+            duration: whisperMotionDuration(context),
+            curve: Curves.easeOutCubic,
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              color: ready ? c.accent : c.fill,
+              shape: BoxShape.circle,
+            ),
+            child: Center(
+              child: WhisperIcon(
+                WhisperGlyph.up,
+                size: 15,
+                weight: 2.2,
+                color: ready ? c.onAccent : c.ink3,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -418,13 +518,11 @@ class ChatComposer extends StatelessWidget {
 
     final extent = (88 * MediaQuery.devicePixelRatioOf(context)).ceil();
     return Image(
-      image: ResizeImage(
+      image: CoverResizeImage(
         draft.bytes.isEmpty
             ? MemoryBoundedFileImage(File(draft.path))
             : MemoryBoundedMemoryImage(draft.bytes),
-        width: extent,
-        height: extent,
-        policy: ResizeImagePolicy.fit,
+        extent: extent,
       ),
       fit: BoxFit.cover,
       errorBuilder: errorBuilder,
@@ -534,6 +632,44 @@ class ChatComposer extends StatelessWidget {
       !_showsClipboardImagesPreview;
 
   Future<void> _handlePrimaryAction(BuildContext context) async {
+    if (_showsAttachmentAction) {
+      await _handleAttach(context);
+      return;
+    }
+    await _handleSend();
+  }
+
+  Future<void> _handleAttach(BuildContext context) async {
+    final pickFolder = onPickFolder;
+    final button = context.findRenderObject();
+    if (!isDesktopStyle ||
+        pickFolder == null ||
+        button is! RenderBox ||
+        !button.hasSize) {
+      await onPickFiles();
+      return;
+    }
+    final localizations = AppLocalizations.of(context);
+    await showWhisperActionMenu(
+      context,
+      anchor: button.localToGlobal(Offset.zero) & button.size,
+      above: true,
+      items: <ContextMenuActionItem>[
+        ContextMenuActionItem(
+          label: localizations?.attachFile ?? 'File',
+          icon: Icons.insert_drive_file_outlined,
+          onSelected: () => unawaited(onPickFiles()),
+        ),
+        ContextMenuActionItem(
+          label: localizations?.attachFolder ?? 'Folder',
+          icon: Icons.folder_outlined,
+          onSelected: () => unawaited(pickFolder()),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _handleSend() async {
     if (_canSendPendingClipboardFiles) {
       await onSendClipboardFiles!();
       return;
@@ -542,37 +678,6 @@ class ChatComposer extends StatelessWidget {
       await onSendClipboardImages!();
       return;
     }
-    if (_showsAttachmentAction) {
-      final pickFolder = onPickFolder;
-      final button = context.findRenderObject();
-      if (!isDesktopStyle ||
-          pickFolder == null ||
-          button is! RenderBox ||
-          !button.hasSize) {
-        await onPickFiles();
-        return;
-      }
-      final localizations = AppLocalizations.of(context);
-      await showWhisperActionMenu(
-        context,
-        anchor: button.localToGlobal(Offset.zero) & button.size,
-        above: true,
-        items: <ContextMenuActionItem>[
-          ContextMenuActionItem(
-            label: localizations?.attachFile ?? 'File',
-            icon: Icons.insert_drive_file_outlined,
-            onSelected: () => unawaited(onPickFiles()),
-          ),
-          ContextMenuActionItem(
-            label: localizations?.attachFolder ?? 'Folder',
-            icon: Icons.folder_outlined,
-            onSelected: () => unawaited(pickFolder()),
-          ),
-        ],
-      );
-      return;
-    }
-
     final snapshot = controller.value;
     final nextText = snapshot.text.trim();
     if (nextText.isEmpty) {
