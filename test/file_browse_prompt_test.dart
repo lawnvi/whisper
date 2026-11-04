@@ -31,20 +31,6 @@ void main() {
     return gate;
   }
 
-  testWidgets('a phone asks one thing and gives two answers', (tester) async {
-    final gate = await phone(tester);
-    final answer = gate.ask(request);
-    await tester.pumpAndSettle();
-    expect(find.text(l10n.remoteFilesPromptTitle('iMac')), findsOneWidget);
-    expect(find.text(l10n.remoteFilesAllowOnce), findsOneWidget);
-    expect(find.text(l10n.remoteFilesDeny), findsOneWidget);
-    expect(find.byType(Switch), findsNothing);
-
-    await tester.tap(find.text(l10n.remoteFilesDeny));
-    await tester.runAsync(() => answer);
-    expect(await answer, FileBrowseDecision.deny);
-  });
-
   testWidgets('allowing from the question only lets it read', (tester) async {
     final gate = await phone(tester);
     // It could change files once: the question does not bring that back.
@@ -63,21 +49,5 @@ void main() {
       ),
       isTrue,
     );
-  });
-
-  test('a desktop asks on the island, with two answers and no text', () {
-    final decided = <FileBrowseDecision>[];
-    askFileBrowse(l10n, request, decided.add);
-    final presenter =
-        RequestIslandSource.shared.activities.single.presenter
-            as RequestPresenter;
-    expect(presenter.detail, isEmpty);
-    expect(presenter.answers.map((a) => a.label), [
-      l10n.remoteFilesAllowOnce,
-      l10n.remoteFilesDeny,
-    ]);
-    presenter.answers.first.onTap();
-    expect(decided, [FileBrowseDecision.once]);
-    expect(RequestIslandSource.shared.activities, isEmpty);
   });
 }

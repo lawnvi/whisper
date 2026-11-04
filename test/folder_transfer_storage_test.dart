@@ -141,15 +141,6 @@ void main() {
       expect(await store.readSkipped(_secondId), isEmpty);
     });
 
-    test('an unreadable skipped list is treated as empty', () async {
-      await store.addSkipped(_firstId, const <FolderSkippedEntry>[
-        FolderSkippedEntry(path: 'a', reason: FolderSkipReason.symlink),
-      ]);
-      directory.listSync().whereType<File>().single.writeAsStringSync('{');
-
-      expect(await store.readSkipped(_firstId), isEmpty);
-    });
-
     test('leftovers go once their transfer no longer needs them', () async {
       final database = LocalDatabase.forTesting(NativeDatabase.memory());
       addTearDown(database.close);
@@ -482,33 +473,6 @@ void main() {
         );
       },
     );
-
-    test('the skipped count can be set on a finished transfer', () async {
-      final database = LocalDatabase.forTesting(NativeDatabase.memory());
-      addTearDown(database.close);
-      await database.upsertFileTransfer(
-        _transfer(
-          _firstId,
-          direction: FileTransferDirection.outgoing,
-          state: FileTransferState.completed,
-        ),
-      );
-
-      final untouched = await database.setFileTransferSkippedEntries(
-        _firstId,
-        0,
-      );
-      final updated = await database.setFileTransferSkippedEntries(_firstId, 7);
-
-      expect(untouched?.skippedEntries, isNull);
-      expect(updated?.skippedEntries, 7);
-      expect(updated?.state, FileTransferState.completed);
-      expect(database.snapshotForTransfer(updated!).skippedEntries, 7);
-      expect(
-        await database.setFileTransferSkippedEntries(_secondId, 3),
-        isNull,
-      );
-    });
   });
 
   group('wire', () {

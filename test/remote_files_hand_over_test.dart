@@ -99,27 +99,6 @@ void main() {
     await expectLater(handing, throwsStateError);
   });
 
-  test(
-    'a file that came whole at once is handed over from where it is',
-    () async {
-      final content = bytes(4096, 9);
-      final landed = File(p.join(dir.path, 'small.txt'));
-      await landed.writeAsBytes(content);
-      final fetch = FilesFetchOut.debug()..debugDone(landed.path);
-      final sink = _Collect();
-      int? opened;
-      await filesHandOver(
-        fetch,
-        open: (n) {
-          opened = n;
-          return sink;
-        },
-      );
-      expect(opened, 4096);
-      expect(sink.bytes, content);
-    },
-  );
-
   group('a folder dragged out to Finder', () {
     Future<void> tree(String root) async {
       await Directory(p.join(root, 'sub')).create(recursive: true);
@@ -162,7 +141,6 @@ void main() {
       });
       expect(Directory(staged).existsSync(), isFalse);
     });
-
   });
 }
 

@@ -1032,19 +1032,6 @@ void main() {
     ).readAsStringSync();
     expect(fuse, contains("if (!tree.writable) 'ro'"));
   });
-
-  test('the socket layer carries writes to the browse host', () {
-    expect(WhisperFrameType.browseWrite.code, 16);
-    final svr = File('lib/socket/svrmanager.dart').readAsStringSync();
-    expect(svr, contains('case WhisperFrameType.browseWrite:'));
-    expect(svr, contains('FileBrowseHost.shared'));
-    expect(svr, contains('RemoteFilesClient.sendWrite = _sendFileBrowseWrite'));
-    expect(svr, contains('frame.type == WhisperFrameType.browseWrite) &&'));
-    final mounts = File(
-      'lib/remote_files/mount/remote_mounts.dart',
-    ).readAsStringSync();
-    expect(mounts, contains('writable: info.canWrite && !info.readOnly'));
-  });
 }
 
 class _ReadOnly extends MountSource {

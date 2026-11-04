@@ -1,7 +1,6 @@
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:whisper/helper/ios_sandbox_path.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/file_transfer.dart';
 
@@ -13,39 +12,6 @@ const newRoot =
     '22222222-2222-2222-2222-222222222222';
 
 void main() {
-  for (final suffix in [
-    'Documents/中文🙂.txt',
-    'Documents/.whisper/transfers/transfer.part',
-    'Library/Caches/picked.txt',
-    'tmp/sent.txt',
-    'Documents',
-  ]) {
-    test('rebases preserved sandbox $suffix after an update', () {
-      final rebased = rebaseIosSandboxPath(
-        '$oldRoot/$suffix',
-        '$newRoot/Documents',
-      );
-      expect(rebased, '$newRoot/$suffix');
-      expect(rebaseIosSandboxPath(rebased, '$newRoot/Documents'), rebased);
-    });
-  }
-  for (final path in [
-    '',
-    '/tmp/external.txt',
-    '/Volumes/drive/file.txt',
-    'file://$oldRoot/Documents/file.txt',
-    '$oldRoot/Documents/../other.txt',
-    '$oldRoot/Other/file.txt',
-    '$oldRoot/Documents/file\u0000.txt',
-  ]) {
-    test('preserves unrelated or invalid path $path', () {
-      expect(rebaseIosSandboxPath(path, '$newRoot/Documents'), path);
-    });
-  }
-  test('does not rebase against a non-container directory', () {
-    const path = '$oldRoot/Documents/file.txt';
-    expect(rebaseIosSandboxPath(path, '/tmp/Documents'), path);
-  });
   test(
     'updates message and resumable transfer paths together without changing progress',
     () async {

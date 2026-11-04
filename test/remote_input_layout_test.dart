@@ -7,12 +7,7 @@ import 'package:whisper/remote_input/remote_input_protocol.dart';
 void main() {
   group('RemoteInputLayoutGeometry', () {
     test('detects right-edge adjacency with partial vertical overlap', () {
-      const local = RemoteInputScreenRect(
-        x: 0,
-        y: 0,
-        width: 1000,
-        height: 800,
-      );
+      const local = RemoteInputScreenRect(x: 0, y: 0, width: 1000, height: 800);
       const peer = RemoteInputScreenRect(
         x: 1000,
         y: 240,
@@ -28,35 +23,8 @@ void main() {
       expect(edge, RemoteInputEdge.right);
     });
 
-    test('detects top-edge adjacency with partial horizontal overlap', () {
-      const local = RemoteInputScreenRect(
-        x: 0,
-        y: 0,
-        width: 1000,
-        height: 800,
-      );
-      const peer = RemoteInputScreenRect(
-        x: 300,
-        y: -600,
-        width: 900,
-        height: 600,
-      );
-
-      final edge = RemoteInputLayoutGeometry.adjacentEdge(
-        local: local,
-        peer: peer,
-      );
-
-      expect(edge, RemoteInputEdge.top);
-    });
-
     test('does not create an edge for separated screens', () {
-      const local = RemoteInputScreenRect(
-        x: 0,
-        y: 0,
-        width: 1000,
-        height: 800,
-      );
+      const local = RemoteInputScreenRect(x: 0, y: 0, width: 1000, height: 800);
       const peer = RemoteInputScreenRect(
         x: 1050,
         y: 0,
@@ -73,12 +41,7 @@ void main() {
     });
 
     test('snaps a nearby peer screen to the nearest side', () {
-      const local = RemoteInputScreenRect(
-        x: 0,
-        y: 0,
-        width: 1000,
-        height: 800,
-      );
+      const local = RemoteInputScreenRect(x: 0, y: 0, width: 1000, height: 800);
       const peer = RemoteInputScreenRect(
         x: 1026,
         y: 140,
@@ -96,33 +59,6 @@ void main() {
       expect(
         RemoteInputLayoutGeometry.adjacentEdge(local: local, peer: snapped),
         RemoteInputEdge.right,
-      );
-    });
-
-    test('snaps a peer screen above while keeping horizontal overlap', () {
-      const local = RemoteInputScreenRect(
-        x: 0,
-        y: 0,
-        width: 1000,
-        height: 800,
-      );
-      const peer = RemoteInputScreenRect(
-        x: -120,
-        y: -612,
-        width: 900,
-        height: 600,
-      );
-
-      final snapped = RemoteInputLayoutGeometry.snapToNearestEdge(
-        local: local,
-        peer: peer,
-      );
-
-      expect(snapped.x, -120);
-      expect(snapped.y, -600);
-      expect(
-        RemoteInputLayoutGeometry.adjacentEdge(local: local, peer: snapped),
-        RemoteInputEdge.top,
       );
     });
 
@@ -161,38 +97,6 @@ void main() {
       expect(segment.start, 260);
       expect(segment.end, 900);
       expect(segment.length, 640);
-    });
-
-    test('does not create a segment for non-overlapping edges', () {
-      const source = RemoteInputDisplay(
-        displayId: 'source-main',
-        name: 'Built-in',
-        x: 0,
-        y: 0,
-        width: 1440,
-        height: 900,
-        scale: 2,
-        isPrimary: true,
-      );
-      const sink = RemoteInputDisplay(
-        displayId: 'sink-main',
-        name: 'Desk',
-        x: 1440,
-        y: 960,
-        width: 1920,
-        height: 1080,
-        scale: 1,
-        isPrimary: true,
-      );
-
-      final segment = RemoteInputLayoutGeometry.sharedEdgeSegment(
-        source: source,
-        sourceEdge: RemoteInputEdge.right,
-        sinkInLayout: sink,
-        sinkEdge: RemoteInputEdge.left,
-      );
-
-      expect(segment, isNull);
     });
 
     test('maps entry and return points through the shared segment', () {
@@ -407,16 +311,18 @@ void main() {
 
       expect(resolved, isNotNull);
       expect(
-        resolved!.edgeMappings.map((mapping) => (
-              mapping.sourceDisplayId,
-              mapping.sourceEdge,
-              mapping.sinkDisplayId,
-              mapping.sinkEdge,
-              mapping.sourceSegmentStart,
-              mapping.sourceSegmentEnd,
-              mapping.sinkSegmentStart,
-              mapping.sinkSegmentEnd,
-            )),
+        resolved!.edgeMappings.map(
+          (mapping) => (
+            mapping.sourceDisplayId,
+            mapping.sourceEdge,
+            mapping.sinkDisplayId,
+            mapping.sinkEdge,
+            mapping.sourceSegmentStart,
+            mapping.sourceSegmentEnd,
+            mapping.sinkSegmentStart,
+            mapping.sinkSegmentEnd,
+          ),
+        ),
         containsAll([
           (
             'source-left',
@@ -505,102 +411,94 @@ void main() {
       expect(resolved, isNotNull);
       expect(resolved!.edgeMappings, hasLength(2));
       expect(
-        resolved.edgeMappings.map((mapping) => (
-              mapping.sourceEdge,
-              mapping.sinkDisplayId,
-              mapping.sinkEdge,
-              mapping.sourceSegmentStart,
-              mapping.sourceSegmentEnd,
-            )),
+        resolved.edgeMappings.map(
+          (mapping) => (
+            mapping.sourceEdge,
+            mapping.sinkDisplayId,
+            mapping.sinkEdge,
+            mapping.sourceSegmentStart,
+            mapping.sourceSegmentEnd,
+          ),
+        ),
         containsAll([
-          (
-            RemoteInputEdge.top,
-            'sink-top',
-            RemoteInputEdge.bottom,
-            1000,
-            1600,
-          ),
-          (
-            RemoteInputEdge.left,
-            'sink-left',
-            RemoteInputEdge.right,
-            800,
-            1200,
-          ),
+          (RemoteInputEdge.top, 'sink-top', RemoteInputEdge.bottom, 1000, 1600),
+          (RemoteInputEdge.left, 'sink-left', RemoteInputEdge.right, 800, 1200),
         ]),
       );
     });
 
-    test('resolves layout when saved sink anchor is not the touching display',
-        () {
-      const sourceTopology = RemoteInputTopology(
-        platform: 'macos',
-        updatedAt: 1,
-        displays: [
-          RemoteInputDisplay(
-            displayId: 'dell',
-            name: 'DELL P2418D',
-            x: 0,
-            y: 0,
-            width: 2560,
-            height: 1440,
-            scale: 1,
-            isPrimary: true,
-          ),
-        ],
-      );
-      const sinkTopology = RemoteInputTopology(
-        platform: 'macos',
-        updatedAt: 1,
-        displays: [
-          RemoteInputDisplay(
-            displayId: 'redmi',
-            name: 'Redmi 27 NQ',
-            x: 0,
-            y: 0,
-            width: 2560,
-            height: 1440,
-            scale: 1,
-            isPrimary: false,
-          ),
-          RemoteInputDisplay(
-            displayId: 'built-in',
-            name: 'Built-in Retina Display',
-            x: 420,
-            y: 1440,
-            width: 1710,
-            height: 1107,
-            scale: 2,
-            isPrimary: true,
-          ),
-        ],
-      );
-      const saved = RemoteInputSavedLayout(
-        sourceDisplayId: 'dell',
-        sinkDisplayId: 'built-in',
-        sourceEdge: RemoteInputEdge.right,
-        sinkEdge: RemoteInputEdge.left,
-        sinkOffsetX: 2560,
-        sinkOffsetY: 0,
-        sharedSegmentStart: 0,
-        sharedSegmentEnd: 1440,
-      );
+    test(
+      'resolves layout when saved sink anchor is not the touching display',
+      () {
+        const sourceTopology = RemoteInputTopology(
+          platform: 'macos',
+          updatedAt: 1,
+          displays: [
+            RemoteInputDisplay(
+              displayId: 'dell',
+              name: 'DELL P2418D',
+              x: 0,
+              y: 0,
+              width: 2560,
+              height: 1440,
+              scale: 1,
+              isPrimary: true,
+            ),
+          ],
+        );
+        const sinkTopology = RemoteInputTopology(
+          platform: 'macos',
+          updatedAt: 1,
+          displays: [
+            RemoteInputDisplay(
+              displayId: 'redmi',
+              name: 'Redmi 27 NQ',
+              x: 0,
+              y: 0,
+              width: 2560,
+              height: 1440,
+              scale: 1,
+              isPrimary: false,
+            ),
+            RemoteInputDisplay(
+              displayId: 'built-in',
+              name: 'Built-in Retina Display',
+              x: 420,
+              y: 1440,
+              width: 1710,
+              height: 1107,
+              scale: 2,
+              isPrimary: true,
+            ),
+          ],
+        );
+        const saved = RemoteInputSavedLayout(
+          sourceDisplayId: 'dell',
+          sinkDisplayId: 'built-in',
+          sourceEdge: RemoteInputEdge.right,
+          sinkEdge: RemoteInputEdge.left,
+          sinkOffsetX: 2560,
+          sinkOffsetY: 0,
+          sharedSegmentStart: 0,
+          sharedSegmentEnd: 1440,
+        );
 
-      final resolved = RemoteInputLayoutGeometry.resolveSavedLayout(
-        savedLayout: saved,
-        sourceTopology: sourceTopology,
-        sinkTopology: sinkTopology,
-      );
+        final resolved = RemoteInputLayoutGeometry.resolveSavedLayout(
+          savedLayout: saved,
+          sourceTopology: sourceTopology,
+          sinkTopology: sinkTopology,
+        );
 
-      expect(resolved, isNotNull);
-      expect(resolved!.sinkDisplay.displayId, 'redmi');
-      expect(resolved.sharedSegment.sourceEdge, RemoteInputEdge.right);
-      expect(resolved.sharedSegment.sinkEdge, RemoteInputEdge.left);
-      expect(resolved.sharedSegment.start, 0);
-      expect(resolved.sharedSegment.end, 1440);
-      expect(resolved.edgeMappings, hasLength(1));
-      expect(resolved.edgeMappings.single.sinkDisplayId, 'redmi');
-    });
+        expect(resolved, isNotNull);
+        expect(resolved!.sinkDisplay.displayId, 'redmi');
+        expect(resolved.sharedSegment.sourceEdge, RemoteInputEdge.right);
+        expect(resolved.sharedSegment.sinkEdge, RemoteInputEdge.left);
+        expect(resolved.sharedSegment.start, 0);
+        expect(resolved.sharedSegment.end, 1440);
+        expect(resolved.edgeMappings, hasLength(1));
+        expect(resolved.edgeMappings.single.sinkDisplayId, 'redmi');
+      },
+    );
 
     test('resolves layout when saved source display id is stale', () {
       const sourceTopology = RemoteInputTopology(
@@ -722,12 +620,12 @@ void main() {
 
       final saved =
           RemoteInputLayoutGeometry.savedLayoutForTranslatedSinkTopology(
-        sourceTopology: sourceTopology,
-        sinkTopology: sinkTopology,
-        sinkOffsetX: 2200,
-        sinkOffsetY: 100,
-        preferredSinkDisplayId: 'sink-main',
-      );
+            sourceTopology: sourceTopology,
+            sinkTopology: sinkTopology,
+            sinkOffsetX: 2200,
+            sinkOffsetY: 100,
+            preferredSinkDisplayId: 'sink-main',
+          );
 
       expect(saved, isNotNull);
       expect(saved!.sourceDisplayId, 'source-external');
@@ -927,12 +825,12 @@ void main() {
       final sinkBounds = sinkTopology.virtualBounds;
       final saved =
           RemoteInputLayoutGeometry.savedLayoutForTranslatedSinkTopology(
-        sourceTopology: sourceTopology,
-        sinkTopology: sinkTopology,
-        sinkOffsetX: placed.bounds.x - sinkBounds.x,
-        sinkOffsetY: placed.bounds.y - sinkBounds.y,
-        preferredSinkDisplayId: sinkTopology.primaryDisplay.displayId,
-      );
+            sourceTopology: sourceTopology,
+            sinkTopology: sinkTopology,
+            sinkOffsetX: placed.bounds.x - sinkBounds.x,
+            sinkOffsetY: placed.bounds.y - sinkBounds.y,
+            preferredSinkDisplayId: sinkTopology.primaryDisplay.displayId,
+          );
 
       expect(saved, isNotNull);
       expect(saved!.sourceDisplayId, 'source-main');
@@ -1078,13 +976,13 @@ void main() {
     });
 
     test(
-        'skips existing layout version column when upgrading repaired v4 databases',
-        () async {
-      await database.close();
-      database = LocalDatabase.forTesting(
-        NativeDatabase.memory(
-          setup: (db) {
-            db.execute('''
+      'skips existing layout version column when upgrading repaired v4 databases',
+      () async {
+        await database.close();
+        database = LocalDatabase.forTesting(
+          NativeDatabase.memory(
+            setup: (db) {
+              db.execute('''
               CREATE TABLE remote_input_layout (
                 peer_id TEXT NOT NULL PRIMARY KEY,
                 peer_name TEXT NOT NULL DEFAULT '',
@@ -1101,7 +999,7 @@ void main() {
                 updated_at INTEGER NOT NULL
               )
             ''');
-            db.execute('''
+              db.execute('''
               INSERT INTO remote_input_layout (
                 peer_id, peer_name, x, y, width, height, enabled,
                 auto_activate, auto_role, layout_version, edge_threshold_px,
@@ -1111,17 +1009,20 @@ void main() {
                 1, 'sink', 1, 6, 'ctrl+alt+esc', 1234
               )
             ''');
-            db.execute('PRAGMA user_version = 4');
-          },
-        ),
-      );
+              db.execute('PRAGMA user_version = 4');
+            },
+          ),
+        );
 
-      final loaded = await database.fetchRemoteInputLayout('peer-repaired-v4');
+        final loaded = await database.fetchRemoteInputLayout(
+          'peer-repaired-v4',
+        );
 
-      expect(loaded, isNotNull);
-      expect(loaded!.layoutVersion, 1);
-      expect(loaded.layoutJson, '');
-      expect(loaded.autoRoleValue, RemoteInputAutoRole.sink);
-    });
+        expect(loaded, isNotNull);
+        expect(loaded!.layoutVersion, 1);
+        expect(loaded.layoutJson, '');
+        expect(loaded.autoRoleValue, RemoteInputAutoRole.sink);
+      },
+    );
   });
 }

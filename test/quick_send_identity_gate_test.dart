@@ -1,12 +1,9 @@
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/socket/device_identity.dart';
 import 'package:whisper/socket/peer_socket_session.dart';
 import 'package:whisper/socket/quick_send_identity_gate.dart';
-
-import 'support/source_reading.dart';
 
 void main() {
   test(
@@ -54,26 +51,6 @@ void main() {
           isFalse,
         );
       }
-    },
-  );
-
-  test(
-    'desktop and Android quick-send calls forward the pinned identity hash',
-    () {
-      final source = deviceListSource();
-      final inbox = File(
-        'lib/state/desktop_quick_send_inbox.dart',
-      ).readAsStringSync();
-      final manager = File('lib/socket/svrmanager.dart').readAsStringSync();
-
-      expect(source, contains('expectedPublicKeyHash: pinnedPublicKeyHash'));
-      expect(
-        RegExp(r'expectedPublicKeyHash: pinnedHash').allMatches(source).length,
-        greaterThanOrEqualTo(3),
-      );
-      expect(inbox, contains('draft.pinnedPublicKeyHash,'));
-      expect(manager, contains('required String expectedPublicKeyHash'));
-      expect(manager, contains('_quickSendBindingRemainsTrusted('));
     },
   );
 

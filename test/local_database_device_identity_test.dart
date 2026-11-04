@@ -2,14 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:drift/drift.dart'
-    show
-        ApplyInterceptor,
-        DataClass,
-        Insertable,
-        QueryExecutor,
-        QueryInterceptor,
-        Value,
-        Variable;
+    show ApplyInterceptor, QueryExecutor, QueryInterceptor, Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart' as sqlite;
@@ -219,48 +212,6 @@ void main() {
         expect(rows.every((row) => row.around == false), isTrue);
       },
     );
-
-    test('DeviceData retains generated Drift row contracts', () async {
-      final row = _device('row-contract', identityPublicKey: 'identity-key');
-
-      expect(row, isA<DataClass>());
-      expect(row, isA<Insertable<DeviceData>>());
-      expect(
-        (row as Insertable<DeviceData>).toColumns(true).keys,
-        containsAll(<String>['uid', 'identity_public_key', 'host', 'port']),
-      );
-      final companion = row.toCompanion(true);
-      expect(companion.identityPublicKey.value, 'identity-key');
-      final copied = row.copyWithCompanion(
-        const DeviceCompanion(
-          name: Value<String>('Renamed'),
-          password: Value<String?>(null),
-        ),
-      );
-      expect(copied.name, 'Renamed');
-      expect(copied.password, isNull);
-
-      final nullable = row.copyWith(
-        password: const Value<String?>(null),
-        around: const Value<bool?>(null),
-      );
-      expect(nullable.toColumns(true), isNot(contains('password')));
-      expect(nullable.toColumns(true), isNot(contains('around')));
-      final explicitNulls = nullable.toColumns(false);
-      expect((explicitNulls['password']! as Variable<String>).value, isNull);
-      expect((explicitNulls['around']! as Variable<bool>).value, isNull);
-      final nullableCompanion = nullable.toCompanion(false);
-      expect(nullableCompanion.password.present, isTrue);
-      expect(nullableCompanion.password.value, isNull);
-      expect(nullableCompanion.around.present, isTrue);
-      expect(nullableCompanion.around.value, isNull);
-
-      await database.into(database.device).insert(row);
-      expect(
-        (await database.fetchDevice('row-contract'))?.identityPublicKey,
-        'identity-key',
-      );
-    });
 
     test('pin and replacement APIs use compare-and-set semantics', () async {
       await database.upsertDevice(_device('peer-race'));

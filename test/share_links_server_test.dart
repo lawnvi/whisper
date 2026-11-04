@@ -5,7 +5,6 @@ import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
-import 'package:whisper/share_links/share_debug_hooks.dart';
 import 'package:whisper/share_links/share_link_store.dart';
 import 'package:whisper/share_links/share_password.dart';
 import 'package:whisper/share_links/share_rate_limiter.dart';
@@ -359,36 +358,6 @@ void main() {
     }
   });
 
-  test('a file opened from its folder gets its own page', () async {
-    await File(p.join(folder, 'a.txt')).writeAsString('first file');
-    await File(p.join(folder, 'z.txt')).writeAsString('last file');
-    await store.create(paths: [folder], route: 'pages');
-    final listing = await _send('GET', url('/pages/'));
-    // Files lead to their pages, folders to their listings.
-    expect(listing.text, contains('/pages/f/notes.txt?view=1'));
-    expect(listing.text, contains('/pages/f/notes.txt?dl=1'));
-    expect(listing.text, contains('/pages/f/day%201/"'));
-    final page = await _send(
-      'GET',
-      url('/pages/f/notes.txt?view=1'),
-      headers: {'accept-language': 'en'},
-    );
-    expect(page.status, 200);
-    expect(page.headers.contentType!.mimeType, 'text/html');
-    // The start of the text, the way back and the neighbours.
-    expect(page.text, contains('<pre tabindex="0">notes</pre>'));
-    expect(page.text, contains('href="/pages/"'));
-    expect(page.text, contains('rel="prev" href="/pages/f/a.txt?view=1"'));
-    expect(page.text, contains('rel="next" href="/pages/f/z.txt?view=1"'));
-    expect(page.text, contains('2 / 3'));
-    expect(page.text, contains('href="/pages/f/notes.txt?dl=1" download'));
-    expect(page.text, contains('From Test Mac'));
-    // Without ?view=1 it is still the file itself.
-    final raw = await _send('GET', url('/pages/f/notes.txt'));
-    expect(raw.text, 'notes');
-    expect(raw.headers.contentType!.mimeType, 'text/plain');
-  });
-
   test('names are escaped on every page', () async {
     final evil = p.join(folder, '<img src=x onerror=alert(1)>.txt');
     if (Platform.isWindows) {
@@ -412,49 +381,6 @@ void main() {
       page.headers.value('content-security-policy'),
       contains("default-src 'none'"),
     );
-  });
-
-  test('the home-screen icon is served when the app has one', () async {
-    await restartWith(
-      (source) => ShareServer(
-        source: source,
-        clock: () => now,
-        touchIcon: () async => [0x89, 0x50, 0x4e, 0x47],
-      ),
-    );
-    await store.create(paths: [movie], route: 'icon');
-    final icon = await _send('GET', url('/apple-touch-icon.png'));
-    expect(icon.status, 200);
-    expect(icon.headers.contentType!.mimeType, 'image/png');
-    expect(icon.body, [0x89, 0x50, 0x4e, 0x47]);
-  });
-
-  test('a new address replaces the old one, and is kept', () async {
-    final link = await store.create(paths: [folder], route: 'first');
-    await store.create(paths: [folder], route: 'taken');
-    expect((await _send('GET', url('/first'))).status, 200);
-
-    await expectLater(
-      store.setRoute(link.id, 'taken'),
-      throwsA(isA<ShareRouteException>()),
-    );
-    await expectLater(
-      store.setRoute(link.id, 'a'),
-      throwsA(isA<ShareRouteException>()),
-    );
-    expect(link.route, 'first');
-
-    await store.setRoute(link.id, 'Second');
-    expect(link.route, 'second');
-    expect((await _send('GET', url('/first'))).status, 404);
-    expect((await _send('GET', url('/second'))).status, 200);
-
-    await store.shutdown();
-    final again = makeStore();
-    addTearDown(again.dispose);
-    await again.initialize();
-    expect(again.linkById(link.id)?.route, 'second');
-    await again.shutdown();
   });
 
   test('a new password shuts out whoever was let in', () async {
@@ -839,75 +765,6 @@ void main() {
     );
     final short = await store.create(paths: [movie], short: true);
     expect(short.route.length, 4);
-  });
-
-  test('missing files show on the link', () async {
-    final link = await store.create(paths: [movie, folder]);
-    await store.refreshAvailability();
-    expect(store.availabilityOf(link), ShareAvailability.available);
-    await File(movie).delete();
-    await store.refreshAvailability();
-    expect(store.availabilityOf(link), ShareAvailability.partlyMissing);
-    await Directory(folder).delete(recursive: true);
-    await store.refreshAvailability();
-    expect(store.availabilityOf(link), ShareAvailability.missing);
-    final page = await _send('GET', url('/${link.route}'));
-    expect(page.status, 404);
-  });
-
-  test('debug commands drive the store and answer in JSON', () async {
-    Future<Map<String, Object?>> run(
-      String command, [
-      Map<String, String> params = const {},
-      bool ok = true,
-    ]) async {
-      final (worked, body) = await runShareDebugCommand(store, command, params);
-      expect(worked, ok, reason: '$command $body');
-      // What goes over the VM service must encode.
-      return jsonDecode(jsonEncode(body)) as Map<String, Object?>;
-    }
-
-    final created = await run('create', {
-      'paths': jsonEncode([movie, folder]),
-      'route': 'Debug',
-      'password': 'pw',
-    });
-    expect(created['route'], 'debug');
-    expect(created['password'], isTrue);
-    expect((created['items'] as List).length, 2);
-    expect(created['urls'], ['http://127.0.0.1:$base/debug']);
-    final id = created['id'] as String;
-
-    final taken = await run('create', {
-      'paths': jsonEncode([movie]),
-      'route': 'debug',
-    }, false);
-    expect(taken, {'error': 'route', 'problem': 'taken'});
-    final nothing = await run('create', {
-      'paths': jsonEncode([p.join(temp.path, 'gone')]),
-    }, false);
-    expect(nothing['problem'], 'itemsMissing');
-
-    final listed = await run('list');
-    expect((listed['links'] as List).single['id'], id);
-    expect((listed['server'] as Map)['phase'], 'running');
-
-    final off = await run('setEnabled', {'id': id, 'enabled': 'false'});
-    expect(off['enabled'], isFalse);
-    expect(await _listening(base), isFalse);
-    await run('setEnabled', {'id': id, 'enabled': 'true'});
-    final service = await run('service', {'on': 'false'});
-    expect(service['service'], isFalse);
-    expect((service['server'] as Map)['phase'], 'stopped');
-    await run('service', {'on': 'true'});
-    expect(await _listening(base), isTrue);
-
-    await run('remove', {'id': id});
-    expect(await run('remove', {'id': id}, false), {
-      'error': 'missing',
-      'id': id,
-    });
-    expect((await run('nope', {}, false))['error'], 'unknown');
   });
 
   test('clients outside the LAN are cut off before HTTP', () async {

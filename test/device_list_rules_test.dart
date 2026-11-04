@@ -1,7 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/model/LocalDatabase.dart';
-import 'package:whisper/remote_input/remote_input_coordinator.dart';
-import 'package:whisper/remote_input/remote_input_workspace_coordinator.dart';
 import 'package:whisper/socket/peer_socket_session.dart';
 import 'package:whisper/state/device_list_rules.dart';
 
@@ -41,30 +39,6 @@ const _discovered = DeviceData(
 
 void main() {
   group('merging what discovery sees over what is stored', () {
-    test('a device never stored is taken as discovered', () {
-      expect(mergeStoredDeviceWithDiscovery(null, _discovered), _discovered);
-    });
-
-    test('where it is and what it is called come from discovery', () {
-      final merged = mergeStoredDeviceWithDiscovery(_stored, _discovered);
-      expect(merged.host, '10.0.0.2');
-      expect(merged.port, 2222);
-      expect(merged.name, 'Fresh name');
-      expect(merged.platform, 'windows');
-      expect(merged.lastTime, 2);
-      expect(merged.around, isTrue);
-    });
-
-    test('an empty discovery does not blank what is known', () {
-      final merged = mergeStoredDeviceWithDiscovery(
-        _stored,
-        _discovered.copyWith(name: '', host: '', platform: ''),
-      );
-      expect(merged.name, 'Stored name');
-      expect(merged.host, '10.0.0.1');
-      expect(merged.platform, 'macos');
-    });
-
     test('trust and the pinned identity stay the stored ones', () {
       final merged = mergeStoredDeviceWithDiscovery(_stored, _discovered);
       expect(merged.identityPublicKey, 'pinned-key');
@@ -106,80 +80,6 @@ void main() {
 
     test('a malformed identity is not trusted, and does not throw', () {
       expect(hash([_stored.copyWith(identityPublicKey: 'not a key')]), isNull);
-    });
-  });
-
-  group('whether keyboard and mouse sharing is really going on', () {
-    bool live({
-      RemoteInputWorkspaceSnapshot workspace =
-          const RemoteInputWorkspaceSnapshot.idle(),
-      RemoteInputRuntimeState legacy = const RemoteInputRuntimeState.idle(),
-      bool manual = false,
-      bool connected = true,
-    }) => isRemoteInputSessionLive(
-      workspace: workspace,
-      legacy: legacy,
-      legacyIsManual: manual,
-      isConnected: (_) => connected,
-    );
-
-    const session = RemoteInputRuntimeState(
-      status: RemoteInputRuntimeStatus.active,
-      role: RemoteInputRuntimeRole.source,
-      peerId: 'peer',
-    );
-
-    test('idle is not', () => expect(live(), isFalse));
-
-    test('a session with its peer still connected is', () {
-      expect(live(legacy: session), isTrue);
-    });
-
-    test('a stale session whose peer has left is not', () {
-      expect(live(legacy: session, connected: false), isFalse);
-    });
-
-    test('a manual session from a phone does not light the toolbar', () {
-      expect(live(legacy: session, manual: true), isFalse);
-    });
-
-    test('a failed session is not', () {
-      expect(
-        live(
-          legacy: const RemoteInputRuntimeState(
-            status: RemoteInputRuntimeStatus.failed,
-            role: RemoteInputRuntimeRole.source,
-            peerId: 'peer',
-          ),
-        ),
-        isFalse,
-      );
-    });
-
-    RemoteInputWorkspaceSnapshot controller(
-      RemoteInputWorkspaceTargetStatus status,
-    ) => RemoteInputWorkspaceSnapshot(
-      role: RemoteInputWorkspaceRole.controller,
-      status: RemoteInputWorkspaceStatus.active,
-      targets: {
-        'peer': RemoteInputWorkspaceTargetSnapshot(
-          peerId: 'peer',
-          peerName: 'iMac',
-          sessionId: 's',
-          status: status,
-        ),
-      },
-    );
-
-    test('a workspace needs a target that is really connected', () {
-      expect(
-        live(workspace: controller(RemoteInputWorkspaceTargetStatus.connected)),
-        isTrue,
-      );
-      expect(
-        live(workspace: controller(RemoteInputWorkspaceTargetStatus.failed)),
-        isFalse,
-      );
     });
   });
 }

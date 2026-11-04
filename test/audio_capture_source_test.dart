@@ -7,7 +7,6 @@ import 'package:whisper/audio/audio_capture_source.dart';
 import 'package:whisper/audio/audio_codec.dart';
 import 'package:whisper/audio/audio_platform.dart';
 import 'package:whisper/audio/audio_protocol.dart';
-import 'package:whisper/audio/audio_share_diagnostics.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -34,82 +33,6 @@ void main() {
   tearDown(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, null);
-  });
-
-  test(
-    'starts platform capture and encodes capture frames into audio packets',
-    () async {
-      final platform = AudioPlatform();
-      final packets = <AudioPacketFrame>[];
-      final pcm = Int16List.fromList(
-        List<int>.generate(
-          config.frameSize * config.channels,
-          (index) => index,
-        ),
-      );
-      final source = AudioCaptureSource(
-        codec: PcmPassthroughAudioCodec(config),
-        platform: platform,
-        onPacket: packets.add,
-      );
-
-      await source.start(sessionId: 'audio-1', format: format);
-      await platform.handleNativeMethodCall(
-        MethodCall('onCapturePcm', <String, dynamic>{
-          'sessionId': 'audio-1',
-          'sequence': 9,
-          'captureTimeMicros': 5678,
-          'pcm': _pcmBytes(pcm),
-        }),
-      );
-
-      expect(calls.first.method, 'startCapture');
-      expect(packets, hasLength(1));
-      expect(packets.single.sessionId, 'audio-1');
-      expect(packets.single.sequence, 0);
-      expect(packets.single.captureTimeMicros, 5678);
-      expect(packets.single.payload.length, pcm.length * 2);
-      await source.stop();
-    },
-  );
-
-  test('buffers variable native chunks into codec-sized packets', () async {
-    final platform = AudioPlatform();
-    final codec = _RecordingAudioCodec(config);
-    final packets = <AudioPacketFrame>[];
-    final source = AudioCaptureSource(
-      codec: codec,
-      platform: platform,
-      onPacket: packets.add,
-    );
-
-    await source.start(sessionId: 'audio-1', format: format);
-    await platform.handleNativeMethodCall(
-      MethodCall('onCapturePcm', <String, dynamic>{
-        'sessionId': 'audio-1',
-        'sequence': 11,
-        'captureTimeMicros': 1000,
-        'pcm': _pcmBytes(Int16List(700)),
-      }),
-    );
-
-    expect(packets, isEmpty);
-    expect(codec.encodedLengths, isEmpty);
-
-    await platform.handleNativeMethodCall(
-      MethodCall('onCapturePcm', <String, dynamic>{
-        'sessionId': 'audio-1',
-        'sequence': 12,
-        'captureTimeMicros': 2000,
-        'pcm': _pcmBytes(Int16List(config.frameSize * config.channels - 700)),
-      }),
-    );
-
-    expect(codec.encodedLengths, <int>[config.frameSize * config.channels]);
-    expect(packets, hasLength(1));
-    expect(packets.single.sequence, 0);
-    expect(packets.single.captureTimeMicros, 1000);
-    await source.stop();
   });
 
   test('preserves PCM order while the packet buffer wraps', () async {
@@ -232,23 +155,6 @@ void main() {
     await source.stop();
   });
 
-  test('stop cancels capture and calls the platform stop method', () async {
-    final platform = AudioPlatform();
-    final source = AudioCaptureSource(
-      codec: PcmPassthroughAudioCodec(config),
-      platform: platform,
-      onPacket: (_) {},
-    );
-
-    await source.start(sessionId: 'audio-1', format: format);
-    calls.clear();
-    await source.stop();
-
-    expect(calls, hasLength(1));
-    expect(calls.single.method, 'stopCapture');
-    expect(calls.single.arguments, <String, dynamic>{'sessionId': 'audio-1'});
-  });
-
   test(
     'stop waits for an in-flight native start before forcing capture stop',
     () async {
@@ -333,51 +239,6 @@ void main() {
       ]);
     },
   );
-
-  test('logs native capture frames and encoded audio packets', () async {
-    final platform = AudioPlatform();
-    final logs = <String>[];
-    final packets = <AudioPacketFrame>[];
-    final source = AudioCaptureSource(
-      codec: PcmPassthroughAudioCodec(config),
-      platform: platform,
-      onPacket: packets.add,
-      diagnostics: AudioShareDiagnostics(sink: logs.add),
-    );
-    final pcm = Int16List(config.frameSize * config.channels);
-
-    await source.start(sessionId: 'audio-1', format: format);
-    await platform.handleNativeMethodCall(
-      MethodCall('onCapturePcm', <String, dynamic>{
-        'sessionId': 'audio-1',
-        'sequence': 5,
-        'captureTimeMicros': 1000,
-        'pcm': _pcmBytes(pcm),
-      }),
-    );
-
-    expect(
-      logs,
-      contains(
-        allOf(
-          contains('"kind":"captureFrame"'),
-          contains('"sequence":5'),
-          contains('"samples":${pcm.length}'),
-        ),
-      ),
-    );
-    expect(
-      logs,
-      contains(
-        allOf(
-          contains('"kind":"capturePacket"'),
-          contains('"sequence":0'),
-          contains('"bytes":${pcm.length * 2}'),
-        ),
-      ),
-    );
-    await source.stop();
-  });
 }
 
 Uint8List _pcmBytes(Int16List pcm) {

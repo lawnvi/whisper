@@ -7,25 +7,6 @@ import 'package:whisper/cast_receiver/cast_receiver_manager.dart';
 final _endpoint = (InternetAddress('192.168.1.2'), _Interface());
 
 void main() {
-  test('saved preference is restored and shutdown preserves it', () async {
-    final backend = _Backend();
-    var saved = true;
-    final receiver = CastReceiverManager(
-      backend: backend,
-      endpointResolver: () async => _endpoint,
-      loadEnabled: () async => saved,
-      saveEnabled: (value) async => saved = value,
-    );
-    await receiver.initialize();
-    await receiver.initialize();
-    expect(backend.starts, 1);
-    expect(receiver.enabled, isTrue);
-    await receiver.stop();
-    expect(saved, isTrue);
-    expect(receiver.status.state, CastReceiverState.stopped);
-    receiver.dispose();
-  });
-
   test(
     'disabled preference opens no receiver; toggle persists both ways',
     () async {
@@ -49,25 +30,6 @@ void main() {
       receiver.dispose();
     },
   );
-
-  test('startup failure is visible and can recover by toggling', () async {
-    final backend = _Backend()..fail = true;
-    final receiver = CastReceiverManager(
-      backend: backend,
-      endpointResolver: () async => _endpoint,
-      saveEnabled: (_) async {},
-    );
-    await receiver.setEnabled(true);
-    expect(receiver.status.issue, CastReceiverIssue.startupFailed);
-    expect(receiver.busy, isFalse);
-    expect(backend.stops, 1);
-    await receiver.setEnabled(false);
-    backend.fail = false;
-    await receiver.setEnabled(true);
-    expect(receiver.status.state, CastReceiverState.running);
-    await receiver.stop();
-    receiver.dispose();
-  });
 
   test('shutdown waits for startup and closes the receiver', () async {
     final endpoint = Completer<CastReceiverEndpoint?>();

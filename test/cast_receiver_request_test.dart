@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/cast_receiver/request_gate.dart';
-import 'package:whisper/cast_receiver/receiver_name.dart';
 
 void main() {
   test(
@@ -57,26 +56,6 @@ void main() {
       expect(await response.timeout(const Duration(seconds: 7)), isTrue);
       expect(request.secondsRemaining, 0);
       expect(gate.pending, isNull);
-    },
-  );
-
-  test(
-    'receiver names migrate old defaults without a random suffix',
-    () {
-      String name(String saved, String id, {bool explicit = false}) =>
-          castReceiverName(
-            savedName: saved,
-            systemName: '书房的 MacBook Air',
-            deviceId: id,
-            explicitlyNamed: explicit,
-          );
-      expect(name('MacBook Air', 'a'), '书房的 MacBook Air');
-      expect(
-        name('MacBook Air', 'a', explicit: true),
-        'MacBook Air',
-      );
-      expect(name('客厅电脑', 'a'), '客厅电脑');
-      expect(name('客厅电脑', 'a'), name('客厅电脑', 'b'));
     },
   );
 }

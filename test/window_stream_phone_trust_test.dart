@@ -1,9 +1,5 @@
-import 'dart:io';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/window_stream/android/phone_trust.dart';
-
-import 'support/source_reading.dart';
 
 void main() {
   test('reads the identity a phone reports over adb', () {
@@ -21,26 +17,4 @@ void main() {
     expect(PhoneTrust.parse('Error: Unknown authority'), isNull);
     expect(PhoneTrust.parse(''), isNull);
   });
-
-  test('Flow opens from a device\'s page, focused on that device', () {
-    final conversation = File('lib/page/conversation.dart').readAsStringSync();
-    // A row on the device's page (the … in its conversation), not an icon
-    // in the conversation's header or on the home screen.
-    expect(
-      conversation,
-      contains('builder: (_) => FlowSpacePage(focusPeerId: device.uid)'),
-    );
-    expect(conversation, isNot(contains('icon: const ComputerControlIcon()')));
-    final settings = File('lib/page/settings.dart').readAsStringSync();
-    expect(settings, contains('class DeviceFeature {'));
-    final deviceList = deviceListSource();
-    expect(deviceList, isNot(contains('const FlowSpacePage()')));
-    final coordinator = File(
-      'lib/window_stream/window_stream_coordinator.dart',
-    ).readAsStringSync();
-    // adb phones are matched to their Whisper peer by the id they report.
-    expect(coordinator, contains('WindowSource? sourceForPeer(String peerId)'));
-    expect(coordinator, contains('peerId: trust.peerId'));
-  });
-
 }

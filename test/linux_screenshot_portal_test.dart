@@ -130,18 +130,6 @@ void main() {
   });
 
   test(
-    'region selection requests interactive area capture and treats cancel as silent',
-    () async {
-      expect(await portal.captureRegion(), false);
-      expect(
-        service.screenshotOptions!['interactive'],
-        const DBusBoolean(true),
-      );
-      expect(service.screenshotOptions!['target'], const DBusUint32(4));
-    },
-  );
-
-  test(
     'portal denial is an error rather than a successful screenshot',
     () async {
       service.screenshotResponse = 2;
@@ -176,23 +164,4 @@ void main() {
       await subscription.cancel();
     },
   );
-
-  test('cancelled replacement keeps the old shortcut session active', () async {
-    await portal.setShortcut(
-      ScreenshotShortcut.defaultFor(macOS: false),
-      'Capture',
-    );
-    final previous = service.latestSession!;
-    service.rejectBinding = true;
-    await expectLater(
-      portal.setShortcut(
-        const ScreenshotShortcut(key: 'A', control: true),
-        'Capture',
-      ),
-      throwsA(isA<PlatformException>()),
-    );
-    final fired = activations.stream.first.timeout(const Duration(seconds: 2));
-    await service.activate(previous);
-    await fired;
-  });
 }

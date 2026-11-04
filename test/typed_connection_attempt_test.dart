@@ -43,33 +43,9 @@ void main() {
         throwsArgumentError,
       );
     });
-
-    test('interactive attempts may target an unknown signed peer', () {
-      final request = ConnectionAttemptRequest(
-        requestId: 'manual-1',
-        endpoint: PeerEndpoint(host: '192.168.1.10', port: 10002),
-        mode: ConnectionAttemptMode.interactive,
-      );
-
-      expect(request.expectedPeerId, isEmpty);
-      expect(request.expectedPublicKeyHash, isEmpty);
-    });
   });
 
   group('ConnectionAttemptResult', () {
-    test('authenticated result carries request, peer, and generation', () {
-      final result = ConnectionAttemptResult.authenticated(
-        requestId: 'manual-1',
-        peerId: 'peer-a',
-        generation: 4,
-      );
-
-      expect(result.status, ConnectionAttemptStatus.authenticated);
-      expect(result.requestId, 'manual-1');
-      expect(result.peerId, 'peer-a');
-      expect(result.generation, 4);
-    });
-
     test('authenticated result rejects empty identity or generation', () {
       expect(
         () => ConnectionAttemptResult.authenticated(

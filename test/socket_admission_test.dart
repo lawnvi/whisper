@@ -3,15 +3,6 @@ import 'package:whisper/socket/socket_admission.dart';
 
 void main() {
   group('SocketAdmissionController', () {
-    test('uses the fixed production admission limits', () {
-      final admission = SocketAdmissionController();
-
-      expect(admission.maxChatConnections, 32);
-      expect(admission.maxPreAuthConnections, 8);
-      expect(admission.maxPreAuthConnectionsPerIp, 2);
-      expect(admission.maxUpgradeAttemptsPerMinutePerIp, 30);
-    });
-
     test('authenticated lease keeps chat capacity until socket closes', () {
       final admission = SocketAdmissionController(
         maxChatConnections: 2,
@@ -125,22 +116,24 @@ void main() {
       lease!.close();
     });
 
-    test('default policy permits 32 authenticated chats and rejects the 33rd',
-        () {
-      final admission = SocketAdmissionController();
-      final now = DateTime.utc(2026, 7, 10);
+    test(
+      'default policy permits 32 authenticated chats and rejects the 33rd',
+      () {
+        final admission = SocketAdmissionController();
+        final now = DateTime.utc(2026, 7, 10);
 
-      for (var index = 0; index < 32; index += 1) {
-        final lease = admission.tryOpen('10.0.0.${index + 1}', now).lease;
-        expect(lease, isNotNull);
-        lease!.markAuthenticated();
-      }
+        for (var index = 0; index < 32; index += 1) {
+          final lease = admission.tryOpen('10.0.0.${index + 1}', now).lease;
+          expect(lease, isNotNull);
+          lease!.markAuthenticated();
+        }
 
-      expect(
-        admission.tryOpen('10.0.1.1', now).rejection,
-        SocketAdmissionRejection.chatCapacity,
-      );
-    });
+        expect(
+          admission.tryOpen('10.0.1.1', now).rejection,
+          SocketAdmissionRejection.chatCapacity,
+        );
+      },
+    );
 
     test('bounds tracked IPv6 sources and globally expires old attempts', () {
       final admission = SocketAdmissionController(

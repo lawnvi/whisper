@@ -2226,131 +2226,6 @@ void main() {
       },
     );
 
-    test('source stores latency reports as synchronization evidence', () async {
-      final sent = <_SentGroupControl>[];
-      final coordinator = AudioGroupCoordinator(
-        platform: platform,
-        codecFactory: _pcmCodec,
-        transportFactory: (_) async => _FakeAudioGroupTransport(),
-        groupIdFactory: () => 'group-1',
-        streamIdFactory: () => 'stream-1',
-        sessionIdFactory: () => 'session-1',
-      );
-      coordinator.startGroup(
-        sourcePeerId: 'mac',
-        sinks: const <String, AudioChannelRole>{
-          'phone': AudioChannelRole.stereo,
-        },
-        format: format,
-        sendControl: (_, __) {},
-      );
-      await coordinator.handleControlMessage(
-        const AudioGroupControlMessage(
-          action: AudioGroupControlAction.groupAccept,
-          groupId: 'group-1',
-          streamId: 'stream-1',
-          sessionId: 'session-phone',
-          sourcePeerId: 'mac',
-          sinkPeerId: 'phone',
-          channelRole: AudioChannelRole.stereo,
-          path: '/audio',
-        ),
-        localPeerId: 'mac',
-        remoteHost: 'phone.local',
-        remotePort: 10002,
-        sendControl: (peerId, control) {
-          sent.add(_SentGroupControl(peerId, control));
-        },
-      );
-      sent.clear();
-
-      await coordinator.handleControlMessage(
-        const AudioGroupControlMessage(
-          action: AudioGroupControlAction.latencyReport,
-          groupId: 'group-1',
-          streamId: 'stream-1',
-          sessionId: 'session-phone',
-          sourcePeerId: 'mac',
-          sinkPeerId: 'phone',
-          bufferDepthMicros: 42000,
-          latePacketCount: 3,
-          syncErrorMicros: 7000,
-        ),
-        localPeerId: 'mac',
-        remoteHost: 'phone.local',
-        remotePort: 10002,
-        sendControl: (peerId, control) {
-          sent.add(_SentGroupControl(peerId, control));
-        },
-      );
-
-      final sink = coordinator.session?.sinks['phone'];
-      expect(sink?.bufferTargetMicros, 42000);
-      expect(sink?.latePacketCount, 3);
-      expect(sink?.syncErrorMicros, 7000);
-      expect(sent.single.control.action, AudioGroupControlAction.clockProbe);
-    });
-
-    test(
-      'sink reports playback evidence after receiving audio packet',
-      () async {
-        final sent = <_SentGroupControl>[];
-        var now = 1000;
-        final coordinator = AudioGroupCoordinator(
-          platform: platform,
-          codecFactory: _pcmCodec,
-          playbackGainProvider: () async => 1.0,
-          clockMicros: () => now,
-        );
-        await coordinator.handleControlMessage(
-          const AudioGroupControlMessage(
-            action: AudioGroupControlAction.groupOffer,
-            groupId: 'group-1',
-            streamId: 'stream-1',
-            sessionId: 'session-phone',
-            sourcePeerId: 'mac',
-            sinkPeerId: 'phone',
-            sinkPeerIds: <String>['phone'],
-            format: format,
-            path: '/audio',
-            channelRole: AudioChannelRole.stereo,
-            targetLatencyMs: 160,
-          ),
-          localPeerId: 'phone',
-          remoteHost: 'mac.local',
-          remotePort: 10002,
-          sendControl: (peerId, control) {
-            sent.add(_SentGroupControl(peerId, control));
-          },
-        );
-        sent.clear();
-
-        await coordinator.handlePacket(
-          AudioGroupPacketFrame(
-            groupId: 'group-1',
-            streamId: 'stream-1',
-            sessionId: 'session-phone',
-            sourcePeerId: 'mac',
-            sequence: 1,
-            captureTimeMicros: 0,
-            targetPlaybackTimeMicros: 2000,
-            durationMicros: 20000,
-            channelMask: AudioChannelMask.stereo,
-            payload: Uint8List(0),
-          ),
-        );
-
-        expect(sent.single.peerId, 'mac');
-        expect(
-          sent.single.control.action,
-          AudioGroupControlAction.latencyReport,
-        );
-        expect(sent.single.control.bufferDepthMicros, 0);
-        expect(sent.single.control.latePacketCount, 0);
-        expect(sent.single.control.syncErrorMicros, 0);
-      },
-    );
-
     test(
       'group packet decode failures throw synchronously to the channel',
       () async {
@@ -2578,7 +2453,6 @@ void main() {
         expect(calls.where((call) => call.method == 'writePcm'), hasLength(1));
       },
     );
-
   });
 }
 

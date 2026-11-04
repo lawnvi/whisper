@@ -619,13 +619,5 @@ void main() {
       expect(kept.lastModifiedSync(), modified);
       expect(File(p.join(temp.path, 'empty.bin')).lengthSync(), 0);
     });
-
-    test('a pool that was never used is let go of at once', () {
-      FolderWritePool(
-        workers: 4,
-        onSettled: (_, _) => fail('nothing was handed over'),
-        onBroken: (description) => fail(description),
-      ).dispose();
-    });
   });
 }

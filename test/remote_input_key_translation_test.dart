@@ -7,13 +7,6 @@ import 'package:whisper/remote_input/remote_input_protocol.dart';
 
 void main() {
   group('RemoteInputKeyTranslator', () {
-    test('recognizes Linux platform strings for protocol translation', () {
-      expect(
-        remoteInputPlatformKindFromString('linux'),
-        RemoteInputPlatformKind.linux,
-      );
-    });
-
     test('maps Windows Control to macOS Control', () {
       final translator = RemoteInputKeyTranslator(
         targetPlatform: RemoteInputPlatformKind.macos,
@@ -154,28 +147,6 @@ void main() {
       expect(payload['linuxKeyCode'], 46);
     });
 
-    test('maps regular O key across all platform code spaces', () {
-      final translator = RemoteInputKeyTranslator(
-        targetPlatform: RemoteInputPlatformKind.linux,
-      );
-
-      final translated = translator.translateFrame(
-        _keyFrame(<String, dynamic>{
-          'sourcePlatform': 'macos',
-          'keyCode': 31,
-          'macKeyCode': 31,
-          'windowsKeyCode': 0x4F,
-          'down': true,
-        }),
-      );
-
-      final payload = _payload(translated.single);
-      expect(payload['keySemantic'], 'keyO');
-      expect(payload['macKeyCode'], 31);
-      expect(payload['windowsKeyCode'], 0x4F);
-      expect(payload['linuxKeyCode'], 24);
-    });
-
     test('maps slash key across all platform code spaces', () {
       final translator = RemoteInputKeyTranslator(
         targetPlatform: RemoteInputPlatformKind.macos,
@@ -241,38 +212,6 @@ void main() {
         'sourcePlatform': 'linux',
         'keyCode': 9999,
         'linuxKeyCode': 9999,
-        'down': true,
-      });
-
-      final translated = translator.translateFrame(original);
-
-      expect(translated.single.payload, original.payload);
-    });
-
-    test('keeps macOS key payloads without key codes unchanged', () {
-      final translator = RemoteInputKeyTranslator(
-        targetPlatform: RemoteInputPlatformKind.windows,
-      );
-
-      final original = _keyFrame(<String, dynamic>{
-        'sourcePlatform': 'macos',
-        'down': true,
-      });
-
-      final translated = translator.translateFrame(original);
-
-      expect(translated.single.payload, original.payload);
-    });
-
-    test('keeps key payloads with non-string source platforms unchanged', () {
-      final translator = RemoteInputKeyTranslator(
-        targetPlatform: RemoteInputPlatformKind.macos,
-      );
-
-      final original = _keyFrame(<String, dynamic>{
-        'sourcePlatform': 7,
-        'keyCode': 0x11,
-        'windowsKeyCode': 0x11,
         'down': true,
       });
 

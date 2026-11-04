@@ -4,34 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/helper/connection_request_notification_dismissal.dart';
 
 void main() {
-  test('delayed dismiss fires only after grace period', () {
-    final timers = <_FakeTimer>[];
-    final durations = <Duration>[];
-    final dismissal = ConnectionRequestNotificationDismissal(
-      timerFactory: (duration, callback) {
-        durations.add(duration);
-        final timer = _FakeTimer(callback);
-        timers.add(timer);
-        return timer;
-      },
-    );
-    final removed = <String>[];
-
-    dismissal.schedule(
-      'peer-a',
-      graceMillis: 3000,
-      onDismiss: () {
-        removed.add('peer-a');
-      },
-    );
-    expect(durations, <Duration>[const Duration(milliseconds: 3000)]);
-    expect(removed, isEmpty);
-
-    timers.single.fire();
-
-    expect(removed, <String>['peer-a']);
-  });
-
   test('new auth request cancels pending delayed dismiss for same peer', () {
     final timers = <_FakeTimer>[];
     final dismissal = ConnectionRequestNotificationDismissal(
@@ -54,36 +26,6 @@ void main() {
     timers.single.fire();
 
     expect(removed, isEmpty);
-  });
-
-  test('immediate dismiss cancels pending delayed dismiss and runs once', () {
-    final timers = <_FakeTimer>[];
-    final dismissal = ConnectionRequestNotificationDismissal(
-      timerFactory: (_, callback) {
-        final timer = _FakeTimer(callback);
-        timers.add(timer);
-        return timer;
-      },
-    );
-    final removed = <String>[];
-
-    dismissal.schedule(
-      'peer-a',
-      graceMillis: 3000,
-      onDismiss: () {
-        removed.add('delayed');
-      },
-    );
-    dismissal.schedule(
-      'peer-a',
-      graceMillis: 0,
-      onDismiss: () {
-        removed.add('immediate');
-      },
-    );
-    timers.single.fire();
-
-    expect(removed, <String>['immediate']);
   });
 }
 

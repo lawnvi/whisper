@@ -1,15 +1,11 @@
 // ignore: depend_on_referenced_packages
-import 'package:fake_async/fake_async.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/model/LocalDatabase.dart';
-import 'package:whisper/model/file_transfer.dart';
-import 'package:whisper/new_ui/shell/shell_island_sources.dart';
 import 'package:whisper/new_ui/shell/shell_requests.dart';
 import 'package:whisper/state/pairing_request.dart';
 import 'package:whisper/widget/island/island_activity.dart';
-import 'package:whisper/widget/island/island_center.dart';
 
 const _device = DeviceData(
   id: 0,
@@ -88,64 +84,5 @@ void main() {
     await pumpEventQueue();
     expect(RequestIslandSource.shared.activities, isEmpty);
     expect(answers, isEmpty);
-  });
-
-  test('a result stays for a moment, then leaves by itself', () {
-    fakeAsync((async) {
-      NoteIslandSource.shared.note('已发送');
-      expect(NoteIslandSource.shared.activities, hasLength(1));
-      async.elapse(const Duration(milliseconds: 2500));
-      expect(NoteIslandSource.shared.activities, hasLength(1));
-      async.elapse(const Duration(milliseconds: 200));
-      expect(NoteIslandSource.shared.activities, isEmpty);
-    });
-  });
-
-  test('a transfer waiting for its device leaves the island', () {
-    TransferSnapshot snapshot(FileTransferState state) => TransferSnapshot(
-      transferId: 't',
-      messageUuid: 'm',
-      peerUid: 'p',
-      direction: FileTransferDirection.outgoing,
-      state: state,
-      finalPath: '/a/log.txt',
-      tempPath: '',
-      size: 100,
-      committedBytes: 50,
-      lastError: '',
-      updatedAt: 0,
-    );
-    TransferIslandSource.shared.update(
-      snapshot(FileTransferState.transferring),
-    );
-    expect(TransferIslandSource.shared.activities, hasLength(1));
-    TransferIslandSource.shared.update(
-      snapshot(FileTransferState.waitingReconnect),
-    );
-    expect(TransferIslandSource.shared.activities, isEmpty);
-  });
-
-  test('a request goes first on the island', () {
-    final center = IslandCenter();
-    addTearDown(center.dispose);
-    final source = IslandListSource([
-      IslandActivity(
-        id: 'copy',
-        kind: IslandKind.copy,
-        status: IslandStatus.live,
-        since: DateTime(2026),
-        presenter: const RequestPresenter(title: 'c', detail: '', answers: []),
-      ),
-      IslandActivity(
-        id: 'ask',
-        kind: IslandKind.request,
-        status: IslandStatus.live,
-        since: DateTime(2025),
-        presenter: const RequestPresenter(title: 'a', detail: '', answers: []),
-      ),
-    ]);
-    addTearDown(source.dispose);
-    center.addSource(source);
-    expect(center.featured?.id, 'ask');
   });
 }

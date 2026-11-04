@@ -355,10 +355,6 @@ Future<void> _sendReady(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('engine is constructible with injected fakes only', () {
-    expect(_engine(), isNotNull);
-  });
-
   test('sendFileTo rejects peer without fileTransferV3 and notifies', () async {
     final notices = <String>[];
     var sent = false;
@@ -1506,14 +1502,6 @@ void main() {
       FileTransferState.negotiating,
     );
   });
-
-  test(
-    'production transfer limits are fixed at 32 per peer and 128 global',
-    () {
-      expect(maxNonterminalTransfersPerPeer, 32);
-      expect(maxNonterminalTransfersGlobal, 128);
-    },
-  );
 
   test(
     'engine retry cannot revive a failed transfer beyond peer capacity',

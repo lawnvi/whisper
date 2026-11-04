@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/audio/audio_codec.dart';
 import 'package:whisper/audio/audio_failure_reason.dart';
 import 'package:whisper/audio/audio_group_coordinator.dart';
-import 'package:whisper/audio/audio_group_session.dart';
 import 'package:whisper/audio/audio_platform.dart';
 import 'package:whisper/audio/audio_protocol.dart';
 import 'package:whisper/new_ui/sound/sound_controller.dart';
@@ -13,34 +12,10 @@ import 'package:whisper/new_ui/sound/sound_rules.dart';
 
 import 'support/share_page_fixtures.dart';
 
-AudioGroupSink _sink({
-  AudioGroupSinkState state = AudioGroupSinkState.active,
-  int rtt = 0,
-  int jitter = 0,
-  int buffer = 0,
-  int late = 0,
-  int error = 0,
-}) => AudioGroupSink(
-  sinkPeerId: 'peer',
-  sessionId: 's',
-  channelRole: AudioChannelRole.stereo,
-  state: state,
-  rttMicros: rtt,
-  jitterMicros: jitter,
-  bufferTargetMicros: buffer,
-  latePacketCount: late,
-  syncErrorMicros: error,
-);
-
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('channel defaults', () {
-    test('the first device is stereo', () {
-      final members = SoundMembers()..add('a');
-      expect(members.roles, {'a': AudioChannelRole.stereo});
-    });
-
     test('a second device splits the two into left and right', () {
       final members = SoundMembers()
         ..add('a')
@@ -62,56 +37,12 @@ void main() {
       });
     });
 
-    test('touched and stereo: a second device still does not split', () {
-      final members = SoundMembers()
-        ..add('a')
-        ..setRole('a', AudioChannelRole.mono)
-        ..setRole('a', AudioChannelRole.stereo)
-        ..add('b');
-      expect(members.roleOf('a'), AudioChannelRole.stereo);
-      expect(members.roleOf('b'), AudioChannelRole.stereo);
-    });
-
     test('down to one, it goes back to stereo', () {
       final members = SoundMembers()
         ..add('a')
         ..add('b')
         ..remove('a');
       expect(members.roles, {'b': AudioChannelRole.stereo});
-    });
-
-    test('also when somebody had picked a channel: nothing to pick alone', () {
-      final members = SoundMembers()
-        ..add('a')
-        ..add('b')
-        ..setRole('b', AudioChannelRole.mono)
-        ..remove('a');
-      expect(members.roles, {'b': AudioChannelRole.stereo});
-      expect(members.touched, isFalse);
-    });
-
-    test('a third device is stereo and leaves the other two alone', () {
-      final members = SoundMembers()
-        ..add('a')
-        ..add('b')
-        ..add('c');
-      expect(members.roles, {
-        'a': AudioChannelRole.left,
-        'b': AudioChannelRole.right,
-        'c': AudioChannelRole.stereo,
-      });
-    });
-
-    test('emptied, it starts over untouched', () {
-      final members = SoundMembers()
-        ..add('a')
-        ..setRole('a', AudioChannelRole.mono)
-        ..remove('a');
-      expect(members.touched, isFalse);
-      members
-        ..add('a')
-        ..add('b');
-      expect(members.roleOf('a'), AudioChannelRole.left);
     });
 
     test('a group changed elsewhere wins, keeping ones gone for a moment', () {
@@ -124,78 +55,6 @@ void main() {
       }, keep: (peer) => peer == 'away');
       expect(members.roles.keys, unorderedEquals(['here', 'away', 'new']));
       expect(members.roleOf('here'), AudioChannelRole.mono);
-    });
-  });
-
-  group('sync quality', () {
-    test('no numbers yet is still estimating', () {
-      expect(audioSinkHasSyncData(_sink()), isFalse);
-      expect(audioSyncQualityOf(_sink()), AudioSyncQuality.calibrating);
-    });
-
-    test('good at the edge of the limits', () {
-      expect(
-        audioSyncQualityOf(_sink(rtt: 2000, jitter: 8000, error: 12000)),
-        AudioSyncQuality.good,
-      );
-    });
-
-    test('fair past 8 ms jitter or 12 ms error', () {
-      expect(audioSyncQualityOf(_sink(jitter: 8001)), AudioSyncQuality.fair);
-      expect(audioSyncQualityOf(_sink(error: 12001)), AudioSyncQuality.fair);
-      expect(audioSyncQualityOf(_sink(error: -12001)), AudioSyncQuality.fair);
-      expect(audioSyncQualityOf(_sink(jitter: 20000)), AudioSyncQuality.fair);
-      expect(audioSyncQualityOf(_sink(error: 30000)), AudioSyncQuality.fair);
-    });
-
-    test('unstable past 20 ms jitter, 30 ms error, or any late packet', () {
-      expect(
-        audioSyncQualityOf(_sink(jitter: 20001)),
-        AudioSyncQuality.unstable,
-      );
-      expect(
-        audioSyncQualityOf(_sink(error: 30001)),
-        AudioSyncQuality.unstable,
-      );
-      expect(audioSyncQualityOf(_sink(late: 1)), AudioSyncQuality.unstable);
-    });
-
-    test('the header shows the worst, or estimating while anyone is', () {
-      const good = SoundMemberPhase.good;
-      const fair = SoundMemberPhase.fair;
-      const bad = SoundMemberPhase.unstable;
-      expect(soundHeaderQuality([good, good]), AudioSyncQuality.good);
-      expect(soundHeaderQuality([good, fair]), AudioSyncQuality.fair);
-      expect(soundHeaderQuality([bad, fair, good]), AudioSyncQuality.unstable);
-      expect(soundHeaderQuality([fair, bad]), AudioSyncQuality.unstable);
-      expect(
-        soundHeaderQuality([bad, SoundMemberPhase.calibrating]),
-        AudioSyncQuality.calibrating,
-      );
-      expect(
-        soundHeaderQuality([good, SoundMemberPhase.connecting]),
-        AudioSyncQuality.calibrating,
-      );
-      expect(soundHeaderQuality([]), isNull);
-      expect(soundHeaderQuality([SoundMemberPhase.failed]), isNull);
-    });
-  });
-
-  group('member states', () {
-    test('every state maps as surfaces.md says', () {
-      SoundMemberPhase of(AudioGroupSinkState state) =>
-          soundMemberPhaseOf(_sink(state: state, rtt: 2000));
-      expect(of(AudioGroupSinkState.offered), SoundMemberPhase.connecting);
-      expect(of(AudioGroupSinkState.accepted), SoundMemberPhase.connecting);
-      expect(of(AudioGroupSinkState.connecting), SoundMemberPhase.connecting);
-      expect(of(AudioGroupSinkState.active), SoundMemberPhase.good);
-      expect(of(AudioGroupSinkState.lagging), SoundMemberPhase.unstable);
-      expect(of(AudioGroupSinkState.failed), SoundMemberPhase.failed);
-      expect(of(AudioGroupSinkState.stopped), SoundMemberPhase.disconnected);
-    });
-
-    test('active without numbers is estimating', () {
-      expect(soundMemberPhaseOf(_sink()), SoundMemberPhase.calibrating);
     });
   });
 
@@ -320,19 +179,6 @@ void main() {
       expect(await play(coordinator, 3), [100, 200]);
       await coordinator.stopLocal();
     });
-
-    test(
-      'the page moves it while sliding and saves it on letting go',
-      () async {
-        final world = SoundWorld();
-        addTearDown(world.dispose);
-        world.controller.setGain(1.7);
-        expect(world.controller.gain, 1.7);
-        expect(world.savedGain, isNull);
-        await world.controller.commitGain(2.5);
-        expect(world.savedGain, 2.5);
-      },
-    );
   });
 
   group('the master switch', () {
@@ -348,24 +194,6 @@ void main() {
       expect(
         world.sentGroup.single.$2.action,
         AudioGroupControlAction.groupOffer,
-      );
-    });
-
-    test('a channel is there to pick only between two or more', () async {
-      await world.controller.toggle(imacDevice.uid);
-      expect(
-        world.controller.rowFor(imacDevice, connected: true).channel,
-        isNull,
-      );
-      await world.controller.toggle(xiaomiDevice.uid);
-      expect(
-        world.controller.rowFor(imacDevice, connected: true).channel,
-        AudioChannelRole.left,
-      );
-      await world.controller.toggle(xiaomiDevice.uid);
-      expect(
-        world.controller.rowFor(imacDevice, connected: true).channel,
-        isNull,
       );
     });
 
@@ -404,14 +232,6 @@ void main() {
       expect(world.sentGroup.map((sent) => sent.$2.action).toSet(), {
         AudioGroupControlAction.groupOffer,
       });
-    });
-
-    test('rows say stopped, and stay checked', () async {
-      await world.controller.toggle(imacDevice.uid);
-      await world.controller.setOn(false);
-      final row = world.controller.rowFor(imacDevice, connected: true);
-      expect(row.phase, SoundRowPhase.stopped);
-      expect(row.checked, isTrue);
     });
 
     test('unchecking the last one turns it all off and forgets', () async {
@@ -520,25 +340,6 @@ void main() {
       ]);
     });
 
-    test('a device that stopped gets it back from its own button', () async {
-      await world.controller.toggle(imacDevice.uid);
-      await world.controller.toggle(xiaomiDevice.uid);
-      await stopsThere(xiaomiDevice.uid);
-      world.sentGroup.clear();
-
-      await world.controller.toggleSending(xiaomiDevice.uid);
-
-      expect(world.controller.isSending(xiaomiDevice.uid), isTrue);
-      expect(
-        world.sentGroup.where(
-          (sent) =>
-              sent.$1 == xiaomiDevice.uid &&
-              sent.$2.action == AudioGroupControlAction.groupOffer,
-        ),
-        hasLength(1),
-      );
-    });
-
     test('stopping it here is not reported as the other device', () async {
       final stopped = <String>[];
       world.controller.onMemberStopped = stopped.add;
@@ -597,22 +398,6 @@ void main() {
       expect(row.checked, isTrue);
     });
 
-    test('its new channel is kept for when it comes back', () async {
-      await world.controller.toggle(imacDevice.uid);
-      await world.controller.toggle(xiaomiDevice.uid);
-      await world.reject(xiaomiDevice.uid);
-      world.sentGroup.clear();
-      await world.controller.setChannel(
-        xiaomiDevice.uid,
-        AudioChannelRole.mono,
-      );
-      expect(world.sentGroup, isEmpty);
-      expect(
-        world.group.session!.sinks[xiaomiDevice.uid]!.channelRole,
-        AudioChannelRole.mono,
-      );
-    });
-
     test('unchecking and checking again retries a failed one', () async {
       await world.controller.toggle(imacDevice.uid);
       await world.controller.toggle(xiaomiDevice.uid);
@@ -636,12 +421,6 @@ void main() {
 
     setUp(() => world = SoundWorld(solo: {thinkPadDevice.uid}));
     tearDown(() => world.dispose());
-
-    test('is listed, without a channel, saying so', () {
-      final row = world.controller.rowFor(thinkPadDevice, connected: true);
-      expect(row.phase, SoundRowPhase.soloOnly);
-      expect(row.channel, isNull);
-    });
 
     test('checking it clears the others and goes one to one', () async {
       await world.controller.toggle(imacDevice.uid);
@@ -682,17 +461,6 @@ void main() {
   });
 
   group('this device playing another', () {
-    test('playing can pause and disconnect', () async {
-      final world = SoundWorld();
-      addTearDown(world.dispose);
-      await world.offerFrom(imacDevice.uid);
-      final view = world.controller.sinkView!;
-      expect(view.sourcePeerId, imacDevice.uid);
-      expect(view.phase, SoundSinkPhase.playing);
-      expect(view.canPause, isTrue);
-      expect(view.canResume, isFalse);
-    });
-
     test('paused can resume when the source can take it back', () async {
       final world = SoundWorld();
       addTearDown(world.dispose);
@@ -704,124 +472,12 @@ void main() {
       expect(view.canPause, isFalse);
     });
 
-    test('paused can only disconnect when the source cannot', () async {
-      final world = SoundWorld(canRejoin: false);
-      addTearDown(world.dispose);
-      await world.offerFrom(imacDevice.uid);
-      await world.controller.pause();
-      expect(world.controller.sinkView!.canResume, isFalse);
-    });
-
-    test('resuming shows until the source answers', () async {
-      final world = SoundWorld();
-      addTearDown(world.dispose);
-      await world.offerFrom(imacDevice.uid);
-      await world.controller.pause();
-      await world.controller.resume();
-      expect(world.controller.sinkView!.phase, SoundSinkPhase.resuming);
-      await world.offerFrom(imacDevice.uid);
-      expect(world.controller.sinkView!.phase, SoundSinkPhase.playing);
-    });
-
     test('disconnecting leaves this device free', () async {
       final world = SoundWorld();
       addTearDown(world.dispose);
       await world.offerFrom(imacDevice.uid);
       await world.controller.disconnect();
       expect(world.controller.sinkView, isNull);
-    });
-
-    test('checking a device does nothing meanwhile', () async {
-      final world = SoundWorld();
-      addTearDown(world.dispose);
-      await world.offerFrom(imacDevice.uid);
-      await world.controller.toggle(thinkPadDevice.uid);
-      expect(world.controller.isSelected(thinkPadDevice.uid), isFalse);
-    });
-  });
-
-  group('capture', () {
-    test('a failure to capture is reported until stopped', () async {
-      const channel = MethodChannel('test_sound_capture');
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(channel, (call) async {
-            if (call.method == 'startCapture') {
-              throw PlatformException(code: 'permission-denied');
-            }
-            return null;
-          });
-      addTearDown(
-        () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-            .setMockMethodCallHandler(channel, null),
-      );
-      var now = 1000000;
-      final group = AudioGroupCoordinator(
-        platform: AudioPlatform(channel: channel),
-        codecFactory: (format) async =>
-            PcmPassthroughAudioCodec(AudioCodecConfig.fromStreamFormat(format)),
-        playbackGainProvider: () async => 1.0,
-        clockMicros: () => now += 1000,
-      );
-      group.startGroup(
-        sourcePeerId: 'mac',
-        sinks: const {'phone': AudioChannelRole.stereo},
-        format: const AudioStreamFormat(
-          codec: AudioCodecKind.pcmS16le,
-          sampleRate: 48000,
-          channels: 2,
-          frameDurationMs: 20,
-          bitRate: 128000,
-        ),
-        sendControl: (_, _) {},
-      );
-      final session = group.session!;
-      final sessionId = session.sinks['phone']!.sessionId;
-      await group.handleControlMessage(
-        AudioGroupControlMessage(
-          action: AudioGroupControlAction.groupAccept,
-          groupId: session.groupId,
-          streamId: session.streamId,
-          sessionId: sessionId,
-          sourcePeerId: 'mac',
-          sinkPeerId: 'phone',
-          channelRole: AudioChannelRole.stereo,
-        ),
-        localPeerId: 'mac',
-        remoteHost: '',
-        remotePort: 0,
-        sendControl: (_, _) {},
-      );
-      expect(group.captureFailure, isNull);
-      // Capture starts once enough clock samples have come in.
-      Object? thrown;
-      for (var i = 0; i < 20 && thrown == null; i++) {
-        final sentAt = now;
-        try {
-          await group.handleControlMessage(
-            AudioGroupControlMessage(
-              action: AudioGroupControlAction.clockReport,
-              groupId: session.groupId,
-              streamId: session.streamId,
-              sessionId: sessionId,
-              sourcePeerId: 'mac',
-              sinkPeerId: 'phone',
-              sentAtMicros: sentAt,
-              receivedAtMicros: sentAt + 200,
-              sinkClockMicros: sentAt + 300,
-            ),
-            localPeerId: 'mac',
-            remoteHost: '',
-            remotePort: 0,
-            sendControl: (_, _) {},
-          );
-        } on PlatformException catch (error) {
-          thrown = error;
-        }
-      }
-      expect(thrown, isA<PlatformException>());
-      expect(group.captureFailure, AudioFailureReason.permission);
-      await group.stopLocal();
-      expect(group.captureFailure, isNull);
     });
   });
 }

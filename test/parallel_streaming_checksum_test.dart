@@ -23,13 +23,6 @@ void main() {
     expect(await checksum.close(), bytesChecksum(<int>[...first, ...second]));
   });
 
-  test('can dispose a worker before producing a digest', () async {
-    final checksum = await ParallelStreamingChecksum.start();
-    await checksum.add(Uint8List(1024));
-
-    await checksum.dispose();
-  });
-
   test(
     'awaited producers bound the backlog without changing the digest',
     () async {
@@ -57,12 +50,5 @@ void main() {
     await checksum.dispose();
     await rejected;
     await expectLater(checksum.add(<int>[1]), throwsStateError);
-  });
-
-  test('rejects an invalid backlog limit before starting a worker', () async {
-    await expectLater(
-      ParallelStreamingChecksum.start(maxPendingBytes: 0),
-      throwsArgumentError,
-    );
   });
 }

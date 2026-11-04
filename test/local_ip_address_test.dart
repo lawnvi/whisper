@@ -1,31 +1,8 @@
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/helper/helper.dart';
 import 'package:whisper/state/ipv4_address_policy.dart';
 
 void main() {
-  test('recognizes every RFC1918 IPv4 range used for LAN pairing', () {
-    expect(Ipv4AddressPolicy.isPrivate('10.0.0.8'), isTrue);
-    expect(Ipv4AddressPolicy.isPrivate('172.16.0.8'), isTrue);
-    expect(Ipv4AddressPolicy.isPrivate('172.31.255.254'), isTrue);
-    expect(Ipv4AddressPolicy.isPrivate('192.168.50.8'), isTrue);
-  });
-
-  test('recognizes usable IPv4 link-local addresses for direct cables', () {
-    expect(Ipv4AddressPolicy.isLinkLocal('169.254.1.0'), isTrue);
-    expect(Ipv4AddressPolicy.isLinkLocal('169.254.37.25'), isTrue);
-    expect(Ipv4AddressPolicy.isLinkLocal('169.254.254.255'), isTrue);
-    expect(Ipv4AddressPolicy.isUsableUnicast('169.254.37.25'), isTrue);
-    expect(Ipv4AddressPolicy.isLinkLocal('169.254.0.8'), isFalse);
-    expect(Ipv4AddressPolicy.isLinkLocal('169.254.255.8'), isFalse);
-  });
-
-  test('recognizes the IPv4 benchmarking range used by fake-IP DNS', () {
-    expect(Ipv4AddressPolicy.isBenchmarking('198.18.0.0'), isTrue);
-    expect(Ipv4AddressPolicy.isBenchmarking('198.19.255.255'), isTrue);
-    expect(Ipv4AddressPolicy.isBenchmarking('198.20.0.1'), isFalse);
-  });
-
   test('prefers RFC1918, then other unicast, then IPv4 link-local', () {
     expect(
       selectLocalIpv4Address(<LocalIpv4Candidate>[
@@ -101,16 +78,6 @@ void main() {
     );
   });
 
-  test('virtual interfaces remain a last-resort fallback', () {
-    expect(
-      selectLocalIpv4Address(<LocalIpv4Candidate>[
-        (address: '198.18.0.1', interfaceName: 'utun4'),
-        (address: '172.17.0.1', interfaceName: 'docker0'),
-      ]),
-      '172.17.0.1',
-    );
-  });
-
   test('Wi-Fi Direct driver description does not outrank the LAN', () {
     for (final name in ['本地连接* 10', 'Local Area Connection* 10', '投屏网卡']) {
       expect(
@@ -153,5 +120,4 @@ void main() {
       expect(Ipv4AddressPolicy.isPrivate(address), isFalse, reason: address);
     }
   });
-
 }

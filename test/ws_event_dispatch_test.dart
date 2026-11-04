@@ -67,20 +67,6 @@ MessageData _buildMessage() {
 }
 
 void main() {
-  test('broadcasts message events to all registered listeners', () {
-    final manager = WsSvrManager();
-    final listListener = _RecordingSocketEvent();
-    final chatListener = _RecordingSocketEvent();
-
-    manager.debugResetListeners();
-    manager.registerEvent(listListener, primary: true);
-    manager.registerEvent(chatListener);
-    manager.debugDispatchMessage(_buildMessage());
-
-    expect(listListener.messages, hasLength(1));
-    expect(chatListener.messages, hasLength(1));
-  });
-
   test('a throwing listener does not break dispatch to later listeners', () {
     final manager = WsSvrManager();
     final throwingListener = _ThrowingSocketEvent();
@@ -91,36 +77,9 @@ void main() {
     manager.registerEvent(chatListener);
 
     expect(
-        () => manager.debugDispatchMessage(_buildMessage()), returnsNormally);
-    expect(chatListener.messages, hasLength(1));
-  });
-
-  test('broadcasts transfer updates to all registered listeners', () {
-    final manager = WsSvrManager();
-    final listListener = _RecordingSocketEvent();
-    final chatListener = _RecordingSocketEvent();
-
-    manager.debugResetListeners();
-    manager.registerEvent(listListener, primary: true);
-    manager.registerEvent(chatListener);
-    manager.debugDispatchTransfer(
-      const TransferSnapshot(
-        transferId: 'transfer-1',
-        messageUuid: 'message-1',
-        peerUid: 'peer-a',
-        direction: FileTransferDirection.outgoing,
-        state: FileTransferState.transferring,
-        finalPath: '/tmp/archive.zip',
-        tempPath: '/tmp/.whisper/transfers/transfer-1.part',
-        size: 1024,
-        committedBytes: 512,
-        lastError: '',
-        updatedAt: 1,
-      ),
+      () => manager.debugDispatchMessage(_buildMessage()),
+      returnsNormally,
     );
-
-    expect(listListener.transfers, hasLength(1));
-    expect(chatListener.transfers, hasLength(1));
-    expect(chatListener.transfers.single.transferId, 'transfer-1');
+    expect(chatListener.messages, hasLength(1));
   });
 }

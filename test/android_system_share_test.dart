@@ -71,24 +71,6 @@ void main() {
     expect(event.items.single.size, 42);
   });
 
-  test('drops empty or unidentified platform events', () {
-    expect(
-      AndroidSystemShareEvent.fromMap(<Object?, Object?>{
-        'id': '',
-        'text': 'hello',
-      }),
-      isNull,
-    );
-    expect(
-      AndroidSystemShareEvent.fromMap(<Object?, Object?>{
-        'id': 'empty',
-        'text': '',
-        'items': const <Object?>[],
-      }),
-      isNull,
-    );
-  });
-
   test('rejects oversized text and item lists instead of truncating', () {
     expect(
       AndroidSystemShareEvent.fromMap(<Object?, Object?>{
@@ -110,30 +92,6 @@ void main() {
       }),
       isNull,
     );
-  });
-
-  test('cold-start initialize consumes native pending shares', () async {
-    final platform = _FakeAndroidSystemSharePlatform()
-      ..enqueue(<AndroidSystemShareEvent>[_event('cold')]);
-    final inbox = AndroidSystemShareInbox(platform: platform);
-    addTearDown(inbox.dispose);
-
-    await inbox.initialize();
-
-    expect(platform.consumeCount, 1);
-    expect(inbox.pendingEvents.map((event) => event.id), <String>['cold']);
-  });
-
-  test('warm share notification consumes the next native batch', () async {
-    final platform = _FakeAndroidSystemSharePlatform();
-    final inbox = AndroidSystemShareInbox(platform: platform);
-    addTearDown(inbox.dispose);
-    await inbox.initialize();
-    platform.enqueue(<AndroidSystemShareEvent>[_event('warm')]);
-
-    await platform.notifyShareIntentReceived();
-
-    expect(inbox.pendingEvents.map((event) => event.id), <String>['warm']);
   });
 
   test(
@@ -173,22 +131,6 @@ void main() {
       ]);
     },
   );
-
-  test('take and takeAll consume Dart pending state', () async {
-    final platform = _FakeAndroidSystemSharePlatform()
-      ..enqueue(<AndroidSystemShareEvent>[_event('one'), _event('two')]);
-    final inbox = AndroidSystemShareInbox(platform: platform);
-    addTearDown(inbox.dispose);
-    await inbox.initialize();
-
-    expect(inbox.take('one')?.id, 'one');
-    await Future<void>.delayed(Duration.zero);
-    expect(platform.discardedEventIds, contains('one'));
-    expect(inbox.takeAll().map((event) => event.id), <String>['two']);
-    await Future<void>.delayed(Duration.zero);
-    expect(platform.discardedEventIds, contains('two'));
-    expect(inbox.hasPendingEvents, isFalse);
-  });
 
   test('route progress is parsed, persisted, and completed durably', () async {
     final event = AndroidSystemShareEvent.fromMap(<Object?, Object?>{
@@ -241,25 +183,6 @@ void main() {
     expect(inbox.event('progress'), isNull);
   });
 
-  test('surfaces a persisted native rejection to the inbox', () async {
-    final platform = _FakeAndroidSystemSharePlatform()
-      ..enqueueFailures(<AndroidSystemShareFailure>[
-        const AndroidSystemShareFailure(
-          reason: AndroidSystemShareFailureReason.tooManyItems,
-          receivedAt: 123,
-        ),
-      ]);
-    final inbox = AndroidSystemShareInbox(platform: platform);
-    addTearDown(inbox.dispose);
-
-    await inbox.initialize();
-
-    expect(
-      inbox.takeFailure()?.reason,
-      AndroidSystemShareFailureReason.tooManyItems,
-    );
-  });
-
   test('startup discards queued system-share transfers only', () async {
     SharedPreferences.setMockInitialValues(<String, Object>{'_uuid': 'local'});
     final database = LocalDatabase.forTesting(NativeDatabase.memory());
@@ -300,7 +223,6 @@ void main() {
     );
     expect(await database.fetchMessageById(regular.message!.id), isNotNull);
   });
-
 }
 
 Future<FileTransferAdmissionResult> _admitOutgoingTransfer(

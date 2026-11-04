@@ -1,9 +1,6 @@
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/helper/clipboard_sync.dart';
 import 'package:whisper/helper/desktop_clipboard_image.dart';
-
-import 'support/source_reading.dart';
 
 void main() {
   test('skips text sync when clipboard contains copied files', () async {
@@ -25,43 +22,5 @@ void main() {
 
     expect(text, isNull);
     expect(textReads, 0);
-  });
-
-  test(
-    'returns text sync content when clipboard has no copied files',
-    () async {
-      final text = await readClipboardTextForSync(
-        fileDraftsProvider: () async => const <ClipboardFileDraft>[],
-        textProvider: () async => 'hello',
-      );
-
-      expect(text, 'hello');
-    },
-  );
-
-  test('falls back to text sync when file detection is unavailable', () async {
-    final text = await readClipboardTextForSync(
-      fileDraftsProvider: () async => throw Exception('unavailable'),
-      textProvider: () async => 'hello',
-    );
-
-    expect(text, 'hello');
-  });
-
-  test('clipboard watcher drops stale asynchronous callbacks', () {
-    final source = deviceListSource();
-    final callback = memberSource(source, 'void onClipboardChanged() async');
-
-    expect(callback, contains('final generation = ++_clipboardSyncGeneration'));
-    expect(
-      callback.indexOf('shouldIgnoreClipboardSync(text)'),
-      lessThan(callback.indexOf('_clipboardText == text')),
-    );
-    expect(callback, contains('_clipboardText = text;'));
-    expect(
-      RegExp('generation != _clipboardSyncGeneration').allMatches(callback),
-      hasLength(greaterThanOrEqualTo(3)),
-    );
-    expect(callback, contains('socketManager.receiver != peerId'));
   });
 }

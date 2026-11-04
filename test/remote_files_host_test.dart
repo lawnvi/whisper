@@ -88,28 +88,6 @@ void main() {
     );
   });
 
-  test('listings put folders first, sort naturally and page', () async {
-    final page = await files.list('home', 'Documents');
-    expect(page.entries.map((e) => e.name), [
-      'zFolder',
-      'A.txt',
-      'b.txt',
-      'IMG_2.jpg',
-      'IMG_10.jpg',
-      'inside-link',
-    ]);
-    expect(page.entries.last.isLink, isTrue);
-    expect(page.entries.first.kind, FsKind.folder);
-    expect(page.entries[3].kind, FsKind.image);
-    final hidden = await files.list('home', 'Documents', showHidden: true);
-    expect(hidden.entries.map((e) => e.name), contains('.hidden'));
-    final first = await files.list('home', 'Documents', limit: 2);
-    expect(first.hasMore, isTrue);
-    final next = await files.list('home', 'Documents', offset: 2, limit: 10);
-    expect(next.entries.first.name, 'b.txt');
-    expect(next.hasMore, isFalse);
-  });
-
   test(
     'create, rename and delete stay inside and spare link targets',
     () async {

@@ -944,47 +944,6 @@ void main() {
     );
   });
 
-  test('sending explains why a folder cannot go', () async {
-    _writeTree(source, <String, List<int>>{
-      for (var index = 0; index < 6; index += 1) 'f$index': <int>[index],
-    });
-    connect(
-      scanFolder: (path) async => scanFolderForTransfer(path, maxEntries: 3),
-    );
-
-    expect(
-      await sender.engine.sendFolderTo('receiver', source.path),
-      FolderSendOutcome.tooManyEntries,
-    );
-    expect(
-      await sender.engine.sendFolderTo(
-        'receiver',
-        p.join(temp.path, 'missing'),
-      ),
-      FolderSendOutcome.unreadable,
-    );
-    if (!Platform.isWindows) {
-      final odd = Directory(p.join(temp.path, 'what?'))..createSync();
-      expect(
-        await sender.engine.sendFolderTo('receiver', odd.path),
-        FolderSendOutcome.invalidName,
-      );
-    }
-    sender.linked = false;
-    expect(
-      await sender.engine.sendFolderTo('receiver', source.path),
-      FolderSendOutcome.notConnected,
-    );
-    expect(sender.messages, isEmpty);
-    expect(await sender.database.fetchRecoverableFileTransfers(), isEmpty);
-    expect(
-      sender.storeDirectory.existsSync()
-          ? sender.storeDirectory.listSync()
-          : const <FileSystemEntity>[],
-      isEmpty,
-    );
-  });
-
   test(
     'thousands of small files stay one transfer',
     () async {

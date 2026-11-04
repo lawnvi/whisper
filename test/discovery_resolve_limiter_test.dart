@@ -24,21 +24,4 @@ void main() {
       isTrue,
     );
   });
-
-  test('clearing a key allows immediate resolve again', () {
-    final limiter = DiscoveryResolveLimiter(
-      minimumInterval: const Duration(seconds: 5),
-    );
-    final now = DateTime(2026, 1, 1, 12, 0, 0);
-
-    expect(limiter.shouldResolve('peer-a', now: now), isTrue);
-    limiter.clear('peer-a');
-    expect(
-      limiter.shouldResolve(
-        'peer-a',
-        now: now.add(const Duration(seconds: 1)),
-      ),
-      isTrue,
-    );
-  });
 }

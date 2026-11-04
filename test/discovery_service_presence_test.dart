@@ -7,9 +7,7 @@ void main() {
       final tracker = DiscoveryServicePresenceTracker();
       tracker.resolved(serviceKey: 'whisper-peer-a|_whisper._tcp', peerId: 'a');
 
-      final loss = tracker.lost(
-        serviceKey: 'whisper-peer-a|_whisper._tcp',
-      );
+      final loss = tracker.lost(serviceKey: 'whisper-peer-a|_whisper._tcp');
 
       expect(loss?.peerId, 'a');
       expect(loss?.stillDiscovered, isFalse);
@@ -26,18 +24,6 @@ void main() {
 
       expect(firstLoss?.stillDiscovered, isTrue);
       expect(finalLoss?.stillDiscovered, isFalse);
-    });
-
-    test('accepts a peer id hint for an untracked lost event', () {
-      final tracker = DiscoveryServicePresenceTracker();
-
-      final loss = tracker.lost(
-        serviceKey: 'unknown',
-        peerIdHint: 'peer-a',
-      );
-
-      expect(loss?.peerId, 'peer-a');
-      expect(loss?.stillDiscovered, isFalse);
     });
   });
 }

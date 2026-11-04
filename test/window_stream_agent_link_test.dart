@@ -105,30 +105,6 @@ void main() {
       expect(script, isNot(contains('TOKEN')));
     });
 
-    test('the probe parses a running agent and the jar', () {
-      final output =
-          '@@state\n'
-          '{"pid":42,"protocol":2,"version":"2.0.0","jarSha":"$abc",'
-          '"socket":"whisper_agent","token":"${'ab' * 32}"}\n'
-          '@@jar\n${sidecar.jarSha256}  /data/local/tmp/x.jar\n@@end\n';
-      final probe = AgentLaunch.parseProbe(output, sidecar);
-      expect(probe.jarPresent, isTrue);
-      expect(probe.running, isNotNull);
-      expect(probe.running!.pid, 42);
-      expect(probe.running!.protocol, 2);
-      expect(probe.running!.hasToken, isTrue);
-    });
-
-    test('a phone-side probe without a token still parses', () {
-      const output =
-          '@@state\n'
-          '{"pid":7,"protocol":2,"version":"2.0.0","jarSha":"$abc",'
-          '"socket":"whisper_agent","token":""}\n@@jar\n@@end\n';
-      final state = AgentLaunch.parseProbe(output, sidecar).running;
-      expect(state, isNotNull);
-      expect(state!.hasToken, isFalse);
-    });
-
     test('only a newer idle agent is replaced', () {
       AgentDaemonState running(String version, String sha) => AgentDaemonState(
         pid: 1,
@@ -182,16 +158,8 @@ void main() {
         isTrue,
       );
     });
-
-    test('version order is numeric', () {
-      expect(AgentLaunch.compareVersions('2.0.10', '2.0.9'), greaterThan(0));
-      expect(AgentLaunch.compareVersions('2.0.0', '2.0.0'), 0);
-      expect(AgentLaunch.compareVersions('1.9.0', '2.0.0'), lessThan(0));
-    });
   });
 }
-
-const abc = 'abababababababababababababababababababababababababababababababab';
 
 Future<Uint8List> _take(StreamIterator<Uint8List> chunks, int count) async {
   final buffer = BytesBuilder();

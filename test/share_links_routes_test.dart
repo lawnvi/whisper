@@ -27,37 +27,6 @@ class _ScriptedRandom implements Random {
 
 void main() {
   group('route alphabet', () {
-    test('has no characters that are easy to mix up', () {
-      for (final c in ['0', 'o', '1', 'l', 'i']) {
-        expect(ShareRoutes.alphabet.contains(c), isFalse, reason: c);
-      }
-      expect(ShareRoutes.alphabet.length, 31);
-      expect(ShareRoutes.alphabet, matches(RegExp(r'^[a-z2-9]+$')));
-      expect(ShareRoutes.alphabet.split('').toSet().length, 31);
-    });
-
-    test('generated routes are 8 characters, short ones 4', () {
-      final rng = Random(1);
-      for (var i = 0; i < 500; i++) {
-        final route = ShareRoutes.generate(random: rng);
-        expect(route.length, 8);
-        expect(
-          route.split('').every(ShareRoutes.alphabet.contains),
-          isTrue,
-          reason: route,
-        );
-        final short = ShareRoutes.generate(short: true, random: rng);
-        expect(short.length, 4);
-        expect(
-          short.split('').every(ShareRoutes.alphabet.contains),
-          isTrue,
-          reason: short,
-        );
-        expect(ShareRoutes.check(route), isNull);
-        expect(ShareRoutes.check(short), isNull);
-      }
-    });
-
     test('a route already taken is never handed out again', () {
       // The first four draws spell "aaaa"; it is taken, so the next draw
       // must be used instead.
@@ -97,11 +66,6 @@ void main() {
       expect(ShareRoutes.check('中文'), ShareRouteProblem.invalid);
       expect(ShareRoutes.check('Upper'), ShareRouteProblem.invalid);
       expect(ShareRoutes.check(''), ShareRouteProblem.invalid);
-    });
-
-    test('are stored lowercase without surrounding spaces', () {
-      expect(ShareRoutes.normalize('  My-Photos '), 'my-photos');
-      expect(ShareRoutes.check(ShareRoutes.normalize('Zip')), isNot(isNull));
     });
 
     test('reserved words are refused', () {

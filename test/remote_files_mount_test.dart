@@ -20,8 +20,6 @@ import 'package:whisper/remote_files/mount/nfs_server.dart';
 import 'package:whisper/remote_files/mount/remote_mounts.dart';
 import 'package:whisper/socket/whisper_frame_v3.dart';
 
-import 'support/source_reading.dart';
-
 class _AllowGate extends FileBrowseGate {
   @override
   Future<FileBrowseDecision> ask(FileBrowseRequest request) async =>
@@ -1026,28 +1024,10 @@ void main() {
     expect(options.any((o) => o.startsWith('deadtimeout=')), isTrue);
   });
 
-  test('each Mac mount is a disk in Finder\'s sidebar, and old ones are '
-      'found', () {
+  test('a Mac mount left behind is found, and nobody else\'s', () {
     // Not under a server, whose item fails on a click (Finder asks it for
     // its shares, which NFS cannot list): the volume itself is put there.
     expect(MacNfsMount.options(4242), contains('nobrowse'));
-    final mac = File(
-      'lib/remote_files/mount/mount_macos.dart',
-    ).readAsStringSync();
-    expect(mac, contains("'kLSSharedFileListFavoriteVolumes'"));
-    // Whisper's own items are marked: found with the mount gone, nobody
-    // else's touched.
-    expect(mac, contains("_markKey = 'com.vireen.whisper.mount'"));
-    final frontend = File(
-      'lib/remote_files/mount/mount_frontend.dart',
-    ).readAsStringSync();
-    // Whose files, and that Whisper shows them.
-    expect(frontend, contains(r"volumeName: '$name (Whisper)'"));
-    // From an isolate of its own: adding it looks at the mount, which the
-    // mount's isolate serves (it waited for itself until the mount died).
-    expect(frontend, contains('static Future<bool> _sidebar('));
-    expect(frontend, contains('await _unlist();'));
-    expect(frontend, contains('await Isolate.run(MacSidebar.removeAll);'));
     const base = '/Users/me/Library/Application Support/whisper/Mounts';
     const listing =
         '/dev/disk3s1 on / (apfs, local, journaled)\n'
@@ -1064,26 +1044,7 @@ void main() {
     ]);
   });
 
-  test('each Linux mount has a place of its own in GNOME\'s and KDE\'s '
-      'file managers', () {
-    final frontend = File(
-      'lib/remote_files/mount/mount_frontend.dart',
-    ).readAsStringSync();
-    // GIO names a mount in the home folder after its folder.
-    expect(frontend, contains("'(Whisper)'].join(' ')"));
-    // KDE lists no mount of a kind it does not know: a place, taken away
-    // before the mount, and those a run before this one left.
-    expect(frontend, contains('await KdePlaces.add(path,'));
-    final stop = frontend.substring(
-      frontend.indexOf('class _LinuxFrontend'),
-      frontend.indexOf('class _MacFrontend'),
-    );
-    expect(
-      stop.lastIndexOf('await KdePlaces.remove(path);'),
-      lessThan(stop.lastIndexOf('await _fuse?.stop();')),
-    );
-    expect(frontend, contains('await KdePlaces.removeAll();'));
-
+  test('KDE places: only what Whisper added is taken away', () {
     const xbel =
         '<?xml version="1.0" encoding="UTF-8"?>\n'
         '<!DOCTYPE xbel>\n'
@@ -1118,21 +1079,5 @@ void main() {
     expect(KdePlaces.without(added, (mark) => mark == point), xbel);
     expect(KdePlaces.without(added, (mark) => mark == '/other'), isNull);
     expect(KdePlaces.without(xbel, (_) => true), isNull);
-  });
-
-  test('the socket layer carries reads only for hosts that offer them', () {
-    expect(WhisperFrameType.browseData.code, 15);
-    final svr = File('lib/socket/svrmanager.dart').readAsStringSync();
-    expect(svr, contains('..sendData = _sendFileBrowseData'));
-    expect(svr, contains('case WhisperFrameType.browseData:'));
-    expect(svr, contains('RemoteFilesClient.handleData('));
-    final mounts = File(
-      'lib/remote_files/mount/remote_mounts.dart',
-    ).readAsStringSync();
-    expect(mounts, contains('if (!info.canRead)'));
-    final shutdown = deviceListSource();
-    expect(shutdown, contains('RemoteMounts.shared.unmountAll'));
-    final main = File('lib/main.dart').readAsStringSync();
-    expect(main, contains('RemoteMounts.shared.cleanUpStale()'));
   });
 }

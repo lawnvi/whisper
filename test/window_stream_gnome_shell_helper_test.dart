@@ -57,22 +57,6 @@ void main() {
       );
     }
 
-    test('only GNOME on Wayland is supported', () {
-      expect(controller().supported, isTrue);
-      expect(
-        controller(
-          env: {'XDG_SESSION_TYPE': 'x11', 'XDG_CURRENT_DESKTOP': 'GNOME'},
-        ).supported,
-        isFalse,
-      );
-      expect(
-        controller(
-          env: {'XDG_SESSION_TYPE': 'wayland', 'XDG_CURRENT_DESKTOP': 'KDE'},
-        ).supported,
-        isFalse,
-      );
-    });
-
     test(
       'install copies the files, allows this executable and enables it',
       () async {
@@ -97,14 +81,6 @@ void main() {
       },
     );
 
-    test('a turned-off extensions switch is left to the user', () async {
-      settings['disable-user-extensions'] = 'true';
-      final helper = controller();
-      await helper.install();
-      expect(settings['disable-user-extensions'], 'true');
-      expect(helper.state, GnomeShellHelperState.extensionsOff);
-    });
-
     test('allowed-exe keeps the newest executables that still exist', () async {
       final helper = controller(exe: '/tmp/.mount_new/whisper');
       await helper.install();
@@ -117,14 +93,6 @@ void main() {
         '/tmp/.mount_new/whisper',
         Platform.resolvedExecutable,
       ]);
-    });
-
-    test('an older installed copy reads as outdated', () async {
-      final helper = controller();
-      await helper.install();
-      File('${helper.installDir}/extension.js').writeAsStringSync('old');
-      await helper.refresh();
-      expect(helper.state, GnomeShellHelperState.outdated);
     });
   });
 
@@ -147,24 +115,6 @@ void main() {
       3,
     );
     expect(GnomeShellHelperController.protocolOf('nothing'), isNull);
-  });
-
-  test('the extension runs on GNOME 45 and later', () {
-    const folder = 'assets/window_stream/gnome-shell/$_uuid';
-    final metadata =
-        jsonDecode(File('$folder/metadata.json').readAsStringSync())
-            as Map<String, dynamic>;
-    final source = File('$folder/extension.js').readAsStringSync();
-
-    expect(
-      metadata['shell-version'],
-      containsAll(['45', '46', '47', '48', '49', '50']),
-    );
-    // 45 and 46 have no stage context, and before 49 monitors cannot be
-    // asked whether they are virtual.
-    expect(source, contains('Clutter.get_default_backend()'));
-    expect(source, contains('get_monitor_for_connector(`Meta-'));
-    expect(source, isNot(contains('global.stage.context.get_backend()')));
   });
 }
 

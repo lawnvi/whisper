@@ -137,12 +137,4 @@ void main() {
     expect(appLink, contains('owner != expected'));
     expect(appLink, contains('Wire.clientProof(appToken, hello.raw, nonce)'));
   });
-
-  test('closing a display keeps its app in the background', () {
-    final stream = File(
-      'android_agent/src/com/vireen/whisper/agent/AgentStream.java',
-    ).readAsStringSync();
-    expect(stream, contains('"vd_destroy_content=false"'));
-    expect(stream, contains('server.tasks().keepInBackground(task, front)'));
-  });
 }

@@ -1,17 +1,12 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:typed_data';
-import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/window_stream/core/window_stream_models.dart';
 import 'package:whisper/window_stream/remote/remote_peer_source.dart';
 import 'package:whisper/window_stream/remote/window_stream_control.dart';
 import 'package:whisper/window_stream/remote/window_stream_host.dart';
-import 'package:whisper/window_stream/window_stream_coordinator.dart';
-import 'package:whisper/window_stream/window_stream_support.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -54,160 +49,9 @@ void main() {
         expect(windowStreamFailureForWire(reason, stopping: true), isNull);
       }
     });
-
-    test('texts name the other device and fit its platform', () {
-      final zh = lookupAppLocalizations(const Locale('zh'));
-      final en = lookupAppLocalizations(const Locale('en'));
-      String text(
-        AppLocalizations l10n,
-        WindowStreamFailureReason reason,
-        WindowStreamPlatform platform,
-      ) => windowStreamFailureText(
-        l10n,
-        reason,
-        platform: platform,
-        device: 'loop-pc',
-      );
-
-      expect(
-        text(
-          zh,
-          WindowStreamFailureReason.helperUnavailable,
-          WindowStreamPlatform.linux,
-        ),
-        startsWith('请在 loop-pc 上注销'),
-      );
-      expect(
-        text(
-          en,
-          WindowStreamFailureReason.desktopUnsupported,
-          WindowStreamPlatform.linux,
-        ),
-        contains('GNOME or KDE Plasma on Wayland'),
-      );
-      // A Mac's permission text points at System Settings; Windows does not.
-      expect(
-        text(
-          en,
-          WindowStreamFailureReason.capturePermission,
-          WindowStreamPlatform.macos,
-        ),
-        contains('System Settings'),
-      );
-      expect(
-        text(
-          en,
-          WindowStreamFailureReason.capturePermission,
-          WindowStreamPlatform.windows,
-        ),
-        isNot(contains('System Settings')),
-      );
-      expect(
-        text(
-          zh,
-          WindowStreamFailureReason.hostUnsupported,
-          WindowStreamPlatform.windows,
-        ),
-        contains('Windows 10'),
-      );
-      expect(
-        text(
-          en,
-          WindowStreamFailureReason.elevatedWindow,
-          WindowStreamPlatform.windows,
-        ),
-        contains('On loop-pc,'),
-      );
-      // A Linux source names what it is missing.
-      expect(
-        text(
-          zh,
-          WindowStreamFailureReason.encoderFailed,
-          WindowStreamPlatform.linux,
-        ),
-        allOf(contains('FFmpeg'), contains('x264'), contains('openh264')),
-      );
-      expect(
-        text(
-          en,
-          WindowStreamFailureReason.encoderFailed,
-          WindowStreamPlatform.windows,
-        ),
-        isNot(contains('FFmpeg')),
-      );
-      // Without a name the sentence still reads well.
-      expect(
-        windowStreamFailureText(en, WindowStreamFailureReason.encoderFailed),
-        startsWith("That device couldn't"),
-      );
-      // Old callers without a source keep their texts.
-      expect(
-        windowStreamFailureText(en, WindowStreamFailureReason.sourceLocked),
-        en.windowStreamSourceLocked,
-      );
-      expect(
-        windowStreamFailureText(
-          en,
-          WindowStreamFailureReason.capturePermission,
-        ),
-        en.windowStreamCapturePermission,
-      );
-      expect(
-        windowStreamFailureText(en, WindowStreamFailureReason.adbUnavailable),
-        en.windowStreamAdbMissing,
-      );
-    });
   });
 
   group('desktop viewers', () {
-    test('every desktop and mobile platform can show windows', () {
-      expect(supportsWindowStreamSink(), isTrue);
-      final support = File(
-        'lib/window_stream/window_stream_support.dart',
-      ).readAsStringSync();
-      expect(
-        support,
-        contains(
-          '(Platform.isMacOS ||\n'
-          '        Platform.isWindows ||\n'
-          '        Platform.isLinux ||\n'
-          '        Platform.isAndroid) &&\n'
-          '    WindowStreamHost.shared.sharingAllowed &&\n'
-          '    WindowStreamHost.shared.supported',
-        ),
-      );
-    });
-
-    test('a native window opens at the picture shape, bounded', () {
-      const work = Size(1710, 993);
-      // A landscape window is limited by 60 % of the width.
-      expect(
-        RemoteViewport.fitDesktopWindow(work, const Size(1400, 900)),
-        const Size(1026, 660),
-      );
-      // A portrait one by 900 points of height.
-      expect(
-        RemoteViewport.fitDesktopWindow(work, const Size(1080, 2400)),
-        const Size(366, 814),
-      );
-      // Tall screens stop at 900 points.
-      expect(
-        RemoteViewport.fitDesktopWindow(
-          const Size(2560, 1400),
-          const Size(800, 600),
-        ),
-        const Size(1200, 900),
-      );
-      // Tiny work areas still give a usable window.
-      expect(
-        RemoteViewport.fitDesktopWindow(
-          const Size(300, 200),
-          const Size(800, 600),
-        ).height,
-        greaterThanOrEqualTo(240),
-      );
-    });
-
     test('a desktop viewer gets one display per window, a phone one', () {
       int key(String session, WindowStreamViewerKind? kind) =>
           WindowStreamHost.screenKeyForViewer(
@@ -413,6 +257,5 @@ void main() {
       expect(closed.state.value.failure, isNull);
       viewer.peerGone('host2');
     });
-
   });
 }

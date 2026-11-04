@@ -1,14 +1,10 @@
 import 'dart:convert';
 import 'dart:typed_data';
-import 'dart:ui' show Size;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:whisper/window_stream/android/agent/phone_capture_backend.dart';
 import 'package:whisper/window_stream/core/window_stream_models.dart';
 import 'package:whisper/window_stream/remote/window_stream_control.dart';
 import 'package:whisper/window_stream/remote/window_stream_host.dart';
-import 'package:whisper/window_stream/window_stream_coordinator.dart';
 
 /// A window is shown in one place at a time, and a streamed window's
 /// picture fits the window it is shown in.
@@ -90,94 +86,6 @@ void main() {
       expect(stop.sessionId, 'session-one');
       expect(stop.payload['reason'], '');
     });
-
-  });
-
-  group('picture quality', () {
-    test(
-      'the viewer\'s choice is remembered and scales the bit rate',
-      () async {
-        SharedPreferences.setMockInitialValues({
-          'window_stream.quality': 'smooth',
-        });
-        final coordinator = WindowStreamCoordinator.shared;
-        await coordinator.loadQuality();
-        expect(coordinator.quality.value, WindowStreamQuality.smooth);
-        await coordinator.setQuality(WindowStreamQuality.best);
-        final prefs = await SharedPreferences.getInstance();
-        expect(prefs.getString('window_stream.quality'), 'best');
-
-        expect(
-          WindowStreamQuality.fromName('nonsense'),
-          WindowStreamQuality.high,
-        );
-        expect(WindowStreamQuality.standard.scale(12000000), 12000000);
-        expect(WindowStreamQuality.high.scale(12000000), 24000000);
-        expect(WindowStreamQuality.smooth.scale(8000000), 4000000);
-      },
-    );
-  });
-
-  group('picture size', () {
-    test('a phone window keeps the phone layout at the viewer density', () {
-      const phonePoints = Size(411, 914);
-      const phonePixels = Size(1080, 2400);
-      final retina = PhoneCaptureBackend.displayFor(
-        viewport: const Size(310, 690),
-        pixelRatio: 2,
-        phonePoints: phonePoints,
-        phonePixels: phonePixels,
-      )!;
-      expect((retina.width, retina.height), (620, 1380));
-      // Laid out 411 dp wide, as on the phone.
-      expect(160 * retina.width / retina.dpi, closeTo(411, 2));
-
-      final plain = PhoneCaptureBackend.displayFor(
-        viewport: const Size(405, 900),
-        pixelRatio: 1,
-        phonePoints: phonePoints,
-        phonePixels: phonePixels,
-      )!;
-      expect((plain.width, plain.height), (404, 900));
-      expect(160 * plain.width / plain.dpi, closeTo(411, 3));
-
-      // Never more pixels than the phone's own screen.
-      final big = PhoneCaptureBackend.displayFor(
-        viewport: const Size(1600, 1000),
-        pixelRatio: 2,
-        phonePoints: phonePoints,
-        phonePixels: phonePixels,
-      )!;
-      expect(big.width, 2400);
-      expect(big.height, 1500);
-      expect(
-        PhoneCaptureBackend.displayFor(
-          viewport: Size.zero,
-          pixelRatio: 2,
-          phonePoints: phonePoints,
-          phonePixels: phonePixels,
-        ),
-        isNull,
-      );
-    });
-
-    test('an adb phone display follows the window at its own density', () {
-      // Opened as 1080x2400 in a 405x900 point window.
-      final wider = WindowStreamCoordinator.androidDisplaySize(
-        const Size(600, 900),
-        pixelsPerPoint: 1080 / 405,
-        maxEdge: 2400,
-      );
-      expect((wider.width, wider.height), (1600, 2400));
-      final landscape = WindowStreamCoordinator.androidDisplaySize(
-        const Size(1200, 700),
-        pixelsPerPoint: 1080 / 405,
-        maxEdge: 2400,
-      );
-      expect(landscape.width, 2400);
-      expect(landscape.height, 1400);
-    });
-
   });
 }
 

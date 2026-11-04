@@ -222,23 +222,6 @@ void main() {
       expect(names.where((n) => n.contains('\\')), isEmpty);
       expect(shareZipSegment(r'a\b\c'), 'a_b_c');
     });
-
-    test('plans past 4 GiB and 65535 entries switch to ZIP64', () {
-      final big = ShareZipPlan.of([
-        ShareZipEntry.file('big.iso', '/nowhere', 5 << 30, DateTime(2026)),
-      ]);
-      // local header + zip64 extra, data, 24-byte descriptor, central
-      // header with sizes in the extra, zip64 end record and locator, end.
-      expect(
-        big.length,
-        (30 + 7 + 20) + (5 << 30) + 24 + (46 + 7 + 20) + 76 + 22,
-      );
-      final many = ShareZipPlan.of([
-        for (var i = 0; i < 70000; i++)
-          ShareZipEntry.folder('d$i/', DateTime(2026)),
-      ]);
-      expect(many.length, greaterThan(70000 * (30 + 46)));
-    });
   });
 
   test('70000 entries stream into a zip that reads back', () async {

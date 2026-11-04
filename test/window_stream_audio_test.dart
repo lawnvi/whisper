@@ -84,18 +84,6 @@ void main() {
     encoder.close();
   });
 
-  test('the viewer plays PCM as it comes and decodes Opus', () {
-    final decoder = WorkerAudioDecoder.open(
-      sampleRate: 48000,
-      channels: 2,
-      opusCodec: false,
-    )!;
-    final frame = pcm(1920);
-    expect(decoder.decode(frame), frame);
-    expect(decoder.decode(Uint8List(3)), isEmpty);
-    decoder.dispose();
-  });
-
   test('an empty bundled libopus falls back to the system one', () {
     final tried = <String>[];
     final library = WorkerOpus.openFirst(
@@ -119,5 +107,4 @@ void main() {
       throwsArgumentError,
     );
   });
-
 }

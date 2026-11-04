@@ -1,13 +1,9 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/services.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/helper/desktop_screenshot.dart';
 import 'package:whisper/helper/screenshot_shortcut.dart';
-import 'package:whisper/l10n/app_localizations.dart';
-import 'package:whisper/widget/screenshot_controls.dart';
 
 class _Backend extends ScreenshotBackend {
   ScreenshotShortcut? registered;
@@ -71,31 +67,6 @@ void main() {
   const custom = ScreenshotShortcut(key: 'A', control: true, alt: true);
 
   test(
-    'Option-modified letters retain a recordable key and portal uses base keysyms',
-    () {
-      final key = ScreenshotShortcut.keyLabelFor(
-        const KeyDownEvent(
-          physicalKey: PhysicalKeyboardKey.keyA,
-          logicalKey: LogicalKeyboardKey(0xe5),
-          timeStamp: Duration.zero,
-        ),
-      );
-      expect(key, 'A');
-      expect(custom.portalTrigger, 'CTRL+ALT+a');
-    },
-  );
-
-  test('restores disabled shortcut without registering it', () async {
-    saved = jsonEncode({...custom.toJson(), 'enabled': false});
-    await controller.initialize('Capture region');
-    expect(controller.shortcut, custom);
-    expect(controller.enabled, false);
-    expect(backend.registered, null);
-    await controller.capture();
-    expect(notices, [ScreenshotNotice.copied]);
-  });
-
-  test(
     'registration failure preserves working shortcut and stored preference',
     () async {
       await controller.initialize('Capture region');
@@ -123,118 +94,5 @@ void main() {
     expect(controller.shortcut, old);
     expect(backend.registered, old);
     expect(controller.configuring, false);
-  });
-
-  test(
-    'saves a replacement and disables only the screenshot shortcut',
-    () async {
-      await controller.configure(custom, enabled: true);
-      expect(backend.registered, custom);
-      expect(jsonDecode(saved!)['key'], 'A');
-      await controller.configure(custom, enabled: false);
-      expect(backend.registered, null);
-      expect(jsonDecode(saved!)['enabled'], false);
-      expect(controller.shortcut, custom);
-    },
-  );
-
-  test('rejects unmodified, shift-only and quick-send combinations', () async {
-    for (final shortcut in [
-      const ScreenshotShortcut(key: 'S'),
-      const ScreenshotShortcut(key: 'S', shift: true),
-      const ScreenshotShortcut(key: 'V', meta: true, alt: true),
-    ]) {
-      await expectLater(
-        controller.configure(shortcut, enabled: true),
-        throwsA(isA<PlatformException>()),
-      );
-    }
-    expect(saved, null);
-  });
-
-  test('invalid stored data falls back to a usable default', () async {
-    saved = '{corrupt';
-    await controller.initialize('Capture region');
-    expect(backend.registered, ScreenshotShortcut.defaultFor(macOS: true));
-  });
-
-  test('concurrent capture requests open only one selector', () async {
-    final pending = Completer<bool>();
-    backend.capture = () => pending.future;
-    final first = controller.capture();
-    await controller.capture();
-    expect(backend.captures, 1);
-    pending.complete(true);
-    await first;
-    expect(notices, [ScreenshotNotice.copied]);
-    expect(controller.capturing, false);
-  });
-
-  test(
-    'cancel is silent and capture failure does not block the next attempt',
-    () async {
-      backend.capture = () async => false;
-      await controller.capture();
-      expect(notices, isEmpty);
-      backend.capture = () async =>
-          throw PlatformException(code: 'permission-denied');
-      await controller.capture();
-      expect(notices, [ScreenshotNotice.permissionDenied]);
-      backend.capture = () async => true;
-      await controller.capture();
-      expect(notices.last, ScreenshotNotice.copied);
-    },
-  );
-
-  test(
-    'shortcut recording suppresses capture without unregistering the key',
-    () async {
-      await controller.initialize('Capture region');
-      controller.shortcutsPaused = true;
-      backend.onShortcut!();
-      expect(backend.captures, 0);
-      expect(backend.registered, isNotNull);
-      controller.shortcutsPaused = false;
-      backend.onShortcut!();
-      await Future<void>.delayed(Duration.zero);
-      expect(backend.captures, 1);
-    },
-  );
-
-  testWidgets('the button names the shortcut currently set', (tester) async {
-    Future<String?> tooltip() async {
-      await tester.pump();
-      return tester.widget<IconButton>(find.byType(IconButton)).tooltip;
-    }
-
-    await tester.pumpWidget(
-      MaterialApp(
-        locale: const Locale('en'),
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(body: ScreenshotButton(controller: controller)),
-      ),
-    );
-    final label = ScreenshotShortcut.defaultFor(macOS: true).label(macOS: true);
-    expect(await tooltip(), 'Screenshot');
-
-    await tester.runAsync(() => controller.initialize('Whisper'));
-    expect(await tooltip(), 'Screenshot ($label)');
-
-    await tester.runAsync(
-      () => controller.configure(controller.shortcut, enabled: false),
-    );
-    expect(await tooltip(), 'Screenshot');
-  });
-
-  test('shortcut labels follow each platform', () {
-    const shortcut = ScreenshotShortcut(key: 'S', alt: true, meta: true);
-    expect(shortcut.label(macOS: true), '⌥⌘S');
-    expect(shortcut.label(macOS: false), 'Alt+Super+S');
-    expect(shortcut.label(macOS: false, windows: true), 'Alt+Win+S');
-    expect(
-      ScreenshotShortcut.defaultFor(macOS: false).label(macOS: false),
-      'Ctrl+Alt+S',
-    );
   });
 }

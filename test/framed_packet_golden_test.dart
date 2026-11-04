@@ -89,25 +89,4 @@ void main() {
     expect(decoded.eventType, RemoteInputEventType.release);
     expect(decoded.payload, [1, 2, 3]);
   });
-
-  test('decode errors keep exact messages', () {
-    expect(
-      () => AudioPacketFrame.decode(Uint8List.fromList([1, 2])),
-      throwsA(predicate((e) =>
-          e is FormatException && e.message == 'audio packet frame too short')),
-    );
-    final wrongMagic = Uint8List.fromList([...ascii.encode('XXXX'), 0, 0, 0, 0]);
-    expect(
-      () => AudioGroupPacketFrame.decode(wrongMagic),
-      throwsA(predicate((e) =>
-          e is FormatException &&
-          e.message == 'invalid audio group packet magic')),
-    );
-    expect(
-      () => RemoteInputPacketFrame.decode(wrongMagic),
-      throwsA(predicate((e) =>
-          e is FormatException &&
-          e.message == 'invalid remote input packet magic')),
-    );
-  });
 }

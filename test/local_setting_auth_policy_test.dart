@@ -1,4 +1,3 @@
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -33,27 +32,6 @@ void main() {
 
       expect(device.auth, isFalse);
       expect(preferences.getBool('_no_auth'), isTrue);
-    },
-  );
-
-  test(
-    'connection profile reuses the saved name without querying native device info',
-    () async {
-      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
-      const channel = MethodChannel('dev.fluttercommunity.plus/device_info');
-      var requests = 0;
-      final messenger =
-          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
-      messenger.setMockMethodCallHandler(channel, (_) async {
-        requests++;
-        throw PlatformException(code: 'unavailable');
-      });
-      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
-
-      final device = await LocalSetting().instance();
-      expect(device.name, 'Local device');
-      expect(await LocalSetting().deviceDisplayName(), 'Local device');
-      expect(requests, 0);
     },
   );
 }

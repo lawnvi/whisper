@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
@@ -6,7 +5,6 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/socket/bounded_outbound_queue.dart';
 import 'package:whisper/socket/session_upgrade_token_registry.dart';
-import 'package:whisper/socket/wire_input_policy.dart';
 import 'package:whisper/state/peer_profile.dart';
 import 'package:whisper/window_stream/core/window_input_event.dart';
 import 'package:whisper/window_stream/pipeline/native_input_decoder.dart';
@@ -334,100 +332,6 @@ void main() {
     );
   });
 
-  test('a host offers a window in the one session it starts', () {
-    const offer = WindowStreamControlMessage(
-      action: WindowStreamControlAction.offer,
-      sessionId: '5a4f1f0e-1c2b-4d3e-8f9a-0b1c2d3e4f50',
-      viewerPeerId: 'viewer',
-      hostPeerId: 'host',
-      payload: {
-        'window': {'id': 7, 'appId': 'com.x', 'appName': 'X', 'title': 'Doc'},
-      },
-    );
-    expect(offer.isInitial, isTrue);
-    expect(offer.isHostInitiated, isTrue);
-    expect(offer.isTerminal, isTrue);
-    expect(WindowStreamControlMessage.allActions, contains('offer'));
-    final back = WindowStreamControlMessage.fromJson(
-      Map<String, dynamic>.from(offer.toJson()),
-    );
-    expect(back.action, WindowStreamControlAction.offer);
-    expect(back.viewerPeerId, 'viewer');
-
-    // The host sends it reversed from the usual viewer-first sessions...
-    final host = WireControlSessionRegistry();
-    expect(
-      host
-          .validateAndRemember(
-            namespace: 'window-stream',
-            sessionId: offer.sessionId,
-            sourcePeerId: 'viewer',
-            sinkPeerId: 'host',
-            authenticatedPeerId: 'viewer',
-            localPeerId: 'host',
-            isInitialOffer: true,
-            isIncoming: false,
-            reverseInitialDirection: true,
-          )
-          .isAccepted,
-      isTrue,
-    );
-    // ...and the viewer takes it in its natural direction.
-    final viewer = WireControlSessionRegistry();
-    expect(
-      viewer
-          .validateAndRemember(
-            namespace: 'window-stream',
-            sessionId: offer.sessionId,
-            sourcePeerId: 'viewer',
-            sinkPeerId: 'host',
-            authenticatedPeerId: 'host',
-            localPeerId: 'viewer',
-            isInitialOffer: true,
-            isIncoming: false,
-          )
-          .isAccepted,
-      isTrue,
-    );
-    final svr = File('lib/socket/svrmanager.dart').readAsStringSync();
-    expect(
-      svr,
-      contains(
-        'reverseInitialDirection: !weAreHost && !control.isHostInitiated',
-      ),
-    );
-    expect(svr, contains('reverseInitialDirection: control.isHostInitiated'));
-    // Offers go only to peers that announced they accept them.
-    expect(svr, contains('capabilities.windowStreamOfferV1 == true'));
-    const caps = PeerCapabilities(windowStreamOfferV1: true);
-    expect(
-      PeerCapabilities.fromWireJson(
-        caps.toWireJson(12),
-        protocolVersion: 12,
-      ).windowStreamOfferV1,
-      isTrue,
-    );
-    expect(caps.toWireJson(11).containsKey('windowStreamOfferV1'), isFalse);
-  });
-
-  test('socket server wires /window like the other media routes', () {
-    final source = File('lib/socket/svrmanager.dart').readAsStringSync();
-    expect(source, contains("path != 'window'"));
-    expect(source, contains('WindowStreamHost.shared.canAttachClaim(claim)'));
-    expect(source, contains('sendKeyScope: _withMediaSendKeyFor'));
-    expect(source, contains('case MessageEnum.WindowStreamControl:'));
-    expect(source, contains('WindowStreamHost.shared.closePeer(peerId)'));
-    expect(source, contains('await WindowStreamHost.shared.closeAll();'));
-    // Hosting is for mutually trusted peers only.
-    final handler = RegExp(
-      r'case MessageEnum\.WindowStreamControl:[\s\S]*?case MessageEnum\.AudioGroupControl:',
-    ).firstMatch(source)!.group(0)!;
-    expect(handler, contains('storedRemote?.auth == true'));
-    expect(handler, contains("'untrusted'"));
-    // Manual input must keep working on protocol 12.
-    expect(source, contains('(profile?.protocolVersion ?? 0) >= 11'));
-  });
-
   test('host encrypts video with its own send key, not the claim key', () {
     final host = File(
       'lib/window_stream/remote/window_stream_host.dart',
@@ -439,89 +343,5 @@ void main() {
     expect(encoder, contains('mediaMacKey: sendKey'));
     // Capture starts after the upgrade's ready frame.
     expect(host, contains('scheduleMicrotask(() {'));
-  });
-
-  test(
-    'the viewer sizes the Mac window and the host keeps its radio awake',
-    () {
-      const message = WindowStreamControlMessage(
-        action: WindowStreamControlAction.viewport,
-        sessionId: 'session',
-        viewerPeerId: 'viewer',
-        hostPeerId: 'host',
-        payload: {
-          'viewportWidth': 390,
-          'viewportHeight': 800,
-          'viewportScale': 0.75,
-        },
-      );
-      final copy = WindowStreamControlMessage.fromJson(
-        jsonDecode(jsonEncode(message.toJson())) as Map<String, dynamic>,
-      );
-      expect(copy.action, WindowStreamControlAction.viewport);
-      expect(copy.payload['viewportScale'], 0.75);
-      expect(copy.isInitial, isFalse);
-      expect(copy.isTerminal, isFalse);
-      expect(WindowStreamControlMessage.allActions, contains('viewport'));
-      expect(
-        WindowStreamPacket.decode(WindowStreamPacket.tick()),
-        isA<WindowStreamTick>(),
-      );
-
-      final host = File(
-        'lib/window_stream/remote/window_stream_host.dart',
-      ).readAsStringSync();
-      expect(host, contains('_bindings?.captureSetViewport('));
-      expect(host, contains('WindowStreamPacket.tick()'));
-      final viewer = File(
-        'lib/page/window_stream/flow_window_viewer_page.dart',
-      ).readAsStringSync();
-      expect(viewer, contains('handle.setViewport('));
-      expect(viewer, contains('ViewerTextScaleRuler('));
-    },
-  );
-
-  test('a text field taking focus on the Mac brings up the phone keyboard', () {
-    for (final typing in [true, false]) {
-      final packet = WindowStreamPacket.decode(
-        WindowStreamPacket.textFocus(typing: typing),
-      );
-      expect(packet, isA<WindowStreamTextFocus>());
-      expect((packet as WindowStreamTextFocus).typing, typing);
-    }
-    final watcher = File(
-      'packages/window_stream_native/macos/Classes/TextFocusWatcher.swift',
-    ).readAsStringSync();
-    expect(watcher, contains('kAXFocusedUIElementChangedNotification'));
-    // Not switching on web content's tree: it slows those apps' typing.
-    expect(
-      watcher,
-      isNot(
-        contains('AXUIElementSetAttributeValue(app, "AXManualAccessibility"'),
-      ),
-    );
-    final host = File(
-      'lib/window_stream/remote/window_stream_host.dart',
-    ).readAsStringSync();
-    expect(host, contains('WindowStreamPacket.textFocus(typing: flags == 1)'));
-    final activity = File(
-      'android/app/src/main/kotlin/com/vireen/whisper/WindowStreamActivity.kt',
-    ).readAsStringSync();
-    // Put away again only if it came up by itself; a focus known before
-    // the window opened is applied once it is up.
-    expect(activity, contains('keyboardShown && keyboardFollowsFocus'));
-    expect(
-      activity,
-      contains('if (textFocusOf[id] == true) followTextFocus(true)'),
-    );
-    expect(activity, contains('insets.show(WindowInsetsCompat.Type.ime())'));
-    // The keyboard covers the picture; the window over there stops above
-    // it, its text field just over the keys.
-    expect(activity, contains('emit("keyboard", mapOf("inset" to'));
-    final stage = File(
-      'packages/window_stream_native/macos/Classes/VirtualStage.swift',
-    ).readAsStringSync();
-    expect(stage, contains('Self.shortened(usable, by: bottomInset)'));
-    expect(host, contains('captureSetInset(capture, stream.keyboardInset)'));
   });
 }

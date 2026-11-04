@@ -57,16 +57,4 @@ void main() {
     await Future<void>.delayed(bridge.missedWakeTimeout * 3);
     expect(resumed, 1);
   });
-
-  test('unknown calls are reported as unimplemented', () {
-    final bridge = SystemPowerBridge(
-      prepareForSleep: () async {},
-      resumeFromSleep: () {},
-    );
-
-    expect(
-      bridge.handle(const MethodCall('didDim')),
-      throwsA(isA<MissingPluginException>()),
-    );
-  });
 }

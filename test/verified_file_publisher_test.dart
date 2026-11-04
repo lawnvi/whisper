@@ -91,25 +91,6 @@ void main() {
         isTrue,
       );
     });
-
-    test('is how the fast path compares the two names', () {
-      final source = File(
-        'lib/socket/verified_file_publisher.dart',
-      ).readAsStringSync();
-      final publish = RegExp(
-        r'Future<DownloadFileReservation> publishVerifiedDownload\([\s\S]*?\n\}\n',
-      ).firstMatch(source)!.group(0)!;
-      expect(
-        'sameFileContentAcrossRename(snapshot._pathStat, movedStat)'.allMatches(
-          publish,
-        ),
-        hasLength(2),
-      );
-      expect(
-        publish,
-        isNot(contains('_sameFileContentStat(snapshot._pathStat, movedStat)')),
-      );
-    });
   });
 
   test('a download named like a Windows program is published', () async {

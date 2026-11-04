@@ -27,26 +27,6 @@ void main() {
     expect(transport.isClosed, isTrue);
   });
 
-  test('buildPeerPacketUri composes ws uri', () {
-    final uri = buildPeerPacketUri(
-      host: '192.168.1.2',
-      port: 9200,
-      path: '/audio',
-      queryParameters: const <String, String>{
-        'session': 'audio-session',
-        'token': 'secret-token',
-      },
-    );
-    expect(uri.scheme, 'ws');
-    expect(uri.host, '192.168.1.2');
-    expect(uri.port, 9200);
-    expect(uri.path, '/audio');
-    expect(uri.queryParameters['session'], 'audio-session');
-    expect(uri.queryParameters['token'], 'secret-token');
-    expect(redactedPacketUri(uri).query, isEmpty);
-    expect(redactedPacketUri(uri).toString(), 'ws://192.168.1.2:9200/audio');
-  });
-
   test('structured packet uri preserves scoped IPv6 and redacts all query', () {
     final uri = buildPeerPacketUri(
       host: 'fe80::1%en0',

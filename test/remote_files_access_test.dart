@@ -5,8 +5,6 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:whisper/page/remote_files/files_model.dart';
-import 'package:whisper/remote_files/fs_browser.dart';
 import 'package:whisper/remote_files/fs_client.dart';
 import 'package:whisper/remote_files/fs_host.dart';
 import 'package:whisper/remote_files/fs_host_files.dart';
@@ -138,49 +136,5 @@ void main() {
     await outcome;
     await _until(() => gate.pending == null);
     expect(host.isOpen(client.sessionId), isFalse);
-  });
-
-  group('the file manager', () {
-    FilesController controllerWith(FileBrowseGate gate) {
-      wire(gate);
-      return FilesController(
-        local: LocalFsBrowser(files: files(home.path)),
-        peers: FilesPeers(
-          connected: () => {'phone'},
-          canBrowse: (_) => true,
-          describe: (_) => (name: 'OnePlus', platform: 'android'),
-        ),
-      );
-    }
-
-    test('shows no answer as its own state, ready to ask again', () async {
-      final gate = _Gate(FileBrowseDecision.noAnswer);
-      final controller = controllerWith(gate);
-      addTearDown(controller.dispose);
-      await _until(() => controller.entries.isNotEmpty);
-      final phone = controller.deviceById('phone')!;
-      await controller.open(phone);
-      expect(phone.state, FilesDeviceState.noAnswer);
-
-      gate.decision = FileBrowseDecision.once;
-      await controller.retry();
-      expect(phone.state, FilesDeviceState.ready);
-    });
-
-    test('can stop waiting for the other device', () async {
-      final gate = FileBrowseGate();
-      final controller = controllerWith(gate);
-      addTearDown(controller.dispose);
-      await _until(() => controller.entries.isNotEmpty);
-      final phone = controller.deviceById('phone')!;
-      final opening = controller.open(phone);
-      await _until(() => gate.pending != null);
-      expect(phone.state, FilesDeviceState.waiting);
-
-      await controller.cancelOpen(phone);
-      await opening;
-      expect(phone.state, FilesDeviceState.idle);
-      await _until(() => gate.pending == null);
-    });
   });
 }

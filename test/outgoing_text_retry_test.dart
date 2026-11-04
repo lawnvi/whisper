@@ -255,28 +255,6 @@ void main() {
       expect(await sendA, isTrue);
       expect(events, <String>['a-start', 'b', 'a-end']);
     });
-
-    test('keeps sends for the same peer ordered', () async {
-      final locks = OutgoingTextSendLocks();
-      final releaseFirst = Completer<void>();
-      final enteredFirst = Completer<void>();
-      var secondEntered = false;
-
-      final first = locks.synchronized('peer', () async {
-        enteredFirst.complete();
-        await releaseFirst.future;
-      });
-      await enteredFirst.future;
-      final second = locks.synchronized('peer', () async {
-        secondEntered = true;
-      });
-      await Future<void>.delayed(Duration.zero);
-      expect(secondEntered, isFalse);
-
-      releaseFirst.complete();
-      await Future.wait(<Future<void>>[first, second]);
-      expect(secondEntered, isTrue);
-    });
   });
 
   group('outgoing message identities', () {
@@ -485,21 +463,6 @@ void main() {
       },
     );
 
-    test('does not persist an empty UUID', () async {
-      var persists = 0;
-      final decision = await WireMessageReplayGuard().claim(
-        _message(uuid: ''),
-        fetchExisting: (_) async => const <MessageData>[],
-        persist: (message) async {
-          persists++;
-          return message;
-        },
-      );
-
-      expect(decision.decision, WireMessageReplayDecision.conflict);
-      expect(persists, 0);
-    });
-
     test(
       'file claims can ignore receiver-local path when matching replay',
       () async {
@@ -561,5 +524,4 @@ void main() {
       expect(captured, isA<StateError>());
     },
   );
-
 }

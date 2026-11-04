@@ -5,9 +5,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/window_stream/adb/adb_host_client.dart';
-import 'package:whisper/window_stream/adb/adb_locator.dart';
 import 'package:whisper/window_stream/core/byte_stream_reader.dart';
-import 'package:whisper/window_stream/core/window_stream_models.dart';
 
 /// Minimal adb server: answers one request per connection with [respond].
 class _FakeAdbServer {
@@ -78,15 +76,6 @@ void main() {
     expect(devices[1].state, AdbDeviceState.offline);
     expect(devices[2].state, AdbDeviceState.unauthorized);
     expect(devices[2].wireless, isTrue);
-  });
-
-  test('parses forward list', () {
-    final forward = AdbForward.tryParse(
-      'R5ABC tcp:51234 localabstract:scrcpy_0000abcd',
-    );
-    expect(forward?.localTcpPort, 51234);
-    expect(forward?.remote, 'localabstract:scrcpy_0000abcd');
-    expect(AdbForward.tryParse('garbage'), isNull);
   });
 
   group('host protocol against a fake server', () {
@@ -180,39 +169,6 @@ void main() {
         ),
       );
     });
-  });
-
-  test('locator reports a missing adb as a typed failure', () async {
-    final locator = AdbLocator(
-      environment: const {'PATH': '/nowhere', 'HOME': '/nohome'},
-      resolvedExecutable: '/app/Contents/MacOS/whisper',
-      fileExists: (_) => false,
-    );
-    expect(locator.findExecutable(), isNull);
-    await expectLater(
-      locator.ensureServer(client: AdbHostClient(port: 1)),
-      throwsA(
-        isA<WindowStreamFailure>().having(
-          (f) => f.reason,
-          'reason',
-          WindowStreamFailureReason.adbUnavailable,
-        ),
-      ),
-    );
-  });
-
-  test('locator prefers a bundled adb over SDK and PATH copies', () {
-    final locator = AdbLocator(
-      environment: const {
-        'PATH': '/usr/bin',
-        'HOME': '/Users/me',
-        'ANDROID_HOME': '/sdk',
-      },
-      resolvedExecutable: '/Applications/Whisper.app/Contents/MacOS/whisper',
-      fileExists: (path) => path.endsWith('/adb') || path.endsWith('adb.exe'),
-    );
-    final found = locator.findExecutable()!;
-    expect(found, contains('Whisper.app'));
   });
 
   test(

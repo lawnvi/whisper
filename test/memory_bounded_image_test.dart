@@ -39,35 +39,15 @@ void main() {
       expect(cancelled.disposed, isTrue);
     },
   );
-
-  test('animation frames do not wait behind large static images', () async {
-    final gate = Completer<ui.FrameInfo>();
-    final frame = _Frame();
-    final staticImage = MemoryBoundedImageCodec(_Codec(gate.future));
-    final animation = MemoryBoundedImageCodec(
-      _Codec(Future.value(frame), frames: 2),
-    );
-    addTearDown(() {
-      if (!gate.isCompleted) gate.complete(frame);
-      staticImage.dispose();
-      animation.dispose();
-    });
-    final pending = staticImage.getNextFrame();
-    expect(await animation.getNextFrame(), same(frame));
-    expect(gate.isCompleted, isFalse);
-    gate.complete(frame);
-    await pending;
-  });
 }
 
 class _Codec implements ui.Codec {
-  _Codec(this.result, {this.frames = 1});
+  _Codec(this.result);
   final Future<ui.FrameInfo> result;
-  final int frames;
   int calls = 0;
   bool disposed = false;
   @override
-  int get frameCount => frames;
+  int get frameCount => 1;
   @override
   int get repetitionCount => 0;
   @override

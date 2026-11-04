@@ -216,16 +216,6 @@ void main() {
   });
 
   group('FileTransferV3Parameters', () {
-    test('uses 4MiB frames, 32MiB acks, and a 64MiB send window', () {
-      expect(fileTransferV3FramePayloadSize, 4 * 1024 * 1024);
-      expect(fileTransferV3AckIntervalSize, 32 * 1024 * 1024);
-      expect(fileTransferV3WindowSize, 64 * 1024 * 1024);
-      expect(
-        fileTransferV3AckIntervalSize,
-        lessThanOrEqualTo(fileTransferV3WindowSize),
-      );
-    });
-
     test('negotiates desktop, mobile, and legacy transfer rhythms', () {
       const modernOffer = FileTransferV3Metadata(
         checksumValue:

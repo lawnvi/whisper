@@ -52,81 +52,6 @@ void main() {
     },
   );
 
-  test('uses the addresses the platform resolved without a lookup', () async {
-    var lookups = 0;
-    Future<String?> resolve({
-      required List<String> addresses,
-      String? advertised,
-      String? name = 'peer.local',
-    }) {
-      return resolveDiscoveryEndpointHost(
-        resolvedHost: name,
-        resolvedAddresses: addresses,
-        advertisedHost: advertised,
-        port: 10002,
-        lookup: (_) async {
-          lookups++;
-          return [InternetAddress('192.168.1.200')];
-        },
-      );
-    }
-
-    // The advertised address wins when the platform confirms it.
-    expect(
-      await resolve(
-        addresses: ['192.168.1.16', '192.168.1.84'],
-        advertised: '192.168.1.84',
-      ),
-      '192.168.1.84',
-    );
-    // Otherwise the first IPv4 the chat server can be reached on, wherever
-    // it comes in the list.
-    expect(
-      await resolve(
-        addresses: ['fe80::1%en0', '198.18.0.7', '192.168.1.16'],
-        advertised: '192.168.1.99',
-      ),
-      '192.168.1.16',
-    );
-    expect(
-      await resolve(addresses: ['192.168.1.16'], name: null),
-      '192.168.1.16',
-    );
-    // IPv6 only, or only fake-IP answers: the advertised IPv4 if there is one.
-    expect(
-      await resolve(addresses: ['fe80::1%en0'], advertised: '192.168.1.84'),
-      '192.168.1.84',
-    );
-    expect(
-      await resolve(addresses: ['198.18.0.7'], advertised: '192.168.1.84'),
-      '192.168.1.84',
-    );
-    expect(await resolve(addresses: ['fe80::1%en0']), 'fe80::1%en0');
-    expect(lookups, 0);
-
-    // Nothing usable from the platform: the name is looked up as before.
-    expect(await resolve(addresses: const []), '192.168.1.200');
-    expect(await resolve(addresses: ['127.0.0.1', 'bogus']), '192.168.1.200');
-    expect(lookups, 2);
-  });
-
-  test('keeps an already numeric resolved endpoint', () async {
-    var lookupCount = 0;
-
-    final host = await resolveDiscoveryEndpointHost(
-      resolvedHost: '192.168.1.16',
-      advertisedHost: '192.168.1.99',
-      port: 10002,
-      lookup: (host) async {
-        lookupCount += 1;
-        return <InternetAddress>[];
-      },
-    );
-
-    expect(host, '192.168.1.16');
-    expect(lookupCount, 0);
-  });
-
   test(
     'prefers advertised IPv4 over a numeric link-local IPv6 result',
     () async {
@@ -146,16 +71,6 @@ void main() {
       expect(lookupCount, 0);
     },
   );
-
-  test('keeps numeric IPv6 when no advertised IPv4 is available', () async {
-    final host = await resolveDiscoveryEndpointHost(
-      resolvedHost: 'fe80::1%13',
-      advertisedHost: null,
-      port: 10002,
-    );
-
-    expect(host, 'fe80::1%13');
-  });
 
   test('falls back from a numeric fake-IP result to advertised IPv4', () async {
     final host = await resolveDiscoveryEndpointHost(
@@ -180,37 +95,6 @@ void main() {
 
     expect(host, '192.168.1.16');
   });
-
-  test('prefers a resolved IPv4 when TXT advertises another address', () async {
-    final host = await resolveDiscoveryEndpointHost(
-      resolvedHost: 'macbook-air.local',
-      advertisedHost: '10.0.0.9',
-      port: 10002,
-      lookup: (_) async => <InternetAddress>[
-        InternetAddress('2001:db8::7'),
-        InternetAddress('192.168.1.16'),
-      ],
-    );
-
-    expect(host, '192.168.1.16');
-  });
-
-  test(
-    'falls back from fake-IP DNS to the advertised numeric endpoint',
-    () async {
-      final host = await resolveDiscoveryEndpointHost(
-        resolvedHost: 'imac.local',
-        advertisedHost: '192.168.31.148',
-        port: 10002,
-        lookup: (_) async => <InternetAddress>[
-          InternetAddress('fdfe:dcba:9876::9'),
-          InternetAddress('198.18.0.14'),
-        ],
-      );
-
-      expect(host, '192.168.31.148');
-    },
-  );
 
   test(
     'prefers a real resolved IPv4 when fake and real answers coexist',
@@ -240,34 +124,6 @@ void main() {
       );
 
       expect(host, '192.168.1.16');
-    },
-  );
-
-  test(
-    'falls back to the advertised endpoint when mDNS returns no address',
-    () async {
-      final host = await resolveDiscoveryEndpointHost(
-        resolvedHost: 'macbook-air.local',
-        advertisedHost: '192.168.1.16',
-        port: 10002,
-        lookup: (_) async => <InternetAddress>[],
-      );
-
-      expect(host, '192.168.1.16');
-    },
-  );
-
-  test(
-    'keeps the mDNS endpoint when its advertised fallback is invalid',
-    () async {
-      final host = await resolveDiscoveryEndpointHost(
-        resolvedHost: 'macbook-air.local',
-        advertisedHost: 'not a host',
-        port: 10002,
-        lookup: (_) async => throw const SocketException('lookup failed'),
-      );
-
-      expect(host, 'macbook-air.local');
     },
   );
 

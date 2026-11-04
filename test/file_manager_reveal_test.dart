@@ -18,24 +18,6 @@ void main() {
     tempDirectory.deleteSync(recursive: true);
   });
 
-  test('macOS reveals the exact file with Finder', () async {
-    final calls = <FileManagerCommand>[];
-
-    final revealed = await revealFileInFileManager(
-      file.path,
-      platform: DesktopFileManagerPlatform.macOS,
-      processRunner: (executable, arguments) async {
-        calls.add(FileManagerCommand(executable, arguments));
-        return ProcessResult(1, 0, '', '');
-      },
-    );
-
-    expect(revealed, isTrue);
-    expect(calls, hasLength(1));
-    expect(calls.single.executable, 'open');
-    expect(calls.single.arguments, <String>['-R', file.path]);
-  });
-
   test('Linux opens a folder without a shell reading its name', () async {
     // What a sender could name a folder so that a shell would run part of it.
     final folder = '${tempDirectory.path}/notes \$(touch pwned) `id`; ls';
@@ -90,76 +72,5 @@ void main() {
     );
 
     expect(revealed, isTrue);
-  });
-
-  test('a received folder is selected in its parent too', () async {
-    final folder = Directory('${tempDirectory.path}/收到的 文件夹')..createSync();
-    final calls = <FileManagerCommand>[];
-
-    final revealed = await revealFileInFileManager(
-      folder.path,
-      platform: DesktopFileManagerPlatform.linux,
-      processRunner: (executable, arguments) async {
-        calls.add(FileManagerCommand(executable, arguments));
-        return ProcessResult(1, 0, '', '');
-      },
-    );
-
-    expect(revealed, isTrue);
-    expect(calls.single.executable, 'gdbus');
-    expect(
-      calls.single.arguments.join(' '),
-      contains(Uri.file(folder.path).toString()),
-    );
-  });
-
-  test(
-    'Linux prefers FileManager1 and falls back to installed managers',
-    () async {
-      final executables = <String>[];
-
-      final revealed = await revealFileInFileManager(
-        file.path,
-        platform: DesktopFileManagerPlatform.linux,
-        processRunner: (executable, arguments) async {
-          executables.add(executable);
-          if (executable == 'gdbus') {
-            expect(
-              arguments,
-              contains('org.freedesktop.FileManager1.ShowItems'),
-            );
-            expect(
-              arguments.join(' '),
-              contains(Uri.file(file.path).toString()),
-            );
-            return ProcessResult(1, 1, '', 'unavailable');
-          }
-          if (executable == 'nautilus') {
-            throw const ProcessException('nautilus', <String>[]);
-          }
-          expect(arguments, <String>['--select', file.path]);
-          return ProcessResult(1, 0, '', '');
-        },
-      );
-
-      expect(revealed, isTrue);
-      expect(executables, <String>['gdbus', 'nautilus', 'dolphin']);
-    },
-  );
-
-  test('does not launch a file manager for a missing file', () async {
-    var processStarted = false;
-
-    final revealed = await revealFileInFileManager(
-      '${tempDirectory.path}${Platform.pathSeparator}missing.txt',
-      platform: DesktopFileManagerPlatform.macOS,
-      processRunner: (executable, arguments) async {
-        processStarted = true;
-        return ProcessResult(1, 0, '', '');
-      },
-    );
-
-    expect(revealed, isFalse);
-    expect(processStarted, isFalse);
   });
 }

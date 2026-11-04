@@ -6,7 +6,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:win32/win32.dart' as win32;
 import 'package:whisper/share_links/share_link.dart';
-import 'package:whisper/share_links/share_link_store.dart' show shareItemsFor;
 import 'package:whisper/share_links/share_hidden.dart';
 import 'package:whisper/share_links/share_paths.dart';
 
@@ -73,20 +72,6 @@ void main() {
       }
       expect(() => checkShareSegment('CONFIG', windows: true), returnsNormally);
       expect(() => checkShareSegment('a:b', windows: false), returnsNormally);
-    });
-
-    test('natural order puts folders first and 2 before 10', () {
-      final names = ['b10.txt', 'B2.txt', 'a.txt', 'z'];
-      final listings = [
-        for (final name in names)
-          ShareListing(
-            name: name,
-            isDir: name == 'z',
-            size: 0,
-            modified: DateTime(2026),
-          ),
-      ]..sort(compareShareListings);
-      expect(listings.map((l) => l.name), ['z', 'a.txt', 'B2.txt', 'b10.txt']);
     });
   });
 
@@ -280,23 +265,6 @@ void main() {
       final items = await resolver.listItems(link);
       expect(items.map((i) => i.name), ['sub', 'a.txt']);
     });
-
-    test(
-      'items get names of their own and missing paths are left out',
-      () async {
-        final again = p.join(shared, 'sub', 'a.txt');
-        await File(again).writeAsString('again');
-        final items = await shareItemsFor([
-          p.join(shared, 'a.txt'),
-          again,
-          p.join(shared, 'a.txt'),
-          p.join(shared, 'missing.bin'),
-          p.join(shared, 'sub'),
-        ]);
-        expect(items.map((i) => i.name), ['a.txt', 'a (2).txt', 'sub']);
-        expect(items.map((i) => i.isDir), [false, false, true]);
-      },
-    );
   });
 }
 

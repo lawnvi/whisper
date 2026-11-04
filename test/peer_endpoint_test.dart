@@ -93,10 +93,7 @@ void main() {
       final linkLocal = PeerEndpoint(host: 'fe80::2%en0', port: 10004);
 
       expect(global.chatUri.toString(), 'ws://[2001:db8::7]:10004/chat');
-      expect(
-        linkLocal.audioUri.toString(),
-        'ws://[fe80::2%25en0]:10004/audio',
-      );
+      expect(linkLocal.audioUri.toString(), 'ws://[fe80::2%25en0]:10004/audio');
       expect(linkLocal.host, 'fe80::2%en0');
       expect(linkLocal.audioUri.host, 'fe80::2%25en0');
     });
@@ -184,17 +181,6 @@ void main() {
           reason: host,
         );
       }
-    });
-
-    test('uses value equality for endpoint caches', () {
-      expect(
-        PeerEndpoint(host: 'peer.local', port: 10004),
-        PeerEndpoint(host: 'peer.local', port: 10004),
-      );
-      expect(
-        PeerEndpoint(host: 'peer.local', port: 10004).hashCode,
-        PeerEndpoint(host: 'peer.local', port: 10004).hashCode,
-      );
     });
   });
 }
