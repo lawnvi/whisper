@@ -4,6 +4,8 @@ import 'dart:typed_data';
 
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:whisper/state/connection_coordinator.dart';
+import 'package:whisper/state/connection_models.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/socket/device_identity.dart';
 import 'package:whisper/socket/svrmanager.dart';
@@ -11,66 +13,70 @@ import 'package:whisper/state/peer_endpoint.dart';
 import 'package:whisper/state/peer_reconnect_controller.dart';
 
 void main() {
-  test('manager-owned controller refreshes an endpoint and accelerates retry',
-      () async {
-    final scheduler = _FakeScheduler();
-    final database = LocalDatabase.forTesting(NativeDatabase.memory());
-    addTearDown(database.close);
-    final manager = _manager(
-      scheduler: scheduler,
-      database: database,
-      autoConnectEnabled: () async => false,
-    );
-    addTearDown(() => manager.closeGracefully(
-          closeServer: true,
-          forceServerClose: true,
-        ));
+  test(
+    'manager-owned controller refreshes an endpoint and accelerates retry',
+    () async {
+      final scheduler = _FakeScheduler();
+      final database = LocalDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      final manager = _manager(
+        scheduler: scheduler,
+        database: database,
+        autoConnectEnabled: () async => false,
+      );
+      addTearDown(
+        () =>
+            manager.closeGracefully(closeServer: true, forceServerClose: true),
+      );
 
-    manager.scheduleReconnect('peer-a', '192.168.1.10', 10002);
-    manager.updateReconnectEndpoint('peer-a', '192.168.1.11', 10003);
+      manager.scheduleReconnect('peer-a', '192.168.1.10', 10002);
+      manager.updateReconnectEndpoint('peer-a', '192.168.1.11', 10003);
 
-    expect(manager.reconnectTargetFor('peer-a')?.host, '192.168.1.11');
-    expect(manager.reconnectTargetFor('peer-a')?.port, 10003);
-    expect(
-      scheduler.scheduledDelays,
-      const <Duration>[Duration(seconds: 1), Duration.zero],
-    );
-    expect(scheduler.activeTimerCount, 1);
-  });
+      expect(manager.reconnectTargetFor('peer-a')?.host, '192.168.1.11');
+      expect(manager.reconnectTargetFor('peer-a')?.port, 10003);
+      expect(scheduler.scheduledDelays, const <Duration>[
+        Duration(seconds: 1),
+        Duration.zero,
+      ]);
+      expect(scheduler.activeTimerCount, 1);
+    },
+  );
 
-  test('eligibility is re-read and auto-connect disable suppresses dialing',
-      () async {
-    final scheduler = _FakeScheduler();
-    final database = LocalDatabase.forTesting(NativeDatabase.memory());
-    addTearDown(database.close);
-    var enabled = false;
-    final manager = _manager(
-      scheduler: scheduler,
-      database: database,
-      autoConnectEnabled: () async => enabled,
-    );
-    addTearDown(() => manager.closeGracefully(
-          closeServer: true,
-          forceServerClose: true,
-        ));
+  test(
+    'eligibility is re-read and auto-connect disable suppresses dialing',
+    () async {
+      final scheduler = _FakeScheduler();
+      final database = LocalDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      var enabled = false;
+      final manager = _manager(
+        scheduler: scheduler,
+        database: database,
+        autoConnectEnabled: () async => enabled,
+      );
+      addTearDown(
+        () =>
+            manager.closeGracefully(closeServer: true, forceServerClose: true),
+      );
 
-    manager.scheduleReconnect('peer-a', '192.168.1.10', 10002);
-    await scheduler.runNext();
+      manager.scheduleReconnect('peer-a', '192.168.1.10', 10002);
+      await scheduler.runNext();
 
-    expect(
-      manager.reconnectSuppressionsFor('peer-a'),
-      contains(ReconnectSuppressionReason.autoConnectDisabled),
-    );
-    expect(manager.hasPendingConnectionAttemptForPeer('peer-a'), isFalse);
+      expect(
+        manager.reconnectSuppressionsFor('peer-a'),
+        contains(ReconnectSuppressionReason.autoConnectDisabled),
+      );
+      expect(manager.hasPendingConnectionAttemptForPeer('peer-a'), isFalse);
 
-    enabled = true;
-    manager.scheduleReconnect('peer-b', '192.168.1.12', 10002);
-    await scheduler.runNext();
-    expect(
-      manager.reconnectSuppressionsFor('peer-b'),
-      contains(ReconnectSuppressionReason.trustRevoked),
-    );
-  });
+      enabled = true;
+      manager.scheduleReconnect('peer-b', '192.168.1.12', 10002);
+      await scheduler.runNext();
+      expect(
+        manager.reconnectSuppressionsFor('peer-b'),
+        contains(ReconnectSuppressionReason.trustRevoked),
+      );
+    },
+  );
 
   test('trust revoke and delete invalidate local reconnect policy', () async {
     final scheduler = _FakeScheduler();
@@ -84,10 +90,9 @@ void main() {
       database: database,
       autoConnectEnabled: () async => true,
     );
-    addTearDown(() => manager.closeGracefully(
-          closeServer: true,
-          forceServerClose: true,
-        ));
+    addTearDown(
+      () => manager.closeGracefully(closeServer: true, forceServerClose: true),
+    );
     manager.scheduleReconnect('peer-a', '192.168.1.10', 10002);
 
     await manager.setPeerTrust('peer-a', false);
@@ -113,10 +118,9 @@ void main() {
       database: database,
       autoConnectEnabled: () async => true,
     );
-    addTearDown(() => manager.closeGracefully(
-          closeServer: true,
-          forceServerClose: true,
-        ));
+    addTearDown(
+      () => manager.closeGracefully(closeServer: true, forceServerClose: true),
+    );
     final reserved = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
     final unavailablePort = reserved.port;
     await reserved.close();
@@ -130,10 +134,10 @@ void main() {
     await scheduler.runNext();
     await _waitUntil(() => scheduler.activeTimerCount == 1);
 
-    expect(
-      scheduler.scheduledDelays,
-      const <Duration>[Duration(seconds: 1), Duration(seconds: 2)],
-    );
+    expect(scheduler.scheduledDelays, const <Duration>[
+      Duration(seconds: 1),
+      Duration(seconds: 2),
+    ]);
     expect(manager.hasPendingConnectionAttemptForPeer('peer-a'), isFalse);
   });
 
@@ -148,10 +152,9 @@ void main() {
       database: database,
       autoConnectEnabled: () async => true,
     );
-    addTearDown(() => manager.closeGracefully(
-          closeServer: true,
-          forceServerClose: true,
-        ));
+    addTearDown(
+      () => manager.closeGracefully(closeServer: true, forceServerClose: true),
+    );
     final staleServer = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     final freshServer = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() => staleServer.close(force: true));
@@ -196,6 +199,41 @@ void main() {
     await _waitUntil(() => freshRequests > 0);
   });
 
+  // A phone's system had frozen Whisper there: it never answered, the retries went
+  // on, and its row said 正在连接 for good.
+  test('a device that does not answer does not stay connecting', () async {
+    final scheduler = _FakeScheduler();
+    final database = LocalDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    await _trustPeer(database, 'peer-quiet');
+    final manager = _manager(
+      scheduler: scheduler,
+      database: database,
+      autoConnectEnabled: () async => true,
+    );
+    addTearDown(
+      () => manager.closeGracefully(closeServer: true, forceServerClose: true),
+    );
+    final reserved = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    final unavailablePort = reserved.port;
+    await reserved.close();
+
+    manager.scheduleReconnectTarget(
+      ReconnectTarget.endpoint(
+        peerId: 'peer-quiet',
+        endpoint: PeerEndpoint.loopbackForTesting(port: unavailablePort),
+      ),
+    );
+    await scheduler.runNext();
+    await _waitUntil(() => scheduler.activeTimerCount == 1);
+
+    expect(
+      ConnectionCoordinator().peer('peer-quiet')?.state,
+      ConnectionLifecycleState.disconnected,
+    );
+    expect(scheduler.activeTimerCount, 1, reason: 'it keeps trying');
+  });
+
   test('protocol rejection stops instead of retrying', () async {
     final scheduler = _FakeScheduler();
     final database = LocalDatabase.forTesting(NativeDatabase.memory());
@@ -206,10 +244,9 @@ void main() {
       database: database,
       autoConnectEnabled: () async => true,
     );
-    addTearDown(() => manager.closeGracefully(
-          closeServer: true,
-          forceServerClose: true,
-        ));
+    addTearDown(
+      () => manager.closeGracefully(closeServer: true, forceServerClose: true),
+    );
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() => server.close(force: true));
     final rejected = Completer<void>();
@@ -245,35 +282,32 @@ WsSvrManager _manager({
     database: database,
     autoConnectEnabled: autoConnectEnabled,
     setAutoConnectEnabled: (_) async {},
-    reconnectControllerFactory: ({
-      required attempt,
-      required eligibility,
-    }) =>
+    reconnectControllerFactory: ({required attempt, required eligibility}) =>
         PeerReconnectController(
-      attempt: attempt,
-      eligibility: eligibility,
-      clock: scheduler.now,
-      timerFactory: scheduler.createTimer,
-      randomDouble: () => 0.5,
-    ),
+          attempt: attempt,
+          eligibility: eligibility,
+          clock: scheduler.now,
+          timerFactory: scheduler.createTimer,
+          randomDouble: () => 0.5,
+        ),
   );
 }
 
 DeviceData _device(String uid) => DeviceData(
-      id: 0,
-      uid: uid,
-      name: 'Peer',
-      host: '192.168.1.10',
-      port: 10002,
-      password: '',
-      platform: 'test',
-      isServer: false,
-      online: true,
-      clipboard: true,
-      auth: false,
-      lastTime: 1,
-      around: true,
-    );
+  id: 0,
+  uid: uid,
+  name: 'Peer',
+  host: '192.168.1.10',
+  port: 10002,
+  password: '',
+  platform: 'test',
+  isServer: false,
+  online: true,
+  clipboard: true,
+  auth: false,
+  lastTime: 1,
+  around: true,
+);
 
 Future<void> _trustPeer(LocalDatabase database, String peerId) async {
   final identity = await DeviceIdentity.fromSeed(

@@ -3262,7 +3262,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
       await ConnectionCoordinator().markManualSelection(peerId);
     }
     if (!manual && peerId != null) {
-      ConnectionCoordinator().markConnecting(peerId, reconnecting: true);
+      // Its row says 正在连接 while an attempt is running: see the socket manager.
       _pendingAutoConnectPeerId = peerId;
       try {
         socketManager.scheduleReconnect(peerId, host, port);

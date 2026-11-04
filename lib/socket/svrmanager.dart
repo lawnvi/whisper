@@ -1880,7 +1880,36 @@ class WsSvrManager {
     return ReconnectEligibilityResult.eligible;
   }
 
+  /// A device can be around and not answer for hours: a phone's system has frozen
+  /// Whisper there, say. The retries go on without saying so. Its row says 正在连接
+  /// for the first of them and then what it is, or it would say that for good.
   FutureOr<ConnectionAttemptStatus> _runReconnectAttempt(
+    ReconnectAttemptContext context,
+  ) async {
+    final peerId = context.target.peerId;
+    final shared = _manageSharedCoordinators;
+    if (shared && !_quietReconnects.contains(peerId)) {
+      ConnectionCoordinator().markConnecting(peerId, reconnecting: true);
+    }
+    var status = ConnectionAttemptStatus.cancelled;
+    try {
+      status = await _attemptReconnect(context);
+      return status;
+    } finally {
+      if (status == ConnectionAttemptStatus.authenticated) {
+        _quietReconnects.remove(peerId);
+      } else {
+        _quietReconnects.add(peerId);
+        if (shared && !isConnectedTo(peerId)) {
+          ConnectionCoordinator().markDisconnected(peerId: peerId);
+        }
+      }
+    }
+  }
+
+  final Set<String> _quietReconnects = <String>{};
+
+  Future<ConnectionAttemptStatus> _attemptReconnect(
     ReconnectAttemptContext context,
   ) async {
     final target = context.target;
