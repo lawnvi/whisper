@@ -234,6 +234,11 @@ int _localIpv4CandidateScore(LocalIpv4Candidate candidate) {
   if (!Ipv4AddressPolicy.isUsableUnicast(address)) {
     return -1;
   }
+  // VPN and proxy software puts addresses of its own on the loopback interface,
+  // which look like any other private address but reach nothing from outside.
+  if (_isLoopbackInterface(candidate.interfaceName)) {
+    return -1;
+  }
   if (Ipv4AddressPolicy.isBenchmarking(address)) {
     return 0;
   }
@@ -249,6 +254,12 @@ int _localIpv4CandidateScore(LocalIpv4Candidate candidate) {
       ? 10
       : 20;
   return interfaceScore + addressScore;
+}
+
+bool _isLoopbackInterface(String name) {
+  final normalized = name.toLowerCase().trim();
+  return RegExp(r'^lo\d*(\s|$)').hasMatch(normalized) ||
+      normalized.contains('loopback');
 }
 
 bool _isLikelyVirtualInterface(String name) {

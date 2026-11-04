@@ -120,4 +120,32 @@ void main() {
       expect(Ipv4AddressPolicy.isPrivate(address), isFalse, reason: address);
     }
   });
+
+  // A VPN or proxy tool had put 172.30.203.182 on lo0 of a Mac: it tied with Wi-Fi
+  // and came first, and the device told everyone an address that reaches nothing.
+  test('never an address on the loopback interface', () {
+    expect(
+      selectLocalIpv4Address(<LocalIpv4Candidate>[
+        (address: '172.30.203.182', interfaceName: 'lo0 '),
+        (address: '192.168.41.5', interfaceName: 'en0 '),
+      ]),
+      '192.168.41.5',
+    );
+    expect(
+      selectLocalIpv4Address(<LocalIpv4Candidate>[
+        (address: '172.30.203.182', interfaceName: 'lo '),
+      ]),
+      isNull,
+    );
+    expect(
+      selectLocalIpv4Address(<LocalIpv4Candidate>[
+        (
+          address: '169.254.10.1',
+          interfaceName: 'Loopback Pseudo-Interface 1 Software Loopback',
+        ),
+        (address: '10.0.0.3', interfaceName: 'Ethernet Realtek'),
+      ]),
+      '10.0.0.3',
+    );
+  });
 }
