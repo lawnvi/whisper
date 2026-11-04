@@ -64,7 +64,7 @@
 
 - 代码在 `lib/theme/whisper_ui.dart`、`lib/theme/whisper_device_art.dart`。`test/whisper_tokens_test.dart` 直接读 `DESIGN.md` 文件头核对 token。`AppTheme` 注册了 `WhisperColors`，旧界面没有用它。
 - 旧界面的 golden 在 `test/goldens/old_ui/`，8 张，只在 macOS 上比较，别的系统文字渲染不同，自动跳过，所以 CI 不跑。改了要重新生成：`flutter test --update-goldens test/old_ui_golden_test.dart`。为了能渲染整页，加了只给测试用的入口：`DeviceListScreen.debugPreview`、`LocalDatabase.debugOverride`、`debugIsDesktopOverride`。
-- 棘轮：`test/ui_design_ratchet_test.dart`，现状 589 处裸值，61 个文件。减少后用 `UPDATE_UI_RATCHET=1` 锁定。拆文件时手动把计数挪到基线的新文件上，总数不能增加。
+- （2026-11-03 起这些界面测试和棘轮都删了，见 `decisions.md`。）棘轮：`test/ui_design_ratchet_test.dart`，现状 589 处裸值，61 个文件。减少后用 `UPDATE_UI_RATCHET=1` 锁定。拆文件时手动把计数挪到基线的新文件上，总数不能增加。
 - 读源码的测试：引用 `deviceList.dart` 的都改走 `test/support/source_reading.dart`，按方法名取方法体，不依赖文件布局。在副本里把 `deviceList.dart` 切成两半跑过，32 个文件 212 项全过。
 - 改成真正行为测试的：设备合并、信任身份、快速发送目标、键鼠是否在进行、服务器只启动一次（逻辑抽到 `lib/state/device_list_rules.dart`），侧栏和手机列表的行为（`test/device_list_behavior_test.dart`）。**其余 32 个文件还是读源码**，它们测的多是 Android 服务、退出顺序、认证流程这些要真实平台或连接的东西，第 2 步之后随代码重写再改。
 

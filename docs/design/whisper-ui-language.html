@@ -9,7 +9,7 @@
    token 名字和 DESIGN.md 一一对应。入口见 docs/design/README.md。 */
 :root{
   --canvas:#f9f9fb; --content:#ffffff; --group:#ffffff; --raised:#ffffff;
-  --sidebar:rgba(240,240,243,.66); --mica:rgba(243,243,243,.9); --sidebar-solid:#f9f9fb; --control:rgba(255,255,255,.7); --panel:rgba(249,249,251,.74); --scrim:rgba(0,0,0,.3);
+  --sidebar:rgba(240,240,243,.66); --mica:rgba(243,243,243,.9); --sidebar-solid:#ffffff; --dev-name:#0f172a; --dev-muted:#64748b; --dev-on:#03a9f4; --dev-near:#4caf50; --dev-off:#e0e0e0; --dev-off-dot:#9e9e9e; --dev-sel:rgba(37,99,235,.08); --control:rgba(255,255,255,.7); --panel:rgba(249,249,251,.74); --scrim:rgba(0,0,0,.3);
   --ink:#1c2024; --ink2:#60646c; --ink3:#80838d;
   --sep:rgba(0,0,47,.149); --fill:rgba(0,0,51,.059); --fill2:rgba(0,0,45,.09); --sel:rgba(0,9,50,.122); --side-sel:rgba(255,255,255,.6); --side-sel-shadow:0 1px 3px rgba(0,0,0,.1),0 0 0 .5px rgba(0,0,0,.05),inset 0 .5px 0 rgba(255,255,255,.8); --bubble:#f0f0f3;
   --ink2-glass:rgba(0,7,20,.624);
@@ -30,7 +30,7 @@
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme=light]){
   --canvas:#111113; --content:#18191b; --group:#18191b; --raised:#272a2d;
-  --sidebar:rgba(33,34,37,.62); --mica:rgba(32,32,32,.92); --sidebar-solid:#18191b; --control:rgba(46,49,53,.68); --panel:rgba(33,34,37,.72); --scrim:rgba(0,0,0,.5);
+  --sidebar:rgba(33,34,37,.62); --mica:rgba(32,32,32,.92); --sidebar-solid:#18191b; --dev-name:#e2e8f0; --dev-muted:#8a8f98; --dev-on:#03a9f4; --dev-near:#4caf50; --dev-off:#616161; --dev-off-dot:#9e9e9e; --dev-sel:rgba(255,255,255,.1); --control:rgba(46,49,53,.68); --panel:rgba(33,34,37,.72); --scrim:rgba(0,0,0,.5);
   --ink:#edeef0; --ink2:#b0b4ba; --ink3:#777b84; --ink2-glass:rgba(241,247,254,.71);
   --sep:rgba(214,235,253,.188); --fill:rgba(221,234,248,.078); --fill2:rgba(211,237,248,.114); --sel:rgba(217,237,254,.145); --side-sel:rgba(255,255,255,.15); --side-sel-shadow:0 1px 3px rgba(0,0,0,.3),inset 0 .5px 0 rgba(255,255,255,.1); --bubble:#272a2d;
   --accent:#0090ff; --accent-text:#70b8ff; --tint:#0d2847; --tint-hover:#003362; --tint-active:#004074; --on-tint:#c2e6ff; --ok-solid:#30a46c; --warn-solid:#ffc53d; --bad-solid:#e5484d; --border:rgba(217,237,255,.251);
@@ -45,7 +45,7 @@
 }}
 :root[data-theme=dark]{
   --canvas:#111113; --content:#18191b; --group:#18191b; --raised:#272a2d;
-  --sidebar:rgba(33,34,37,.62); --mica:rgba(32,32,32,.92); --sidebar-solid:#18191b; --control:rgba(46,49,53,.68); --panel:rgba(33,34,37,.72); --scrim:rgba(0,0,0,.5);
+  --sidebar:rgba(33,34,37,.62); --mica:rgba(32,32,32,.92); --sidebar-solid:#18191b; --dev-name:#e2e8f0; --dev-muted:#8a8f98; --dev-on:#03a9f4; --dev-near:#4caf50; --dev-off:#616161; --dev-off-dot:#9e9e9e; --dev-sel:rgba(255,255,255,.1); --control:rgba(46,49,53,.68); --panel:rgba(33,34,37,.72); --scrim:rgba(0,0,0,.5);
   --ink:#edeef0; --ink2:#b0b4ba; --ink3:#777b84; --ink2-glass:rgba(241,247,254,.71);
   --sep:rgba(214,235,253,.188); --fill:rgba(221,234,248,.078); --fill2:rgba(211,237,248,.114); --sel:rgba(217,237,254,.145); --side-sel:rgba(255,255,255,.15); --side-sel-shadow:0 1px 3px rgba(0,0,0,.3),inset 0 .5px 0 rgba(255,255,255,.1); --bubble:#272a2d;
   --accent:#0090ff; --accent-text:#70b8ff; --tint:#0d2847; --tint-hover:#003362; --tint-active:#004074; --on-tint:#c2e6ff; --ok-solid:#30a46c; --warn-solid:#ffc53d; --bad-solid:#e5484d; --border:rgba(217,237,255,.251);
@@ -91,7 +91,7 @@ code{font:12px/1.4 var(--mono)}
 /* 窗口：侧栏透出桌面，内容是实色 */
 .win{position:relative;display:flex;flex-direction:column;height:690px;border-radius:var(--r-m);overflow:hidden;box-shadow:var(--shadow-3);width:100%;isolation:isolate}
 .body{position:relative;flex:1;min-height:0;display:flex}
-.side{width:252px;flex:none;display:flex;flex-direction:column;min-height:0;background:var(--sidebar);backdrop-filter:blur(44px) saturate(1.8);-webkit-backdrop-filter:blur(44px) saturate(1.8);box-shadow:inset -.5px 0 0 var(--sep)}
+.side{width:252px;flex:none;display:flex;flex-direction:column;min-height:0;background:var(--sidebar-solid);backdrop-filter:blur(44px) saturate(1.8);-webkit-backdrop-filter:blur(44px) saturate(1.8);box-shadow:inset -.5px 0 0 var(--sep)}
 .main{flex:1;min-width:0;display:flex;flex-direction:column;position:relative;background:var(--content);overflow:hidden}
 .main.tint{background:var(--canvas)}
 .insp{flex:none;width:0;overflow:hidden;position:relative;background:var(--canvas)}
@@ -108,7 +108,7 @@ code{font:12px/1.4 var(--mono)}
 .win[data-input=touch]:not([data-size=compact]) .side{width:clamp(240px,32%,300px);padding-top:var(--status);background:var(--sidebar-solid);backdrop-filter:none;-webkit-backdrop-filter:none;--ink2:var(--ink2-solid)}
 .win[data-input=touch]:not([data-size=compact]) .main{padding-top:var(--status)}
 .win[data-input=touch]:not([data-size=compact]) .side-list .dev{min-height:68px;gap:12px;border-radius:var(--r-m);padding:10px 12px}
-.win[data-input=touch] .side-list .dev .g{width:44px;height:44px;border-radius:var(--r-m)}
+.win[data-input=touch] .side-list .dev .g{width:48px;height:48px;border-radius:50%;font-size:20px}
 .win[data-input=touch] .side-list .dev small{margin-top:4px}
 .win[data-input=touch]:not([data-size=compact]) .side-list{padding:0 10px 24px}
 .win[data-input=touch]:not([data-size=compact]) .tb{height:50px}
@@ -185,23 +185,21 @@ code{font:12px/1.4 var(--mono)}
 .win[data-input=touch] .side-top .iconbtn{color:var(--ink);width:44px}
 .side-list{position:relative;flex:1;overflow-y:auto;padding:8px 10px 8px;min-height:0;display:flex;flex-direction:column;gap:2px}
 /* 选中底是一个元素，在行之间滑动 */
-.side-sel{position:absolute;left:10px;right:10px;top:0;height:0;border-radius:var(--r-s);background:var(--side-sel);box-shadow:var(--side-sel-shadow);opacity:0;transition:opacity .18s;pointer-events:none}
+.side-sel{position:absolute;left:10px;right:10px;top:0;height:0;border-radius:var(--r-m);background:var(--dev-sel);opacity:0;transition:opacity .18s;pointer-events:none}
 .win[data-size=compact] .side-sel{display:none}
 .win[data-size=compact] .side-list{padding:0 0 28px;display:block}
 .sec{font-size:var(--t-tiny);font-weight:600;color:var(--ink2);padding:16px 10px 5px}
-.dev{flex:none;width:100%;display:flex;align-items:center;gap:10px;min-height:54px;padding:7px 10px;border-radius:var(--r-s);text-align:left;position:relative}
+.dev{flex:none;width:100%;display:flex;align-items:center;gap:11px;min-height:60px;padding:0 10px;border-radius:var(--r-m);text-align:left;position:relative}
 .dev:hover{background:var(--fill)}
 .dev[aria-current=true]{background:none}
-.dev .g{width:36px;height:36px;border-radius:var(--r-s);background:var(--fill);display:grid;place-items:center;color:var(--accent-text);flex:none}
-.dev.off .g{color:var(--ink3)}
-/* 离线的设备图褪色，连着的和在附近的不褪 */
-.dev .g svg{transition:filter .3s,opacity .3s}
-.dev.gone .g svg{filter:grayscale(1);opacity:.45}
-.dev.seen .g svg{filter:saturate(.85);opacity:.9}
-.dev.gone:not([aria-current=true]) b{color:var(--ink2)}
-.dev.gone:not([aria-current=true]) small{color:var(--ink3)}
-.dev b{display:block;font-weight:500;font-size:var(--t-body);line-height:1.25;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
-.dev small{display:block;margin-top:3px;font-size:var(--t-note);color:var(--ink2);line-height:1.25;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.dev .g{width:38px;height:38px;border-radius:50%;background:var(--dev-on);display:grid;place-items:center;color:#fff;font-size:16px;font-weight:600;flex:none}
+.dev.seen .g{background:var(--dev-near)}
+.dev.gone .g{background:var(--dev-off)}
+.dev b{display:block;font-weight:600;font-size:14px;line-height:1.25;color:var(--dev-name);overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.dev small{display:flex;align-items:center;gap:6px;margin-top:4px;font-size:12px;color:var(--dev-muted);line-height:1.25;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.dev small .dot{width:7px;height:7px;border-radius:50%;background:var(--dev-on);flex:none}
+.dev.seen small .dot{background:var(--dev-near)}
+.dev.gone small .dot{background:var(--dev-off-dot)}
 .dev small.live{color:var(--accent-text);font-weight:500}
 .dev .t{min-width:0;flex:1}
 .dev .c{color:var(--ink3);display:none}
@@ -291,10 +289,10 @@ code{font:12px/1.4 var(--mono)}
 .side-list.ghost{position:absolute;left:0;right:0;pointer-events:none}
 .side-list.t-out-r{animation:tOutR var(--dur-smooth) var(--ease-smooth) both}
 .side-list.t-out-l{animation:tOutL var(--dur-smooth) var(--ease-smooth) both}
-@keyframes tInR{from{transform:translate3d(9%,0,0) scale(.985);opacity:0;filter:blur(10px)}to{transform:none;opacity:1;filter:blur(0)}}
-@keyframes tInL{from{transform:translate3d(-9%,0,0) scale(.985);opacity:0;filter:blur(10px)}to{transform:none;opacity:1;filter:blur(0)}}
-@keyframes tOutR{to{transform:translate3d(-9%,0,0) scale(.97);opacity:0;filter:blur(10px)}}
-@keyframes tOutL{to{transform:translate3d(9%,0,0) scale(.97);opacity:0;filter:blur(10px)}}
+@keyframes tInR{from{transform:translate3d(9%,0,0);opacity:0}to{transform:none;opacity:1}}
+@keyframes tInL{from{transform:translate3d(-9%,0,0);opacity:0}to{transform:none;opacity:1}}
+@keyframes tOutR{to{transform:translate3d(-9%,0,0);opacity:0}}
+@keyframes tOutL{to{transform:translate3d(9%,0,0);opacity:0}}
 .rise{animation:riseIn var(--dur-smooth) var(--ease-smooth) both;animation-delay:calc(var(--i,0)*24ms)}
 @keyframes riseIn{from{opacity:0;transform:translateY(12px) scale(.98)}to{opacity:1;transform:none}}
 .ihero b{overflow-wrap:anywhere}
@@ -345,7 +343,7 @@ code{font:12px/1.4 var(--mono)}
 .fcols,.frow{display:grid;grid-template-columns:20px minmax(0,1fr) 84px 76px;gap:10px;align-items:center}
 .fcols{padding:0 26px 3px;font-size:var(--t-tiny);color:var(--ink2);flex:none}
 .frow{width:calc(100% - 24px);margin-inline:12px;padding:0 14px;min-height:30px;text-align:left;font-size:var(--t-body);border-radius:var(--r-xs)}
-.frow:active:not(:disabled){transform:none}
+.frow:active:not(:disabled){filter:none}
 .frow:hover{background:var(--fill)}
 .frow[aria-selected=true]{background:var(--accent);color:var(--on-accent)}
 .frow[aria-selected=true] small{color:#fff}
@@ -620,7 +618,7 @@ input[type=range]::-moz-range-thumb{width:var(--tw);height:18px;border:0;border-
 .island.open{border-radius:26px;box-shadow:0 16px 44px rgba(0,0,0,.4)}
 .win[data-size=compact] .island{top:11px}
 .isl-in{position:absolute;left:0;top:0}
-.isl-c{display:flex;align-items:center;gap:7px;height:34px;padding:0 13px 0 10px;font-size:var(--t-note);font-weight:500;color:inherit;white-space:nowrap;max-width:320px}
+.isl-c{display:flex;align-items:center;gap:7px;height:34px;padding:0 13px 0 10px;font-size:var(--t-note);font-weight:500;color:inherit;white-space:nowrap;max-width:260px}
 .isl-c:active:not(:disabled){transform:none}
 .isl-c .tx{overflow:hidden;text-overflow:ellipsis;min-width:0}
 .isl-c .val{font-variant-numeric:tabular-nums;color:rgba(255,255,255,.6)}
@@ -747,6 +745,7 @@ input[type=range]::-moz-range-thumb{width:var(--tw);height:18px;border:0;border-
 .tr-row .sub{color:var(--ink2)}
 .minimap{display:block;width:100%;height:96px;margin-bottom:4px}
 .tr-clips{padding:6px}
+.tr-none{display:flex;align-items:center;gap:10px;padding-top:8px;color:var(--ink2)}
 .tr-cl{display:flex;align-items:center;gap:9px;width:100%;min-height:40px;padding:5px 8px;border-radius:var(--r-s);text-align:left;font-size:var(--t-note)}
 .tr-cl:hover{background:var(--fill)}
 .tr-cl .tx{flex:1;min-width:0}
@@ -870,7 +869,7 @@ input[type=range]::-moz-range-thumb{width:var(--tw);height:18px;border:0;border-
 .stage[data-os=win]>.nmenu{right:12px;bottom:58px}
 .stage[data-os=mac]>.nmenu{right:10px;top:30px}
 .nm-i{position:relative;width:100%;min-height:28px;display:flex;align-items:center;gap:8px;padding:4px 10px;border-radius:5px;text-align:left}
-.nm-i:active:not(:disabled){transform:none}
+.nm-i:active:not(:disabled){filter:none}
 .nm-i:hover:not(:disabled),.nm-w[data-open=true]>.nm-i{background:var(--fill2)}
 .nm-i:disabled{color:var(--ink2)}
 .nm-i .ck{width:14px;flex:none;display:grid;place-items:center}
@@ -1137,19 +1136,18 @@ Object.assign(DEV,{
 });
 ['pad','office','pixel'].forEach(i => { LK[i]={clip:false,mount:false}; PERM[i]={auto:false,files:false,edit:false,clip:false,input:false}; MSG[i]=[]; });
 MSG.pad=[{t:'when',v:'昨天 09:30'},{t:'b',v:'书签同步一下'}];
-/* 顺序稳定：连着的在前，然后是附近的，最后是不在附近的 */
+/* 三档：连着的、附近的、不在附近的。变好移到新档最后，变差移到新档最前，同档里别的行不动 */
 const RANK={on:0,connecting:0,seen:1,near:1,off:2};
 const ORDER=[], PLACED={};
 const devOrder=() => {
   ORDER.splice(0,ORDER.length,...ORDER.filter(i => DEV[i]));
   [0,1,2].forEach(r => Object.keys(DEV).forEach(id => {
-    if (RANK[DEV[id].state]!==r) return;
-    if (PLACED[id]===undefined || r<PLACED[id]) {
-      const k=ORDER.indexOf(id); if (k>=0) ORDER.splice(k,1);
-      PLACED[id]=r;
-      const at=ORDER.findIndex(o => PLACED[o]>r);
-      ORDER.splice(at<0?ORDER.length:at,0,id);
-    }
+    if (RANK[DEV[id].state]!==r || PLACED[id]===r) return;
+    const worse=PLACED[id]!==undefined && r>PLACED[id];
+    const k=ORDER.indexOf(id); if (k>=0) ORDER.splice(k,1);
+    PLACED[id]=r;
+    const at=ORDER.findIndex(o => worse ? PLACED[o]>=r : PLACED[o]>r);
+    ORDER.splice(at<0?ORDER.length:at,0,id);
   }));
   return ORDER;
 };
@@ -1201,7 +1199,7 @@ function audAdd(id) {
 function audRemove(id) {
   delete AUD.members[id]; delete AUD.st[id];
   const left = audIds();
-  if (left.length===1 && !AUD.touched) AUD.members[left[0]]='stereo';
+  if (left.length===1) { AUD.members[left[0]]='stereo'; AUD.touched=false; }
   if (!left.length) { AUD.on=false; AUD.mode='idle'; AUD.touched=false; }
   renderAll();
 }
@@ -1416,8 +1414,8 @@ function devRow(id) {
   const d = DEV[id], st = statusOf(id);
   const phone=mob(), big=phone?1.25:1;
   return `<button class="dev ${d.state==='on'?'':'off'} ${d.state==='off'?'gone':d.state==='seen'?'seen':''}" data-k="d-${id}" data-a="dev" data-v="${id}" data-dev="${id}" aria-current="${!isGlobal()&&S.place!=='settings'&&S.place!=='connect'&&S.dev===id}">
-    <span class="g">${art(d.kind,id,Math.round((d.kind==='phone'||d.kind==='tablet'?24:26)*big))}</span>
-    <span class="t"><b>${esc(d.name)}</b><small class="${st.live?'live':''}">${st.t}</small></span>
+    <span class="g">${esc(d.name.slice(0,1).toUpperCase())}</span>
+    <span class="t"><b>${esc(d.name)}</b><small class="${st.live?'live':''}"><i class="dot"></i>${st.t}</small></span>
     <span class="c">${ic('right',14,2)}</span></button>`;
 }
 function cornerBtn(place, icon, label, on) {
@@ -1608,13 +1606,13 @@ function placeChat(d) {
     ${c?'':`<button type="button" class="iconbtn" data-a="shot" aria-label="截图" title="截图 ${S.prefs.shotKey}">${ic('camera',17)}</button>`}
     <button class="send" data-a="composeAct" aria-label="发送或添加文件">${ic('plus',16,2).replace('class="ico"','class="ico add"')}${ic('up',15,2.2).replace('class="ico"','class="ico up"')}</button>`}</form>`}`;
 }
-function offlinePlace(d, what) {
-  return `<div class="empty">${art(d.kind,d.id,84)}<b>${esc(d.name)} 没有连接</b><p>${what}</p>
+function offlinePlace(d) {
+  return `<div class="empty">${art(d.kind,d.id,84)}<b>${esc(d.name)} 没有连接</b>
     <button class="btn p lg" data-a="connect">${d.state==='connecting'?'正在连接…':'连接'}</button></div>`;
 }
 function placeFiles(d) {
   const local = S.fileLoc==='self';
-  if (!local && d.state!=='on') return offlinePlace(d,'连接后可以浏览它的文件。');
+  if (!local && d.state!=='on') return offlinePlace(d);
   const key = S.path[S.path.length-1] || 'root', rows = FILES[key] || [];
   const sel = S.sel!==null ? rows[S.sel] : null;
   const crumbs = S.path.map(x => `${ic('right',10,2)}<span class="cur">${esc(x)}</span>`).join('');
@@ -1622,7 +1620,7 @@ function placeFiles(d) {
   return `<div class="fhead">
       <button class="iconbtn" data-a="fileBack" aria-label="后退" ${S.path.length?'':'disabled'} style="opacity:${S.path.length?1:.35}">${ic('back',13,2)}</button>
       <button class="popb" data-a="fileLoc" aria-haspopup="menu" aria-label="位置：${where}"><span style="max-width:150px;overflow:hidden;text-overflow:ellipsis">${where}</span>${ic('updown',12,2)}</button>${crumbs}
-      <span class="sp" style="flex:1"></span><span class="cnt">${rows.length} 项</span>
+      <span class="sp" style="flex:1"></span>${mob()?'':`<span class="cnt">${rows.length} 项</span>`}
       <button class="iconbtn" data-a="navStub" data-v="筛选当前文件夹" aria-label="筛选">${ic('search',14)}</button>
       <button class="iconbtn" data-a="fileMore" aria-label="更多">${ic('more',15,2.4)}</button></div>
     <div class="fcols"><span></span><span>名称</span><span>大小</span><span>修改日期</span></div>
@@ -1631,7 +1629,7 @@ function placeFiles(d) {
     ${sel && sel[1]==='file' ? `<div class="float-bar">${local?`<button class="btn p" data-a="fileTo">发到…</button><button class="btn q" data-a="share">共享链接</button>`:`<button class="btn p" data-a="copyHere">拷到这台</button><button class="btn q" data-a="fileTo">发到…</button>`}<button class="btn q" data-a="unsel" aria-label="取消选择">${ic('x',13)}</button></div>` : ''}`;
 }
 function placeApps(d) {
-  if (d.state!=='on') return offlinePlace(d,'连接后可以使用它的应用，或者把这台的窗口送过去。');
+  if (d.state!=='on') return offlinePlace(d);
   const flows = S.flows.filter(f => f.other===d.id);
   const local = LOCALW().filter(w => !S.flows.some(f => f.title===w));
   return `<div class="scroll"><div class="apps">
@@ -1649,7 +1647,7 @@ function placePair(d) {
     const digits=[...'481726'].map((n,i) => `${i===3?'<i class="gap"></i>':''}<span>${n}</span>`).join('');
     return `<div class="pair"><div class="pair-mid"><div class="pair-devs">${art('phone','self',72)}<i></i><i></i><span class="lk">${ic('lock',16)}</span><i></i><i></i>${art(d.kind,'near',d.kind==='phone'||d.kind==='tablet'?72:92)}</div>
       <b>${esc(d.name)} 在附近</b><p>请确认两台设备显示相同的 6 位数字。</p><div class="code digits" aria-label="481 726">${digits}</div></div>
-      <div class="pair-end"><button class="btn p lg" data-a="pair">数字相同，配对</button><button class="btn q" data-a="back" style="color:var(--ink2)">取消</button><small>配对后，文本、文件、剪贴板和控制数据均端到端加密</small></div></div>`;
+      <div class="pair-end"><button class="btn p lg" data-a="pair">数字相同，配对</button><button class="btn q" data-a="back" style="color:var(--ink2)">取消</button></div></div>`;
   }
   return `<div class="empty">${art(d.kind,'near',84)}<b>${esc(d.name)} 在附近</b>
     <p>请确认两台设备显示相同的 6 位数字。</p><div class="code">481 726</div>
@@ -1670,7 +1668,7 @@ function placeAudio() {
     return `<div class="row row-a ${online?'':'dim'}" data-k="${d.id}" style="--inset:60px">
         <span style="width:38px;display:grid;place-items:center">${art(d.kind,d.id,d.kind==='phone'?36:38)}</span>
         <span class="tx"><b><span>${esc(d.name)}</span>${playing?`<em class="q ${st==='fair'||st==='bad'?'warn':''}">${SYNC[st||'cal']}</em>`:''}</b>${nums?`<small class="detail">${nums}</small>`:sub?`<small>${sub}</small>`:''}</span>
-        ${on?`<button class="popb" data-a="audRolePick" data-v="${d.id}" aria-label="${esc(d.name)} 的声道：${ROLE[AUD.members[d.id]]}">${ROLE[AUD.members[d.id]]}${ic('updown',12,2)}</button><span class="miniseg" role="group" aria-label="${esc(d.name)} 的声道"><i class="mthumb" data-live></i>${[['left','左'],['stereo','立体声'],['right','右'],['mono','单声道']].map(([k,l]) => `<button aria-pressed="${AUD.members[d.id]===k}" data-a="audRole" data-v="${d.id}:${k}">${l}</button>`).join('')}</span>`:''}
+        ${on&&audIds().length>1?`<button class="popb" data-a="audRolePick" data-v="${d.id}" aria-label="${esc(d.name)} 的声道：${ROLE[AUD.members[d.id]]}">${ROLE[AUD.members[d.id]]}${ic('updown',12,2)}</button>`:''}
         <button class="check" role="checkbox" aria-checked="${on}" aria-label="把声音放到 ${esc(d.name)}" data-a="audToggle" data-v="${d.id}" ${online?'':'disabled'}>${ic('check',13,2.6)}</button>
       </div>`;
   }).join('');
@@ -1692,13 +1690,13 @@ function placeAudioSink() {
 /* 键鼠：像显示器排列 */
 function placeInput() {
   if (KBM.role==='controlled') { const d=DEV[KBM.controller];
-    return `<div class="empty">${art(d.kind,d.id,96)}<b>${esc(d.name)} 正在控制这台</b><p>要控制别的电脑，先停止。</p><button class="btn p lg" data-a="ctrlStop">停止</button></div>`; }
+    return `<div class="empty">${art(d.kind,d.id,96)}<b>${esc(d.name)} 正在控制这台</b><button class="btn p lg" data-a="ctrlStop">停止</button></div>`; }
   const ids=Object.keys(KBM.nodes).filter(i => i!=='self'&&!KBM.nodes[i].placed);
   const sel=KBM.sel&&KBM.sel!=='self'&&KBM.nodes[KBM.sel]?.placed?KBM.sel:null, st=sel&&KBM.st[sel];
   const foot = sel ? `<b>${esc(DEV[sel].name)}</b><span>${esc(KBM.nodes[sel].res)}${st==='failed'?'':` · ${kbOnline(sel)?kbSide(sel):'离线'}`}</span>${st==='failed'?`<span class="warn">它还没有信任这台</span>`:''}<span class="sp"></span>
       ${st==='failed'?`<button class="btn p" data-a="kbRetry" data-v="${sel}">重试</button>`:''}
       <button class="btn q" data-a="kbRemove" data-v="${sel}">移出</button>` :
-    (KBM.on?`<span>按 <kbd>${EXIT()}</kbd> 收回键鼠</span><span class="sp"></span>`:`<span>拖动屏幕来排列。指针从相接的边过去。</span>`);
+    (KBM.on?`<span>按 <kbd>${EXIT()}</kbd> 收回键鼠</span><span class="sp"></span>`:'');
   return `<div class="gs"><div class="kb-canvas" data-own role="application" aria-label="屏幕排列"></div>
     ${ids.length?`<div class="bench">${ids.map(i => { const d=DEV[i], on=d.state==='on'; return `<button class="bchip" data-k="${i}" data-kb="${i}" ${on?'':'disabled'} aria-label="把 ${esc(d.name)} 加入键鼠共享"><span class="mini" style="background:${wallCss(i)}"></span>${esc(d.name)}${on?'':'<small>离线</small>'}</button>`; }).join('')}</div>`:''}
     <div class="gs-foot">${foot}</div></div>`;
@@ -1720,11 +1718,10 @@ function linkSub(l) {
 }
 function placeLinks() {
   const on=S.shares.some(s => s.on);
-  return `<div class="pane" style="padding:6px 20px 12px;flex:none"><div class="group"><div class="row" style="min-height:56px"><span class="tx"><b><span>文件服务</span></b><small>${!S.svc?'链接都打不开':on?'192.168.31.8:10003':'没有开启的链接，服务没有运行'}</small></span>${swHtml('svcToggle','',S.svc,'文件服务')}</div></div></div><div class="scroll"><div class="pane" style="padding-top:0">
+  return `<div class="pane" style="padding:6px 20px 12px;flex:none"><div class="group"><div class="row" style="min-height:56px"><span class="tx"><b><span>文件服务</span></b><small>${!S.svc?'链接都打不开':on?'192.168.31.8:10003':'没有开启的链接'}</small></span>${swHtml('svcToggle','',S.svc,'文件服务')}</div></div></div><div class="scroll"><div class="pane" style="padding-top:0">
     ${S.shares.length?`<div class="group lks">${S.shares.map(l => { const s=linkSub(l), live=l.on&&S.svc; return `<div class="row ${live?'':'off'}" data-k="${l.id}"><span class="fic">${l.dir?folderArt(28):docArt(28)}</span>
       <button class="tx" style="text-align:left" data-a="linkOpen" data-v="${l.id}"><b><span>${esc(l.name)}</span>${l.pw?ic('lock',11):''}</b><small>${s.warn?ic('warn',12):''}<span style="overflow:hidden;text-overflow:ellipsis">${esc(s.t)}</span></small></button>
       <button class="iconbtn more" data-a="linkMore" data-v="${l.id}" aria-label="更多操作" title="更多">${ic('more',15,2.4)}</button>${swHtml('linkToggle',l.id,l.on,`开启 ${l.name}`)}</div>`; }).join('')}</div>`:`<div class="empty" style="padding:56px 24px">${ic('link',40,1.2)}<b>还没有链接</b><p>选一些文件，生成一个链接。对方不用装 Whisper，用浏览器打开就能下载。</p><button class="btn p lg" data-a="linkNew">选择文件</button></div>`}
-    <div>    <p class="foot-note">对方不用装 Whisper，在同一局域网用浏览器打开就能下载。走的是普通 HTTP，密码只防止别人随意打开。</p></div>
   </div></div>`;
 }
 function qrSvg(seed) {
@@ -1747,7 +1744,8 @@ function linkSheet(id) {
     <div class="group">
       <div class="row"><span>开启</span><span class="sp"></span>${swHtml('linkToggle',l.id,l.on,'开启链接')}</div>
       <div class="row"><span>地址</span><span class="sp"></span><small class="val">192.168.31.8（Wi-Fi）</small></div>
-      <div class="row"><span>密码</span><span class="sp"></span><small class="val">${l.pw?'已设置':'没有'}</small></div>
+      <button class="row" data-a="linkRoute" data-v="${l.id}"><span>路径</span><span class="sp"></span><small class="val">${esc(l.route)}</small><span style="color:var(--ink3)">${ic('right',13,2)}</span></button>
+      <button class="row" data-a="linkPw" data-v="${l.id}"><span>密码</span><span class="sp"></span><small class="val">${l.pw?'已设置':'没有'}</small><span style="color:var(--ink3)">${ic('right',13,2)}</span></button>
       <div class="row"><span>访问</span><span class="sp"></span><small class="val">${l.visits} 次 · ${esc(l.last)}</small></div>
       <div class="row"><span>下载</span><span class="sp"></span><small class="val">${l.downloads} 次</small></div>
     </div>
@@ -1783,7 +1781,7 @@ function inspHtml() {
       </div></div>`}
     ${c&&d.state!=='near'?`<div class="group"><button class="row" data-a="noopHist"><span>搜索聊天记录</span><span class="sp"></span><span style="color:var(--ink3)">${ic('right',13,2)}</span></button></div>`:''}
     ${playing?`<div class="group"><div class="row"><span class="tx"><b><span>正在播放它的声音</span></b>${AUD.paused?'<small>已暂停</small>':''}</span><button class="btn" data-a="sinkPause">${AUD.paused?'继续':'暂停'}</button><button class="btn" data-a="sinkStop">断开</button></div></div>`:''}
-    <div class="group"><div class="row"><span>地址</span><span class="sp"></span><code>${esc(d.ip)}</code></div>${d.state==='near'?'':`<button class="row" data-a="navStub" data-v="连接诊断"><span>连接诊断</span><span class="sp"></span><span style="color:var(--ink3)">${ic('right',13,2)}</span></button>`}${on?`<button class="row" data-a="disconnect" style="color:var(--bad)"><span>断开连接</span></button>`:''}</div>
+    ${on||d.state==='near'?'':`<div class="group"><button class="row" data-a="navStub" data-v="连接诊断"><span>连接诊断</span><span class="sp"></span><span style="color:var(--ink3)">${ic('right',13,2)}</span></button></div>`}
     ${d.state==='off'?`<button class="linkbtn bad" data-a="forget">移除这台设备</button>`:''}`;
 }
 const inspP = new Spring(0, M.smooth, x => paintInsp(x), .004);
@@ -1862,7 +1860,7 @@ function renderIsland() {
     morph(inn, `<div class="isl-e">${ms.map(m => {
       const r = m.kind==='transfer' && m.p<1 ? `<button class="rb" data-a="cancel" data-v="${m.id}" aria-label="取消">${ic('x',13,2)}</button>` : m.kind==='link' ? `<button class="rb" data-a="stopLink" data-v="${m.link}" aria-label="停止">${ic('x',13,2)}</button>` : '';
       const sub = m.kind==='transfer' ? `${esc(m.sub)}${m.p<1?` · <span data-pct="${m.id}">${Math.round(m.p*100)}%</span>`:' · 已完成'}` : esc(m.sub||'');
-      if (m.kind==='req') return `<div class="ask">${m.dev?`<span class="ask-t">${art(DEV[m.dev].kind,m.dev,48)}</span>`:''}<b>${esc(m.title)}</b>${sub?`<small>${sub}</small>`:''}${m.code?`<div class="ask-code">${esc(m.code)}</div>`:''}<div class="ask-acts"><button class="p" data-a="reqAnswer" data-v="${m.id}:once">这次允许</button><button data-a="reqAnswer" data-v="${m.id}:always">始终允许</button><button data-a="reqAnswer" data-v="${m.id}:no">拒绝</button></div></div>`;
+      if (m.kind==='req') return `<div class="ask">${m.dev?`<span class="ask-t">${art(DEV[m.dev].kind,m.dev,48)}</span>`:''}<b>${esc(m.title)}</b>${sub?`<small>${sub}</small>`:''}${m.code?`<div class="ask-code">${esc(m.code)}</div>`:''}<div class="ask-acts"><button class="p" data-a="reqAnswer" data-v="${m.id}:once">允许</button><button data-a="reqAnswer" data-v="${m.id}:no">拒绝</button></div></div>`;
       return `<div class="mo"><span class="ld">${leading(m)}</span><span class="t"><b>${esc(m.title)}</b><small>${sub}</small></span>${r}</div>${m.kind==='warn'?`<div class="mo-acts"><button data-a="self">查看</button></div>`:''}`;
     }).join('')}</div>`);
   }
@@ -1963,7 +1961,7 @@ function linuxTrayItems() {
       ? {label:`${DEV[KBM.controller].name} 在控制这台 · 停止`,on:() => A.ctrlStop()}
       : {label:'键鼠共享',check:KBM.on,on:() => kbSetOn(!KBM.on)},
     ...(S.flows.length?[{id:'flows',label:'正在流转的窗口',sub:S.flows.map(f => ({label:`${f.title.split(' · ')[0]} · ${f.runsOn==='self'?'拿回来':'结束'}`,on:() => A.endFlow(0,{dataset:{v:f.title}})}))}]:[]),
-    ...(S.clips.length>1?[{id:'clips',label:'最近的剪贴板',sub:S.clips.filter(c => c!==S.clip).slice(0,4).map(c => ({label:c.text,on:() => { A.clipCopy(0,{dataset:{v:S.clips.indexOf(c)}}); note('已拷贝',c.text.slice(0,24)); }}))}]:[]),
+    ...(S.clips.length?[{id:'clips',label:'最近的剪贴板',sub:S.clips.filter(c => c!==S.clip).slice(0,4).map(c => ({label:c.text,on:() => { A.clipCopy(0,{dataset:{v:S.clips.indexOf(c)}}); note('已拷贝',c.text.slice(0,24)); }}))}]:[]),
     {sep:true},
     {label:'设置…',on:() => { showWin(); A.settings(); }},
     {label:'退出 Whisper',on:() => note('退出 Whisper','示例：真实的 App 这里会退出')},
@@ -1990,23 +1988,23 @@ function renderTray() {
   const live = Object.values(DEV).filter(d => d.state==='on');
   const a = audStatus(), k = kbStatus();
   const mom = [
-    ...reqs.map(r => `<div class="mod" data-k="${r.id}"><div class="tr-mo"><span style="color:var(--warn)">${ic('ask',18)}</span><span class="tx"><b>${esc(r.title)}</b><small>${esc(r.sub)}</small></span></div><div class="tr-acts"><button class="btn p" data-a="reqAnswer" data-v="${r.id}:once">这次允许</button><button class="btn" data-a="reqAnswer" data-v="${r.id}:always">始终允许</button><button class="btn q" data-a="reqAnswer" data-v="${r.id}:no">拒绝</button></div></div>`),
+    ...reqs.map(r => `<div class="mod" data-k="${r.id}"><div class="tr-mo"><span style="color:var(--warn)">${ic('ask',18)}</span><span class="tx"><b>${esc(r.title)}</b></span></div><div class="tr-acts"><button class="btn p" data-a="reqAnswer" data-v="${r.id}:once">允许</button><button class="btn q" data-a="reqAnswer" data-v="${r.id}:no">拒绝</button></div></div>`),
     ...acts.filter(x => x.p<1).map(x => `<div class="mod" data-k="${x.id}" style="padding:8px 10px"><div class="tr-mo"><span>${ring(x.id,x.p,'var(--fill2)','var(--accent)')}</span><span class="tx"><b>${esc(x.title)}</b><small>${esc(x.sub)} · <span data-pct="${x.id}">${Math.round(x.p*100)}%</span></small></span><button class="iconbtn" data-a="cancel" data-v="${x.id}" aria-label="取消">${ic('x',12,2)}</button></div></div>`),
   ];
   const flows = S.flows.map(f => `<div class="tr-mo" data-k="${esc(f.title)}" style="min-height:34px"><span style="color:var(--ink2)">${ic('window',15)}</span><span class="tx"><b>${esc(f.title.split(' · ')[0])}</b><small>显示于 ${f.shown?esc(DEV[f.shown].name):f.runsOn==='self'?esc(DEV[f.other].name):'这台'}</small></span><button class="btn q" data-a="endFlow" data-v="${esc(f.title)}">${f.runsOn==='self'?'拿回来':'结束'}</button></div>`).join('');
   const html = `
-    <div class="mod tr-send ${S.hold?'holding':''}" id="trSend"><div class="tr-what">${trayWhat()}</div>
-      ${live.length?`<div class="tr-targets">${live.map(d => `<button class="tr-t" data-k="${d.id}" data-a="traySend" data-v="${d.id}" data-tr="${d.id}" aria-label="发到 ${esc(d.name)}"><span style="height:38px;display:grid;place-items:center">${art(d.kind,d.id,d.kind==='phone'?38:48)}</span><span>${esc(d.name)}</span></button>`).join('')}</div>`:'<small style="color:var(--ink2)">没有已连接的设备</small>'}
-    </div>
     ${mom.join('')}
+    ${flows?`<div class="mod">${flows}</div>`:''}
+    <div class="mod tr-send ${S.hold?'holding':''}" id="trSend"><div class="tr-what">${trayWhat()}</div>
+      ${live.length?`<div class="tr-targets">${live.map(d => `<button class="tr-t" data-k="${d.id}" data-a="traySend" data-v="${d.id}" data-tr="${d.id}" aria-label="发到 ${esc(d.name)}"><span style="height:38px;display:grid;place-items:center">${art(d.kind,d.id,d.kind==='phone'?38:48)}</span><span>${esc(d.name)}</span></button>`).join('')}</div>`:`<div class="tr-none">${ic('plus',15)}<small class="n" style="flex:1">没有已连接的设备</small><button class="btn q" data-a="openMain">连接新设备</button></div>`}
+    </div>
     <div class="tr-mods">
       <button class="mod tr-mod ${a.live?'on':''}" data-a="trayMod" data-v="audio" aria-expanded="${S.trayOpen==='audio'}"><span class="ic">${AUD.on||AUD.mode==='sink'?EQ:ic('speaker',16)}</span><span class="tx"><b>声音</b><small>${esc(a.t||'关')}</small></span></button>
       <button class="mod tr-mod ${k.live?'on':''}" data-a="trayMod" data-v="input" aria-expanded="${S.trayOpen==='input'}"><span class="ic">${ic('keyboard',16)}</span><span class="tx"><b>键鼠</b><small>${esc(k.t||'关')}</small></span></button>
     </div>
     <div class="exp ${S.trayOpen==='audio'?'open':''}"><div><div class="mod">${trayAudio()}</div></div></div>
     <div class="exp ${S.trayOpen==='input'?'open':''}"><div><div class="mod">${trayInput()}</div></div></div>
-    ${flows?`<div class="mod">${flows}</div>`:''}
-    ${S.clips.length>1?`<div class="mod tr-clips"><div class="tr-label" style="padding:4px 8px 4px">最近的剪贴板</div>${S.clips.slice(0,5).map((c,i) => `<button class="tr-cl" data-a="clipCopy" data-v="${i}" aria-label="拷贝：${esc(c.text)}">${c.kind==='shot'?'<i class="pic"></i>':''}<span class="tx"><b>${esc(c.text)}</b><small>${esc(c.from)} · ${esc(c.when)}</small></span><span class="cp ${S.copied===c?'done':''}">${ic(S.copied===c?'check':'copy',14,S.copied===c?2.2:1.6)}</span></button>`).join('')}</div>`:''}
+    ${S.clips.length?`<div class="mod tr-clips"><div class="tr-label" style="padding:4px 8px 4px">最近的剪贴板</div>${S.clips.slice(0,5).map((c,i) => `<button class="tr-cl" data-a="clipCopy" data-v="${i}" aria-label="拷贝：${esc(c.text)}">${c.kind==='shot'?'<i class="pic"></i>':''}<span class="tx"><b>${esc(c.text)}</b><small>${esc(c.from)} · ${esc(c.when)}</small></span><span class="cp ${S.copied===c?'done':''}">${ic(S.copied===c?'check':'copy',14,S.copied===c?2.2:1.6)}</span></button>`).join('')}</div>`:''}
     <div class="tray-h" style="padding:2px 4px 0"><span class="sp"></span><button class="iconbtn" data-a="trayMain" aria-label="打开 Whisper" title="打开 Whisper">${ic('window',15)}</button><button class="iconbtn" data-a="settings" aria-label="设置" title="设置">${ic('gear',15)}</button></div>`;
   if (old) morph($('.tray-in',old), html);
   else { const p = document.createElement('div'); p.className='tray'; p.id='trayPanel'; p.innerHTML=`<div class="tray-in">${html}</div>`; stage.appendChild(p); }
@@ -2159,19 +2157,19 @@ function settingsSections() {
   const lockRow=svcRow('锁屏与 UAC 时接收键鼠','lockSvc','锁屏时可输入密码，开关控制 UAC 提示',{none:'未安装',noneGo:'安装',run:'运行中',runGo:'卸载',working:'正在等待系统服务就绪…'},'lockSvc');
   const helperRow=svcRow('窗口流转组件','gnomeHelper','其他设备流转本机窗口需要一个 GNOME 小组件，首次安装后要注销并重新登录一次',{none:'未安装',noneGo:'安装',relogin:'需重新登录',reloginGo:'重新检查',ready:'已就绪',readyGo:'卸载',working:'正在安装…'},'gnomeHelper');
   const osSystem=OS==='win'?[lockRow]:OS==='gnome'?[helperRow]:[];
-  const osPerms=isMac()?[nav('辅助功能','已允许'),nav('屏幕与系统录音','已允许'),nav('仅系统录音','未允许')]:[];
+  const osPerms=isMac()?[nav('仅系统录音','未允许')]:[];
   const general=[field('昵称','name',S.prefs.name||selfName()),theme,pick('语言','lang',LANGS),dirRow];
   if (c) return [
     ['通用','laptop-g','#8b8d98',[...general,gain]],
-    ['连接','globe','#0090ff',[field('服务端口','port',S.prefs.port,'numeric'),sw('自动连接互信设备','autoConn'),sw('后台保持连接','mobileBg'),`<button class="row" data-a="prefToggle" data-v="island"><span>后台灵动岛</span><span class="sp"></span><small class="val">${S.prefs.island?'已开启':'未开启'}</small>${chev}</button>`,nav('电池优化白名单'),nav('窗口流转服务')]],
-    ['剪贴板和通知','bell','#f76b15',[sw('允许访问剪贴板','clipAllow'),sw('自动同步剪贴板','clipSync'),sw('推送安卓通知','pushAndroid'),...(S.prefs.pushAndroid?[nav('通知应用','已选择 3 个')]:[]),sw('忽略安卓通知','ignoreNotif'),sw('验证码写入剪贴板','copyVerify')]],
+    ['连接','globe','#0090ff',[sw('自动连接互信设备','autoConn'),sw('后台保持连接','mobileBg'),`<button class="row" data-a="prefToggle" data-v="island"><span>后台灵动岛</span><span class="sp"></span><small class="val">${S.prefs.island?'已开启':'未开启'}</small>${chev}</button>`,nav('电池优化白名单'),nav('窗口流转服务'),field('服务端口','port',S.prefs.port,'numeric')]],
+    ['剪贴板和通知','bell','#f76b15',[sw('同步剪贴板','clipSync'),sw('推送安卓通知','pushAndroid'),...(S.prefs.pushAndroid?[nav('通知应用','已选择 3 个')]:[]),sw('忽略安卓通知','ignoreNotif'),sw('验证码写入剪贴板','copyVerify')]],
     ['','info','#8b8d98',[version,about]],
   ];
   return [
     ['通用','laptop-g','#8b8d98',general],
-    ['连接','globe','#0090ff',[field('服务端口','port',S.prefs.port,'numeric'),sw('自动连接互信设备','autoConn'),sw('接收电视投屏','cast')]],
+    ['连接','globe','#0090ff',[sw('自动连接互信设备','autoConn'),sw('接收电视投屏','cast'),field('服务端口','port',S.prefs.port,'numeric')]],
     ['系统','gear','#60646c',[sw('开机自启动','autostart'),sw('关闭时隐藏到托盘','tray'),sw('启用截图快捷键','shotOn'),...(S.prefs.shotOn?[key('截图快捷键','shotKey')]:[]),...osSystem]],
-    ['共享与权限','link','#e93d82',[...osPerms,sw('允许查看和操作本机窗口','windows'),sw('允许访问剪贴板','clipAllow'),sw('自动同步剪贴板','clipSync'),gain,slide('键鼠共享滚轮速度','wheel',.5,3,.1,S.prefs.wheel)],'增益只影响这台播放的声音，过高可能失真。滚轮速度只影响这台被控制时。'],
+    ['共享与权限','link','#e93d82',[...osPerms,sw('允许查看和操作本机窗口','windows'),sw('同步剪贴板','clipSync')]],
     ['通知','bell','#f76b15',[sw('忽略安卓通知','ignoreNotif'),sw('验证码写入剪贴板','copyVerify')]],
     ['关于','info','#8b8d98',[version,about]],
   ];
@@ -2195,10 +2193,10 @@ function placeSettingsRoot() {
 const CONN=[['qr','二维码'],['scan','扫一扫'],['addr','IP / 端口']];
 function placeConnect() {
   const t=S.connTab, cls=S.connDir?(S.connDir>0?'swap-r':'swap-l'):''; S.connDir=0;
-  const body = t==='qr' ? `<div class="conn-qr">${qrSvg('self-'+SELF.addr)}<b>${esc(S.prefs.name||selfName())}</b><small>用另一台设备扫这个二维码</small></div>
+  const body = t==='qr' ? `<div class="conn-qr">${qrSvg('self-'+SELF.addr)}<b>${esc(S.prefs.name||selfName())}</b></div>
       <div class="group"><div class="row"><span>地址</span><span class="sp"></span><code>${esc(SELF.addr)}</code></div><div class="row"><span>身份指纹</span><span class="sp"></span><code>7F3A 19C2 04DE</code></div></div>
       <button class="btn lg" style="align-self:center" data-a="copyLink">${ic('copy',14)}拷贝连接链接</button>`
-    : t==='scan' ? `<button class="vf" data-a="scanDemo" aria-label="扫描另一台设备上的二维码"><i class="c1"></i><i class="c2"></i><i class="c3"></i><i class="c4"></i><span class="ln"></span><small>对准另一台设备上的二维码</small></button>
+    : t==='scan' ? `<button class="vf" data-a="scanDemo" aria-label="扫描另一台设备上的二维码"><i class="c1"></i><i class="c2"></i><i class="c3"></i><i class="c4"></i><span class="ln"></span></button>
         <div class="vf-tools"><button class="vf-b" data-a="torch" aria-label="手电筒">${ic('bolt',19)}</button><button class="vf-b" data-a="flipCam" aria-label="切换摄像头">${ic('flip',19)}</button></div>`
     : `<div class="group" style="padding:12px;display:flex;flex-direction:column;gap:12px"><label class="field">地址<input type="text" value="192.168.31." inputmode="decimal" autocomplete="off"></label><label class="field">端口<input type="text" value="10002" inputmode="numeric" autocomplete="off"></label></div>
       <button class="btn p lg" style="align-self:stretch" data-a="addrGo">连接</button>`;
@@ -2277,7 +2275,7 @@ function flyTo(fromRect, devId, cb) {
     fl.style.opacity = q>.9 ? (1-q)*10 : 1;
   }, .004);
   sp.cb(0);
-  sp.to(1, null, () => {
+  sp.to(1, () => {
     fl.remove();
     target.classList && target.classList.remove('flash');
     if (target.classList) { void target.offsetWidth; target.classList.add('flash'); setTimeout(() => target.classList.remove('flash'),800); }
@@ -2455,7 +2453,8 @@ const A = {
     S.clip=c; S.copied=c; renderTray(); clearTimeout(S.copyT);
     S.copyT=setTimeout(() => { S.copied=null; renderTray(); },900);
   },
-  shortRoute(_,el) { el.setAttribute('aria-checked', el.getAttribute('aria-checked')!=='true'); },
+  linkRoute(_,el) { const id=el.dataset.v, l=S.shares.find(x => x.id===id); openSheet('edit',`<form class="sheet-stack" data-form="linkRoute" data-v="${id}"><label class="field">路径<input type="text" name="route" value="${esc(l.route)}" autocomplete="off" pattern="[a-z0-9_\\-]{2,32}"></label><div class="sheet-actions"><button type="button" class="btn" data-a="linkOpen" data-v="${id}">取消</button><button class="btn p">完成</button></div></form>`); },
+  linkPw(_,el) { const id=el.dataset.v; openSheet('edit',`<form class="sheet-stack" data-form="linkPw" data-v="${id}"><label class="field">密码（可不填）<input type="password" name="pw" autocomplete="new-password"></label><div class="sheet-actions"><button type="button" class="btn" data-a="linkOpen" data-v="${id}">取消</button><button class="btn p">完成</button></div></form>`); },
   palRun(_,el) { runPal(+el.dataset.v); },
 };
 function curFile() { const key=S.path[S.path.length-1]||'root'; return FILES[key][S.sel]; }
@@ -2466,13 +2465,8 @@ function sendFile() {
   S.place='chat'; chatPin=true; renderAll();
 }
 function linkCreate(name) {
-  const rnd=Math.random().toString(36).slice(2,10);
-  openSheet('new',`<h3>共享「${esc(name)}」</h3><p>同一局域网的设备用浏览器打开就能下载。</p>
-    <form class="sheet-stack" data-form="link" data-name="${esc(name)}">
-    <label class="field">路由<input type="text" name="route" placeholder="${rnd}" autocomplete="off" pattern="[a-z0-9_\\-]{2,32}"></label>
-    <div class="row" style="padding:0;min-height:28px"><span>简短路由</span><span class="sp"></span><button type="button" class="sw" role="switch" aria-checked="false" aria-label="简短路由" data-a="shortRoute"></button></div>
-    <label class="field">密码（可不填）<input type="password" name="pw" autocomplete="new-password"></label>
-    <div class="sheet-actions"><button type="button" class="btn" data-a="closeSheet">取消</button><button class="btn p">创建链接</button></div></form>`);
+  const nl={id:'new'+(uid++),name,route:Math.random().toString(36).slice(2,10),pw:false,on:true,visits:0,downloads:0,last:'还没有访问'};
+  S.shares.unshift(nl); S.sel=null; renderAll(); openSheet('link',() => linkSheet(nl.id));
 }
 
 /* ---------- 全局搜索 ---------- */
@@ -2542,12 +2536,12 @@ document.addEventListener('contextmenu', e => {
   ]);
 });
 document.addEventListener('submit', e => {
-  const l=e.target.closest('[data-form=link]');
-  if (l) { e.preventDefault();
-    const name=l.dataset.name, sh=$('[data-a=shortRoute]',l).getAttribute('aria-checked')==='true', r=l.route.value.trim()||(sh?Math.random().toString(36).slice(2,6):Math.random().toString(36).slice(2,10));
-    if (S.shares.some(x => x.route===r)) { l.route.setCustomValidity('已经有链接在用这个路由了'); l.route.reportValidity(); return; }
-    const nl={id:'new'+(uid++),name,route:r,pw:!!l.pw.value,on:true,visits:0,downloads:0,last:'还没有访问'};
-    S.shares.unshift(nl); S.sel=null; renderAll(); openSheet('link',() => linkSheet(nl.id)); return; }
+  const lr=e.target.closest('[data-form=linkRoute]');
+  if (lr) { e.preventDefault(); const id=lr.dataset.v, r=lr.route.value.trim();
+    if (S.shares.some(x => x.route===r&&x.id!==id)) { lr.route.setCustomValidity('已经有链接在用这个路由了'); lr.route.reportValidity(); return; }
+    S.shares.find(x => x.id===id).route=r; renderAll(); openSheet('link',() => linkSheet(id)); return; }
+  const lp=e.target.closest('[data-form=linkPw]');
+  if (lp) { e.preventDefault(); const id=lp.dataset.v; S.shares.find(x => x.id===id).pw=!!lp.pw.value; renderAll(); openSheet('link',() => linkSheet(id)); return; }
   const f=e.target.closest('[data-form=send]'); if (!f) return; e.preventDefault();
   const i=$('#composerInput'), v=i.value.trim(); if (!v&&!S.attach) return;
   if (S.attach) { const id=startTransfer(S.dev,S.attach,`发到 ${DEV[S.dev].name}`,true); MSG[S.dev].push({t:'f',me:1,name:S.attach,size:'2.4 MB',act:id,fresh:1}); S.attach=null; }
@@ -2674,7 +2668,7 @@ $('#try').addEventListener('click', e => {
   if (S.size==='compact') { S.pstack=[]; S.dev='imac'; S.place='chat'; S.nav='detail'; push.to(1); S.sel=null; S.path=[]; }
   else if (isGlobal()||DEV[S.dev]?.state!=='on'||S.dev!=='imac') { S.dev='imac'; S.place='chat'; S.sel=null; S.path=[]; }
   ensureDetail();
-  if (k==='req') { const id='r'+(uid++); reqs.push({id,dev:'imac',title:'iMac 想浏览你的文件',sub:'可以看到文件，不能修改'}); islOpen=true; renderAll(); }
+  if (k==='req') { const id='r'+(uid++); reqs.push({id,dev:'imac',title:'iMac 请求访问你的文件',sub:''}); islOpen=true; renderAll(); }
   if (k==='open'||k==='send') {
     setPlace('apps'); renderAll();
     requestAnimationFrame(() => {
