@@ -767,8 +767,10 @@ class _DeviceListScreen extends State<DeviceListScreen>
       await _windowsTrayIcon.start();
       return;
     }
+    // Linux gives no way to tell what the panel is: GNOME's can be dark in light
+    // mode. So it gets the one in colour, which shows on either.
     await trayManager.setIcon(
-      'assets/tray_icon.png',
+      Platform.isLinux ? 'assets/tray_icon_linux.png' : 'assets/tray_icon.png',
       isTemplate: Platform.isMacOS,
       iconSize: 18,
     );
