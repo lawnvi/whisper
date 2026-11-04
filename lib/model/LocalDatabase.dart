@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqlite3/sqlite3.dart';
 import 'package:sqlite3_flutter_libs/sqlite3_flutter_libs.dart';
+import 'package:whisper/state/app_health.dart';
 import 'package:whisper/remote_input/remote_input_layout.dart';
 import 'package:whisper/socket/auth_protocol.dart';
 import 'package:whisper/socket/file_transfer_v3.dart';
@@ -2157,9 +2158,10 @@ Future<Directory> _databaseDirectory() async {
       )) {
         return currentDirectory;
       }
-      if (await legacyDatabase.exists()) {
+      if (await canOpenMacOSDatabase(legacyDatabase)) {
         return legacyDirectory;
       }
+      AppHealth.shared.oldHistoryUnreadable = await legacyDatabase.exists();
     }
     return currentDirectory;
   }
@@ -2233,6 +2235,25 @@ Future<bool> migrateLegacyMacOSDatabase({
     if (await temporary.exists()) {
       await temporary.delete();
     }
+  }
+}
+
+/// Whether a database left in an old sandboxed install's container can be used
+/// where it is. macOS may keep this app out of that container, signed differently
+/// as it is: the file is there, and opening it fails. Going ahead with it would
+/// leave the app with no database at all, and so no server and no discovery either,
+/// with nothing on screen to say so. Its history stays where it is, untouched.
+Future<bool> canOpenMacOSDatabase(File database) async {
+  if (!await database.exists()) return false;
+  Database? opened;
+  try {
+    opened = sqlite3.open(database.path);
+    opened.select('SELECT count(*) FROM sqlite_master');
+    return true;
+  } catch (_) {
+    return false;
+  } finally {
+    opened?.dispose();
   }
 }
 

@@ -67,4 +67,19 @@ void main() {
       'current',
     );
   });
+
+  // A Mac with an old sandboxed install: macOS would not let Whisper open the
+  // database in that container, and using it anyway left no server and no discovery.
+  test('a database that cannot be opened is not used', () async {
+    final directory = await Directory.systemTemp.createTemp('legacy-db');
+    addTearDown(() => directory.delete(recursive: true));
+    final locked = File('${directory.path}/db.sqlite');
+    await locked.writeAsString('not a database');
+    expect(await canOpenMacOSDatabase(locked), isFalse);
+    expect(await locked.readAsString(), 'not a database');
+    expect(
+      await canOpenMacOSDatabase(File('${directory.path}/missing.sqlite')),
+      isFalse,
+    );
+  });
 }
