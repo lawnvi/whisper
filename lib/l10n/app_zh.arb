@@ -2290,7 +2290,7 @@
     }
   },
   "inputStatusWaiting": "等待确认",
-  "inputStatusNotConnected": "未连接",
+  "inputStatusNotConnected": "无法控制",
   "inputSideRight": "右侧",
   "inputSideLeft": "左侧",
   "inputSideAbove": "上方",

@@ -3011,7 +3011,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get inputStatusWaiting => '等待确认';
 
   @override
-  String get inputStatusNotConnected => '未连接';
+  String get inputStatusNotConnected => '无法控制';
 
   @override
   String get inputSideRight => '右侧';

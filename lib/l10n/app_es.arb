@@ -1223,7 +1223,7 @@
     }
   },
   "inputStatusWaiting": "Esperando confirmación",
-  "inputStatusNotConnected": "Sin conexión",
+  "inputStatusNotConnected": "No se puede controlar",
   "inputSideRight": "A la derecha",
   "inputSideLeft": "A la izquierda",
   "inputSideAbove": "Arriba",

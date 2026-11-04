@@ -5401,7 +5401,7 @@ abstract class AppLocalizations {
   /// No description provided for @inputStatusNotConnected.
   ///
   /// In zh, this message translates to:
-  /// **'未连接'**
+  /// **'无法控制'**
   String get inputStatusNotConnected;
 
   /// No description provided for @inputSideRight.

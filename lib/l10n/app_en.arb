@@ -2142,7 +2142,7 @@
     }
   },
   "inputStatusWaiting": "Waiting to confirm",
-  "inputStatusNotConnected": "Not connected",
+  "inputStatusNotConnected": "Can't control",
   "inputSideRight": "On the right",
   "inputSideLeft": "On the left",
   "inputSideAbove": "Above",

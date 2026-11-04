@@ -3188,7 +3188,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get inputStatusWaiting => 'Waiting to confirm';
 
   @override
-  String get inputStatusNotConnected => 'Not connected';
+  String get inputStatusNotConnected => 'Can\'t control';
 
   @override
   String get inputSideRight => 'On the right';
