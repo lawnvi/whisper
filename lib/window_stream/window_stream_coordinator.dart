@@ -976,7 +976,8 @@ class WindowStreamCoordinator extends ChangeNotifier
     if (event is! TransportStats) {
       _diag(
         'transport ${message.streamId} ${event.runtimeType}'
-        '${event is TransportEnded ? ' ${event.failure}' : ''}',
+        '${event is TransportEnded ? ' ${event.failure}' : ''}'
+        '${event is TransportVideoSize ? ' ${event.width}x${event.height}' : ''}',
       );
     }
     if (event is TransportStats) {
@@ -1143,6 +1144,12 @@ class WindowStreamCoordinator extends ChangeNotifier
         videoHeight > 0 &&
         ((size.width / size.height) / (videoWidth / videoHeight) - 1).abs() <
             0.02;
+    // How many pixels a point is, the first time the window shows the whole
+    // picture: also when it is about to be skipped below, or the first resize
+    // has nothing to work with and the window just goes back.
+    if (matchesPicture && handle is! RemoteStreamHandle) {
+      session._pixelsPerPoint ??= videoWidth / size.width;
+    }
     // A window that just followed a new picture shape reports that size;
     // passing it back would make the host re-layout in a loop.
     if (matchesPicture &&
@@ -1158,9 +1165,7 @@ class WindowStreamCoordinator extends ChangeNotifier
     } else {
       // The display's own density: pixels per point as the window first
       // showed the whole picture, never more pixels than it opened with.
-      final perPoint = session._pixelsPerPoint ??= matchesPicture
-          ? videoWidth / size.width
-          : null;
+      final perPoint = session._pixelsPerPoint;
       if (perPoint == null) {
         return;
       }

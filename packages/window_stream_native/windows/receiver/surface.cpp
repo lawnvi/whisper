@@ -1511,6 +1511,11 @@ LRESULT Surface::HandleMessage(UINT message, WPARAM wparam, LPARAM lparam) {
         return 0;
       }
       if (in_size_move_) resized_in_move_ = true;
+      // Back from maximized, or anything else without a drag: the picture has
+      // the same moment to follow as at the end of one (WM_EXITSIZEMOVE).
+      if (reflow_ && !in_size_move_ && wparam == SIZE_RESTORED) {
+        SetTimer(hwnd_, kTimerSettle, kSettleDelayMs, nullptr);
+      }
       if (volume_control_ != nullptr) volume_control_->OwnerMoved();
       SetVisible(IsWindowVisible(hwnd_) != FALSE);
       std::shared_ptr<D3DPresenter> presenter = this->presenter();

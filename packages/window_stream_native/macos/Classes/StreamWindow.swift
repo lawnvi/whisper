@@ -13,7 +13,6 @@ final class StreamWindowController: NSObject, NSWindowDelegate {
   /// settles to the picture's shape only if that does not follow.
   private let reflow: Bool
   private var settleWork: DispatchWorkItem?
-  private var settling = false
   private let volumeControl: WindowVolumeControl
 
   /// The user changed the volume in the window's control.
@@ -167,10 +166,17 @@ final class StreamWindowController: NSObject, NSWindowDelegate {
     videoView.noteFrame(size)
   }
 
-  /// Keeps the window's height and centre when the stream's size changes,
-  /// e.g. after rotation or a display resize.
+  /// Follows the stream's size, e.g. after rotation or a display resize, around
+  /// the window's centre.
+  ///
+  /// Not with `setFrame(animate: true)`: that holds the main thread for as long as
+  /// it takes, and it takes longer the further it goes. From portrait to landscape
+  /// that is over a second with no new frames shown, and then all of them at once.
   func updateVideoSize(_ size: CGSize) {
     guard size.width > 0, size.height > 0, size != videoSize else { return }
+    let turned = (size.width > size.height) != (videoSize.width > videoSize.height)
+    let answeringResize =
+      ProcessInfo.processInfo.systemUptime - resizedAt < StreamWindowController.settleDelay
     videoSize = size
     videoView.videoSize = size
     let frame = window.frame
@@ -185,28 +191,83 @@ final class StreamWindowController: NSObject, NSWindowDelegate {
       {
         return
       }
+      // The app would not take the shape just given to the window (one that
+      // keeps to portrait turned its display back): not the picture turning on
+      // its own, so the window closes in around it, keeping what was set.
+      if answeringResize {
+        settle()
+        return
+      }
     } else {
       window.contentAspectRatio = size
     }
-    let height = content.height
-    let width = (height * size.width / size.height).rounded()
-    let newContent = NSRect(
-      x: content.midX - width / 2, y: content.minY, width: width, height: height)
-    // Following the picture's new shape is not the user resizing: the other
-    // side already has this size.
-    followingVideo = true
-    window.setFrame(window.frameRect(forContentRect: newContent), display: true, animate: true)
-    followingVideo = false
+    let newContent = StreamWindowController.contentRect(
+      following: content, to: size, turned: turned,
+      within: window.screen?.visibleFrame)
+    let newFrame = window.frameRect(forContentRect: newContent)
+    // The other side already has this size.
+    follow(to: newFrame)
   }
 
-  private var followingVideo = false
+  /// To a shape the picture asked for. It is not the user resizing, so nothing
+  /// reports it as that while it moves.
+  private func follow(to frame: NSRect, then done: (() -> Void)? = nil) {
+    followingVideo += 1
+    if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+      window.setFrame(frame, display: true)
+      followingVideo -= 1
+      done?()
+      return
+    }
+    NSAnimationContext.runAnimationGroup({ context in
+      context.duration = StreamWindowController.followDuration
+      context.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.8, 0.2, 1)
+      window.animator().setFrame(frame, display: true)
+    }, completionHandler: { [weak self] in
+      self?.followingVideo -= 1
+      done?()
+    })
+  }
+
+  private var followingVideo = 0
+  /// When the window last got a size that was not the picture's doing.
+  private var resizedAt: TimeInterval = 0
+  private static let followDuration: TimeInterval = 0.28
+
+  /// Turned, the picture is the same one on its side, so its long edge stays as
+  /// long: keeping the height would make a phone's window enormous. Otherwise the
+  /// height stays. Whatever does not fit the screen is scaled down to fit.
+  private static func contentRect(
+    following content: NSRect, to size: CGSize, turned: Bool, within visible: NSRect?
+  ) -> NSRect {
+    var width: CGFloat
+    var height: CGFloat
+    if turned {
+      let long = max(content.width, content.height)
+      width = size.width > size.height ? long : long * size.width / size.height
+      height = size.width > size.height ? long * size.height / size.width : long
+    } else {
+      height = content.height
+      width = height * size.width / size.height
+    }
+    var x = content.midX - width / 2
+    var y = content.midY - height / 2
+    if let visible = visible {
+      let shrink = min(1, visible.width / width, visible.height / height)
+      width *= shrink
+      height *= shrink
+      x = max(visible.minX, min(content.midX - width / 2, visible.maxX - width))
+      y = max(visible.minY, min(content.midY - height / 2, visible.maxY - height))
+    }
+    return NSRect(x: x.rounded(), y: y.rounded(), width: width.rounded(), height: height.rounded())
+  }
 
   private static func sameShape(_ a: CGSize, _ b: CGSize) -> Bool {
     guard a.width > 0, a.height > 0, b.width > 0, b.height > 0 else { return true }
     return abs((a.width / a.height) / (b.width / b.height) - 1) <= aspectTolerance
   }
 
-  /// REFLOW, after the user resized: if the picture has not taken the
+  /// REFLOW, after the window was resized: if the picture has not taken the
   /// window's new shape by `settleDelay`, the window takes the picture's,
   /// shrinking one side around its centre so the picture fits the frame.
   private func scheduleSettle() {
@@ -231,13 +292,8 @@ final class StreamWindowController: NSObject, NSWindowDelegate {
       width: (fitted.width * grow).rounded(), height: (fitted.height * grow).rounded())
     fitted.origin = CGPoint(
       x: (content.midX - fitted.width / 2).rounded(), y: (content.midY - fitted.height / 2).rounded())
-    settling = true
-    window.setFrame(
-      window.frameRect(forContentRect: fitted), display: true,
-      animate: !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
-    settling = false
     // The other side lays the window out for its settled size.
-    reportSize()
+    follow(to: window.frameRect(forContentRect: fitted)) { [weak self] in self?.reportSize() }
   }
 
   /// Tells the other side how much room the window has, in points.
@@ -289,6 +345,7 @@ final class StreamWindowController: NSObject, NSWindowDelegate {
   }
 
   func windowDidEndLiveResize(_ notification: Notification) {
+    resizedAt = ProcessInfo.processInfo.systemUptime
     reportSize()
     if reflow {
       scheduleSettle()
@@ -302,8 +359,22 @@ final class StreamWindowController: NSObject, NSWindowDelegate {
 
   /// Zoom, full screen, or the screen trimming it: resized without a drag.
   func windowDidResize(_ notification: Notification) {
-    if !window.inLiveResize && !followingVideo && !settling {
+    if !window.inLiveResize && followingVideo == 0 {
+      resizedAt = ProcessInfo.processInfo.systemUptime
       reportSize()
+      // Nobody's hand on it, so the resize is over: as at the end of a drag. A
+      // phone's app that keeps to portrait turns its display back, and the
+      // picture never takes this shape.
+      if reflow {
+        scheduleSettle()
+      }
+    }
+  }
+
+  /// Back from full screen, where the window could not follow the picture.
+  func windowDidExitFullScreen(_ notification: Notification) {
+    if reflow {
+      scheduleSettle()
     }
   }
 
