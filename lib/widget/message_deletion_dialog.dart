@@ -46,7 +46,6 @@ class _MessageDeletionDialogState extends State<_MessageDeletionDialog> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final palette = context.wc;
     return CallbackShortcuts(
       bindings: {const SingleActivator(LogicalKeyboardKey.escape): _close},
       child: Focus(
@@ -67,24 +66,27 @@ class _MessageDeletionDialogState extends State<_MessageDeletionDialog> {
               ),
               if (widget.hasReceivedFiles) ...[
                 const SizedBox(height: 16),
-                CheckboxListTile(
-                  key: const ValueKey('keep-received-files'),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 6),
-                  horizontalTitleGap: 0,
-                  controlAffinity: ListTileControlAffinity.leading,
-                  checkboxShape: const CircleBorder(),
-                  tileColor: palette.fill,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    side: BorderSide(color: palette.sep),
+                // Its own Material: a tile paints its hover and press on the
+                // nearest one, and the dialog's background would be over that.
+                Material(
+                  type: MaterialType.transparency,
+                  child: CheckboxListTile(
+                    key: const ValueKey('keep-received-files'),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 6),
+                    horizontalTitleGap: 0,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    checkboxShape: const CircleBorder(),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    title: Text(
+                      l10n?.keepReceivedFiles ?? '保留接收的文件',
+                      textAlign: TextAlign.start,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                    value: _keepFiles,
+                    onChanged: (value) => setState(() => _keepFiles = value!),
                   ),
-                  title: Text(
-                    l10n?.keepReceivedFiles ?? '保留接收的文件',
-                    textAlign: TextAlign.start,
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                  value: _keepFiles,
-                  onChanged: (value) => setState(() => _keepFiles = value!),
                 ),
               ],
             ],
