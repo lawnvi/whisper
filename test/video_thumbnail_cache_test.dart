@@ -26,6 +26,43 @@ void main() {
     skip: sample == null,
   );
 
+  test('a thumbnail made once is read back from disk next run', () async {
+    final root = await Directory.systemTemp.createTemp('thumbs');
+    addTearDown(() => root.delete(recursive: true));
+    final video = File('${root.path}/a.mp4')..writeAsBytesSync([1, 2, 3]);
+    final disk = Directory('${root.path}/cache')..createSync();
+    var made = 0;
+    VideoThumbnailCache run() => VideoThumbnailCache(
+      loader: (_) async {
+        made++;
+        return VideoThumbnail(
+          bytes: Uint8List.fromList([9, 8, 7]),
+          aspectRatio: 1.5,
+          duration: const Duration(seconds: 3),
+        );
+      },
+      directory: () async => disk,
+    );
+    await run().load(video.path);
+    expect(made, 1);
+    // The write does not hold up the thumbnail.
+    await Future.doWhile(() async {
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+      return disk.listSync().whereType<File>().every(
+        (file) => file.path.endsWith('.partial'),
+      );
+    });
+    final again = await run().load(video.path);
+    expect(made, 1, reason: 'no decoder the second time');
+    expect(again!.bytes, [9, 8, 7]);
+    expect(again.aspectRatio, 1.5);
+    expect(again.duration, const Duration(seconds: 3));
+    // A changed file is another video.
+    video.writeAsBytesSync([1, 2, 3, 4]);
+    await run().load(video.path);
+    expect(made, 2);
+  });
+
   test(
     'deduplicates concurrent loads and serializes different videos',
     () async {

@@ -292,6 +292,9 @@ class MainFlutterWindow: NSWindow {
     case "enableWindowMaterial":
       result(enableWindowMaterial())
       return true
+    case "videoThumbnail":
+      videoThumbnail(call, result: result)
+      return true
     case "clipboardIsSensitive":
       // Password managers mark what they copy; it must not be remembered.
       let types = NSPasteboard.general.types ?? []
@@ -303,6 +306,32 @@ class MainFlutterWindow: NSWindow {
       return true
     default:
       return false
+    }
+  }
+
+  /// A frame of a video and how long it is, or nil for what the system cannot
+  /// read. Far lighter than decoding it with a whole player in this process.
+  private func videoThumbnail(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    guard let path = (call.arguments as? [String: Any])?["path"] as? String else {
+      result(nil)
+      return
+    }
+    DispatchQueue.global(qos: .utility).async {
+      let asset = AVURLAsset(url: URL(fileURLWithPath: path))
+      let generator = AVAssetImageGenerator(asset: asset)
+      generator.appliesPreferredTrackTransform = true
+      generator.maximumSize = CGSize(width: 512, height: 512)
+      var reply: [String: Any]?
+      if let image = try? generator.copyCGImage(at: .zero, actualTime: nil),
+        let data = NSBitmapImageRep(cgImage: image).representation(
+          using: .jpeg, properties: [.compressionFactor: 0.8])
+      {
+        reply = [
+          "bytes": FlutterStandardTypedData(bytes: data),
+          "seconds": asset.duration.seconds.isFinite ? asset.duration.seconds : 0,
+        ]
+      }
+      DispatchQueue.main.async { result(reply) }
     }
   }
 

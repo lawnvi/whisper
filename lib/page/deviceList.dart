@@ -610,7 +610,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
     windowManager.addListener(this);
     if (trayPanelSupported) {
       _trayPanel = TrayPanelHost(onAction: _onTrayAction);
-      unawaited(_trayPanel!.start().then((_) => _pushTrayState()));
       // The list lives in memory: start it from what is on the clipboard now.
       unawaited(_recordClipboard());
     }
@@ -3554,6 +3553,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     final panel = _trayPanel;
     if (panel != null) {
       _pushTrayState();
+      await panel.start();
       await panel.toggle();
       return;
     }

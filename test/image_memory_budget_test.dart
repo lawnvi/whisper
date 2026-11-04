@@ -35,4 +35,21 @@ void main() {
       expect(gpuLimits, [32, 8, 32].map((mb) => mb * 1024 * 1024));
     },
   );
+
+  testWidgets('the GPU budget closes while nothing is drawn and opens again', (
+    tester,
+  ) async {
+    final budgets = <int>[];
+    final trimmer = GpuCacheTrimmer(setBudget: budgets.add);
+    trimmer.onFrames();
+    await tester.pump(GpuCacheTrimmer.idleAfter - const Duration(seconds: 1));
+    trimmer.onFrames();
+    await tester.pump(GpuCacheTrimmer.idleAfter - const Duration(seconds: 1));
+    expect(budgets, isEmpty, reason: 'still being drawn');
+    await tester.pump(const Duration(seconds: 2));
+    expect(budgets, [GpuCacheTrimmer.idleBytes]);
+    trimmer.onFrames();
+    expect(budgets, [GpuCacheTrimmer.idleBytes, GpuCacheTrimmer.activeBytes]);
+    trimmer.dispose();
+  });
 }

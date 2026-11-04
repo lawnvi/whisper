@@ -29,8 +29,14 @@ class TrayPanelHost {
 
   static const _margin = 10.0, _rightMargin = 12.0;
 
-  Future<void> start() async {
-    if (!trayPanelSupported || _window != null) return;
+  Future<void>? _starting;
+
+  /// The panel is an engine of its own, tens of MB. It is made the first time it
+  /// is wanted.
+  Future<void> start() => _starting ??= _start();
+
+  Future<void> _start() async {
+    if (!trayPanelSupported) return;
     // Its engine only needs a few plugins, and on Windows must not get them all.
     if (Platform.isWindows) {
       try {
@@ -64,6 +70,8 @@ class TrayPanelHost {
     }
     _ready = true;
     await window.invokeMethod<void>('state', _stateMap);
+    // One frame to measure itself in, or it opens at the wrong height.
+    await Future<void>.delayed(const Duration(milliseconds: 60));
   }
 
   Future<dynamic> _onCall(MethodCall call) async {

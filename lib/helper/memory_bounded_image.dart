@@ -8,7 +8,28 @@ class MemoryBoundedFileImage extends FileImage {
 
   @override
   ImageStreamCompleter loadImage(FileImage key, ImageDecoderCallback decode) =>
-      super.loadImage(key, _boundedDecoder(decode));
+      MultiFrameImageStreamCompleter(
+        codec: _load(key, _boundedDecoder(decode)),
+        scale: key.scale,
+        debugLabel: key.file.path,
+      );
+
+  /// FileImage checks `file.runtimeType == File`, which is never so: a real file
+  /// is a `_File`. It then reads the whole file into Dart and copies that for the
+  /// engine, twice the size of the picture for each one on screen. The engine can
+  /// read it by itself.
+  static Future<ui.Codec> _load(
+    FileImage key,
+    ImageDecoderCallback decode,
+  ) async {
+    if (await key.file.length() == 0) {
+      PaintingBinding.instance.imageCache.evict(key);
+      throw StateError(
+        '${key.file} is empty and cannot be loaded as an image.',
+      );
+    }
+    return decode(await ui.ImmutableBuffer.fromFilePath(key.file.path));
+  }
 }
 
 class MemoryBoundedMemoryImage extends MemoryImage {

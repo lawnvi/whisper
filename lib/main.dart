@@ -91,10 +91,13 @@ Future<void> main(List<String> arguments) async {
       arguments[0] == 'multi_window' &&
       arguments[2] == trayPanelArgument) {
     WidgetsFlutterBinding.ensureInitialized();
+    // A small window: it has no use for the main window's GPU budget.
+    unawaited(applyImageMemoryBudget(background: true));
     runApp(const TrayPanelApp());
     return;
   }
   await applyImageMemoryBudget();
+  GpuCacheTrimmer.start();
   // Which devices are tablets, for their icons from the first frame.
   unawaited(DeviceFormFactors.shared.load());
   final sodium = await SodiumInit.init();

@@ -110,10 +110,25 @@ abstract final class WhisperWindow {
         {'brightness': brightness.name},
       );
       hasMaterial.value = enabled == true;
+      await _showMaterialFor(brightness);
     } on PlatformException {
       hasMaterial.value = false;
     } on MissingPluginException {
       hasMaterial.value = false;
+    }
+  }
+
+  /// In light mode the sidebar is opaque white, so macOS would keep a material
+  /// nobody can see, and its picture, in memory.
+  static Future<void> _showMaterialFor(Brightness brightness) async {
+    if (!Platform.isMacOS) return;
+    try {
+      await _channel.invokeMethod<void>(
+        'setWindowMaterialVisible',
+        brightness == Brightness.dark,
+      );
+    } on Object {
+      // An older runner: it stays as it was.
     }
   }
 
@@ -127,6 +142,7 @@ abstract final class WhisperWindow {
       } else {
         await windowManager.setBrightness(brightness);
       }
+      await _showMaterialFor(brightness);
     } on PlatformException {
       // The window keeps its appearance; nothing else depends on it.
     } on MissingPluginException {
