@@ -136,6 +136,17 @@ double _aspect(DeviceKind kind) => switch (kind) {
   DeviceKind.tablet => 76 / 100,
 };
 
+/// Where the middle of a picture's screen is, for what stands on the screen.
+/// The heights are those in the painter's viewBoxes.
+Alignment deviceScreenCenter(DeviceKind kind, DeviceOs os) => switch (kind) {
+  DeviceKind.laptop => const Alignment(0, 27.5 / 33 - 1),
+  DeviceKind.desktop => Alignment(
+    0,
+    (os == DeviceOs.windows || os == DeviceOs.linux ? 35 : 29.5) / 43 - 1,
+  ),
+  DeviceKind.phone || DeviceKind.tablet => Alignment.center,
+};
+
 /// A realistic device. For handhelds [size] is the height, for computers the width,
 /// which is how the prototype and `surfaces.md` measure them.
 class DeviceArt extends StatelessWidget {
@@ -146,7 +157,11 @@ class DeviceArt extends StatelessWidget {
     required this.size,
     this.state = DeviceArtState.normal,
     this.os = DeviceOs.other,
+    this.bare = false,
   });
+
+  /// Only the wallpaper on the screen, for something to stand on it.
+  final bool bare;
 
   final DeviceKind kind;
   final DeviceWallpaper wallpaper;
@@ -183,7 +198,7 @@ class DeviceArt extends StatelessWidget {
       child: CustomPaint(
         size: art,
         isComplex: false,
-        painter: _DeviceArtPainter(kind, wallpaper, os),
+        painter: _DeviceArtPainter(kind, wallpaper, os, bare: bare),
       ),
     );
     if (state == DeviceArtState.normal) return painted;
@@ -198,11 +213,17 @@ class DeviceArt extends StatelessWidget {
 }
 
 class _DeviceArtPainter extends CustomPainter {
-  const _DeviceArtPainter(this.kind, this.wallpaper, this.os);
+  const _DeviceArtPainter(
+    this.kind,
+    this.wallpaper,
+    this.os, {
+    this.bare = false,
+  });
 
   final DeviceKind kind;
   final DeviceWallpaper wallpaper;
   final DeviceOs os;
+  final bool bare;
 
   bool get _graphite => os == DeviceOs.windows || os == DeviceOs.linux;
 
@@ -253,6 +274,7 @@ class _DeviceArtPainter extends CustomPainter {
 
   /// What the system puts on the screen.
   void _system(Canvas canvas, RRect screen) {
+    if (bare) return;
     final s = screen.outerRect;
     canvas.save();
     canvas.clipRRect(screen);
@@ -430,7 +452,10 @@ class _DeviceArtPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_DeviceArtPainter old) =>
-      old.kind != kind || old.wallpaper != wallpaper || old.os != os;
+      old.kind != kind ||
+      old.wallpaper != wallpaper ||
+      old.os != os ||
+      old.bare != bare;
 }
 
 /// A one-color line icon of a device, for the device picker. [size] is the

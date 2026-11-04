@@ -53,29 +53,6 @@ SoundMemberPhase soundMemberPhaseOf(AudioGroupSink sink) =>
       },
     };
 
-/// What the page header says about everyone: still estimating while anyone is,
-/// otherwise the worst of them. Null when nobody is playing.
-AudioSyncQuality? soundHeaderQuality(Iterable<SoundMemberPhase> phases) {
-  AudioSyncQuality? worst;
-  for (final phase in phases) {
-    switch (phase) {
-      case SoundMemberPhase.connecting:
-      case SoundMemberPhase.calibrating:
-        return AudioSyncQuality.calibrating;
-      case SoundMemberPhase.unstable:
-        worst = AudioSyncQuality.unstable;
-      case SoundMemberPhase.fair:
-        if (worst != AudioSyncQuality.unstable) worst = AudioSyncQuality.fair;
-      case SoundMemberPhase.good:
-        worst ??= AudioSyncQuality.good;
-      case SoundMemberPhase.failed:
-      case SoundMemberPhase.disconnected:
-        break;
-    }
-  }
-  return worst;
-}
-
 /// Who is checked, on which channel. `surfaces.md`「声道默认值」: the first is
 /// stereo; a second splits the two into left and right unless somebody has
 /// touched a channel; back to stereo at one; from the third on, stereo.

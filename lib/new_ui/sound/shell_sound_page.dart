@@ -12,13 +12,14 @@ import 'package:whisper/new_ui/shell/shell_parts.dart';
 import 'package:whisper/new_ui/sound/sound_controller.dart';
 import 'package:whisper/new_ui/sound/sound_rules.dart';
 import 'package:whisper/state/chat_session_list.dart';
+import 'package:whisper/theme/radix_colors.dart';
 import 'package:whisper/theme/whisper_device_art.dart';
 import 'package:whisper/theme/whisper_icons.dart';
 import 'package:whisper/theme/whisper_ui.dart';
 import 'package:whisper/widget/island/island_home.dart';
 
-const _maxColumn = 620.0;
-const _narrowColumn = 520.0;
+const _column = 520.0;
+const _artSize = 144.0;
 
 /// docs/design/surfaces.md「声音」: playing this device's sound on others, or
 /// another device's sound here. Fills the area right of the sidebar, toolbar
@@ -101,13 +102,17 @@ class _ShellSoundPageState extends State<ShellSoundPage> {
                         builder: (context, _) => LayoutBuilder(
                           builder: (context, constraints) {
                             final column = math.min(
-                              _maxColumn,
+                              _column,
                               math.max(0.0, constraints.maxWidth - 40),
                             );
+                            // From the window alone, never from the content:
+                            // nothing moves as devices come and go.
+                            final top = ((constraints.maxHeight - 300) / 3)
+                                .clamp(0.0, 160.0);
                             final sink = _controller.sinkView;
                             return SingleChildScrollView(
                               controller: _scroll,
-                              padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
+                              padding: EdgeInsets.fromLTRB(20, top, 20, 28),
                               child: Center(
                                 child: SizedBox(
                                   width: column,
@@ -166,157 +171,227 @@ class _SourceView extends StatelessWidget {
     final l10n = context.shellL10n;
     final rows = [
       for (final session in sessions)
-        if (session.isConnected || session.isNearby)
-          controller.rowFor(session.device, connected: session.isConnected),
+        if (session.isConnected) controller.rowFor(session.device),
     ];
-    final live = rows.where((row) => row.checked && row.live).toList();
-    final quality = controller.headerQuality(live);
+    final live = rows.where((row) => row.checked && row.live).length;
+    final anyConnected = rows.isNotEmpty;
     final permission = controller.permissionNeeded;
     final failure = controller.failure;
-    final solo = live.any((row) => row.phase == SoundRowPhase.soloPlaying);
-    final subtitle = permission
-        ? l10n.soundPermissionNeeded
-        : failure != null
-        ? l10n.audioShareFailed(_failureDetail(l10n, failure))
-        : live.isEmpty
-        ? null
-        : solo
-        ? l10n.soundMemberSoloOnly
-        : live.every((row) => row.sink == null)
-        ? l10n.shellConnecting
-        : switch (quality) {
-            AudioSyncQuality.fair => l10n.audioGroupSyncFair,
-            AudioSyncQuality.unstable => l10n.audioGroupSyncUnstable,
-            AudioSyncQuality.good => l10n.audioGroupSyncGood,
-            _ => l10n.audioGroupSyncCalibrating,
-          };
-    final trouble =
-        permission ||
-        failure != null ||
-        quality == AudioSyncQuality.fair ||
-        quality == AudioSyncQuality.unstable;
     final self = selfDevice;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _Hero(
-          art: DeviceArt(
-            kind: self == null
-                ? DeviceKind.laptop
-                : deviceKindFor(self.platform),
-            os: deviceOsFor(self?.platform ?? ''),
-            wallpaper: DeviceWallpaper.self,
-            size: 96,
+        Center(
+          child: _ArtButton(
+            art: DeviceArt(
+              kind: self == null
+                  ? DeviceKind.laptop
+                  : deviceKindFor(self.platform),
+              os: deviceOsFor(self?.platform ?? ''),
+              wallpaper: DeviceWallpaper.self,
+              size: _artSize,
+              bare: true,
+            ),
+            live: live > 0,
+            playing: controller.on,
+            label: l10n.soundShareThisDevice,
+            onTap:
+                !permission &&
+                    controller.hasMembers &&
+                    (controller.on || anyConnected)
+                ? () => unawaited(controller.setOn(!controller.on))
+                : null,
           ),
-          live: live.isNotEmpty,
-          title: live.isEmpty
-              ? l10n.soundHeroIdleTitle
-              : l10n.soundHeroPlaying(live.length),
-          subtitle: subtitle,
-          warning: trouble,
+        ),
+        const SizedBox(height: 12),
+        _Name(self?.name ?? ''),
+        _State(
+          text: permission
+              ? l10n.soundPermissionNeeded
+              : failure != null
+              ? l10n.audioShareFailed(_failureDetail(l10n, failure))
+              : live > 0
+              ? l10n.soundSelfPlaying(live)
+              : rows.isEmpty
+              ? l10n.soundNoDevices
+              : l10n.soundSelfIdle,
+          warning: permission || failure != null,
           action: permission
               ? ShareButton(
                   label: l10n.shareOpenSettings,
-                  large: true,
                   onTap: () => unawaited(controller.openPermission()),
                 )
-              : _PlayButton(
-                  label: l10n.soundShareThisDevice,
-                  playing: controller.on,
-                  onTap: controller.hasMembers
-                      ? () => unawaited(controller.setOn(!controller.on))
-                      : null,
-                ),
+              : null,
         ),
-        const SizedBox(height: 18),
-        ShareGroup(
-          inset: 60,
-          children: [
-            if (rows.isEmpty)
-              ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: 60),
-                child: Center(
-                  child: Text(
-                    l10n.soundNoDevices,
-                    style: TextStyle(
-                      fontSize: const WhisperType(touch: false).body,
-                      color: context.wc.ink2,
-                    ),
-                  ),
+        if (rows.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          ShareGroup(
+            inset: 60,
+            children: [
+              for (final row in rows)
+                _MemberRow(
+                  key: ValueKey(row.device.uid),
+                  row: row,
+                  controller: controller,
                 ),
-              ),
-            for (final row in rows)
-              _MemberRow(
-                key: ValueKey(row.device.uid),
-                row: row,
-                controller: controller,
-              ),
-          ],
-        ),
+            ],
+          ),
+        ],
       ],
     );
   }
 }
 
-/// `.pane-hero`: picture, wave, title, one line. Every height here follows the
-/// prototype's line heights so the page sits exactly where it does there.
-class _Hero extends StatelessWidget {
-  const _Hero({
+/// The device and its play button in one. The button stands on the picture's
+/// screen, as on a video, and the whole picture presses it. While sound plays
+/// the wave is inside it, and under the pointer what a press will do.
+class _ArtButton extends StatefulWidget {
+  const _ArtButton({
     required this.art,
     required this.live,
-    required this.title,
-    this.subtitle,
-    this.warning = false,
-    this.action,
+    required this.playing,
+    required this.label,
+    required this.onTap,
+    this.button = true,
   });
 
-  final Widget art;
-  final bool live;
-  final String title;
-  final String? subtitle;
+  final DeviceArt art;
+  final bool live, playing, button;
+  final String label;
+  final VoidCallback? onTap;
+
+  @override
+  State<_ArtButton> createState() => _ArtButtonState();
+}
+
+class _ArtButtonState extends State<_ArtButton> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.button) return widget.art;
+    final c = context.wc;
+    final on = widget.onTap != null;
+    final ink = on ? c.accent : Radix.whiteA12;
+    final showWave = widget.live && !(on && _hovered);
+    return Tooltip(
+      message: widget.label,
+      child: Semantics(
+        toggled: widget.playing,
+        child: MouseRegion(
+          onEnter: (_) => setState(() => _hovered = true),
+          onExit: (_) => setState(() => _hovered = false),
+          child: Pressable(
+            key: const ValueKey('sound-play'),
+            onTap: widget.onTap,
+            radius: WhisperRadius.s,
+            label: widget.label,
+            child: Stack(
+              alignment: deviceScreenCenter(widget.art.kind, widget.art.os),
+              children: [
+                widget.art,
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: on ? Radix.white : Radix.whiteA5,
+                    shape: BoxShape.circle,
+                    boxShadow: on
+                        ? WhisperShadow.e1(Theme.of(context).brightness)
+                        : null,
+                  ),
+                  child: SizedBox.square(
+                    dimension: 40,
+                    child: SpringBuilder(
+                      value: showWave ? 1 : 0,
+                      builder: (context, amount, _) {
+                        final wave = amount.clamp(0.0, 1.0);
+                        return Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            Opacity(
+                              opacity: 1 - wave,
+                              child: WhisperIcon(
+                                widget.playing
+                                    ? WhisperGlyph.pause
+                                    : WhisperGlyph.play,
+                                size: 18,
+                                weight: 2,
+                                filled: !widget.playing,
+                                color: ink,
+                              ),
+                            ),
+                            Opacity(
+                              opacity: wave,
+                              child: _Wave(live: widget.live, color: ink),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Whose sound this is, under its picture.
+class _Name extends StatelessWidget {
+  const _Name(this.name);
+
+  final String name;
+
+  @override
+  Widget build(BuildContext context) => Text(
+    name,
+    textAlign: TextAlign.center,
+    maxLines: 1,
+    overflow: TextOverflow.ellipsis,
+    style: TextStyle(
+      fontSize: const WhisperType(touch: false).title,
+      fontWeight: FontWeight.w600,
+      height: 1.4,
+      leadingDistribution: TextLeadingDistribution.even,
+      color: context.wc.ink,
+    ),
+  );
+}
+
+/// What it is doing, in one line under the name. As high with a button beside
+/// it as without: what is below must not move.
+class _State extends StatelessWidget {
+  const _State({required this.text, this.warning = false, this.action});
+
+  final String text;
   final bool warning;
   final Widget? action;
 
   @override
   Widget build(BuildContext context) {
     final c = context.wc;
-    const type = WhisperType(touch: false);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(0, 6, 0, 4),
-      child: Column(
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 30),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          art,
-          const SizedBox(height: 9),
-          _Wave(live: live),
-          const SizedBox(height: 11),
-          Text(
-            title,
-            textAlign: TextAlign.center,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: type.title,
-              fontWeight: FontWeight.w600,
-              height: 1.4,
-              leadingDistribution: TextLeadingDistribution.even,
-              color: c.ink,
+          Flexible(
+            child: Text(
+              text,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: const WhisperType(touch: false).body,
+                height: 1.4,
+                leadingDistribution: TextLeadingDistribution.even,
+                color: warning ? c.warn : c.ink2,
+              ),
             ),
           ),
-          const SizedBox(height: 3),
-          // Its line stays when it has nothing to say: what is below must not move.
-          Text(
-            subtitle ?? ' ',
-            textAlign: TextAlign.center,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: type.body,
-              height: 1.4,
-              leadingDistribution: TextLeadingDistribution.even,
-              color: warning ? c.warn : c.ink2,
-            ),
-          ),
-          if (action != null) ...[const SizedBox(height: 12), action!],
+          if (action != null) ...[const SizedBox(width: 10), action!],
         ],
       ),
     );
@@ -324,11 +399,12 @@ class _Hero extends StatelessWidget {
 }
 
 /// `.wave`: five bars, 3 wide, 3 apart, 18 high. They dance while sound plays
-/// and lie down as grey dots when it does not.
+/// and lie down as dots when it does not.
 class _Wave extends StatefulWidget {
-  const _Wave({required this.live});
+  const _Wave({required this.live, required this.color});
 
   final bool live;
+  final Color color;
 
   @override
   State<_Wave> createState() => _WaveState();
@@ -369,7 +445,6 @@ class _WaveState extends State<_Wave> with SingleTickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.wc;
     final reduced = MediaQuery.disableAnimationsOf(context);
     return Semantics(
       excludeSemantics: true,
@@ -385,8 +460,7 @@ class _WaveState extends State<_Wave> with SingleTickerProviderStateMixin {
                 phase: _loop.value,
                 amount: amount.clamp(0.0, 1.0),
                 reduced: reduced,
-                on: c.accent,
-                off: c.ink3,
+                color: widget.color,
               ),
             ),
           ),
@@ -401,8 +475,7 @@ class _WavePainter extends CustomPainter {
     required this.phase,
     required this.amount,
     required this.reduced,
-    required this.on,
-    required this.off,
+    required this.color,
   });
 
   // Each bar's place in the loop: animation-delay over the 1.1 s period.
@@ -411,11 +484,11 @@ class _WavePainter extends CustomPainter {
 
   final double phase, amount;
   final bool reduced;
-  final Color on, off;
+  final Color color;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = Color.lerp(off, on, amount)!;
+    final paint = Paint()..color = color;
     for (var i = 0; i < _offsets.length; i++) {
       final beat = (phase + _offsets[i]) % 1;
       // Ease in and out between .22 and full height, and back.
@@ -437,62 +510,11 @@ class _WavePainter extends CustomPainter {
       old.phase != phase ||
       old.amount != amount ||
       old.reduced != reduced ||
-      old.on != on ||
-      old.off != off;
+      old.color != color;
 }
 
 /// `.row-a`: 60 high whatever its state, so that nothing moves as a device
 /// joins, finds its sync or drops out.
-/// Shares this device's sound or stops it: one round button under the words,
-/// in reach however many devices are listed. Nothing to play with none checked.
-class _PlayButton extends StatelessWidget {
-  const _PlayButton({
-    required this.label,
-    required this.playing,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool playing;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.wc;
-    final on = onTap != null;
-    return Tooltip(
-      message: label,
-      child: Semantics(
-        toggled: playing,
-        child: Pressable(
-          key: const ValueKey('sound-play'),
-          onTap: onTap,
-          radius: WhisperRadius.capsule,
-          label: label,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: on ? c.accent : c.fill,
-              shape: BoxShape.circle,
-            ),
-            child: SizedBox.square(
-              dimension: 48,
-              child: Center(
-                child: WhisperIcon(
-                  playing ? WhisperGlyph.pause : WhisperGlyph.play,
-                  size: 20,
-                  weight: 2,
-                  filled: !playing,
-                  color: on ? c.onAccent : c.ink3,
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _MemberRow extends StatelessWidget {
   const _MemberRow({super.key, required this.row, required this.controller});
 
@@ -505,43 +527,36 @@ class _MemberRow extends StatelessWidget {
     final device = row.device;
     final phone = deviceKindOf(device).handheld;
     final channel = row.channel;
-    return Opacity(
-      opacity: row.connected ? 1 : .5,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 60),
-        child: Padding(
-          // 12 at the right too: the check's target is 3 wider than its circle.
-          padding: const EdgeInsets.fromLTRB(12, 6, 9, 6),
-          child: Row(
-            children: [
-              SizedBox(
-                width: 38,
-                child: Center(
-                  child: deviceArtFor(device, size: phone ? 36 : 38),
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 60),
+      child: Padding(
+        // 12 at the right too: the check's target is 3 wider than its circle.
+        padding: const EdgeInsets.fromLTRB(12, 6, 9, 6),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 38,
+              child: Center(child: deviceArtFor(device, size: phone ? 36 : 38)),
+            ),
+            const SizedBox(width: 10),
+            Expanded(child: _MemberText(row: row)),
+            if (channel != null)
+              Padding(
+                padding: const EdgeInsets.only(left: 10),
+                child: _ChannelPopup(
+                  device: device,
+                  channel: channel,
+                  onChanged: (role) =>
+                      unawaited(controller.setChannel(device.uid, role)),
                 ),
               ),
-              const SizedBox(width: 10),
-              Expanded(child: _MemberText(row: row)),
-              if (channel != null)
-                Padding(
-                  padding: const EdgeInsets.only(left: 10),
-                  child: _ChannelPopup(
-                    device: device,
-                    channel: channel,
-                    onChanged: (role) =>
-                        unawaited(controller.setChannel(device.uid, role)),
-                  ),
-                ),
-              const SizedBox(width: 7),
-              ShareCheck(
-                label: l10n.soundCheckLabel(device.name),
-                value: row.checked,
-                onChanged: row.connected
-                    ? (_) => unawaited(controller.toggle(device.uid))
-                    : null,
-              ),
-            ],
-          ),
+            const SizedBox(width: 7),
+            ShareCheck(
+              label: l10n.soundCheckLabel(device.name),
+              value: row.checked,
+              onChanged: (_) => unawaited(controller.toggle(device.uid)),
+            ),
+          ],
         ),
       ),
     );
@@ -568,7 +583,6 @@ class _MemberText extends StatelessWidget {
     };
     final sink = row.sink;
     final (String? below, bool warnBelow) = switch (row.phase) {
-      SoundRowPhase.notConnected => (l10n.soundMemberNotConnected, false),
       SoundRowPhase.stopped => (l10n.soundMemberStopped, false),
       SoundRowPhase.soloOnly ||
       SoundRowPhase.soloPlaying => (l10n.soundMemberSoloOnly, false),
@@ -716,18 +730,30 @@ class _SinkView extends StatelessWidget {
     final playing = view.phase == SoundSinkPhase.playing;
     return Column(
       children: [
-        _Hero(
+        _ArtButton(
           art: source == null
               ? const DeviceArt(
                   kind: DeviceKind.desktop,
                   wallpaper: DeviceWallpaper.unpaired,
-                  size: 96,
+                  size: _artSize,
+                  bare: true,
                 )
-              : deviceArtFor(source, size: 96),
+              : deviceArtFor(source, size: _artSize, bare: true),
           live: playing,
-          title: l10n.soundSinkTitle(source?.name ?? ''),
-          subtitle: switch (view.phase) {
-            SoundSinkPhase.playing => null,
+          playing: playing,
+          button: view.canPause || view.canResume,
+          label: playing ? l10n.mediaActionPause : l10n.soundResume,
+          onTap: view.canPause
+              ? () => unawaited(controller.pause())
+              : view.canResume && !resuming
+              ? () => unawaited(controller.resume())
+              : null,
+        ),
+        const SizedBox(height: 12),
+        _Name(source?.name ?? ''),
+        _State(
+          text: switch (view.phase) {
+            SoundSinkPhase.playing => l10n.shellRowSoundHere,
             SoundSinkPhase.paused => l10n.soundSinkPaused,
             SoundSinkPhase.resuming => l10n.soundSinkResuming,
           },
@@ -738,33 +764,10 @@ class _SinkView extends StatelessWidget {
           child: ShareGroup(children: [_GainRow(controller: controller)]),
         ),
         const SizedBox(height: 18),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            if (view.canPause) ...[
-              ShareButton(
-                label: l10n.mediaActionPause,
-                kind: ShareButtonKind.tinted,
-                large: true,
-                onTap: () => unawaited(controller.pause()),
-              ),
-              const SizedBox(width: 8),
-            ],
-            if (view.canResume) ...[
-              ShareButton(
-                label: l10n.soundResume,
-                kind: ShareButtonKind.tinted,
-                large: true,
-                onTap: resuming ? null : () => unawaited(controller.resume()),
-              ),
-              const SizedBox(width: 8),
-            ],
-            ShareButton(
-              label: l10n.mediaActionDisconnect,
-              large: true,
-              onTap: resuming ? null : () => unawaited(controller.disconnect()),
-            ),
-          ],
+        ShareButton(
+          label: l10n.mediaActionDisconnect,
+          large: true,
+          onTap: resuming ? null : () => unawaited(controller.disconnect()),
         ),
       ],
     );

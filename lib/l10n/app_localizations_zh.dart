@@ -2942,10 +2942,10 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get soundHeroIdleTitle => '播放到其他设备';
+  String get soundSelfIdle => '未播放';
 
   @override
-  String soundHeroPlaying(int count) {
+  String soundSelfPlaying(int count) {
     return '正在播放到 $count 台设备';
   }
 
@@ -2954,9 +2954,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get soundMemberStopped => '已停止';
-
-  @override
-  String get soundMemberNotConnected => '未连接';
 
   @override
   String soundMemberFailed(String reason) {
@@ -2984,11 +2981,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get soundNoDevices => '没有已连接的设备';
-
-  @override
-  String soundSinkTitle(String device) {
-    return '正在播放 $device 的声音';
-  }
 
   @override
   String get soundSinkPaused => '已暂停';

@@ -2226,9 +2226,9 @@
       }
     }
   },
-  "soundHeroIdleTitle": "播放到其他设备",
-  "soundHeroPlaying": "正在播放到 {count} 台设备",
-  "@soundHeroPlaying": {
+  "soundSelfIdle": "未播放",
+  "soundSelfPlaying": "正在播放到 {count} 台设备",
+  "@soundSelfPlaying": {
     "placeholders": {
       "count": {
         "type": "int"
@@ -2237,7 +2237,6 @@
   },
   "soundShareThisDevice": "共享本机声音",
   "soundMemberStopped": "已停止",
-  "soundMemberNotConnected": "未连接",
   "soundMemberFailed": "播放失败 · {reason}",
   "@soundMemberFailed": {
     "placeholders": {
@@ -2269,14 +2268,6 @@
     }
   },
   "soundNoDevices": "没有已连接的设备",
-  "soundSinkTitle": "正在播放 {device} 的声音",
-  "@soundSinkTitle": {
-    "placeholders": {
-      "device": {
-        "type": "String"
-      }
-    }
-  },
   "soundSinkPaused": "已暂停",
   "soundSinkResuming": "正在恢复…",
   "soundGain": "增益",

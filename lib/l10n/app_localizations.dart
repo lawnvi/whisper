@@ -5284,17 +5284,17 @@ abstract class AppLocalizations {
   /// **'{count, plural, other{{count} 个开启中}}'**
   String shellSettingsLinksOn(int count);
 
-  /// No description provided for @soundHeroIdleTitle.
+  /// No description provided for @soundSelfIdle.
   ///
   /// In zh, this message translates to:
-  /// **'播放到其他设备'**
-  String get soundHeroIdleTitle;
+  /// **'未播放'**
+  String get soundSelfIdle;
 
-  /// No description provided for @soundHeroPlaying.
+  /// No description provided for @soundSelfPlaying.
   ///
   /// In zh, this message translates to:
   /// **'正在播放到 {count} 台设备'**
-  String soundHeroPlaying(int count);
+  String soundSelfPlaying(int count);
 
   /// No description provided for @soundShareThisDevice.
   ///
@@ -5307,12 +5307,6 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'已停止'**
   String get soundMemberStopped;
-
-  /// No description provided for @soundMemberNotConnected.
-  ///
-  /// In zh, this message translates to:
-  /// **'未连接'**
-  String get soundMemberNotConnected;
 
   /// No description provided for @soundMemberFailed.
   ///
@@ -5355,12 +5349,6 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'没有已连接的设备'**
   String get soundNoDevices;
-
-  /// No description provided for @soundSinkTitle.
-  ///
-  /// In zh, this message translates to:
-  /// **'正在播放 {device} 的声音'**
-  String soundSinkTitle(String device);
 
   /// No description provided for @soundSinkPaused.
   ///

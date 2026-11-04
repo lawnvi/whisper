@@ -308,7 +308,7 @@ void main() {
       expect(world.controller.isSelected(imacDevice.uid), isTrue);
       expect(stopped, [imacDevice.uid]);
       expect(
-        world.controller.rowFor(imacDevice, connected: true).phase,
+        world.controller.rowFor(imacDevice).phase,
         SoundRowPhase.disconnected,
       );
     });
@@ -355,14 +355,11 @@ void main() {
       await world.report(imacDevice.uid);
       await world.reject(xiaomiDevice.uid);
 
-      final failed = world.controller.rowFor(xiaomiDevice, connected: true);
+      final failed = world.controller.rowFor(xiaomiDevice);
       expect(failed.phase, SoundRowPhase.failed);
       expect(failed.failure, AudioFailureReason.busy);
       expect(failed.checked, isTrue);
-      expect(
-        world.controller.rowFor(imacDevice, connected: true).phase,
-        SoundRowPhase.good,
-      );
+      expect(world.controller.rowFor(imacDevice).phase, SoundRowPhase.good);
     });
 
     test('changing a channel does not restart one that was paused', () async {
@@ -393,7 +390,7 @@ void main() {
       expect(world.sentGroup.map((sent) => (sent.$1, sent.$2.action)), [
         (imacDevice.uid, AudioGroupControlAction.groupUpdate),
       ]);
-      final row = world.controller.rowFor(xiaomiDevice, connected: true);
+      final row = world.controller.rowFor(xiaomiDevice);
       expect(row.phase, SoundRowPhase.disconnected);
       expect(row.checked, isTrue);
     });
@@ -430,10 +427,7 @@ void main() {
       expect(world.controller.selection.keys, [thinkPadDevice.uid]);
       expect(world.single.state.peerId, thinkPadDevice.uid);
       expect(world.sentSingle.single.$2.action, AudioControlAction.offer);
-      expect(
-        world.controller.rowFor(thinkPadDevice, connected: true).channel,
-        isNull,
-      );
+      expect(world.controller.rowFor(thinkPadDevice).channel, isNull);
     });
 
     test('checking another device stops it first', () async {

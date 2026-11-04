@@ -2078,9 +2078,9 @@
   "shellSettingsVersionDownloading": "Downloading {progress}%",
   "shellSettingsAboutVersion": "Version {version}",
   "shellSettingsLinksOn": "{count, plural, =1{1 on} other{{count} on}}",
-  "soundHeroIdleTitle": "Play on other devices",
-  "soundHeroPlaying": "{count, plural, =1{Playing on 1 device} other{Playing on {count} devices}}",
-  "@soundHeroPlaying": {
+  "soundSelfIdle": "Not playing",
+  "soundSelfPlaying": "Playing on {count} {count, plural, =1{device} other{devices}}",
+  "@soundSelfPlaying": {
     "placeholders": {
       "count": {
         "type": "int"
@@ -2089,7 +2089,6 @@
   },
   "soundShareThisDevice": "Share this device's sound",
   "soundMemberStopped": "Stopped",
-  "soundMemberNotConnected": "Not connected",
   "soundMemberFailed": "Didn't play · {reason}",
   "@soundMemberFailed": {
     "placeholders": {
@@ -2121,14 +2120,6 @@
     }
   },
   "soundNoDevices": "No devices connected",
-  "soundSinkTitle": "Playing {device}'s sound",
-  "@soundSinkTitle": {
-    "placeholders": {
-      "device": {
-        "type": "String"
-      }
-    }
-  },
   "soundSinkPaused": "Paused",
   "soundSinkResuming": "Resuming…",
   "soundGain": "Gain",

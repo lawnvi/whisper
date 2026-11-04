@@ -22,6 +22,7 @@ DeviceArt deviceArtFor(
   required double size,
   DeviceArtState state = DeviceArtState.normal,
   bool paired = true,
+  bool bare = false,
 }) {
   // By pairing order, so reordering the list does not repaint anyone.
   final wall = paired
@@ -32,6 +33,7 @@ DeviceArt deviceArtFor(
     os: deviceOsFor(device.platform),
     wallpaper: wall,
     size: size,
+    bare: bare,
     state: state,
   );
 }

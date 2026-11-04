@@ -86,7 +86,6 @@ enum SoundRowPhase {
   soloOnly,
 
   /// Nearby but not connected, dimmed.
-  notConnected,
 
   /// Checked, while the master switch is off.
   stopped,
@@ -123,8 +122,6 @@ class SoundRow {
   /// The numbers, while it is in a group.
   final AudioGroupSink? sink;
   final AudioFailureReason? failure;
-
-  bool get connected => phase != SoundRowPhase.notConnected;
 
   /// Whether it should be counted as playing, for the title.
   bool get live => switch (phase) {
@@ -535,7 +532,7 @@ class ShellSoundController extends ChangeNotifier {
   }
 
   /// The row for one device. [connected] comes from the device list.
-  SoundRow rowFor(DeviceData device, {required bool connected}) {
+  SoundRow rowFor(DeviceData device) {
     final peer = device.uid;
     final group = _backend.supportsGroupSink(peer);
     final checked = _members.contains(peer);
@@ -557,7 +554,6 @@ class ShellSoundController extends ChangeNotifier {
       failure: failure,
     );
 
-    if (!connected) return row(SoundRowPhase.notConnected);
     if (!checked) {
       return row(group ? SoundRowPhase.idle : SoundRowPhase.soloOnly);
     }
@@ -601,22 +597,6 @@ class ShellSoundController extends ChangeNotifier {
           : null,
     );
   }
-
-  /// What the header says, from the rows on screen.
-  AudioSyncQuality? headerQuality(Iterable<SoundRow> rows) =>
-      soundHeaderQuality(
-        rows
-            .where((row) => row.live && row.sink != null)
-            .map(
-              (row) => switch (row.phase) {
-                SoundRowPhase.good => SoundMemberPhase.good,
-                SoundRowPhase.fair => SoundMemberPhase.fair,
-                SoundRowPhase.unstable => SoundMemberPhase.unstable,
-                SoundRowPhase.calibrating => SoundMemberPhase.calibrating,
-                _ => SoundMemberPhase.connecting,
-              },
-            ),
-      );
 
   // ---- This device playing another's sound ----
 

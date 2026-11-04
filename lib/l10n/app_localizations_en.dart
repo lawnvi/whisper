@@ -3113,17 +3113,17 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get soundHeroIdleTitle => 'Play on other devices';
+  String get soundSelfIdle => 'Not playing';
 
   @override
-  String soundHeroPlaying(int count) {
+  String soundSelfPlaying(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Playing on $count devices',
-      one: 'Playing on 1 device',
+      other: 'devices',
+      one: 'device',
     );
-    return '$_temp0';
+    return 'Playing on $count $_temp0';
   }
 
   @override
@@ -3131,9 +3131,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get soundMemberStopped => 'Stopped';
-
-  @override
-  String get soundMemberNotConnected => 'Not connected';
 
   @override
   String soundMemberFailed(String reason) {
@@ -3161,11 +3158,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get soundNoDevices => 'No devices connected';
-
-  @override
-  String soundSinkTitle(String device) {
-    return 'Playing $device\'s sound';
-  }
 
   @override
   String get soundSinkPaused => 'Paused';
