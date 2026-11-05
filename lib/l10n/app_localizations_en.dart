@@ -244,12 +244,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get diagCopied => 'Diagnostics copied';
 
   @override
-  String get diagSave => 'Save';
-
-  @override
-  String get diagSaved => 'Diagnostics saved';
-
-  @override
   String get diagFeedback => 'Report';
 
   @override
@@ -3617,6 +3611,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get shellSelfNotesHint => 'Only on this device';
+
+  @override
+  String get shellSettingsNicknameHint => 'Other devices see this name';
+
+  @override
+  String get shellSettingsPortHint =>
+      'Other devices use this port to connect to this one. Takes effect when you leave Settings';
 
   @override
   String get shellSelfCopied => 'Copied';

@@ -1,13 +1,8 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:io';
-import 'dart:typed_data';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:whisper/helper/local.dart';
 import 'package:whisper/helper/helper.dart';
 import 'package:whisper/helper/toast.dart';
 import 'package:whisper/l10n/app_localizations.dart';
@@ -64,22 +59,6 @@ class _ShellDiagnosticsState extends State<ShellDiagnostics> {
     if (mounted) showAppToast(AppLocalizations.of(context)!.diagCopied);
   }
 
-  Future<void> _save() async {
-    final l10n = AppLocalizations.of(context)!;
-    final report = Uint8List.fromList(
-      utf8.encode(await buildDiagnosticReport()),
-    );
-    final path = await FilePicker.saveFile(
-      dialogTitle: l10n.diagSave,
-      fileName: 'whisper-diagnostics.txt',
-      initialDirectory: await LocalSetting().saveDialogFolder(),
-      bytes: report,
-    );
-    if (path == null) return;
-    if (isDesktop()) await File(path).writeAsBytes(report);
-    showAppToast(l10n.diagSaved);
-  }
-
   /// The report goes on the clipboard, to paste there.
   Future<void> _feedback() async {
     final l10n = AppLocalizations.of(context)!;
@@ -100,11 +79,58 @@ class _ShellDiagnosticsState extends State<ShellDiagnostics> {
     }
   }
 
+  /// A phone's buttons share the width, big enough for a thumb.
+  Widget _actions(AppLocalizations l10n, bool touch) {
+    final feedback = ShellButton(
+      label: l10n.diagFeedback,
+      touch: touch,
+      large: touch,
+      inset: touch ? 8 : null,
+      onTap: _busy ? null : () => unawaited(_while(_feedback)),
+    );
+    final copy = ShellButton(
+      label: l10n.diagCopy,
+      touch: touch,
+      large: touch,
+      inset: touch ? 8 : null,
+      onTap: _busy ? null : () => unawaited(_while(_copy)),
+    );
+    final done = ShellButton(
+      label: l10n.shellDone,
+      kind: ShellButtonKind.primary,
+      touch: touch,
+      large: touch,
+      inset: touch ? 8 : null,
+      onTap: () => Navigator.of(context).pop(),
+    );
+    if (touch) {
+      return Row(
+        children: [
+          Expanded(child: feedback),
+          const SizedBox(width: 8),
+          Expanded(child: copy),
+          const SizedBox(width: 8),
+          Expanded(child: done),
+        ],
+      );
+    }
+    return Row(
+      children: [
+        feedback,
+        const Spacer(),
+        copy,
+        const SizedBox(width: 8),
+        done,
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.wc;
     final l10n = AppLocalizations.of(context)!;
-    const type = WhisperType(touch: false);
+    final touch = !isDesktop();
+    final type = WhisperType(touch: touch);
     return ListenableBuilder(
       listenable: AppHealth.shared,
       builder: (context, _) {
@@ -155,16 +181,19 @@ class _ShellDiagnosticsState extends State<ShellDiagnostics> {
                 flat: true,
                 children: [
                   ShellRow(
+                    touch: touch,
                     label: l10n.diagDatabase,
                     trailing: state(databaseOk),
                   ),
                   ShellRow(
+                    touch: touch,
                     label: l10n.diagServer,
                     trailing: state(
                       WsSvrManager().started && !health.has(AppProblem.server),
                     ),
                   ),
                   ShellRow(
+                    touch: touch,
                     label: l10n.diagDiscovery,
                     trailing: state(
                       databaseOk &&
@@ -173,6 +202,7 @@ class _ShellDiagnosticsState extends State<ShellDiagnostics> {
                     ),
                   ),
                   ShellRow(
+                    touch: touch,
                     label: l10n.shellSelfAddress,
                     trailing: Text(
                       _address ?? '—',
@@ -203,31 +233,7 @@ class _ShellDiagnosticsState extends State<ShellDiagnostics> {
               ),
             ],
           ),
-          actions: Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              ShellButton(
-                label: l10n.diagFeedback,
-                onTap: _busy ? null : () => unawaited(_while(_feedback)),
-              ),
-              const Spacer(),
-              ShellButton(
-                label: l10n.diagSave,
-                onTap: _busy ? null : () => unawaited(_while(_save)),
-              ),
-              const SizedBox(width: 8),
-              ShellButton(
-                label: l10n.diagCopy,
-                onTap: _busy ? null : () => unawaited(_while(_copy)),
-              ),
-              const SizedBox(width: 8),
-              ShellButton(
-                label: l10n.shellDone,
-                kind: ShellButtonKind.primary,
-                onTap: () => Navigator.of(context).pop(),
-              ),
-            ],
-          ),
+          actions: _actions(l10n, touch),
         );
       },
     );

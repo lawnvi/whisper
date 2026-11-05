@@ -233,12 +233,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get diagCopied => '诊断信息已拷贝';
 
   @override
-  String get diagSave => '保存';
-
-  @override
-  String get diagSaved => '诊断信息已保存';
-
-  @override
   String get diagFeedback => '反馈问题';
 
   @override
@@ -3418,6 +3412,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get shellSelfNotesHint => '只保存在这台设备上';
+
+  @override
+  String get shellSettingsNicknameHint => '其他设备会看到这个名字';
+
+  @override
+  String get shellSettingsPortHint => '其他设备用这个端口连接这台。退出设置后生效';
 
   @override
   String get shellSelfCopied => '已拷贝';

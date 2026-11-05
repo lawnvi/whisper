@@ -508,6 +508,7 @@ extension _RedesignedSettings on _SettingsScreenState {
   Widget _nicknameRow(AppLocalizations l10n) => SettingsFieldRow(
     title: l10n.nickname,
     value: device?.name ?? '',
+    hint: l10n.shellSettingsNicknameHint,
     validate: (text) {
       if (text.trim().isEmpty) return l10n.validationNicknameRequired;
       if (text.trim().runes.length > 64) return l10n.validationNicknameTooLong;
@@ -520,6 +521,7 @@ extension _RedesignedSettings on _SettingsScreenState {
   Widget _portRow(AppLocalizations l10n) => SettingsFieldRow(
     title: l10n.serverPortTitle,
     value: '${device?.port ?? 10002}',
+    hint: l10n.shellSettingsPortHint,
     keyboardType: TextInputType.number,
     inputFormatters: [
       FilteringTextInputFormatter.digitsOnly,

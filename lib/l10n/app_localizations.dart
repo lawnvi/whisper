@@ -538,18 +538,6 @@ abstract class AppLocalizations {
   /// **'诊断信息已拷贝'**
   String get diagCopied;
 
-  /// No description provided for @diagSave.
-  ///
-  /// In zh, this message translates to:
-  /// **'保存'**
-  String get diagSave;
-
-  /// No description provided for @diagSaved.
-  ///
-  /// In zh, this message translates to:
-  /// **'诊断信息已保存'**
-  String get diagSaved;
-
   /// No description provided for @diagFeedback.
   ///
   /// In zh, this message translates to:
@@ -6074,6 +6062,18 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'只保存在这台设备上'**
   String get shellSelfNotesHint;
+
+  /// Under the nickname field on a phone.
+  ///
+  /// In zh, this message translates to:
+  /// **'其他设备会看到这个名字'**
+  String get shellSettingsNicknameHint;
+
+  /// Under the server port field on a phone. The service restarts on the new port when settings close.
+  ///
+  /// In zh, this message translates to:
+  /// **'其他设备用这个端口连接这台。退出设置后生效'**
+  String get shellSettingsPortHint;
 
   /// No description provided for @shellSelfCopied.
   ///

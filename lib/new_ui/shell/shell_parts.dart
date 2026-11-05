@@ -274,6 +274,7 @@ class ShellButton extends StatelessWidget {
     this.touch = false,
     this.glyph,
     this.color,
+    this.inset,
   });
 
   final String label;
@@ -281,6 +282,9 @@ class ShellButton extends StatelessWidget {
   final ShellButtonKind kind;
   final bool large, touch;
   final WhisperGlyph? glyph;
+
+  /// Beside the label, for buttons sharing a narrow row.
+  final double? inset;
 
   /// Only for a quiet button with a meaning of its own: 删除 in `bad`.
   final Color? color;
@@ -308,7 +312,7 @@ class ShellButton extends StatelessWidget {
         radius: WhisperRadius.capsule,
         child: Container(
           height: height,
-          padding: EdgeInsets.symmetric(horizontal: large ? 20 : 13),
+          padding: EdgeInsets.symmetric(horizontal: inset ?? (large ? 20 : 13)),
           decoration: BoxDecoration(
             color: background,
             borderRadius: BorderRadius.circular(WhisperRadius.capsule),

@@ -90,8 +90,6 @@
   "diagView": "View",
   "diagCopy": "Copy",
   "diagCopied": "Diagnostics copied",
-  "diagSave": "Save",
-  "diagSaved": "Diagnostics saved",
   "diagFeedback": "Report",
   "diagFeedbackCopied": "Diagnostics copied. Paste them into your report.",
   "diagPrivacy": "No messages, files or device names: only the system version, this device's network addresses and a record of what the app did. It leaves this device only if you send it.",
@@ -2465,6 +2463,8 @@
   "shellSelfCopy": "Copy connection info",
   "shellSelfNotes": "This device",
   "shellSelfNotesHint": "Only on this device",
+  "shellSettingsNicknameHint": "Other devices see this name",
+  "shellSettingsPortHint": "Other devices use this port to connect to this one. Takes effect when you leave Settings",
   "shellSelfCopied": "Copied",
   "shareLinkNoNetwork": "Not connected to a local network, so other devices can't open it yet",
   "@shareLinkNoNetwork": {

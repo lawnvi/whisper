@@ -90,8 +90,6 @@
   "diagView": "查看",
   "diagCopy": "拷贝",
   "diagCopied": "诊断信息已拷贝",
-  "diagSave": "保存",
-  "diagSaved": "诊断信息已保存",
   "diagFeedback": "反馈问题",
   "diagFeedbackCopied": "诊断信息已拷贝，粘贴到问题里就行",
   "diagPrivacy": "不含消息、文件和设备名，只有系统版本、本机网络地址和运行记录。只有你发出去才会离开这台设备。",
@@ -2627,6 +2625,14 @@
   "shellSelfCopy": "拷贝连接信息",
   "shellSelfNotes": "本机",
   "shellSelfNotesHint": "只保存在这台设备上",
+  "shellSettingsNicknameHint": "其他设备会看到这个名字",
+  "@shellSettingsNicknameHint": {
+    "description": "Under the nickname field on a phone."
+  },
+  "shellSettingsPortHint": "其他设备用这个端口连接这台。退出设置后生效",
+  "@shellSettingsPortHint": {
+    "description": "Under the server port field on a phone. The service restarts on the new port when settings close."
+  },
   "shellSelfCopied": "已拷贝",
   "shareLinkNoNetwork": "没有连上局域网，其他设备暂时打不开",
   "@shareLinkNoNetwork": {

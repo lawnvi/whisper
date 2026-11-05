@@ -633,62 +633,67 @@ class _PhoneConnectPageState extends State<PhoneConnectPage>
 
   Widget _buildAddress(AppLocalizations l10n) {
     final c = context.wc;
-    final brightness = Theme.of(context).brightness;
+    const type = WhisperType(touch: true);
+    final error = _addressError ?? _portError;
     return SingleChildScrollView(
       padding: _pagePadding,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          DecoratedBox(
-            decoration: BoxDecoration(
-              color: c.group,
-              borderRadius: BorderRadius.circular(WhisperRadius.m),
-              boxShadow: WhisperShadow.e1(brightness),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  ShellField(
-                    label: l10n.shellSelfAddress,
-                    fieldKey: const ValueKey('connection-address'),
-                    controller: _address,
-                    focusNode: _addressFocus,
-                    error: _addressError,
-                    // The same keyboard for both, so that moving between them
-                    // does not reconfigure it; an address can have letters.
-                    keyboardType: TextInputType.url,
-                    textInputAction: TextInputAction.next,
-                    onChanged: (_) {
-                      if (_addressError != null) {
-                        setState(() => _addressError = null);
-                      }
-                    },
-                    onSubmitted: (_) => _portFocus.requestFocus(),
-                  ),
-                  const SizedBox(height: 12),
-                  ShellField(
-                    label: l10n.phoneConnectPort,
-                    fieldKey: const ValueKey('connection-port'),
-                    controller: _port,
-                    focusNode: _portFocus,
-                    error: _portError,
-                    keyboardType: TextInputType.url,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    textInputAction: TextInputAction.done,
-                    onChanged: (_) {
-                      if (_portError != null) {
-                        setState(() => _portError = null);
-                      }
-                    },
-                    onSubmitted: (_) => _connect(),
-                  ),
-                ],
+          ShellGroup(
+            children: [
+              _AddressRow(
+                label: l10n.shellSelfAddress,
+                fieldKey: const ValueKey('connection-address'),
+                controller: _address,
+                focusNode: _addressFocus,
+                wrong: _addressError != null,
+                // The same keyboard for both, so that moving between them
+                // does not reconfigure it; an address can have letters.
+                keyboardType: TextInputType.url,
+                textInputAction: TextInputAction.next,
+                onChanged: (_) {
+                  if (_addressError != null) {
+                    setState(() => _addressError = null);
+                  }
+                },
+                onSubmitted: (_) => _portFocus.requestFocus(),
+              ),
+              _AddressRow(
+                label: l10n.phoneConnectPort,
+                fieldKey: const ValueKey('connection-port'),
+                controller: _port,
+                focusNode: _portFocus,
+                wrong: _portError != null,
+                keyboardType: TextInputType.url,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                textInputAction: TextInputAction.done,
+                onChanged: (_) {
+                  if (_portError != null) {
+                    setState(() => _portError = null);
+                  }
+                },
+                onSubmitted: (_) => _connect(),
+              ),
+            ],
+          ),
+          // Its line is always there: a mistake doesn't move the button.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+            child: SizedBox(
+              height: type.note * 1.35,
+              child: Text(
+                error ?? '',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: type.note,
+                  height: 1.35,
+                  color: c.bad,
+                ),
               ),
             ),
           ),
-          const SizedBox(height: 16),
           PhoneButton(
             key: const ValueKey('connect-by-address'),
             large: true,
@@ -698,6 +703,97 @@ class _PhoneConnectPageState extends State<PhoneConnectPage>
             onTap: _connect,
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// A label, and the value beside it with no box around it, as in a phone's own
+/// network settings. The whole row is the target.
+class _AddressRow extends StatelessWidget {
+  const _AddressRow({
+    required this.label,
+    required this.fieldKey,
+    required this.controller,
+    required this.focusNode,
+    required this.wrong,
+    required this.keyboardType,
+    required this.textInputAction,
+    required this.onChanged,
+    required this.onSubmitted,
+    this.inputFormatters,
+  });
+
+  final String label;
+  final Key fieldKey;
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final bool wrong;
+  final TextInputType keyboardType;
+  final TextInputAction textInputAction;
+  final List<TextInputFormatter>? inputFormatters;
+  final ValueChanged<String> onChanged, onSubmitted;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.wc;
+    const type = WhisperType(touch: true);
+    const none = InputBorder.none;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      excludeFromSemantics: true,
+      onTap: focusNode.requestFocus,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 48),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Row(
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: type.body,
+                  height: 1.3,
+                  color: c.ink,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Semantics(
+                  label: label,
+                  child: TextField(
+                    key: fieldKey,
+                    controller: controller,
+                    focusNode: focusNode,
+                    textAlign: TextAlign.end,
+                    keyboardType: keyboardType,
+                    textInputAction: textInputAction,
+                    inputFormatters: inputFormatters,
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    cursorColor: c.accent,
+                    style: TextStyle(
+                      fontSize: type.body,
+                      height: 1.3,
+                      color: wrong ? c.bad : c.ink2,
+                    ),
+                    decoration: const InputDecoration(
+                      isCollapsed: true,
+                      filled: false,
+                      border: none,
+                      enabledBorder: none,
+                      focusedBorder: none,
+                      disabledBorder: none,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                    onChanged: onChanged,
+                    onSubmitted: onSubmitted,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

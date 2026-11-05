@@ -261,6 +261,6 @@ With "TV casting" turned on in desktop Settings, video apps on the same network 
 
 ## Diagnostics
 
-When Whisper is not running properly (the database will not open, startup failed, or the connection service or device discovery did not start), the island keeps saying so until it is fixed. Select "View" on it, or open "Diagnostics" in Settings, to see each part's state and copy, save, or report it.
+When Whisper is not running properly (the database will not open, startup failed, or the connection service or device discovery did not start), the island keeps saying so until it is fixed. Select "View" on it, or open "Diagnostics" in Settings, to see each part's state and copy or report it.
 
 Diagnostics contain no messages, files, or device names, only the system version, this device's network addresses, and a record of what ran. They leave this device only if you send them.

@@ -116,7 +116,7 @@ On Wayland, keyboard and mouse sharing supports GNOME and KDE Plasma. GNOME asks
 | Pointer stuck on another device | Press `Ctrl+Alt+Esc` (`Control+Option+Esc` on macOS) |
 | Stutter on Windows | Set Settings → System → Projecting to this PC to "Always Off" |
 | No keyboard/mouse on macOS | Grant Accessibility in System Settings, then reopen Whisper |
-| Whisper says it is not running properly | Select "View" on the notice or open "Diagnostics" in Settings to copy, save or report it |
+| Whisper says it is not running properly | Select "View" on the notice or open "Diagnostics" in Settings to copy or report it |
 | Windows lock screen or UAC | Needs the system service from the installer; see the [user guide](docs/user-guide_en.md#windows-lock-screen-and-uac) |
 
 ## Security
