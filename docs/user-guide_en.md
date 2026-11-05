@@ -48,7 +48,7 @@ On desktop you can also send a whole folder: drop it into the conversation, or c
 
 A conversation with this device itself, which works with nobody else around. Text and files stay on this device; nothing is sent anywhere.
 
-Open it from "Send to yourself" the first time you use Whisper, or from this device's panel at the bottom left; connecting to your own address also lands here. It joins the device list once opened, and deleting it does not touch messages sent to anyone else.
+Open it from this device's panel at the bottom left; connecting to your own address also lands here. It joins the device list once opened, and deleting it does not touch messages sent to anyone else.
 
 ## Search, favorite, and delete
 

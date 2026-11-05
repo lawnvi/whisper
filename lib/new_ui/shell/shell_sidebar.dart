@@ -107,10 +107,8 @@ class ShellSidebar extends StatelessWidget {
         ),
         Expanded(
           child: rows.isEmpty && !data.loading
-              ? _FirstDevice(
-                  onConnect: onOpenSelf,
-                  onNotes: actions.openSelfNotes,
-                )
+              // The content says what to do: see ShellFirstDevice.
+              ? const SizedBox.shrink()
               : _BottomEdge(
                   child: ScrollConfiguration(
                     behavior: ScrollConfiguration.of(
@@ -203,38 +201,6 @@ class ShellSidebar extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _FirstDevice extends StatelessWidget {
-  const _FirstDevice({required this.onConnect, required this.onNotes});
-
-  final VoidCallback onConnect, onNotes;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.wc;
-    final l10n = context.shellL10n;
-    const type = WhisperType(touch: false);
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              l10n.shellFirstDevice,
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: type.body, color: c.ink2Glass),
-            ),
-            const SizedBox(height: 12),
-            ShellFilledButton(label: l10n.shellConnectDevice, onTap: onConnect),
-            const SizedBox(height: 8),
-            ShellButton(label: l10n.shellFirstDeviceNotes, onTap: onNotes),
-          ],
-        ),
-      ),
     );
   }
 }

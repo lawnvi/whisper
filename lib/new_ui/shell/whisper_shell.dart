@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/new_ui/shell/shell_data.dart';
+import 'package:whisper/new_ui/shell/shell_first_device.dart';
 import 'package:whisper/new_ui/shell/shell_device_page.dart';
 import 'package:whisper/new_ui/shell/shell_palette.dart';
 import 'package:whisper/new_ui/shell/shell_parts.dart';
@@ -238,7 +239,15 @@ class _WhisperShellState extends State<WhisperShell> {
                                     ),
                                   )
                                 : session == null
-                                ? const ToolbarBand(child: SizedBox.expand())
+                                ? ToolbarBand(
+                                    child: ShellFirstDevice(
+                                      visible:
+                                          widget.data.sessions.isEmpty &&
+                                          !widget.data.loading,
+                                      self: widget.data.self,
+                                      onConnect: _openSelf,
+                                    ),
+                                  )
                                 : ShellDevicePage(
                                     key: ValueKey(session.device.uid),
                                     session: session,

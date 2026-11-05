@@ -2698,7 +2698,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get shellSettings => '设置';
 
   @override
-  String get shellFirstDevice => '连接第一台设备';
+  String get shellFirstDevice => '附近还没有设备';
 
   @override
   String get shellConnectDevice => '连接设备';
@@ -3420,9 +3420,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get shellSelfNotesHint => '只保存在这台设备上';
 
   @override
-  String get shellFirstDeviceNotes => '先给自己发';
-
-  @override
   String get shellSelfCopied => '已拷贝';
 
   @override
@@ -3475,4 +3472,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get androidWindowServiceNotifyReply => '填写';
+
+  @override
+  String get shellFirstDeviceHint => '在另一台设备上打开 Whisper，连上同一个网络，它就会出现在这里';
 }

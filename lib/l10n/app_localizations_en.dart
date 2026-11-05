@@ -2864,7 +2864,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get shellSettings => 'Settings';
 
   @override
-  String get shellFirstDevice => 'Connect your first device';
+  String get shellFirstDevice => 'No devices nearby yet';
 
   @override
   String get shellConnectDevice => 'Connect a device';
@@ -3619,9 +3619,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get shellSelfNotesHint => 'Only on this device';
 
   @override
-  String get shellFirstDeviceNotes => 'Send to yourself';
-
-  @override
   String get shellSelfCopied => 'Copied';
 
   @override
@@ -3680,4 +3677,8 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get androidWindowServiceNotifyReply => 'Enter';
+
+  @override
+  String get shellFirstDeviceHint =>
+      'Open Whisper on another device on the same network and it will appear here';
 }

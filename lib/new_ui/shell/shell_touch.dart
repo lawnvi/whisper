@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/new_ui/shell/shell_data.dart';
+import 'package:whisper/new_ui/shell/shell_first_device.dart';
 import 'package:whisper/new_ui/shell/shell_device_page.dart';
 import 'package:whisper/new_ui/shell/shell_parts.dart';
 import 'package:whisper/new_ui/shell/shell_phone.dart';
@@ -458,7 +459,22 @@ class _ShellTouchState extends State<ShellTouch> with TickerProviderStateMixin {
     final c = context.wc;
     final session = widget.data.selected;
     if (session == null || !_deviceAlive) {
-      return ColoredBox(color: c.content, child: const SizedBox.expand());
+      return Material(
+        color: c.content,
+        child: SizedBox.expand(
+          child: ShellFirstDevice(
+            touch: true,
+            // In the compact size class the list says this itself.
+            visible:
+                !widget.layout.compact &&
+                session == null &&
+                widget.data.sessions.isEmpty &&
+                !widget.data.loading,
+            self: widget.data.self,
+            onConnect: () => widget.actions.openPairing(),
+          ),
+        ),
+      );
     }
     final layout = widget.layout;
     final device = session.device;

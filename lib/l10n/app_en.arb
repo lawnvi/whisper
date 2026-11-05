@@ -1951,7 +1951,7 @@
   "shellInput": "Keyboard & mouse",
   "shellShareLinks": "Share links",
   "shellSettings": "Settings",
-  "shellFirstDevice": "Connect your first device",
+  "shellFirstDevice": "No devices nearby yet",
   "shellConnectDevice": "Connect a device",
   "shellNotConnected": "{device} isn't connected",
   "@shellNotConnected": {
@@ -2465,7 +2465,6 @@
   "shellSelfCopy": "Copy connection info",
   "shellSelfNotes": "My notes",
   "shellSelfNotesHint": "Only on this device",
-  "shellFirstDeviceNotes": "Send to yourself",
   "shellSelfCopied": "Copied",
   "shareLinkNoNetwork": "Not connected to a local network, so other devices can't open it yet",
   "@shareLinkNoNetwork": {
@@ -2484,5 +2483,6 @@
   "androidWindowServiceAutoStartFailed": "Couldn’t turn this on. Turn on Wireless debugging first; Xiaomi phones also need ‘USB debugging (Security settings)’",
   "androidWindowServiceNotifyWaitingCode": "Waiting for the pairing code",
   "androidWindowServiceNotifyCodeHint": "6-digit code",
-  "androidWindowServiceNotifyReply": "Enter"
+  "androidWindowServiceNotifyReply": "Enter",
+  "shellFirstDeviceHint": "Open Whisper on another device on the same network and it will appear here"
 }

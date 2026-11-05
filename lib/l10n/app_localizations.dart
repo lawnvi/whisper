@@ -4861,7 +4861,7 @@ abstract class AppLocalizations {
   /// No description provided for @shellFirstDevice.
   ///
   /// In zh, this message translates to:
-  /// **'连接第一台设备'**
+  /// **'附近还没有设备'**
   String get shellFirstDevice;
 
   /// No description provided for @shellConnectDevice.
@@ -6075,12 +6075,6 @@ abstract class AppLocalizations {
   /// **'只保存在这台设备上'**
   String get shellSelfNotesHint;
 
-  /// No description provided for @shellFirstDeviceNotes.
-  ///
-  /// In zh, this message translates to:
-  /// **'先给自己发'**
-  String get shellFirstDeviceNotes;
-
   /// No description provided for @shellSelfCopied.
   ///
   /// In zh, this message translates to:
@@ -6176,6 +6170,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'填写'**
   String get androidWindowServiceNotifyReply;
+
+  /// Empty device list: one line under the title saying how another device turns up on its own, and that it has to be on the same network.
+  ///
+  /// In zh, this message translates to:
+  /// **'在另一台设备上打开 Whisper，连上同一个网络，它就会出现在这里'**
+  String get shellFirstDeviceHint;
 }
 
 class _AppLocalizationsDelegate

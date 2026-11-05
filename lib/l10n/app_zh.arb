@@ -2057,7 +2057,7 @@
   "shellInput": "键鼠",
   "shellShareLinks": "共享链接",
   "shellSettings": "设置",
-  "shellFirstDevice": "连接第一台设备",
+  "shellFirstDevice": "附近还没有设备",
   "shellConnectDevice": "连接设备",
   "shellNotConnected": "{device} 没有连接",
   "@shellNotConnected": {
@@ -2627,7 +2627,6 @@
   "shellSelfCopy": "拷贝连接信息",
   "shellSelfNotes": "我的记录",
   "shellSelfNotesHint": "只保存在这台设备上",
-  "shellFirstDeviceNotes": "先给自己发",
   "shellSelfCopied": "已拷贝",
   "shareLinkNoNetwork": "没有连上局域网，其他设备暂时打不开",
   "@shareLinkNoNetwork": {
@@ -2690,5 +2689,9 @@
   },
   "@androidWindowServiceNotifyReply": {
     "description": "Android window flow service: notification button that opens the pairing code reply field."
+  },
+  "shellFirstDeviceHint": "在另一台设备上打开 Whisper，连上同一个网络，它就会出现在这里",
+  "@shellFirstDeviceHint": {
+    "description": "Empty device list: one line under the title saying how another device turns up on its own, and that it has to be on the same network."
   }
 }

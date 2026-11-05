@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:whisper/new_ui/shell/shell_data.dart';
+import 'package:whisper/new_ui/shell/shell_first_device.dart';
 import 'package:whisper/new_ui/shell/shell_parts.dart';
 import 'package:whisper/new_ui/shell/shell_sidebar.dart';
 import 'package:whisper/theme/whisper_icons.dart';
@@ -77,30 +78,11 @@ class ShellPhoneList extends StatelessWidget {
               ),
             ),
             Expanded(
-              child: rows.isEmpty && !data.loading
-                  ? ShellDeviceState(
-                      touch: true,
-                      art: const SizedBox.shrink(),
-                      title: l10n.shellFirstDevice,
-                      body: '',
-                      action: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          ShellFilledButton(
-                            touch: true,
-                            label: l10n.shellConnectDevice,
-                            onTap: () => actions.openPairing(),
-                          ),
-                          const SizedBox(height: 10),
-                          ShellButton(
-                            touch: true,
-                            label: l10n.shellFirstDeviceNotes,
-                            onTap: actions.openSelfNotes,
-                          ),
-                        ],
-                      ),
-                    )
-                  : SingleChildScrollView(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  if (rows.isNotEmpty || data.loading)
+                    SingleChildScrollView(
                       padding: sidebar
                           ? EdgeInsets.fromLTRB(10, 0, 10, 24 + bottom)
                           : EdgeInsets.only(bottom: bottom + 8),
@@ -117,6 +99,16 @@ class ShellPhoneList extends StatelessWidget {
                         edgeToEdge: !sidebar,
                       ),
                     ),
+                  // Beside the content it stands in the content, with room.
+                  if (!sidebar)
+                    ShellFirstDevice(
+                      touch: true,
+                      visible: rows.isEmpty && !data.loading,
+                      self: data.self,
+                      onConnect: () => actions.openPairing(),
+                    ),
+                ],
+              ),
             ),
           ],
         ),

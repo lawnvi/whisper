@@ -1032,7 +1032,7 @@
   "shellInput": "Teclado y ratón",
   "shellShareLinks": "Enlaces compartidos",
   "shellSettings": "Ajustes",
-  "shellFirstDevice": "Conecta tu primer dispositivo",
+  "shellFirstDevice": "Aún no hay dispositivos cerca",
   "shellConnectDevice": "Conectar un dispositivo",
   "shellNotConnected": "{device} no está conectado",
   "@shellNotConnected": {
@@ -1531,7 +1531,6 @@
   "shellSelfCopy": "Copiar datos de conexión",
   "shellSelfNotes": "Mis notas",
   "shellSelfNotesHint": "Solo en este dispositivo",
-  "shellFirstDeviceNotes": "Envíate algo",
   "shellSelfCopied": "Copiado",
   "shareLinkNoNetwork": "Sin conexión a una red local: otros dispositivos aún no pueden abrirlo",
   "screenshotShortcutReset": "Restaurar atajo predeterminado",
@@ -1547,5 +1546,6 @@
   "androidWindowServiceAutoStartFailed": "No se pudo activar. Activa primero la depuración inalámbrica; en teléfonos Xiaomi activa también ‘Depuración USB (ajustes de seguridad)’",
   "androidWindowServiceNotifyWaitingCode": "Esperando el código de vinculación",
   "androidWindowServiceNotifyCodeHint": "Código de 6 dígitos",
-  "androidWindowServiceNotifyReply": "Escribir"
+  "androidWindowServiceNotifyReply": "Escribir",
+  "shellFirstDeviceHint": "Abre Whisper en otro dispositivo de la misma red y aparecerá aquí"
 }
