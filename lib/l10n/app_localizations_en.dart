@@ -3613,7 +3613,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get shellSelfCopy => 'Copy connection info';
 
   @override
-  String get shellSelfNotes => 'My notes';
+  String get shellSelfNotes => 'This device';
 
   @override
   String get shellSelfNotesHint => 'Only on this device';

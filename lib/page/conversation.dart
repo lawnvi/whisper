@@ -1875,7 +1875,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
     }
   }
 
-  /// What sending means in 我的记录: it goes in the list, and nowhere else.
+  /// What sending means in 本机: it goes in the list, and nowhere else.
   Future<bool> _sendFile(String path, {bool draft = false}) async {
     if (!_isLocalhost) return socketManager.sendFileTo(device.uid, path);
     _noteAdded(await SelfNotes(db).addFile(device.uid, path, draft: draft));
@@ -2956,7 +2956,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
       return;
     }
     // Everything sent from here has this device as its sender: only the notes
-    // belong in 我的记录.
+    // belong in 本机.
     if (_isLocalhost
         ? messageData.receiver.isEmpty
         : messageData.sender == device.uid ||

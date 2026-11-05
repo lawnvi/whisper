@@ -37,7 +37,7 @@ class ChatSessionItem {
   final bool hasHistory;
   final String avatarLabel;
 
-  /// 我的记录: this device itself, which nothing connects to.
+  /// 本机: this device itself, which nothing connects to.
   final bool isSelf;
 
   bool matches(String query) {

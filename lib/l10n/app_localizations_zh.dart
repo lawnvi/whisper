@@ -3414,7 +3414,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get shellSelfCopy => '拷贝连接信息';
 
   @override
-  String get shellSelfNotes => '我的记录';
+  String get shellSelfNotes => '本机';
 
   @override
   String get shellSelfNotesHint => '只保存在这台设备上';

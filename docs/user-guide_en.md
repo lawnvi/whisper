@@ -4,7 +4,7 @@
 
 - [Connect devices](#connect-devices)
 - [Send text and files](#send-text-and-files)
-- [My notes](#my-notes)
+- [This device](#this-device)
 - [Search, favorite, and delete](#search-favorite-and-delete)
 - [Browse files](#browse-files)
 - [Share links](#share-links)
@@ -44,7 +44,7 @@ An interrupted file transfer continues from the last confirmed position.
 
 On desktop you can also send a whole folder: drop it into the conversation, or choose "Folder" from `+` in the message box. A folder goes as one transfer, without being archived first, and arrives with the same structure. Links are not sent. If some files could not be transferred, the message shows how many; open it to see which. If Whisper on the other device is too old, you are asked to update it first.
 
-## My notes
+## This device
 
 A conversation with this device itself, which works with nobody else around. Text and files stay on this device; nothing is sent anywhere.
 

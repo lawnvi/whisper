@@ -6066,7 +6066,7 @@ abstract class AppLocalizations {
   /// No description provided for @shellSelfNotes.
   ///
   /// In zh, this message translates to:
-  /// **'我的记录'**
+  /// **'本机'**
   String get shellSelfNotes;
 
   /// No description provided for @shellSelfNotesHint.

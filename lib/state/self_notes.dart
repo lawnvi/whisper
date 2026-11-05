@@ -6,7 +6,7 @@ import 'package:whisper/helper/file.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/message.dart';
 
-/// 我的记录: a conversation with this device, for when there is nobody else.
+/// 本机: a conversation with this device, for when there is nobody else.
 /// Nothing leaves it, so a message is only a row, and an empty `receiver` is what
 /// tells it from one sent to someone.
 class SelfNotes {

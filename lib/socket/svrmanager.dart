@@ -2350,7 +2350,7 @@ class WsSvrManager {
     await pendingCancellation;
     await _waitForPeerAuthentication(peerId);
     await removal;
-    // With this device's own id, 我的记录: everything it ever sent also has that
+    // With this device's own id, 本机: everything it ever sent also has that
     // id as its sender, and only the notes are to go.
     await _database.clearDevices(<String>[peerId], localPeerId: sender);
     _deletedPeerDiscoverySuppressions.add(peerId);

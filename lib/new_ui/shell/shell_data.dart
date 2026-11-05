@@ -97,7 +97,7 @@ class ShellActions {
   final void Function(DeviceData target, List<String> paths) sendDropped;
   final VoidCallback openSound, openInput, openShareLinks, openSettings;
 
-  /// 我的记录: a conversation with this device, for when there is nobody else.
+  /// 本机: a conversation with this device, for when there is nobody else.
   final VoidCallback openSelfNotes;
   final ValueChanged<DeviceData> openDiagnostics;
 

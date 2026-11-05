@@ -1694,7 +1694,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     final stored = (await db.fetchAllDevice())
         .where((item) => !socketManager.shouldSuppressDiscoveredPeer(item.uid))
         .toList(growable: false);
-    // 我的记录 is not a peer: nothing connects to it or looks for it. Its row only
+    // 本机 is not a peer: nothing connects to it or looks for it. Its row only
     // says that it was opened, and this device is what it is about.
     final hasSelfNotes = stored.any((item) => item.uid == temp.uid);
     final arr = stored
@@ -3578,8 +3578,8 @@ class _DeviceListScreen extends State<DeviceListScreen>
     return;
   }
 
-  /// 我的记录: reached from the first device's page, this device's panel, or by
-  /// connecting to its own address.
+  /// 本机: reached from this device's panel, or by connecting to its own
+  /// address.
   Future<void> _openSelfNotes() async {
     final me = await LocalSetting().instance();
     socketManager.releaseDeletedPeerDiscoverySuppression(me.uid);

@@ -2463,7 +2463,7 @@
   },
   "shellLinksChooseAny": "Choose",
   "shellSelfCopy": "Copy connection info",
-  "shellSelfNotes": "My notes",
+  "shellSelfNotes": "This device",
   "shellSelfNotesHint": "Only on this device",
   "shellSelfCopied": "Copied",
   "shareLinkNoNetwork": "Not connected to a local network, so other devices can't open it yet",
