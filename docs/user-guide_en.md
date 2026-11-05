@@ -4,6 +4,7 @@
 
 - [Connect devices](#connect-devices)
 - [Send text and files](#send-text-and-files)
+- [My notes](#my-notes)
 - [Search, favorite, and delete](#search-favorite-and-delete)
 - [Browse files](#browse-files)
 - [Share links](#share-links)
@@ -15,15 +16,16 @@
 - [Screenshots](#screenshots)
 - [Android notifications](#android-notifications)
 - [TV casting](#tv-casting)
+- [Diagnostics](#diagnostics)
 
 ## Connect devices
 
 When two devices are on the same network with Whisper open, they usually appear in each other's device list. Select the other device and confirm the request on the receiving side; the first time, both sides check and confirm the same pairing code.
 
-If the other device is not listed, select the QR icon above the device list to open "Connect device":
+If the other device is not listed, connect with a QR code or an address:
 
-- **Phone**: switch between the QR code, scanner, and IP/port tabs to show your code, scan the other device, or enter its address.
-- **Computer**: your QR code stays on the left while the right side switches between local details and the IP/port form.
+- **Phone**: select the plus button, then switch between the QR code, scanner, and IP/port tabs to show your code, scan the other device, or enter its address.
+- **Computer**: select this device's name at the bottom left. The panel shows your QR code and address; "Enter an address…" takes the other device's IP and port.
 
 The QR code carries both the LAN address and the device identity, so there is no extra password. The default service port is `10002` and can be changed under "Server Port" in Settings.
 
@@ -31,7 +33,7 @@ On Linux, discovery depends on Avahi. On networks that block mDNS / Bonjour, con
 
 ## Send text and files
 
-Open the conversation with a connected device and type, or use the attachment button to pick files. Images open full screen, audio plays inline, and video and other files open in a system app. On desktop, received files can be revealed in the file manager or dragged out of a message.
+Open the conversation with a connected device and type, or use `+` in the message box to pick files. Images open full screen, audio plays inline, and video and other files open in a system app. On desktop, received files can be revealed in the file manager or dragged out of a message.
 
 To send without opening a conversation first:
 
@@ -40,19 +42,25 @@ To send without opening a conversation first:
 
 An interrupted file transfer continues from the last confirmed position.
 
-On desktop you can also send a whole folder: drop it into the conversation, or choose "Folder" from the attachment button. A folder goes as one transfer, without being archived first, and arrives with the same structure. Links are not sent. If some files could not be transferred, the message shows how many; open it to see which. If Whisper on the other device is too old, you are asked to update it first.
+On desktop you can also send a whole folder: drop it into the conversation, or choose "Folder" from `+` in the message box. A folder goes as one transfer, without being archived first, and arrives with the same structure. Links are not sent. If some files could not be transferred, the message shows how many; open it to see which. If Whisper on the other device is too old, you are asked to update it first.
+
+## My notes
+
+A conversation with this device itself, which works with nobody else around. Text and files stay on this device; nothing is sent anywhere.
+
+Open it from "Send to yourself" the first time you use Whisper, or from this device's panel at the bottom left; connecting to your own address also lands here. It joins the device list once opened, and deleting it does not touch messages sent to anyone else.
 
 ## Search, favorite, and delete
 
-Open "Search chat history" from the conversation settings; wide desktop windows also have a search button. Search covers the text of the current conversation, and results let you select text, expand long messages, favorite, or copy everything. The "Favorites" filter at the top shows saved text.
+Select the info button at the top right of a conversation, then "Search chat history"; on desktop the search at the top of the sidebar finds messages too. Search covers the text of the current conversation, and results let you select text, expand long messages, favorite, or copy everything. The "Favorites" filter at the top shows saved text.
 
 Long-press a message on a phone or right-click it on desktop to delete it or enter multi-select. A confirmation appears first: received local files are deleted too by default, or select "Keep received files" to remove only the records. Files you sent are always kept.
 
 ## Browse files
 
-Select ⋯ at the top right of a conversation to open "Device Details", then select "Files" to browse the other device's files as you would in your own file manager. The other device must be connected and running a recent version of Whisper.
+Switch to "Files" at the top of a conversation (on the device page on a phone) to browse the other device's files as you would in your own file manager. The other device must be connected and running a recent version of Whisper.
 
-Each time, the other device asks whether you may browse its files, with "Don't allow", "Allow this time", and "Always allow". Turning off "Always Allow Browsing My Files" in a device's details takes back an earlier "Always allow".
+Each time, the other device asks first, with "Don't allow" and "Allow"; allowing lets you view and copy out this once. To allow it for good, or to allow changes, turn on "Browse my files" and "Change my files" on the device card (the info button at the top right); turning them off takes that back.
 
 - **Computer**: the other device sees your home folder (and each drive on Windows). Deleted files go to the Trash.
 - **Android**: the other device sees internal storage. Phones have no Trash, so deleting asks once more.
@@ -70,7 +78,7 @@ Copy progress shows at the top of the window. "Transfers" in the sidebar lists e
 
 On macOS, Windows, and Linux you can also put the other device's files into the system file manager and open them in any app without copying them first. Android phones and computers can both be mounted.
 
-- Turn on "Mount on this computer" in the device details, and the files are mounted whenever the device connects. For a one-off, right-click the device in the sidebar of the "Files" window and choose "Open in Finder" ("Open in File Explorer" on Windows).
+- Select the info button at the top right, then turn on "Mount", and the files are mounted whenever the device connects. For a one-off, right-click in "Files" and choose "Open in Finder" ("Open in File Explorer" on Windows).
 - Where the files appear:
   - **macOS**: under Locations in the Finder sidebar, one disk per device, named "device name (Whisper)".
   - **Windows**: under "Devices and drives" in This PC, named "device name (Whisper)", and in the File Explorer navigation pane with the Whisper icon.
@@ -79,7 +87,7 @@ On macOS, Windows, and Linux you can also put the other device's files into the 
   - A save is written to a hidden copy next to the file and put in its place in one go, so a dropped connection never leaves a half-written file.
   - If the file changes on the other device while you write it, the original is left alone and what you wrote is saved next to it as "name (this device)".
   - Deleting a file that was already there sends it to the other device's Trash (Android has none, so it is deleted); files made in the mount are deleted right away.
-  - If the other device turns off "Allow Changes to My Files" in its device details, the mount only lets you open and copy files out.
+  - If the other device turns off "Change my files" on its device card, the mount only lets you open and copy files out.
   - On macOS, the `._` and `.DS_Store` files Finder writes stay on this Mac and never reach the other device.
   - On Windows, files you create or change in File Explorer are sent a few seconds after they are closed.
 - Only the parts of a file that are opened are transferred, so speed depends on the network and the other device.
@@ -116,7 +124,7 @@ Open a window or app from one device on another and use it there: carry on with 
 
 ### Open the other device's windows
 
-Select "Flow" in the device details. It lists the other device's recent tasks, windows, and apps; select one to open it here.
+Switch to "Apps" at the top of a conversation (on the device page on a phone). It lists the other device's recent tasks, windows, and apps; select one to open it here.
 
 - **Phones and tablets**: the window fills the screen and works with touch, or with a keyboard and mouse. When the on-screen keyboard comes up, the window on the other device gets shorter so nothing is hidden. You can rotate to landscape.
 - **Computers**: each window opens as its own system window that you can resize or make full screen, and use with this computer's keyboard, mouse, and input methods.
@@ -163,25 +171,25 @@ Flowed apps run on a virtual display on the phone, so you can keep using the pho
 
 ## Clipboard sync
 
-"Auto-sync clipboard" is off by default; turn it on in Settings.
+"Sync clipboard" is off by default; turn it on in Settings.
 
 - A regular conversation syncs only to the connected, trusted device.
-- A keyboard/mouse workspace syncs to its connected devices, and the most recent copy wins.
+- Keyboard and mouse sharing syncs to the connected devices taking part, and the most recent copy wins.
 - Synced content never enters the chat history.
-- Image and file clipboards sync only inside a desktop keyboard/mouse workspace, within per-file and batch size limits.
+- Image and file clipboards sync only during keyboard and mouse sharing on desktop, within per-file and batch size limits.
 
 Android syncs text only. Under the [Android 10 privacy restriction](https://developer.android.com/about/versions/10/privacy/changes#clipboard-data), Whisper cannot read what you copy in another app while it is in the background; it checks the clipboard and sends the change when you return to it.
 
 ## Keyboard and mouse sharing
 
-On desktop, open the keyboard/mouse workspace, drag the other device's screen next to this one, and select "Start". After that, moving the pointer past that screen edge takes it to the other device, and the keyboard follows the pointer.
+On desktop, select the keyboard at the top of the sidebar, drag the other device's screen next to this one, and turn on the switch at the top right. After that, moving the pointer past that screen edge takes it to the other device, and the keyboard follows the pointer.
 
 Turn on clipboard sync first if you want to paste across devices.
 
 ### Leaving and stopping
 
 - Either the controlling or the controlled device can stop sharing.
-- While the pointer is on another device you cannot click the local stop button. Press `Ctrl+Alt+Esc` on the controlling device (`Control+Option+Esc` on macOS) and keyboard and mouse return to it immediately. The shortcut is always shown at the bottom of the workspace's screen arrangement area.
+- While the pointer is on another device you cannot click the local stop button. Press `Ctrl+Alt+Esc` on the controlling device (`Control+Option+Esc` on macOS) and keyboard and mouse return to it immediately. The keyboard and mouse page shows the shortcut at the bottom when no screen is selected.
 - When the other device disconnects, the pointer returns to the controlling device on its own.
 - A device has one role at a time: a device that is being controlled cannot start sharing. Stop the current session before switching.
 
@@ -202,7 +210,7 @@ Once Windows is locked, ordinary programs cannot type on the lock screen. The Wh
 
 ## Control a computer from Android
 
-The phone and computer must already be connected and trust each other, and the computer must be logged in with Whisper running. On Android, open the conversation with that computer, select "Control computer", then the start button at the top.
+The phone and computer must already be connected and trust each other, and the computer must be logged in with Whisper running. On Android, open that computer's device page (top right of the conversation), select "Control computer", then the start button at the top.
 
 | Action | How |
 | --- | --- |
@@ -221,11 +229,15 @@ The phone and computer must already be connected and trust each other, and the c
 
 ## System audio sharing
 
-On desktop, choose audio sharing in the device tools area, then pick one or more connected devices that can play audio. Multi-device playback supports basic synchronization and left/right channel assignment.
+On desktop, select the speaker at the top of the sidebar, check one or more connected devices, then press play on the device picture. Multi-device playback supports basic synchronization, and with two or more checked you can assign left and right channels.
+
+When another device plays its sound here, this page shows that device instead, with gain, pause, and disconnect.
 
 ## Screenshots
 
-Use the screenshot button on desktop, or the shortcut set in Settings. Click to select a window or drag to select a region, then confirm to copy the image; press `Esc` to cancel. The capture is not sent automatically: paste it into the Whisper composer to preview and send it.
+Use the screenshot button in the message box on desktop, or the shortcut set in Settings. Click to select a window or drag to select a region; when you let go, the toolbar is right beside the selection, with box, circle, arrow, pen, text, and mosaic. Hold Shift for a square, a circle, or an arrow in one of eight directions. Double-click the selection or press Enter to copy it, or save it as a file; `Esc` or a right click cancels. The capture is not sent automatically: paste it into the Whisper message box to preview and send it, and select the thumbnail to mark it up further.
+
+A selection across two screens cannot be marked up, only copied or cancelled. On Wayland the system does the selecting and the capture goes to the clipboard; paste it into the message box and select the thumbnail to mark it up.
 
 On Linux, what is available depends on the screenshot service your desktop environment provides.
 
@@ -236,3 +248,9 @@ After granting the notification access permission on Android, choose which apps 
 ## TV casting
 
 With "TV casting" turned on in desktop Settings, video apps on the same network can cast to this computer without Whisper pairing. The feature is experimental and off by default; see the [TV casting notes (Chinese)](cast_receiver.md).
+
+## Diagnostics
+
+When Whisper is not running properly (the database will not open, startup failed, or the connection service or device discovery did not start), the island keeps saying so until it is fixed. Select "View" on it, or open "Diagnostics" in Settings, to see each part's state and copy, save, or report it.
+
+Diagnostics contain no messages, files, or device names, only the system version, this device's network addresses, and a record of what ran. They leave this device only if you send them.

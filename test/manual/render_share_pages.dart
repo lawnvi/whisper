@@ -3,7 +3,7 @@
 // layout overflow fails the test on its own.
 //
 // To look at them next to docs/design/reference/:
-//   WHISPER_RENDER_DIR=/some/dir flutter test --no-pub test/shell_share_pages_render_test.dart
+//   WHISPER_RENDER_DIR=/some/dir flutter test --no-pub test/manual/render_share_pages.dart
 
 import 'dart:async';
 import 'dart:ui' show PointerDeviceKind;

@@ -79,7 +79,7 @@ iOS / iPadOS: the project has no paid Apple Developer account, so the app is not
 | Play sound on other devices | Select the speaker at the top of the sidebar, check the devices, then press play on the device picture |
 | Start keyboard/mouse sharing | Select the keyboard at the top of the sidebar, place the other screen beside yours, then turn on the switch at the top right |
 | Leave keyboard/mouse sharing | Press `Ctrl+Alt+Esc` (`Control+Option+Esc` on macOS) |
-| Control a computer from a phone | Select "Control computer" in the Android conversation, then start |
+| Control a computer from a phone | On Android, open that computer's device page (top right of the conversation), select "Control computer", then start |
 | Take a screenshot | Use the screenshot button in the message box or your shortcut on desktop, then mark it up beside the selection; `Esc` cancels |
 
 The [user guide](docs/user-guide_en.md) covers every feature in full.

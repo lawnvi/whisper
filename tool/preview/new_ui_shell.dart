@@ -311,7 +311,7 @@ class _SampleChat extends StatelessWidget {
                 child: SizedBox(
                   width: compact
                       ? box.maxWidth - 36
-                      : (box.maxWidth - 96).clamp(0, 620).toDouble(),
+                      : (box.maxWidth - 48).clamp(0, 860).toDouble(),
                   child: const Material(
                     type: MaterialType.transparency,
                     child: TextField(
