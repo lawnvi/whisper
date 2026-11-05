@@ -1,9 +1,10 @@
+import 'dart:async';
+
 import 'package:whisper/theme/whisper_ui.dart';
 import 'package:whisper/theme/radix_colors.dart';
 import 'package:whisper/helper/helper.dart';
 import 'package:whisper/new_ui/shell/shell_island_sources.dart';
 import 'package:flutter/material.dart';
-import 'package:toastification/toastification.dart';
 import 'package:whisper/helper/privacy_log.dart';
 import 'package:whisper/theme/app_theme.dart';
 
@@ -23,10 +24,8 @@ class AppToastAction {
 
 final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
 
-/// Give this to the [ToastificationWrapper] around the app. One toast shows at
-/// a time: a newer one replaces whatever is up, including one raised earlier
-/// in the same frame, which dismissing by hand would miss.
-const appToastConfig = ToastificationConfig(maxToastLimit: 1);
+/// The toast on screen: one at a time, a newer one replaces it.
+_AppToast? _currentToast;
 
 /// Long enough to read [message] once: short confirmations leave quickly,
 /// instructions stay, and a toast with an action waits for the tap.
@@ -61,22 +60,18 @@ void showAppToast(
   }
 
   try {
-    toastification
-      ..dismissAll(delayForAnimation: false)
-      ..showCustom(
-        overlayState: overlayState,
-        alignment: Alignment.topCenter,
-        autoCloseDuration:
-            duration ?? appToastDurationFor(message, hasAction: action != null),
-        animationDuration: const Duration(milliseconds: 240),
-        animationBuilder: _buildToastAnimation,
-        builder: (context, item) => _AppToastView(
-          message: message,
-          tone: tone,
-          action: action,
-          onDismiss: () => toastification.dismiss(item),
-        ),
-      );
+    _currentToast?.close();
+    _currentToast = _AppToast(
+      overlay: overlayState,
+      duration:
+          duration ?? appToastDurationFor(message, hasAction: action != null),
+      builder: (close) => _AppToastView(
+        message: message,
+        tone: tone,
+        action: action,
+        onDismiss: close,
+      ),
+    );
   } catch (error) {
     privacyLog.event(PrivacyEvent.toastUnavailable, <PrivacyField, Object>{
       PrivacyField.reason: ToastUnavailableReason.renderFailure,
@@ -85,10 +80,70 @@ void showAppToast(
   }
 }
 
+/// One toast, in the app's overlay. Only the capsule takes touches, so what is
+/// around it stays usable, the page's back button included.
+class _AppToast {
+  _AppToast({
+    required OverlayState overlay,
+    required Duration duration,
+    required Widget Function(VoidCallback close) builder,
+  }) : _animation = AnimationController(
+         vsync: overlay,
+         duration: const Duration(milliseconds: 240),
+       ) {
+    _entry = OverlayEntry(
+      builder: (context) => Align(
+        alignment: Alignment.topCenter,
+        child: Padding(
+          padding: EdgeInsets.only(top: MediaQuery.paddingOf(context).top + 12),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 400),
+            child: DefaultTextStyle(
+              style: Theme.of(context).textTheme.bodyLarge!,
+              child: _buildToastAnimation(context, _animation, builder(close)),
+            ),
+          ),
+        ),
+      ),
+    );
+    overlay.insert(_entry);
+    unawaited(_animation.forward());
+    // Counted from the first frame. In the background there are none, and a
+    // toast nobody has seen shouldn't be over when they come back.
+    WidgetsBinding.instance
+      ..addPostFrameCallback((_) {
+        if (!_closing) {
+          _timer = Timer(duration, close);
+        }
+      })
+      ..ensureVisualUpdate();
+  }
+
+  final AnimationController _animation;
+  late final OverlayEntry _entry;
+  Timer? _timer;
+  bool _closing = false;
+
+  void close() {
+    if (_closing) {
+      return;
+    }
+    _closing = true;
+    _timer?.cancel();
+    if (identical(_currentToast, this)) {
+      _currentToast = null;
+    }
+    _animation.reverse().whenCompleteOrCancel(() {
+      _entry.remove();
+      _entry.dispose();
+      _animation.dispose();
+    });
+  }
+}
+
 Widget _buildToastAnimation(
   BuildContext context,
   Animation<double> animation,
-  Alignment alignment,
   Widget child,
 ) {
   if (MediaQuery.disableAnimationsOf(context)) {
@@ -146,13 +201,12 @@ class _AppToastView extends StatelessWidget {
     final borderColor = isDark ? Radix.whiteA3 : palette.sep;
     final shadowColor = isDark ? Colors.black : Radix.slate12;
 
-    // The package hands every toast a fixed-width slot and starts it at the
-    // leading edge; fill the slot so the capsule can sit in its centre.
     return SizedBox(
       width: double.infinity,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
         child: Center(
+          heightFactor: 1,
           child: Semantics(
             container: true,
             liveRegion: true,

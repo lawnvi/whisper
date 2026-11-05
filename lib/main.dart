@@ -46,7 +46,6 @@ import 'package:whisper/socket/device_identity.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:toastification/toastification.dart';
 import 'package:whisper/new_ui/capture/capture_flow.dart';
 import 'package:whisper/new_ui/capture/capture_overlay.dart';
 import 'package:whisper/new_ui/shell/shell_window_chrome.dart';
@@ -383,59 +382,56 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    return ToastificationWrapper(
-      config: appToastConfig,
-      child: MaterialApp(
-        title: 'Whisper',
-        navigatorKey: appNavigatorKey,
-        theme: AppTheme.lightTheme,
-        darkTheme: AppTheme.darkTheme,
-        themeMode: _themeMode,
-        // The right edge is what is being judged, not covered up.
-        debugShowCheckedModeBanner: false,
-        localizationsDelegates: const [
-          AppLocalizations.delegate,
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
-        supportedLocales: AppLocalizations.supportedLocales,
-        locale: _locale,
-        builder: (context, child) {
-          if (isDesktop()) {
-            final l10n = AppLocalizations.of(context)!;
-            // Keep native capture chrome in sync when locale or theme changes.
-            unawaited(
-              DesktopScreenshotController.shared.initialize(
-                l10n.screenshotCapture,
-                captureLabels: {
-                  'hint': l10n.screenshotSelectionHint,
-                  'adjustHint': l10n.screenshotAdjustHint,
-                  'confirm': l10n.screenshotConfirm,
-                  'cancel': l10n.cancel,
-                  'appearance': Theme.of(context).brightness.name,
-                },
-              ),
-            );
-          }
-          // Windows opened from anywhere (not only the Flow page) carry
-          // their overlay texts in the app's language.
-          final strings = AppLocalizations.of(context);
-          if (strings != null) {
-            WindowStreamCoordinator.shared.updateStrings(strings);
-          }
-          final content = child ?? const SizedBox.shrink();
-          final shell = FileBrowsePromptHost(child: content);
-          if (isDesktop()) {
-            final desktop = CastPlaybackHost(
-              child: PhoneTouchAlertHost(child: shell),
-            );
-            return ShellWindowChrome(child: desktop);
-          }
-          return IslandHost(navigatorKey: appNavigatorKey, child: shell);
-        },
-        home: const DeviceListScreen(),
-      ),
+    return MaterialApp(
+      title: 'Whisper',
+      navigatorKey: appNavigatorKey,
+      theme: AppTheme.lightTheme,
+      darkTheme: AppTheme.darkTheme,
+      themeMode: _themeMode,
+      // The right edge is what is being judged, not covered up.
+      debugShowCheckedModeBanner: false,
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: AppLocalizations.supportedLocales,
+      locale: _locale,
+      builder: (context, child) {
+        if (isDesktop()) {
+          final l10n = AppLocalizations.of(context)!;
+          // Keep native capture chrome in sync when locale or theme changes.
+          unawaited(
+            DesktopScreenshotController.shared.initialize(
+              l10n.screenshotCapture,
+              captureLabels: {
+                'hint': l10n.screenshotSelectionHint,
+                'adjustHint': l10n.screenshotAdjustHint,
+                'confirm': l10n.screenshotConfirm,
+                'cancel': l10n.cancel,
+                'appearance': Theme.of(context).brightness.name,
+              },
+            ),
+          );
+        }
+        // Windows opened from anywhere (not only the Flow page) carry
+        // their overlay texts in the app's language.
+        final strings = AppLocalizations.of(context);
+        if (strings != null) {
+          WindowStreamCoordinator.shared.updateStrings(strings);
+        }
+        final content = child ?? const SizedBox.shrink();
+        final shell = FileBrowsePromptHost(child: content);
+        if (isDesktop()) {
+          final desktop = CastPlaybackHost(
+            child: PhoneTouchAlertHost(child: shell),
+          );
+          return ShellWindowChrome(child: desktop);
+        }
+        return IslandHost(navigatorKey: appNavigatorKey, child: shell);
+      },
+      home: const DeviceListScreen(),
     );
   }
 }
