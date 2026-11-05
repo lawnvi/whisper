@@ -110,7 +110,16 @@ class WhisperGlassDialog extends StatelessWidget {
     this.borderRadius = 26,
     this.insetAnimationDuration = const Duration(milliseconds: 100),
     this.blurBackground = true,
+    this.centered = false,
+    this.icon,
   });
+
+  /// Above the title of a [centered] alert, as macOS puts its symbol.
+  final Widget? icon;
+
+  /// An alert, as macOS lays one out: title and text centred, buttons of one
+  /// width across the bottom.
+  final bool centered;
 
   final Widget? title;
   final Widget? content;
@@ -124,7 +133,31 @@ class WhisperGlassDialog extends StatelessWidget {
   final Duration insetAnimationDuration;
   final bool blurBackground;
 
-  /// `.sheet`: raised, 20 inside, left-aligned, actions at the end.
+  /// Two buttons share the row; more stand one above another.
+  Widget _evenActions() {
+    if (actions.length > 2) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final (i, action) in actions.indexed) ...[
+            if (i > 0) const SizedBox(height: 8),
+            action,
+          ],
+        ],
+      );
+    }
+    return Row(
+      children: [
+        for (final (i, action) in actions.indexed) ...[
+          if (i > 0) const SizedBox(width: 8),
+          Expanded(child: action),
+        ],
+      ],
+    );
+  }
+
+  /// `.sheet`: raised, 20 inside, left-aligned, actions at the end. An alert
+  /// ([centered]) is centred instead.
   Widget _buildNew(BuildContext context) {
     final c = context.wc;
     final touch = !isDesktop();
@@ -157,8 +190,13 @@ class WhisperGlassDialog extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                if (icon != null) ...[
+                  Center(child: icon),
+                  const SizedBox(height: 12),
+                ],
                 if (title != null)
                   DefaultTextStyle.merge(
+                    textAlign: centered ? TextAlign.center : null,
                     style: TextStyle(
                       fontSize: type.head,
                       fontWeight: FontWeight.w600,
@@ -171,6 +209,7 @@ class WhisperGlassDialog extends StatelessWidget {
                   Flexible(
                     fit: FlexFit.loose,
                     child: DefaultTextStyle.merge(
+                      textAlign: centered ? TextAlign.center : null,
                       style: TextStyle(
                         fontSize: type.note,
                         height: 1.5,
@@ -181,13 +220,16 @@ class WhisperGlassDialog extends StatelessWidget {
                   ),
                 ],
                 if (actions.isNotEmpty) ...[
-                  const SizedBox(height: 14),
-                  Wrap(
-                    alignment: WrapAlignment.end,
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: actions,
-                  ),
+                  SizedBox(height: centered ? 20 : 14),
+                  if (centered)
+                    _evenActions()
+                  else
+                    Wrap(
+                      alignment: WrapAlignment.end,
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: actions,
+                    ),
                 ],
               ],
             ),
@@ -210,17 +252,21 @@ class WhisperAlertDialog extends StatelessWidget {
     required this.title,
     required this.content,
     required this.actions,
+    this.icon,
   });
 
   final String title;
-  final Widget content;
+  final Widget? content;
   final List<Widget> actions;
+  final Widget? icon;
 
   @override
   Widget build(BuildContext context) => WhisperGlassDialog(
     constraints: const BoxConstraints(maxWidth: 380, maxHeight: 620),
+    centered: true,
+    icon: icon,
     title: Text(title),
-    content: SingleChildScrollView(child: content),
+    content: content == null ? null : SingleChildScrollView(child: content),
     actions: actions,
   );
 }

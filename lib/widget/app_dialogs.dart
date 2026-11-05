@@ -387,22 +387,22 @@ Future<void> showLoadingDialog(
     showWhisperDialog<void>(
       context,
       barrierDismissible: false,
-      builder: (BuildContext context) {
+      builder: (BuildContext dialogContext) {
         return WhisperAlertDialog(
           title: title,
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              if (isLoading) ...[icon, const SizedBox(height: 16)],
-              Text(description),
-            ],
-          ),
+          icon: isLoading ? icon : null,
+          content: description.isEmpty ? null : Text(description),
           actions: <Widget>[
             if (isLoading && showCancel)
               WhisperDialogButton(
-                onPressed: onCancel,
+                // The dialog closes itself: it is on the root navigator, and
+                // the page that opened it may sit in a nested one (a phone's
+                // content), where popping takes away the page instead.
+                onPressed: () {
+                  Navigator.of(dialogContext).pop();
+                  onCancel();
+                },
                 label: cancelButtonText,
-                destructive: true,
               ),
           ],
         );

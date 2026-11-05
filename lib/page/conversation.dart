@@ -2040,13 +2040,14 @@ class _SendMessageScreen extends State<SendMessageScreen>
           title:
               AppLocalizations.of(context)?.connectFailed ??
               'Connection Failed',
-          description: displayMessage,
+          // The title says it already when there is nothing more to say.
+          description: displayMessage == l10n.connectFailed
+              ? ''
+              : displayMessage,
           isLoading: true,
           icon: Icon(Icons.warning_rounded, color: context.wc.bad),
           cancelButtonText: AppLocalizations.of(context)?.cancel ?? 'Cancel',
-          onCancel: () {
-            Navigator.of(context).pop();
-          },
+          onCancel: () {},
           task: (VoidCallback onCancel) async {},
         );
       }
