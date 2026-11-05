@@ -86,6 +86,16 @@ POINT FrameFractionToScreen(HWND top, double fx, double fy) {
                frame.top + static_cast<LONG>(std::lround(fy * RectHeight(frame)))};
 }
 
+// What a real pointer can land on: Windows passes over hidden and disabled
+// windows, and over click-through ones (layered and transparent). Chromium
+// covers its tab strip and toolbar with a disabled window of its GPU process
+// that draws them; a click posted there reaches nothing.
+bool TakesPointer(HWND window) {
+  if (!IsWindowVisible(window) || !IsWindowEnabled(window)) return false;
+  const LONG_PTR through = WS_EX_LAYERED | WS_EX_TRANSPARENT;
+  return (GetWindowLongPtrW(window, GWL_EXSTYLE) & through) != through;
+}
+
 HWND ChildAt(HWND top, POINT screen) {
   // RealChildWindowFromPoint picks the child that would actually receive the
   // mouse message (it handles controls like Edit that ChildWindowFromPointEx
@@ -95,7 +105,11 @@ HWND ChildAt(HWND top, POINT screen) {
     POINT client = screen;
     if (!ScreenToClient(target, &client)) break;
     HWND child = RealChildWindowFromPoint(target, client);
-    if (child == nullptr || child == target) break;
+    if (child != nullptr && child != target && !TakesPointer(child)) {
+      // Something under it may still take the pointer.
+      child = ChildWindowFromPointEx(target, client, CWP_SKIPINVISIBLE | CWP_SKIPDISABLED);
+    }
+    if (child == nullptr || child == target || !TakesPointer(child)) break;
     target = child;
   }
   return target;
