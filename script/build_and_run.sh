@@ -25,10 +25,7 @@ REQUIRE_STABLE_SIGNING="${WHISPER_MACOS_REQUIRE_STABLE_SIGNING:-0}"
 DMG_ROOT="${WHISPER_MACOS_DMG_ROOT:-dmg-root}"
 DMG_PATH="${WHISPER_MACOS_DMG_PATH:-whisper.dmg}"
 DMG_APP_BUNDLE_NAME="Whisper.app"
-DMG_WINDOW_BOUNDS="{160, 120, 720, 440}"
-DMG_ICON_SIZE=112
-DMG_APP_ICON_POSITION="{180, 170}"
-DMG_APPLICATIONS_ICON_POSITION="{420, 170}"
+DMG_LAYOUT="script/dmg_layout.DS_Store"
 TEMP_DIRS=()
 CLEAN_MACOS_NATIVE_ASSET_STAGING_ON_EXIT=0
 FLUTTER_UPDATE_ARGS=()
@@ -321,80 +318,17 @@ build_release_x64_app() {
   sign_app "$X64_RELEASE_APP_BUNDLE" "$INTEL_VIRTUAL_HID_ENTITLEMENTS"
 }
 
-configure_dmg_finder_window() {
-  local mount_point="$1"
-
-  osascript <<EOF
-tell application "Finder"
-  tell disk "Whisper"
-    open
-    set current view of container window to icon view
-    set toolbar visible of container window to false
-    set statusbar visible of container window to false
-    set the bounds of container window to $DMG_WINDOW_BOUNDS
-    set viewOptions to the icon view options of container window
-    set arrangement of viewOptions to not arranged
-    set icon size of viewOptions to $DMG_ICON_SIZE
-    set text size of viewOptions to 13
-    set position of item "$DMG_APP_BUNDLE_NAME" of container window to $DMG_APP_ICON_POSITION
-    set position of item "Applications" of container window to $DMG_APPLICATIONS_ICON_POSITION
-    update without registering applications
-    close
-  end tell
-end tell
-EOF
-
-  # Finder writes .DS_Store asynchronously; give it a moment before detaching.
-  sleep 1
-  sync
-  test -f "$mount_point/.DS_Store"
-}
-
-detach_dmg_mount() {
-  local mount_point="$1"
-
-  for _ in 1 2 3 4 5; do
-    if hdiutil detach "$mount_point" -quiet; then
-      return 0
-    fi
-    sleep 1
-  done
-
-  hdiutil detach "$mount_point" -force -quiet
-}
-
 package_release_dmg() {
   local app_bundle="${1:-$RELEASE_APP_BUNDLE}"
-  local rw_dmg_path="${DMG_PATH%.dmg}-rw.dmg"
-  if [[ "$rw_dmg_path" == "$DMG_PATH" ]]; then
-    rw_dmg_path="${DMG_PATH}-rw.dmg"
-  fi
 
-  local mount_point
-  mount_point="$(mktemp -d)"
-  TEMP_DIRS+=("$mount_point")
-
-  rm -rf "$DMG_ROOT" "$DMG_PATH" "$rw_dmg_path"
+  rm -rf "$DMG_ROOT" "$DMG_PATH"
   mkdir -p "$DMG_ROOT"
   cp -R "$app_bundle" "$DMG_ROOT/$DMG_APP_BUNDLE_NAME"
   ln -s /Applications "$DMG_ROOT/Applications"
-  hdiutil create -volname "Whisper" -srcfolder "$DMG_ROOT" -ov -format UDRW "$rw_dmg_path"
-  hdiutil attach "$rw_dmg_path" -mountpoint "$mount_point" -nobrowse -quiet
-  # The Finder window layout is purely cosmetic. Headless CI runners have no
-  # interactive Finder session, so scripting the mounted volume fails
-  # (-1728 "Can't get disk"). Treat it as best-effort so a functional DMG is
-  # still produced; require it only when explicitly demanded.
-  if ! configure_dmg_finder_window "$mount_point"; then
-    if [[ "${WHISPER_MACOS_REQUIRE_DMG_LAYOUT:-0}" == "1" ]]; then
-      detach_dmg_mount "$mount_point" || true
-      echo "Failed to configure DMG Finder window layout" >&2
-      exit 1
-    fi
-    echo "Warning: skipping DMG Finder window layout (cosmetic); packaging plain DMG" >&2
-  fi
-  detach_dmg_mount "$mount_point"
-  hdiutil convert "$rw_dmg_path" -format UDZO -imagekey zlib-level=9 -o "$DMG_PATH"
-  rm -f "$rw_dmg_path"
+  # Prebuilt by script/make_dmg_layout.py: release runners have no Finder to script.
+  cp "$DMG_LAYOUT" "$DMG_ROOT/.DS_Store"
+  hdiutil create -volname "Whisper" -srcfolder "$DMG_ROOT" -ov -format UDZO \
+    -imagekey zlib-level=9 "$DMG_PATH"
   hdiutil verify "$DMG_PATH"
 }
 

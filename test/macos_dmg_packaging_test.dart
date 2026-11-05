@@ -87,67 +87,13 @@ void main() {
     );
   });
 
-  test('release DMG applies a compact Finder install window layout', () {
+  test('release DMG carries its prebuilt Finder window layout', () {
     final packageScript = File('script/build_and_run.sh').readAsStringSync();
 
-    expect(packageScript, contains('DMG_WINDOW_BOUNDS="{160, 120, 720, 440}"'));
-    expect(packageScript, contains('DMG_ICON_SIZE=112'));
-    expect(packageScript, contains('DMG_APP_BUNDLE_NAME="Whisper.app"'));
-    expect(packageScript, contains('DMG_APP_ICON_POSITION="{180, 170}"'));
-    expect(
-      packageScript,
-      contains('DMG_APPLICATIONS_ICON_POSITION="{420, 170}"'),
-    );
-    expect(packageScript, contains('configure_dmg_finder_window()'));
-    expect(
-      packageScript,
-      contains('set toolbar visible of container window to false'),
-    );
-    expect(
-      packageScript,
-      contains('set statusbar visible of container window to false'),
-    );
-    expect(
-      packageScript,
-      contains(r'set the bounds of container window to $DMG_WINDOW_BOUNDS'),
-    );
-    expect(
-      packageScript,
-      contains(r'set icon size of viewOptions to $DMG_ICON_SIZE'),
-    );
-    expect(
-      packageScript,
-      contains(r'set position of item "$DMG_APP_BUNDLE_NAME"'),
-    );
-    expect(packageScript, contains('set position of item "Applications"'));
+    expect(File('script/dmg_layout.DS_Store').existsSync(), isTrue);
+    expect(packageScript, contains('DMG_LAYOUT="script/dmg_layout.DS_Store"'));
+    expect(packageScript, contains(r'cp "$DMG_LAYOUT" "$DMG_ROOT/.DS_Store"'));
   });
-
-  test(
-    'DMG Finder window layout is best-effort so headless CI still packages',
-    () {
-      final packageScript = File('script/build_and_run.sh').readAsStringSync();
-
-      // The cosmetic layout must not abort packaging by default — headless CI
-      // runners cannot script the mounted volume (-1728 "Can't get disk").
-      expect(packageScript, contains('WHISPER_MACOS_REQUIRE_DMG_LAYOUT'));
-      expect(
-        packageScript,
-        contains(
-          'Warning: skipping DMG Finder window layout (cosmetic); '
-          'packaging plain DMG',
-        ),
-      );
-
-      // The layout failure still runs the compression + verification afterwards.
-      final layoutFailure = packageScript.indexOf(
-        'WHISPER_MACOS_REQUIRE_DMG_LAYOUT',
-      );
-      final convert = packageScript.indexOf('hdiutil convert "\$rw_dmg_path"');
-      expect(layoutFailure, isNot(-1));
-      expect(convert, isNot(-1));
-      expect(layoutFailure, lessThan(convert));
-    },
-  );
 
   test('macOS package script can import a stable signing certificate', () {
     final script = File('script/build_and_run.sh').readAsStringSync();
