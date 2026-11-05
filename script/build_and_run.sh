@@ -253,23 +253,45 @@ build_release_app() {
   flutter build macos "${FLUTTER_UPDATE_ARGS[@]}"
   dart script/prune_flutter_assets.dart macos \
     "$RELEASE_APP_BUNDLE/Contents/Frameworks/App.framework/Versions/A/Resources/flutter_assets"
+  thin_bundle_to_architecture "$RELEASE_APP_BUNDLE" "$host_arch"
   verify_bundle_architecture "$RELEASE_APP_BUNDLE" "$host_arch"
   sign_app "$RELEASE_APP_BUNDLE" "$entitlements"
+}
+
+# `flutter build macos` produces both architectures on any host, but each package
+# is for one kind of Mac. Must run before signing: this rewrites the binaries.
+thin_bundle_to_architecture() {
+  local app_bundle="$1"
+  local arch="$2"
+  local binary
+  local kind
+
+  while IFS= read -r -d '' binary; do
+    # Read the whole output: with pipefail, `file | grep -q` can lose to SIGPIPE.
+    kind="$(file -b "$binary")"
+    if [[ "$kind" != *Mach-O* || "$(lipo -archs "$binary")" != *" "* ]]; then
+      continue
+    fi
+    lipo -thin "$arch" "$binary" -output "$binary.thin"
+    mv "$binary.thin" "$binary"
+  done < <(find "$app_bundle/Contents" -type f -print0)
 }
 
 verify_bundle_architecture() {
   local app_bundle="$1"
   local required_arch="$2"
   local binary
+  local kind
   local architectures
 
   while IFS= read -r -d '' binary; do
-    if ! file "$binary" | grep -q 'Mach-O'; then
+    kind="$(file -b "$binary")"
+    if [[ "$kind" != *Mach-O* ]]; then
       continue
     fi
     architectures="$(lipo -archs "$binary")"
-    if [[ " $architectures " != *" $required_arch "* ]]; then
-      echo "Missing $required_arch slice: $binary ($architectures)" >&2
+    if [[ "$architectures" != "$required_arch" ]]; then
+      echo "Expected only $required_arch: $binary ($architectures)" >&2
       exit 1
     fi
   done < <(
@@ -294,6 +316,7 @@ build_release_x64_app() {
     build
   dart script/prune_flutter_assets.dart macos \
     "$X64_RELEASE_APP_BUNDLE/Contents/Frameworks/App.framework/Versions/A/Resources/flutter_assets"
+  thin_bundle_to_architecture "$X64_RELEASE_APP_BUNDLE" x86_64
   verify_bundle_architecture "$X64_RELEASE_APP_BUNDLE" x86_64
   sign_app "$X64_RELEASE_APP_BUNDLE" "$INTEL_VIRTUAL_HID_ENTITLEMENTS"
 }
