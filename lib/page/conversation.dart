@@ -1724,7 +1724,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
         return null;
       }
 
-      final text = (await Clipboard.getData(Clipboard.kTextPlain))?.text;
+      final text = await getClipboardText();
       if (!mounted || generation != _clipboardPasteGeneration) {
         return null;
       }

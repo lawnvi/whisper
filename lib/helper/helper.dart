@@ -292,23 +292,25 @@ bool _isLikelyVirtualInterface(String name) {
       markers.any(normalized.contains);
 }
 
+/// Windows refuses a read while another program has the clipboard open, which
+/// is common right after a copy: everyone watching it looks at the same moment.
 Future<String?> getClipboardText() async {
-  return await Clipboard.getData(Clipboard.kTextPlain)
-      .then((value) {
-        if (value != null && value.text != null) {
-          return value.text;
-        } else {
-          return null;
-        }
-      })
-      .catchError((error) {
-        privacyLog.event(PrivacyEvent.localOperation, <PrivacyField, Object>{
-          PrivacyField.kind: LocalOperationKind.clipboardRead,
-          PrivacyField.state: LocalOperationState.failed,
-          PrivacyField.errorType: privacyLog.errorType(error),
-        });
-        return null;
+  for (var attempt = 0; ; attempt++) {
+    try {
+      return (await Clipboard.getData(Clipboard.kTextPlain))?.text;
+    } on Object catch (error) {
+      if (attempt < 3) {
+        await Future<void>.delayed(Duration(milliseconds: 40 << attempt));
+        continue;
+      }
+      privacyLog.event(PrivacyEvent.localOperation, <PrivacyField, Object>{
+        PrivacyField.kind: LocalOperationKind.clipboardRead,
+        PrivacyField.state: LocalOperationState.failed,
+        PrivacyField.errorType: privacyLog.errorType(error),
       });
+      return null;
+    }
+  }
 }
 
 Future<void> copyToClipboard(

@@ -199,7 +199,7 @@ class _CaptureOverlay extends ChangeNotifier {
   }
 
   Future<void> _gpuCache(int bytes) async {
-    if (!Platform.isMacOS) return;
+    if (!Platform.isMacOS && !Platform.isWindows) return;
     await SystemChannels.skia.invokeMethod<void>(
       'Skia.setResourceCacheMaxBytes',
       bytes,
@@ -220,10 +220,10 @@ class _CaptureOverlay extends ChangeNotifier {
   Future<void> _finish() async {
     await _dropSession();
     await _gpuCache(_idle);
+    // Windows keeps its size: back from 1×1 the next picture came out on a
+    // surface of the wrong shape, squashed and half black.
     if (Platform.isLinux) {
       await windowManager.setBounds(const Rect.fromLTWH(0, 0, 1, 1));
-    } else {
-      await _theme.invokeMethod<bool>('shrinkCover');
     }
     await _frame();
     await _hideWindow();

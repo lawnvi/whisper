@@ -247,38 +247,38 @@ class ChatComposer extends StatelessWidget {
         shape: RoundedSuperellipseBorder(
           borderRadius: BorderRadius.circular(radius),
         ),
-        child: Padding(
-          padding: const EdgeInsets.all(5),
-          child: AnimatedSize(
-            duration: whisperMotionDuration(context),
-            curve: Curves.easeOutCubic,
-            alignment: Alignment.bottomCenter,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (hasPreview)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
-                    child: _showsClipboardFilesPreview
-                        ? _buildClipboardFilesPreview(context)
-                        : _buildClipboardImagesPreview(context),
-                  ),
-                if (touch)
-                  row
-                else ...[
-                  // The whole card is for writing, not only the text itself.
-                  GestureDetector(
-                    behavior: HitTestBehavior.translucent,
-                    onTap: focusNode.requestFocus,
-                    child: Padding(
+        // The whole card is for writing, to its edges; its buttons keep their taps.
+        child: GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onTap: touch ? null : focusNode.requestFocus,
+          child: Padding(
+            padding: const EdgeInsets.all(5),
+            child: AnimatedSize(
+              duration: whisperMotionDuration(context),
+              curve: Curves.easeOutCubic,
+              alignment: Alignment.bottomCenter,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (hasPreview)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+                      child: _showsClipboardFilesPreview
+                          ? _buildClipboardFilesPreview(context)
+                          : _buildClipboardImagesPreview(context),
+                    ),
+                  if (touch)
+                    row
+                  else ...[
+                    Padding(
                       padding: const EdgeInsets.fromLTRB(6, 7, 6, 8),
                       child: field,
                     ),
-                  ),
-                  _buildToolbar(context),
+                    _buildToolbar(context),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
         ),

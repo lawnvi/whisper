@@ -1865,7 +1865,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     } on Object {
       return;
     }
-    final text = (await Clipboard.getData(Clipboard.kTextPlain))?.text;
+    final text = await getClipboardText();
     if (text == null || !mounted) return;
     _clipHistory.add(
       ClipEntry(text: text, from: '', at: DateTime.now()),
@@ -2394,7 +2394,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
       inputActive:
           ShellInputController.shared.on ||
           ShellInputController.shared.controlledBy != null,
-      linksActive: ShareLinkStore.shared.serviceOn,
+      linksActive: ShareLinkStore.shared.sharing,
       soundSupported: supportsNativeSystemAudio(),
       inputSupported: supportsNativeRemoteInput(),
     );

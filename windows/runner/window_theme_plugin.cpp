@@ -143,16 +143,6 @@ class WindowThemePlugin : public flutter::Plugin {
       return;
     }
 
-    // Kept for the next screenshot, without a screen's worth of surface: its
-    // next frame gives that back, and it hides after.
-    if (call.method_name() == "shrinkCover") {
-      SetLayeredWindowAttributes(window_, 0, 0, LWA_ALPHA);
-      SetWindowPos(window_, nullptr, 0, 0, 1, 1,
-                   SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW);
-      result->Success(flutter::EncodableValue(true));
-      return;
-    }
-
     // Password managers set this format on what they copy; it must not be
     // remembered in the clipboard history.
     if (call.method_name() == "clipboardIsSensitive") {

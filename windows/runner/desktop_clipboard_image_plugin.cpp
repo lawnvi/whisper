@@ -326,9 +326,55 @@ std::optional<std::wstring> Utf8ToWide(const std::string& value) {
   return result;
 }
 
+// Top-down RGBA into CF_DIB, which is bottom-up BGRA. Opaque, so nothing reads
+// the fourth byte as anything but that.
+void SetClipboardBitmap(const std::vector<uint8_t>& rgba, int width, int height) {
+  if (width <= 0 || height <= 0 ||
+      rgba.size() != static_cast<size_t>(width) * height * 4) {
+    return;
+  }
+  HGLOBAL dib = GlobalAlloc(GMEM_MOVEABLE, sizeof(BITMAPINFOHEADER) + rgba.size());
+  if (dib == nullptr) {
+    return;
+  }
+  bool filled = false;
+  {
+    ScopedGlobalLock lock(dib);
+    if (lock.data() != nullptr) {
+      auto* header = static_cast<BITMAPINFOHEADER*>(lock.data());
+      *header = {};
+      header->biSize = sizeof(BITMAPINFOHEADER);
+      header->biWidth = width;
+      header->biHeight = height;
+      header->biPlanes = 1;
+      header->biBitCount = 32;
+      header->biCompression = BI_RGB;
+      auto* out = reinterpret_cast<uint8_t*>(header + 1);
+      const size_t stride = static_cast<size_t>(width) * 4;
+      for (int row = 0; row < height; ++row) {
+        const uint8_t* from = rgba.data() + stride * (height - 1 - row);
+        uint8_t* to = out + stride * row;
+        for (int x = 0; x < width; ++x, from += 4, to += 4) {
+          to[0] = from[2];
+          to[1] = from[1];
+          to[2] = from[0];
+          to[3] = from[3];
+        }
+      }
+      filled = true;
+    }
+  }
+  if (!filled || SetClipboardData(CF_DIB, dib) == nullptr) {
+    GlobalFree(dib);
+  }
+}
+
 bool WriteClipboardFilePaths(HWND window,
                              const std::vector<std::string>& paths,
-                             bool as_image) {
+                             bool as_image,
+                             const std::vector<uint8_t>* rgba,
+                             int width,
+                             int height) {
   if (paths.empty()) {
     return false;
   }
@@ -404,6 +450,9 @@ bool WriteClipboardFilePaths(HWND window,
         }
       }
       CloseHandle(file);
+    }
+    if (rgba != nullptr) {
+      SetClipboardBitmap(*rgba, width, height);
     }
   }
   return true;
@@ -569,8 +618,20 @@ class DesktopClipboardImagePlugin : public flutter::Plugin {
           as_image = *value;
         }
       }
-      result->Success(flutter::EncodableValue(
-          WriteClipboardFilePaths(window_, paths, as_image)));
+      const auto int_argument = [&](const char* name) {
+        const auto entry = arguments->find(flutter::EncodableValue(name));
+        const auto* value = entry == arguments->end()
+                                ? nullptr
+                                : std::get_if<int32_t>(&entry->second);
+        return value == nullptr ? 0 : *value;
+      };
+      const auto rgba_entry = arguments->find(flutter::EncodableValue("rgba"));
+      const auto* rgba = rgba_entry == arguments->end()
+                             ? nullptr
+                             : std::get_if<std::vector<uint8_t>>(&rgba_entry->second);
+      result->Success(flutter::EncodableValue(WriteClipboardFilePaths(
+          window_, paths, as_image, rgba, int_argument("width"),
+          int_argument("height"))));
       return;
     }
     if (call.method_name() != "readImagePng") {

@@ -7,6 +7,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:whisper/helper/local.dart';
 import 'package:whisper/helper/helper.dart';
 import 'package:whisper/helper/toast.dart';
 import 'package:whisper/l10n/app_localizations.dart';
@@ -71,6 +72,7 @@ class _ShellDiagnosticsState extends State<ShellDiagnostics> {
     final path = await FilePicker.saveFile(
       dialogTitle: l10n.diagSave,
       fileName: 'whisper-diagnostics.txt',
+      initialDirectory: await LocalSetting().saveDialogFolder(),
       bytes: report,
     );
     if (path == null) return;

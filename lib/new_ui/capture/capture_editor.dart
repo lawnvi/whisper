@@ -7,6 +7,7 @@ import 'dart:ui' as ui;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:whisper/helper/local.dart';
 import 'package:whisper/helper/toast.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/new_ui/capture/capture_marks.dart';
@@ -101,6 +102,7 @@ class _CaptureEditorState extends State<CaptureEditor> {
       final path = await FilePicker.saveFile(
         dialogTitle: l10n.captureSave,
         fileName: captureFileName(),
+        initialDirectory: await LocalSetting().saveDialogFolder(),
         bytes: png,
       );
       if (path != null) {

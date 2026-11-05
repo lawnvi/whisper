@@ -199,6 +199,10 @@ class ShareLinkStore extends ChangeNotifier implements ShareServerSource {
   /// Links that are switched on (whether or not the server is).
   int get enabledCount => _links.where((link) => link.enabled).length;
   bool get serviceOn => _serviceOn;
+
+  /// Something can be fetched from here right now, or would be once the server
+  /// is up: not the same as the switch, which is on from the first run.
+  bool get sharing => _serviceOn && _links.any((link) => link.enabled);
   ShareServerState get serverState => _state;
 
   /// This device's LAN addresses, the one other devices most likely reach
@@ -571,8 +575,7 @@ class ShareLinkStore extends ChangeNotifier implements ShareServerSource {
     if (_disposed) {
       return;
     }
-    final wanted = _serviceOn && _links.any((link) => link.enabled);
-    if (wanted) {
+    if (sharing) {
       if (server.isRunning) {
         _setState(ShareServerState.running(server.port!));
         return;

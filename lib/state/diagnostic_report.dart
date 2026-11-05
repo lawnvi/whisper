@@ -18,7 +18,8 @@ Future<String> buildDiagnosticReport() async {
   line('time', DateTime.now().toIso8601String());
   try {
     final info = await PackageInfo.fromPlatform();
-    line('version', '${info.version}+${info.buildNumber} ${info.packageName}');
+    final build = info.buildNumber.isEmpty ? '' : '+${info.buildNumber}';
+    line('version', '${info.version}$build ${info.packageName}');
   } on Object {
     line('version', 'unknown');
   }

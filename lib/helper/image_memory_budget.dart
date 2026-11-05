@@ -5,6 +5,10 @@ import 'package:flutter/painting.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
+bool get _limitsGpuCache =>
+    defaultTargetPlatform == TargetPlatform.macOS ||
+    defaultTargetPlatform == TargetPlatform.windows;
+
 Future<void> applyImageMemoryBudget({bool background = false}) async {
   final cache = PaintingBinding.instance.imageCache;
   cache.maximumSizeBytes = (background ? 4 : 24) * 1024 * 1024;
@@ -12,11 +16,11 @@ Future<void> applyImageMemoryBudget({bool background = false}) async {
     // Release idle entries; live images still belong to their widgets.
     cache.clear();
   }
-  if (defaultTargetPlatform != TargetPlatform.macOS) {
+  if (!_limitsGpuCache) {
     return;
   }
   try {
-    // macOS Skia otherwise scales its GPU cache budget with window pixels.
+    // Skia otherwise scales its GPU cache budget with window pixels.
     await SystemChannels.skia.invokeMethod<void>(
       'Skia.setResourceCacheMaxBytes',
       (background ? 8 : 32) * 1024 * 1024,
@@ -61,9 +65,9 @@ class GpuCacheTrimmer {
 
   static GpuCacheTrimmer? _shared;
 
-  /// macOS only, for the same reason as [applyImageMemoryBudget].
+  /// Where [applyImageMemoryBudget] limits the cache, for the same reason.
   static void start() {
-    if (defaultTargetPlatform != TargetPlatform.macOS || _shared != null) {
+    if (!_limitsGpuCache || _shared != null) {
       return;
     }
     final trimmer = _shared = GpuCacheTrimmer(

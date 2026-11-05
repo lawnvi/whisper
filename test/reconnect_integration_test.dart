@@ -318,8 +318,9 @@ Future<void> _trustPeer(LocalDatabase database, String peerId) async {
   await database.authDevice(peerId, true);
 }
 
+// Windows retries a refused connection for a couple of seconds before it says so.
 Future<void> _waitUntil(bool Function() predicate) async {
-  for (var attempt = 0; attempt < 100; attempt += 1) {
+  for (var attempt = 0; attempt < 1000; attempt += 1) {
     if (predicate()) return;
     await Future<void>.delayed(const Duration(milliseconds: 5));
   }

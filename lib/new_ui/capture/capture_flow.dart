@@ -7,6 +7,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:whisper/helper/local.dart';
 import 'package:whisper/helper/desktop_clipboard_image.dart';
 import 'package:whisper/helper/desktop_screenshot.dart';
 import 'package:whisper/helper/toast.dart';
@@ -84,6 +85,7 @@ Future<bool> _saveAs(Uint8List? png) async {
   final path = await FilePicker.saveFile(
     dialogTitle: l10n?.captureSave,
     fileName: captureFileName(),
+    initialDirectory: await LocalSetting().saveDialogFolder(),
     bytes: png,
   );
   if (path == null) return false;
@@ -94,12 +96,32 @@ Future<bool> _saveAs(Uint8List? png) async {
 Future<bool> _copy(Uint8List? png) async {
   if (png == null) throw StateError('no picture');
   final file = await _write(png);
-  if (!await const DesktopClipboardFileWriter().writeFilePaths([
-    file.path,
-  ], asImage: true)) {
+  if (!await const DesktopClipboardFileWriter().writeFilePaths(
+    [file.path],
+    asImage: true,
+    bitmap: Platform.isWindows ? await _bitmapOf(png) : null,
+  )) {
     throw StateError('clipboard');
   }
   return true;
+}
+
+Future<ClipboardBitmap?> _bitmapOf(Uint8List png) async {
+  final codec = await ui.instantiateImageCodec(png);
+  final image = (await codec.getNextFrame()).image;
+  codec.dispose();
+  try {
+    final data = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+    return data == null
+        ? null
+        : ClipboardBitmap(
+            data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
+            image.width,
+            image.height,
+          );
+  } finally {
+    image.dispose();
+  }
 }
 
 /// Where no window could take over. The selection only, in Whisper's own window.

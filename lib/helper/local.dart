@@ -273,6 +273,15 @@ class LocalSetting {
     return rebased;
   }
 
+  /// Where a save dialog opens on Windows. Left alone it opens in the working
+  /// directory, which for a start from the Run key is System32, and nothing can
+  /// be saved there.
+  Future<String?> saveDialogFolder() async {
+    if (!Platform.isWindows) return null;
+    final path = await savePath();
+    return path.isEmpty ? null : path;
+  }
+
   Future<void> modifySavePath(String path) async {
     await _setSP(_savePath, path);
   }

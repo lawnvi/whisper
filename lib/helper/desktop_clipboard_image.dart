@@ -116,6 +116,13 @@ class DesktopClipboardImageReader {
   }
 }
 
+class ClipboardBitmap {
+  const ClipboardBitmap(this.rgba, this.width, this.height);
+
+  final Uint8List rgba;
+  final int width, height;
+}
+
 class DesktopClipboardFileWriter {
   static const channelName = DesktopClipboardImageReader.channelName;
 
@@ -125,9 +132,12 @@ class DesktopClipboardFileWriter {
 
   final MethodChannel _channel;
 
+  /// [bitmap] is for Windows, where paint programs and much else read nothing
+  /// but a bitmap: top-down RGBA of the one image in [paths].
   Future<bool> writeFilePaths(
     List<String> paths, {
     bool asImage = false,
+    ClipboardBitmap? bitmap,
   }) async {
     if (paths.isEmpty) {
       return false;
@@ -135,7 +145,15 @@ class DesktopClipboardFileWriter {
     try {
       return await _channel.invokeMethod<bool>(
             'writeFilePaths',
-            <String, Object?>{'paths': paths, 'asImage': asImage},
+            <String, Object?>{
+              'paths': paths,
+              'asImage': asImage,
+              if (bitmap != null) ...{
+                'rgba': bitmap.rgba,
+                'width': bitmap.width,
+                'height': bitmap.height,
+              },
+            },
           ) ??
           false;
     } on MissingPluginException {
