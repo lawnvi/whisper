@@ -380,7 +380,7 @@ final class AgentStream {
         server.broadcast("closed", data);
     }
 
-    private static void shutdown(LocalSocket socket) {
+    static void shutdown(LocalSocket socket) {
         try {
             socket.shutdownInput();
         } catch (IOException e) {

@@ -35,6 +35,14 @@ object WindowStreamAgentLink {
         if (port !in 1..65535 || token == null || token.size != TOKEN_BYTES) {
             return false
         }
+        // The agent repeats itself while Whisper runs with nothing connected,
+        // in case Whisper lost it: only a new link is news.
+        val known = load(context)
+        if (known != null && known["port"] == port && known["pid"] == extras.getInt("pid", 0) &&
+            (known["token"] as ByteArray).contentEquals(token)
+        ) {
+            return true
+        }
         val json = JSONObject()
             .put("port", port)
             .put("token", Base64.encodeToString(token, Base64.NO_WRAP))

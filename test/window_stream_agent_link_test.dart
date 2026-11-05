@@ -117,7 +117,7 @@ void main() {
       // Same build: keep it.
       expect(
         AgentLaunch.shouldReplace(
-          running('2.0.0', sidecar.jarSha256),
+          running(sidecar.agentVersion, sidecar.jarSha256),
           sidecar,
           streams: 0,
         ),

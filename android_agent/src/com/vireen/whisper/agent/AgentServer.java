@@ -42,16 +42,14 @@ import java.util.concurrent.TimeUnit;
  *   with adb or by the phone's Whisper over its own wireless debugging):
  *   it outlives adb and the starter, and serves every desktop and the
  *   phone's Whisper. It exits when a client asks ({@code shutdown}: the
- *   user turned the service off on the phone), when Whisper is no longer
- *   installed, or {@link #ORPHAN_EXIT_MS} after the last client of any
- *   kind went away (Whisper killed and never back), which bounds what a
- *   forgotten agent costs.</li>
+ *   user turned the service off on the phone) or when Whisper is no longer
+ *   installed; otherwise it stays until the phone restarts, as the service
+ *   page says, however long nobody uses it.</li>
  * </ul>
  */
 final class AgentServer {
 
     static final long GRACE_MS = 20_000;
-    static final long ORPHAN_EXIT_MS = 60 * 60_000L;
     static final String DAEMON_SOCKET = "whisper_agent";
     private static final int HELLO_TIMEOUT_MS = 2_000;
 
@@ -173,9 +171,9 @@ final class AgentServer {
             schedulePush(60_000);
             return;
         }
-        boolean installed = whisperUid() >= 0;
-        if (!installed) {
-            whisperUid = -1;
+        // Looked up afresh: nothing else would notice Whisper being removed.
+        whisperUid = Catalog.uidOf(PhoneApp.PACKAGE);
+        if (whisperUid < 0) {
             linkFailures++;
             // Whisper was removed: nobody would ever use or stop this agent.
             if (linkFailures >= 3) {
@@ -421,7 +419,9 @@ final class AgentServer {
 
     private synchronized void scheduleExit() {
         cancelExit();
-        exitTask = timer.schedule(this::shutdown, persistent ? ORPHAN_EXIT_MS : GRACE_MS, TimeUnit.MILLISECONDS);
+        if (!persistent) {
+            exitTask = timer.schedule(this::shutdown, GRACE_MS, TimeUnit.MILLISECONDS);
+        }
     }
 
     private synchronized void cancelExit() {

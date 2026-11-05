@@ -142,6 +142,9 @@ final class AppLink {
         OutputStream toInner = inner.getOutputStream();
         Runnable end = () -> {
             close(outer);
+            // Closing alone wakes no reader: the agent would keep this session,
+            // and the copy below would wait, for as long as it runs.
+            AgentStream.shutdown(inner);
             AgentServer.closeQuietly(inner);
         };
         Thread up = new Thread(() -> {
