@@ -462,7 +462,7 @@ final class VirtualStage {
       destroyDisplay()
       throw Failure.neverOnline
     }
-    mark("online")
+    mark(d.onlineNote.map { "online (\($0))" } ?? "online")
     await Self.arrange(d.displayID)
     mark("arranged")
     if !Self.insetMeasured {

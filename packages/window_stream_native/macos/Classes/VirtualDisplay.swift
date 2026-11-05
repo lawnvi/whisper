@@ -208,39 +208,80 @@ final class VirtualDisplay {
     /// context on the main actor, not by blocking main.
     @discardableResult
     func waitUntilOnline(timeout: TimeInterval = 3) async -> Bool {
+        onlineNote = nil
         let deadline = Date().addingTimeInterval(timeout)
         var nextSelect = Date()
         var acceptBy: Date?
+        var attempts = 0, applied = 0
         while Date() < deadline {
             if hasRequestedMode { return true }
             let b = bounds
             if b.width > 0, Date() >= nextSelect {
-                selectRequestedMode()
+                attempts += 1
+                if selectRequestedMode() { applied += 1 }
                 nextSelect = Date().addingTimeInterval(0.5)
                 if acceptBy == nil { acceptBy = Date().addingTimeInterval(0.3) }
+                // macOS turned the mode down twice: seen at 0 of 6 every time it
+                // happened, and the display was then taken as it was anyway, three
+                // seconds later.
+                if attempts >= 2, applied == 0 {
+                    noteMode(attempts: attempts, applied: applied)
+                    return false
+                }
             }
             if let accept = acceptBy, Date() >= accept,
                Int(b.width) == widthPt, Int(b.height) == heightPt {
+                noteMode(attempts: attempts, applied: applied)
                 return true
             }
             try? await Task.sleep(nanoseconds: 50_000_000)
         }
+        if !hasRequestedMode { noteMode(attempts: attempts, applied: applied) }
         return hasRequestedMode
+    }
+
+    /// How the display came up when it was not the requested mode, for the
+    /// staging log: whether macOS offered that mode at all, and whether the
+    /// selections were taken.
+    private(set) var onlineNote: String?
+
+    /// Why the last mode selection failed, as CoreGraphics error codes.
+    private var lastSelectError: String?
+
+    private func noteMode(attempts: Int, applied: Int) {
+        let b = bounds, px = pixelSize
+        let offered = requestedMode() != nil ? "yes" : "no"
+        onlineNote = "asked \(widthPt)x\(heightPt)@\(scale)x, got \(Int(b.width))x\(Int(b.height)) pt "
+            + "\(px.width)x\(px.height) px, offered \(offered), selected \(applied)/\(attempts)"
+            + (lastSelectError.map { ", refused \($0)" } ?? "")
+    }
+
+    private func requestedMode() -> CGDisplayMode? {
+        guard displayID != 0 else { return nil }
+        let opts = [kCGDisplayShowDuplicateLowResolutionModes: kCFBooleanTrue] as CFDictionary
+        let modes = (CGDisplayCopyAllDisplayModes(displayID, opts) as? [CGDisplayMode]) ?? []
+        return modes.first(where: {
+            $0.width == widthPt && $0.height == heightPt && $0.pixelWidth == widthPt * scale
+        })
     }
 
     /// Picks the mode whose point size and pixel size match the request. Public API.
     @discardableResult
     func selectRequestedMode() -> Bool {
-        guard displayID != 0 else { return false }
-        let opts = [kCGDisplayShowDuplicateLowResolutionModes: kCFBooleanTrue] as CFDictionary
-        guard let modes = CGDisplayCopyAllDisplayModes(displayID, opts) as? [CGDisplayMode] else { return false }
-        guard let want = modes.first(where: {
-            $0.width == widthPt && $0.height == heightPt && $0.pixelWidth == widthPt * scale
-        }) else { return false }
+        guard let want = requestedMode() else { return false }
         var config: CGDisplayConfigRef?
-        guard CGBeginDisplayConfiguration(&config) == .success else { return false }
-        CGConfigureDisplayWithDisplayMode(config, displayID, want, nil)
-        return CGCompleteDisplayConfiguration(config, .forSession) == .success
+        let begun = CGBeginDisplayConfiguration(&config)
+        guard begun == .success else {
+            lastSelectError = "begin \(begun.rawValue)"
+            return false
+        }
+        let configured = CGConfigureDisplayWithDisplayMode(config, displayID, want, nil)
+        let completed = CGCompleteDisplayConfiguration(config, .forSession)
+        if completed != .success || configured != .success {
+            lastSelectError = "configure \(configured.rawValue), complete \(completed.rawValue)"
+            return false
+        }
+        return true
     }
 
     /// Every mode macOS offers for this display, for diagnostics.
