@@ -1598,7 +1598,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get windowStreamAdbMissing =>
-      'adb wasn\'t found. Install Android Platform Tools first';
+      'adb isn’t on this computer, and you don’t need it: on the phone, open Whisper, turn on Settings → Window Flow Service, then connect to this device';
 
   @override
   String get windowStreamAdbFailed => 'The adb server couldn\'t start';
@@ -1646,7 +1646,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get windowStreamNoDevicesHintDesktop =>
-      'Connect an Android phone with a cable, or turn on Wireless debugging in its Developer options.';
+      'On the phone, open Whisper, turn on Settings → Window Flow Service, then connect to this device. Or connect the phone with a cable.';
 
   @override
   String get windowStreamNoDevicesHintMobile =>
@@ -2649,21 +2649,21 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get androidWindowServiceRunningHint =>
-      'Your trusted computers can now see this phone in their window flow and open its apps';
+      'Devices you paired can now see this phone’s apps and use them';
 
   @override
   String get androidWindowServiceStopped => 'Not running';
 
   @override
   String get androidWindowServiceStoppedHint =>
-      'Turn on Wireless debugging, then start it again here without a computer';
+      'Turn on Wireless debugging, then start it below. No computer needed';
 
   @override
   String get androidWindowServiceNeedsSetup => 'Not set up';
 
   @override
   String get androidWindowServiceNeedsSetupHint =>
-      'Once on, this phone\'s apps can flow to your trusted computers to view and control, while the phone stays in the background';
+      'Once on, devices you paired can see and use this phone’s apps. No computer needed';
 
   @override
   String get androidWindowServiceStart => 'Turn on';
@@ -2689,7 +2689,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get androidWindowServiceStep2Hint =>
-      'In Developer options, turn on Wireless debugging and open ‘Pair device with pairing code’';
+      'Tap here for Developer options, turn on Wireless debugging, then tap ‘Pair device with pairing code’. Stay on that page: pull down the notifications, expand Whisper’s and type the code there';
 
   @override
   String get androidWindowServiceStep2Action => 'Open Developer options';
@@ -2699,7 +2699,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get androidWindowServiceStep3Hint =>
-      'Type the 6-digit code the system shows; Whisper pairs with this phone and starts the service';
+      'Or use split screen and type it here';
 
   @override
   String get androidWindowServicePairingCode => 'Pairing code';
@@ -2714,12 +2714,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get androidWindowServiceStarting => 'Starting…';
 
   @override
-  String get androidWindowServiceAutoStart =>
-      'Start automatically after a reboot';
+  String get androidWindowServiceAutoStart => 'Start when Whisper opens';
 
   @override
   String get androidWindowServiceAutoStartHint =>
-      'Needs a system permission so Whisper can turn Wireless debugging back on; only your trusted computers can connect, and you can turn this off here anytime';
+      'The service stops when the phone restarts. With this on, when Whisper opens or a device comes to look, Whisper turns on Wireless debugging, starts the service and turns it off again. This needs a system permission for Whisper, and you can turn it off here anytime';
 
   @override
   String get androidWindowServiceStarted => 'Window flow service is on';
@@ -2729,7 +2728,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get androidWindowServiceStartFailed =>
-      'Couldn’t start. Check that Wireless debugging is on and try again';
+      'The service didn’t start. Try again';
 
   @override
   String get androidWindowServicePairFailed =>
@@ -2740,7 +2739,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get androidWindowServiceComputerHint =>
-      'Connect this phone once to a computer running Whisper with window flow on; then every computer can use it';
+      'This phone runs a version below Android 12 and can’t start this by itself. Connect it once to a computer with adb and Whisper';
 
   @override
   String windowStreamPhoneServiceOff(String device) {
@@ -3644,4 +3643,41 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get shellDropSendConfirm => 'Send';
+
+  @override
+  String get androidWindowServiceNotifyTitle => 'Window flow pairing';
+
+  @override
+  String get androidWindowServiceNotifyEnterCode =>
+      'Type the 6 digits the system shows';
+
+  @override
+  String get androidWindowServiceNoPairingService =>
+      'No pairing request found. In Wireless debugging, tap ‘Pair device with pairing code’ first';
+
+  @override
+  String get androidWindowServiceWirelessOff =>
+      'Wireless debugging is off. Connect to Wi-Fi and turn it on';
+
+  @override
+  String get androidWindowServiceNotPaired =>
+      'Pairing is no longer valid. Pair again';
+
+  @override
+  String get androidWindowServiceNeedsWifi =>
+      'Wireless debugging needs this phone on Wi-Fi';
+
+  @override
+  String get androidWindowServiceAutoStartFailed =>
+      'Couldn’t turn this on. Turn on Wireless debugging first; Xiaomi phones also need ‘USB debugging (Security settings)’';
+
+  @override
+  String get androidWindowServiceNotifyWaitingCode =>
+      'Waiting for the pairing code';
+
+  @override
+  String get androidWindowServiceNotifyCodeHint => '6-digit code';
+
+  @override
+  String get androidWindowServiceNotifyReply => 'Enter';
 }

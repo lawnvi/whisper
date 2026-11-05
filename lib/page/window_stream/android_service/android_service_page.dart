@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:whisper/theme/whisper_ui.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../../../helper/toast.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../../window_stream/android/agent/phone_self_start.dart';
 import '../../../theme/app_theme.dart';
 import '../../settings.dart' show SettingsSectionSurface;
 import 'android_service_controller.dart';
@@ -23,16 +27,29 @@ class AndroidWindowServicePage extends StatefulWidget {
       _AndroidWindowServicePageState();
 }
 
-class _AndroidWindowServicePageState extends State<AndroidWindowServicePage> {
+class _AndroidWindowServicePageState extends State<AndroidWindowServicePage>
+    with WidgetsBindingObserver {
   late final AndroidWindowServiceController _controller =
       widget.controller ?? AndroidWindowServiceController();
   final _code = TextEditingController();
+  StreamSubscription<PhoneSelfStartResult>? _finished;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _controller.addListener(_onChange);
     _controller.init();
+    // A pairing finished in the notification.
+    _finished = _controller.finished.listen(_report);
+  }
+
+  // Back from the system's settings: what they say may have changed.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && !_controller.busy) {
+      unawaited(_controller.refresh());
+    }
   }
 
   void _onChange() {
@@ -43,6 +60,8 @@ class _AndroidWindowServicePageState extends State<AndroidWindowServicePage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    unawaited(_finished?.cancel());
     _controller.removeListener(_onChange);
     if (widget.controller == null) {
       _controller.dispose();
@@ -107,6 +126,19 @@ class _AndroidWindowServicePageState extends State<AndroidWindowServicePage> {
             palette.bad,
             busy ? null : _stop,
           ),
+        if (self &&
+            state == AndroidWindowServiceState.stopped &&
+            !_controller.status.wirelessDebugging &&
+            !_controller.status.canToggle)
+          _row(
+            palette,
+            colors,
+            icon: CupertinoIcons.wifi,
+            title: _s.androidWindowServiceStep2,
+            desc: _s.androidWindowServiceNeedsWifi,
+            onTap: _controller.openDeveloperOptions,
+            trailing: Icon(Icons.chevron_right_rounded, color: palette.ink2),
+          ),
         if (self && state == AndroidWindowServiceState.stopped)
           _actionRow(
             _s.androidWindowServiceStart,
@@ -122,16 +154,15 @@ class _AndroidWindowServicePageState extends State<AndroidWindowServicePage> {
             title: _s.androidWindowServiceAutoStart,
             desc: _s.androidWindowServiceAutoStartHint,
             lines: 4,
-            onTap: busy
-                ? null
-                : () => _controller.setAutoStart(!_controller.autoStart),
+            onTap: busy ? null : () => _setAutoStart(!_controller.autoStart),
             trailing: CupertinoSwitch(
               value: _controller.autoStart,
-              onChanged: busy ? null : _controller.setAutoStart,
+              onChanged: busy ? null : _setAutoStart,
             ),
           ),
       ], footer: self ? null : _s.androidWindowServiceComputerHint),
-      if (self && !running) _setupSection(palette, colors),
+      if (self && !running && !_controller.status.paired)
+        _setupSection(palette, colors),
     ];
   }
 
@@ -247,38 +278,44 @@ class _AndroidWindowServicePageState extends State<AndroidWindowServicePage> {
 
   Widget _setupSection(WhisperColors palette, ColorScheme colors) {
     final chevron = Icon(Icons.chevron_right_rounded, color: palette.ink2);
-    return _section(_s.androidWindowServiceHowTitle, [
-      _row(
-        palette,
-        colors,
-        leading: _stepNumber(palette, 1),
-        title: _s.androidWindowServiceStep1,
-        desc: _s.androidWindowServiceStep1Hint,
-        semanticsHint: _s.androidWindowServiceStep1Action,
-        onTap: _controller.openDeviceInfo,
-        trailing: chevron,
-      ),
-      _row(
-        palette,
-        colors,
-        leading: _stepNumber(palette, 2),
-        title: _s.androidWindowServiceStep2,
-        desc: _s.androidWindowServiceStep2Hint,
-        semanticsHint: _s.androidWindowServiceStep2Action,
-        onTap: _controller.openDeveloperOptions,
-        trailing: chevron,
-        lines: 3,
-      ),
-      _row(
-        palette,
-        colors,
-        leading: _stepNumber(palette, 3),
-        title: _s.androidWindowServiceStep3,
-        desc: _s.androidWindowServiceStep3Hint,
-        lines: 3,
-        below: _pairingField(palette, colors),
-      ),
-    ]);
+    final status = _controller.status;
+    return _section(
+      _s.androidWindowServiceHowTitle,
+      [
+        if (!status.developerOptions)
+          _row(
+            palette,
+            colors,
+            leading: _stepNumber(palette, 1),
+            title: _s.androidWindowServiceStep1,
+            desc: _s.androidWindowServiceStep1Hint,
+            semanticsHint: _s.androidWindowServiceStep1Action,
+            onTap: _controller.openDeviceInfo,
+            trailing: chevron,
+          ),
+        _row(
+          palette,
+          colors,
+          leading: _stepNumber(palette, status.developerOptions ? 1 : 2),
+          title: _s.androidWindowServiceStep2,
+          desc: _s.androidWindowServiceStep2Hint,
+          semanticsHint: _s.androidWindowServiceStep2Action,
+          onTap: _openWirelessDebugging,
+          trailing: chevron,
+          lines: 4,
+        ),
+        _row(
+          palette,
+          colors,
+          leading: _stepNumber(palette, status.developerOptions ? 2 : 3),
+          title: _s.androidWindowServiceStep3,
+          desc: _s.androidWindowServiceStep3Hint,
+          lines: 3,
+          below: _pairingField(palette, colors),
+        ),
+      ],
+      footer: status.wifi ? null : _s.androidWindowServiceNeedsWifi,
+    );
   }
 
   Widget _stepNumber(WhisperColors palette, int number) {
@@ -438,28 +475,63 @@ class _AndroidWindowServicePageState extends State<AndroidWindowServicePage> {
     );
   }
 
-  Future<void> _pair() async {
-    final ok = await _controller.pairAndStart(_code.text);
-    if (!mounted) {
-      return;
+  Future<void> _openWirelessDebugging() async {
+    // The notification is where the code goes while the system's page shows it.
+    if (await Permission.notification.isDenied) {
+      await Permission.notification.request();
     }
-    if (ok) {
-      _code.clear();
-      showAppToast(_s.androidWindowServiceStarted, tone: AppToastTone.success);
-    } else {
-      showAppToast(_s.androidWindowServicePairFailed, tone: AppToastTone.error);
-    }
+    await _controller.openWirelessDebugging({
+      'channel': _s.androidWindowServiceNotifyTitle,
+      'title': _s.androidWindowServiceTitle,
+      'codeTitle': _s.androidWindowServiceStep3,
+      'enterCode': _s.androidWindowServiceNotifyEnterCode,
+      'waitingCode': _s.androidWindowServiceNotifyWaitingCode,
+      'codeHint': _s.androidWindowServiceNotifyCodeHint,
+      'codeAction': _s.androidWindowServiceNotifyReply,
+      'pairing': _s.androidWindowServicePairing,
+      'failed': _s.androidWindowServicePairFailed,
+      'starting': _s.androidWindowServiceStarting,
+      'started': _s.androidWindowServiceRunning,
+      'startFailed': _s.androidWindowServiceStartFailed,
+    });
   }
 
-  Future<void> _start() async {
-    final ok = await _controller.start();
+  Future<void> _pair() async {
+    final result = await _controller.pairAndStart(_code.text);
+    if (mounted && result == PhoneSelfStartResult.started) {
+      _code.clear();
+    }
+    _report(result);
+  }
+
+  Future<void> _start() async => _report(await _controller.start());
+
+  void _report(PhoneSelfStartResult result) {
     if (!mounted) {
       return;
     }
-    showAppToast(
-      ok ? _s.androidWindowServiceStarted : _s.androidWindowServiceStartFailed,
-      tone: ok ? AppToastTone.success : AppToastTone.error,
-    );
+    if (result == PhoneSelfStartResult.started) {
+      showAppToast(_s.androidWindowServiceStarted, tone: AppToastTone.success);
+      return;
+    }
+    showAppToast(switch (result) {
+      PhoneSelfStartResult.wrongCode => _s.androidWindowServicePairFailed,
+      PhoneSelfStartResult.noPairingService =>
+        _s.androidWindowServiceNoPairingService,
+      PhoneSelfStartResult.wirelessOff => _s.androidWindowServiceWirelessOff,
+      PhoneSelfStartResult.notPaired => _s.androidWindowServiceNotPaired,
+      _ => _s.androidWindowServiceStartFailed,
+    }, tone: AppToastTone.error);
+  }
+
+  Future<void> _setAutoStart(bool value) async {
+    final applied = await _controller.setAutoStart(value);
+    if (!applied && mounted) {
+      showAppToast(
+        _s.androidWindowServiceAutoStartFailed,
+        tone: AppToastTone.error,
+      );
+    }
   }
 
   Future<void> _stop() async {

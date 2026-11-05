@@ -83,14 +83,14 @@ void main() {
     expect(notice, contains('Apache License 2.0'));
   });
 
-  test('the agent ships to desktops only', () {
+  test('the agent ships to desktops and Android, which starts it itself', () {
     final pubspec = File('pubspec.yaml').readAsStringSync();
     for (final asset in ['whisper-agent.jar', 'whisper-agent.json']) {
       expect(
         pubspec,
         contains(
           '- path: assets/window_stream/$asset\n'
-          '      platforms: [macos, windows, linux]',
+          '      platforms: [android, macos, windows, linux]',
         ),
       );
     }

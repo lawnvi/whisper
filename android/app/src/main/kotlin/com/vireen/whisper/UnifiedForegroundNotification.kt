@@ -88,6 +88,10 @@ object UnifiedForegroundNotification {
                 .build()
     }
 
+    /** What the shared notification shows now, or null when nothing holds it. */
+    @Synchronized
+    fun current(context: Context): Notification? = buildCurrent(context)
+
     @Synchronized
     fun setKeepAlive(
         context: Context,

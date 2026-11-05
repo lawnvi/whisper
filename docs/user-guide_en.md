@@ -157,9 +157,19 @@ On Linux, showing windows from other devices needs FFmpeg 4 or later. Sharing th
 
 Apps on an Android phone can flow to a computer. Whisper on the phone must be paired with the computer and connected.
 
-The first time, start it from a computer that has adb installed (Android SDK Platform-Tools; Whisper looks in the Android SDK's default location and on PATH, and the installers do not include it). Turn on "USB debugging" in the phone's Developer options, connect the phone to that computer with a cable, and allow it to debug on the phone ("Wireless debugging" also works). The phone's apps then show up in that computer's Flow.
+The phone first has to turn on the Window Flow Service. After that, devices you paired can flow this phone with no computer and no adb.
 
-Once started, the phone's window flow service keeps running, and your other trusted computers can show this phone's apps without a cable; after the phone restarts, start it from a computer again. The service's status is under Settings → "Window flow service" in Whisper on the phone, where you can stop it at any time.
+Android 12 and later can start it on the phone itself, while connected to Wi-Fi:
+
+1. In Whisper on the phone, open Settings → Window Flow Service.
+2. Tap Turn on Wireless debugging, turn on Wireless debugging in the system's Developer options, then tap Pair device with pairing code. If Developer options aren't on yet, the page asks for that first.
+3. Stay on the page showing the code: leaving it cancels the code. Pull down the notifications and, on Enter the pairing code, tap Enter (expand it first if there is no button), then type the 6 digits. You can also use split screen and type it on Whisper's page.
+
+You only pair once. The service stops when the phone restarts; tap Start on the same page. With Start when Whisper opens on, Whisper turns on Wireless debugging when it opens or when a device comes to look, starts the service and turns Wireless debugging off again. This needs a system permission for Whisper, and the system may ask for permission on a new Wi-Fi network.
+
+Android 10 and 11 can't start it by themselves and need a computer with adb installed (Android SDK Platform-Tools; Whisper looks in the Android SDK's default location and on PATH, and the installers do not include it). Turn on USB debugging in the phone's Developer options, connect it to that computer with a cable and allow debugging on the phone. The phone's apps then appear in that computer's flow page. Start it again after the phone restarts.
+
+The service's state is in Whisper on the phone under Settings → Window Flow Service, where you can stop it at any time.
 
 Flowed apps run on a virtual display on the phone, so you can keep using the phone for other things. Also:
 

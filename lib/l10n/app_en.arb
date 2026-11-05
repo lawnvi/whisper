@@ -672,7 +672,7 @@
   "windowStreamDisconnected": "Disconnected. You can close this window",
   "windowStreamUnauthorized": "Allow debugging from this computer on your phone",
   "windowStreamDeviceOffline": "The phone isn't responding. Reconnect the cable or turn Wireless debugging off and on",
-  "windowStreamAdbMissing": "adb wasn't found. Install Android Platform Tools first",
+  "windowStreamAdbMissing": "adb isn’t on this computer, and you don’t need it: on the phone, open Whisper, turn on Settings → Window Flow Service, then connect to this device",
   "windowStreamAdbFailed": "The adb server couldn't start",
   "windowStreamUnsupported": "Phone app windows aren't available on this computer yet",
   "windowStreamSearchApps": "Search apps",
@@ -687,7 +687,7 @@
   "windowStreamResume": "Resume",
   "windowStreamClose": "Close",
   "windowStreamNoDevices": "No devices yet",
-  "windowStreamNoDevicesHintDesktop": "Connect an Android phone with a cable, or turn on Wireless debugging in its Developer options.",
+  "windowStreamNoDevicesHintDesktop": "On the phone, open Whisper, turn on Settings → Window Flow Service, then connect to this device. Or connect the phone with a cable.",
   "windowStreamNoDevicesHintMobile": "Open Whisper on your Mac and trust each other; its windows will show up here.",
   "windowStreamLoadFailed": "Couldn't load this device's apps",
   "windowStreamBackToSpace": "Back to Flow",
@@ -1723,7 +1723,7 @@
   "@androidWindowServiceRunning": {
     "description": "Android window flow service status: the agent is running and reachable."
   },
-  "androidWindowServiceRunningHint": "Your trusted computers can now see this phone in their window flow and open its apps",
+  "androidWindowServiceRunningHint": "Devices you paired can now see this phone’s apps and use them",
   "@androidWindowServiceRunningHint": {
     "description": "Android window flow service subtitle when running: what it enables."
   },
@@ -1731,7 +1731,7 @@
   "@androidWindowServiceStopped": {
     "description": "Android window flow service status: set up before, but the agent is not running now (e.g. after a reboot)."
   },
-  "androidWindowServiceStoppedHint": "Turn on Wireless debugging, then start it again here without a computer",
+  "androidWindowServiceStoppedHint": "Turn on Wireless debugging, then start it below. No computer needed",
   "@androidWindowServiceStoppedHint": {
     "description": "Android window flow service subtitle when stopped but already set up once."
   },
@@ -1739,7 +1739,7 @@
   "@androidWindowServiceNeedsSetup": {
     "description": "Android window flow service status: never set up on this phone."
   },
-  "androidWindowServiceNeedsSetupHint": "Once on, this phone's apps can flow to your trusted computers to view and control, while the phone stays in the background",
+  "androidWindowServiceNeedsSetupHint": "Once on, devices you paired can see and use this phone’s apps. No computer needed",
   "@androidWindowServiceNeedsSetupHint": {
     "description": "Android window flow service subtitle when not set up: what the feature does."
   },
@@ -1771,7 +1771,7 @@
   "@androidWindowServiceStep2": {
     "description": "Android setup step 2 title."
   },
-  "androidWindowServiceStep2Hint": "In Developer options, turn on Wireless debugging and open ‘Pair device with pairing code’",
+  "androidWindowServiceStep2Hint": "Tap here for Developer options, turn on Wireless debugging, then tap ‘Pair device with pairing code’. Stay on that page: pull down the notifications, expand Whisper’s and type the code there",
   "@androidWindowServiceStep2Hint": {
     "description": "Android setup step 2 subtitle."
   },
@@ -1783,7 +1783,7 @@
   "@androidWindowServiceStep3": {
     "description": "Android setup step 3 title: the 6-digit Wireless debugging pairing code."
   },
-  "androidWindowServiceStep3Hint": "Type the 6-digit code the system shows; Whisper pairs with this phone and starts the service",
+  "androidWindowServiceStep3Hint": "Or use split screen and type it here",
   "@androidWindowServiceStep3Hint": {
     "description": "Android setup step 3 subtitle."
   },
@@ -1803,11 +1803,11 @@
   "@androidWindowServiceStarting": {
     "description": "Android window flow service status while the agent starts."
   },
-  "androidWindowServiceAutoStart": "Start automatically after a reboot",
+  "androidWindowServiceAutoStart": "Start when Whisper opens",
   "@androidWindowServiceAutoStart": {
     "description": "Android window flow service toggle: let Whisper restart the service by itself after the phone reboots."
   },
-  "androidWindowServiceAutoStartHint": "Needs a system permission so Whisper can turn Wireless debugging back on; only your trusted computers can connect, and you can turn this off here anytime",
+  "androidWindowServiceAutoStartHint": "The service stops when the phone restarts. With this on, when Whisper opens or a device comes to look, Whisper turns on Wireless debugging, starts the service and turns it off again. This needs a system permission for Whisper, and you can turn it off here anytime",
   "@androidWindowServiceAutoStartHint": {
     "description": "Android window flow service auto-start toggle subtitle, stating the security trade-off."
   },
@@ -1819,7 +1819,7 @@
   "@androidWindowServiceStopped2": {
     "description": "Toast after the service stops."
   },
-  "androidWindowServiceStartFailed": "Couldn’t start. Check that Wireless debugging is on and try again",
+  "androidWindowServiceStartFailed": "The service didn’t start. Try again",
   "@androidWindowServiceStartFailed": {
     "description": "Toast when the self-start fails."
   },
@@ -1831,7 +1831,7 @@
   "@androidWindowServiceEntryTitle": {
     "description": "Settings row title linking to the Android window flow service page."
   },
-  "androidWindowServiceComputerHint": "Connect this phone once to a computer running Whisper with window flow on; then every computer can use it",
+  "androidWindowServiceComputerHint": "This phone runs a version below Android 12 and can’t start this by itself. Connect it once to a computer with adb and Whisper",
   "@androidWindowServiceComputerHint": {
     "description": "Android window flow service hint shown when the phone cannot start the agent by itself (no bundled pairing): use a computer once."
   },
@@ -2474,5 +2474,15 @@
   "screenshotShortcutReset": "Restore default shortcut",
   "shellDropSendTitle": "Send to {name}",
   "shellDropSendMore": "{count} more",
-  "shellDropSendConfirm": "Send"
+  "shellDropSendConfirm": "Send",
+  "androidWindowServiceNotifyTitle": "Window flow pairing",
+  "androidWindowServiceNotifyEnterCode": "Type the 6 digits the system shows",
+  "androidWindowServiceNoPairingService": "No pairing request found. In Wireless debugging, tap ‘Pair device with pairing code’ first",
+  "androidWindowServiceWirelessOff": "Wireless debugging is off. Connect to Wi-Fi and turn it on",
+  "androidWindowServiceNotPaired": "Pairing is no longer valid. Pair again",
+  "androidWindowServiceNeedsWifi": "Wireless debugging needs this phone on Wi-Fi",
+  "androidWindowServiceAutoStartFailed": "Couldn’t turn this on. Turn on Wireless debugging first; Xiaomi phones also need ‘USB debugging (Security settings)’",
+  "androidWindowServiceNotifyWaitingCode": "Waiting for the pairing code",
+  "androidWindowServiceNotifyCodeHint": "6-digit code",
+  "androidWindowServiceNotifyReply": "Enter"
 }

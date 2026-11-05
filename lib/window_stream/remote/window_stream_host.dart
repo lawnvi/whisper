@@ -19,6 +19,7 @@ import '../../socket/no_delay_socket.dart';
 import '../../socket/packet_byte_transport.dart';
 import '../../socket/session_upgrade_token_registry.dart';
 import '../android/agent/phone_capture_backend.dart';
+import '../android/agent/phone_self_start.dart';
 import '../core/window_stream_models.dart';
 import '../pipeline/native_bootstrap.dart';
 import '../window_stream_log.dart';
@@ -328,6 +329,7 @@ class WindowStreamHost {
       // why there is nothing yet instead of an empty list.
       _attachNative();
       unawaited(_loadSharing());
+      PhoneSelfStart.shared.attach();
     }
   }
 

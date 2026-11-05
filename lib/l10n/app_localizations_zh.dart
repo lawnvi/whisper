@@ -1487,7 +1487,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get windowStreamDeviceOffline => '无法连接手机，请重新插拔数据线或重新打开无线调试';
 
   @override
-  String get windowStreamAdbMissing => '未找到 adb，请安装 Android 平台工具';
+  String get windowStreamAdbMissing =>
+      '这台电脑没有 adb，也可以不装：在手机 Whisper 里打开“设置 → 窗口流转服务”，再连接本机';
 
   @override
   String get windowStreamAdbFailed => 'adb 服务启动失败';
@@ -1533,7 +1534,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get windowStreamNoDevicesHintDesktop =>
-      '用数据线连接安卓手机，或在手机的开发者选项里打开“无线调试”。';
+      '在手机 Whisper 里打开“设置 → 窗口流转服务”，再连接本机；也可以用数据线连接手机。';
 
   @override
   String get windowStreamNoDevicesHintMobile =>
@@ -2494,19 +2495,20 @@ class AppLocalizationsZh extends AppLocalizations {
   String get androidWindowServiceRunning => '已开启';
 
   @override
-  String get androidWindowServiceRunningHint => '已配对的电脑现在可以查看和操作本机应用';
+  String get androidWindowServiceRunningHint => '你配对过的设备现在可以查看和操作本机应用';
 
   @override
   String get androidWindowServiceStopped => '未运行';
 
   @override
-  String get androidWindowServiceStoppedHint => '打开无线调试后，这里可以重新开启，无需再插电脑';
+  String get androidWindowServiceStoppedHint => '打开无线调试后，点下面的开启，不需要电脑';
 
   @override
   String get androidWindowServiceNeedsSetup => '未设置';
 
   @override
-  String get androidWindowServiceNeedsSetupHint => '开启后，已配对的电脑可以查看和操作本机应用';
+  String get androidWindowServiceNeedsSetupHint =>
+      '开启后，配对过的设备可以查看和操作本机应用，不需要电脑';
 
   @override
   String get androidWindowServiceStart => '开启服务';
@@ -2531,7 +2533,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get androidWindowServiceStep2Hint =>
-      '在“开发者选项”里打开“无线调试”，并保持本页在同一屏打开“使用配对码配对设备”';
+      '点这里进入“开发者选项”，打开“无线调试”，再点“使用配对码配对设备”。别离开配对码页面：下拉通知栏，展开 Whisper 的通知，在里面填配对码';
 
   @override
   String get androidWindowServiceStep2Action => '打开“开发者选项”';
@@ -2540,7 +2542,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get androidWindowServiceStep3 => '输入配对码';
 
   @override
-  String get androidWindowServiceStep3Hint => '填入系统显示的 6 位配对码';
+  String get androidWindowServiceStep3Hint => '也可以分屏后填在这里';
 
   @override
   String get androidWindowServicePairingCode => '配对码';
@@ -2555,11 +2557,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get androidWindowServiceStarting => '正在开启…';
 
   @override
-  String get androidWindowServiceAutoStart => '重启后自动开启';
+  String get androidWindowServiceAutoStart => '打开 Whisper 时自动开启';
 
   @override
   String get androidWindowServiceAutoStartHint =>
-      '需要授予 Whisper 一项系统权限来开启无线调试；只有你信任的电脑才能连上，随时可在这里关闭';
+      '手机重启后服务会停止。打开这项后，Whisper 启动或有设备来查看时会自己打开无线调试、开启服务，再把无线调试关上。这需要授予 Whisper 一项系统权限，随时可以在这里关闭';
 
   @override
   String get androidWindowServiceStarted => '窗口流转服务已开启';
@@ -2568,7 +2570,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get androidWindowServiceStopped2 => '窗口流转服务已停止';
 
   @override
-  String get androidWindowServiceStartFailed => '开启失败，请确认无线调试已打开并重试';
+  String get androidWindowServiceStartFailed => '服务没有开启，请再试一次';
 
   @override
   String get androidWindowServicePairFailed => '配对失败，请核对配对码后重试';
@@ -2578,7 +2580,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get androidWindowServiceComputerHint =>
-      '将本机连接一次装有 Whisper 并开启窗口流转的电脑即可开启';
+      '这台手机的系统低于 Android 12，不能自己开启。把它连接一次装有 adb 和 Whisper 的电脑即可';
 
   @override
   String windowStreamPhoneServiceOff(String device) {
@@ -3441,4 +3443,36 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get shellDropSendConfirm => '发送';
+
+  @override
+  String get androidWindowServiceNotifyTitle => '窗口流转配对';
+
+  @override
+  String get androidWindowServiceNotifyEnterCode => '填入系统显示的 6 位数字';
+
+  @override
+  String get androidWindowServiceNoPairingService =>
+      '没有找到配对请求，请先在无线调试里点“使用配对码配对设备”';
+
+  @override
+  String get androidWindowServiceWirelessOff => '无线调试没有打开，请连接 Wi-Fi 后打开它';
+
+  @override
+  String get androidWindowServiceNotPaired => '配对已失效，请重新配对';
+
+  @override
+  String get androidWindowServiceNeedsWifi => '无线调试需要手机连接 Wi-Fi';
+
+  @override
+  String get androidWindowServiceAutoStartFailed =>
+      '没能打开：请先打开无线调试；小米手机还要打开“USB 调试（安全设置）”';
+
+  @override
+  String get androidWindowServiceNotifyWaitingCode => '正在等配对码';
+
+  @override
+  String get androidWindowServiceNotifyCodeHint => '6 位配对码';
+
+  @override
+  String get androidWindowServiceNotifyReply => '填写';
 }

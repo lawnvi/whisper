@@ -1621,7 +1621,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get windowStreamAdbMissing =>
-      'No se encontró adb. Instala primero Android Platform Tools';
+      'Este ordenador no tiene adb y no hace falta: en el teléfono, abre Whisper, activa Ajustes → Servicio de flujo de ventanas y conéctate a este dispositivo';
 
   @override
   String get windowStreamAdbFailed => 'No se pudo iniciar el servidor adb';
@@ -1669,7 +1669,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get windowStreamNoDevicesHintDesktop =>
-      'Conecta un teléfono Android con un cable o activa la depuración inalámbrica en sus opciones de desarrollador.';
+      'En el teléfono, abre Whisper, activa Ajustes → Servicio de flujo de ventanas y conéctate a este dispositivo. También puedes conectar el teléfono con un cable.';
 
   @override
   String get windowStreamNoDevicesHintMobile =>
@@ -2681,21 +2681,21 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get androidWindowServiceRunningHint =>
-      'Tus ordenadores de confianza ya pueden ver este teléfono en su flujo de ventanas y abrir sus apps';
+      'Los dispositivos que vinculaste ya pueden ver y usar las apps de este teléfono';
 
   @override
   String get androidWindowServiceStopped => 'No está en marcha';
 
   @override
   String get androidWindowServiceStoppedHint =>
-      'Activa la depuración inalámbrica y vuelve a iniciarlo aquí sin ordenador';
+      'Activa la depuración inalámbrica e inícialo abajo. No hace falta ordenador';
 
   @override
   String get androidWindowServiceNeedsSetup => 'Sin configurar';
 
   @override
   String get androidWindowServiceNeedsSetupHint =>
-      'Una vez activado, las apps de este teléfono pueden fluir a tus ordenadores de confianza para verlas y controlarlas, mientras el teléfono permanece en segundo plano';
+      'Una vez activado, los dispositivos que vinculaste pueden ver y usar las apps de este teléfono. No hace falta ordenador';
 
   @override
   String get androidWindowServiceStart => 'Activar';
@@ -2722,7 +2722,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get androidWindowServiceStep2Hint =>
-      'En Opciones de desarrollador, activa la depuración inalámbrica y abre ‘Vincular dispositivo con código’';
+      'Toca aquí para abrir Opciones de desarrollador, activa la depuración inalámbrica y toca ‘Vincular dispositivo con código’. No salgas de esa página: desliza las notificaciones, expande la de Whisper y escribe ahí el código';
 
   @override
   String get androidWindowServiceStep2Action =>
@@ -2733,7 +2733,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get androidWindowServiceStep3Hint =>
-      'Escribe el código de 6 dígitos que muestra el sistema; Whisper se vincula con este teléfono e inicia el servicio';
+      'O usa la pantalla dividida y escríbelo aquí';
 
   @override
   String get androidWindowServicePairingCode => 'Código de vinculación';
@@ -2748,12 +2748,11 @@ class AppLocalizationsEs extends AppLocalizations {
   String get androidWindowServiceStarting => 'Iniciando…';
 
   @override
-  String get androidWindowServiceAutoStart =>
-      'Iniciar automáticamente tras reiniciar';
+  String get androidWindowServiceAutoStart => 'Iniciar al abrir Whisper';
 
   @override
   String get androidWindowServiceAutoStartHint =>
-      'Necesita un permiso del sistema para que Whisper reactive la depuración inalámbrica; solo tus ordenadores de confianza pueden conectarse y puedes desactivarlo aquí cuando quieras';
+      'El servicio se detiene al reiniciar el teléfono. Con esto activado, cuando Whisper se abre o un dispositivo viene a mirar, Whisper activa la depuración inalámbrica, inicia el servicio y la vuelve a desactivar. Necesita un permiso del sistema para Whisper y puedes desactivarlo aquí cuando quieras';
 
   @override
   String get androidWindowServiceStarted =>
@@ -2765,7 +2764,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get androidWindowServiceStartFailed =>
-      'No se pudo iniciar. Comprueba que la depuración inalámbrica esté activada e inténtalo de nuevo';
+      'El servicio no se ha iniciado. Inténtalo de nuevo';
 
   @override
   String get androidWindowServicePairFailed =>
@@ -2776,7 +2775,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get androidWindowServiceComputerHint =>
-      'Conecta este teléfono una vez a un ordenador con Whisper y el flujo de ventanas activado; después todos los ordenadores podrán usarlo';
+      'Este teléfono tiene una versión anterior a Android 12 y no puede iniciarlo por sí mismo. Conéctalo una vez a un ordenador con adb y Whisper';
 
   @override
   String windowStreamPhoneServiceOff(String device) {
@@ -3683,4 +3682,42 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get shellDropSendConfirm => 'Enviar';
+
+  @override
+  String get androidWindowServiceNotifyTitle =>
+      'Vinculación del flujo de ventanas';
+
+  @override
+  String get androidWindowServiceNotifyEnterCode =>
+      'Escribe los 6 dígitos que muestra el sistema';
+
+  @override
+  String get androidWindowServiceNoPairingService =>
+      'No se encontró ninguna solicitud. En Depuración inalámbrica, toca primero ‘Vincular dispositivo con código’';
+
+  @override
+  String get androidWindowServiceWirelessOff =>
+      'La depuración inalámbrica está desactivada. Conéctate a una red Wi-Fi y actívala';
+
+  @override
+  String get androidWindowServiceNotPaired =>
+      'La vinculación ya no es válida. Vuelve a vincular';
+
+  @override
+  String get androidWindowServiceNeedsWifi =>
+      'La depuración inalámbrica necesita que el teléfono esté conectado a Wi-Fi';
+
+  @override
+  String get androidWindowServiceAutoStartFailed =>
+      'No se pudo activar. Activa primero la depuración inalámbrica; en teléfonos Xiaomi activa también ‘Depuración USB (ajustes de seguridad)’';
+
+  @override
+  String get androidWindowServiceNotifyWaitingCode =>
+      'Esperando el código de vinculación';
+
+  @override
+  String get androidWindowServiceNotifyCodeHint => 'Código de 6 dígitos';
+
+  @override
+  String get androidWindowServiceNotifyReply => 'Escribir';
 }

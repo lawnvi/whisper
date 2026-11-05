@@ -20,6 +20,7 @@ import 'agent_control_client.dart';
 import 'agent_link.dart';
 import 'agent_wire.dart';
 import 'phone_agent_link.dart';
+import 'phone_self_start.dart';
 
 /// This phone's own apps and tasks offered to other Whisper peers, with
 /// whisper-agent (running as the shell user) as the capture and input
@@ -153,6 +154,8 @@ class PhoneCaptureBackend implements WindowCaptureBackend {
   Future<CaptureResult> requestCatalog() async {
     final control = await _ensureConnected();
     if (control == null) {
+      // A viewer is asking: if the user allowed it, be there next time it does.
+      unawaited(PhoneSelfStart.shared.autoStartIfWanted());
       return CaptureResult.failed(
         WindowStreamCaptureCode.unknown,
         reason: agentNotRunning,

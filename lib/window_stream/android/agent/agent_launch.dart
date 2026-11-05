@@ -125,19 +125,11 @@ abstract final class AgentLaunch {
 
   /// Starts the persistent agent detached from this shell (`setsid`, no
   /// terminal, stdio on /dev/null) so it outlives adb, after checking the
-  /// jar's hash; [copyFrom] first copies the jar from there (the phone's
-  /// own Whisper puts it in its external files folder, which the shell
-  /// user can read). Waits up to 5 s for the state file and prints it.
-  static String startScript(
-    AgentSidecar sidecar, {
-    String? copyFrom,
-    bool withToken = true,
-  }) {
+  /// jar's hash. Waits up to 5 s for the state file and prints it.
+  static String startScript(AgentSidecar sidecar, {bool withToken = true}) {
     final jar = sidecar.devicePath;
     return [
       'S=$statePath; J=$jar',
-      if (copyFrom != null)
-        'cat ${_quote(copyFrom)} > \$J.part && mv \$J.part \$J && chmod 644 \$J',
       'sha256sum \$J 2>/dev/null | grep -q ${sidecar.jarSha256} || { echo @@badjar; exit 1; }',
       'rm -f \$S',
       'CLASSPATH=\$J setsid app_process / ${AgentWire.mainClass} --daemon '
@@ -152,6 +144,15 @@ abstract final class AgentLaunch {
       output.contains('@@badjar')
       ? null
       : AgentDaemonState.parse(_section(output, '@@state', '@@end'));
+
+  /// Ends a running agent that can't be asked to, by force if it is still
+  /// there after 3 s. Its virtual displays go with it.
+  static String killScript(int pid) => [
+    'kill $pid 2>/dev/null',
+    'i=0; while [ \$i -lt 30 ] && [ -d /proc/$pid ]; do sleep 0.1; i=\$((i+1)); done',
+    '[ -d /proc/$pid ] && kill -9 $pid 2>/dev/null',
+    'true',
+  ].join('\n');
 
   /// Whether a running agent of [running] should make way for this build's:
   /// only a newer build replaces it, and never while windows stream.
@@ -194,6 +195,4 @@ abstract final class AgentLaunch {
     final end = text.indexOf(to, start + from.length);
     return text.substring(start + from.length, end < 0 ? text.length : end);
   }
-
-  static String _quote(String value) => "'${value.replaceAll("'", r"'\''")}'";
 }

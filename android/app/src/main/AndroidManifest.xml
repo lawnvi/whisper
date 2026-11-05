@@ -34,6 +34,11 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
     <uses-permission android:name="com.android.permission.GET_INSTALLED_APPS" />
+    <!-- Only the shell can grant this, and Whisper asks it to only when the user
+         turns on starting the window flow service automatically. -->
+    <uses-permission
+        android:name="android.permission.WRITE_SECURE_SETTINGS"
+        tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- requestRawExternalStorageAccess: on Android 12+ every file created under
@@ -149,6 +154,10 @@
             android:enabled="true"
             android:exported="false"
             android:stopWithTask="true"
+            android:foregroundServiceType="connectedDevice" />
+        <service
+            android:name=".AdbPairingService"
+            android:exported="false"
             android:foregroundServiceType="connectedDevice" />
         <service
             android:name=".TransferForegroundService"

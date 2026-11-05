@@ -94,7 +94,7 @@ The [user guide](docs/user-guide_en.md) covers every feature in full.
 | Mounting | Can be mounted only | ✅ | ✅ | Needs fuse3 |
 | Share links | ✅ | ✅ | ✅ | ✅ |
 | Window flow: view | ✅ | ✅ | ✅ | ✅ |
-| Window flow: share | Android 10+, via adb | ✅ | ✅ | GNOME 45+ or KDE Plasma 6 |
+| Window flow: share | Android 12+ starts it itself; Android 10 and 11 need a computer with adb | ✅ | ✅ | GNOME 45+ or KDE Plasma 6 |
 | Clipboard sync | Text, foreground only | ✅ | ✅ | ✅ |
 | Keyboard & mouse | — | ✅ | ✅ | X11, GNOME or KDE Plasma |
 | Phone controller | Controls | Controlled | Controlled | Controlled, as above |

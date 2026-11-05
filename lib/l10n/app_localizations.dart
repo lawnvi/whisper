@@ -2773,7 +2773,7 @@ abstract class AppLocalizations {
   /// No description provided for @windowStreamAdbMissing.
   ///
   /// In zh, this message translates to:
-  /// **'未找到 adb，请安装 Android 平台工具'**
+  /// **'这台电脑没有 adb，也可以不装：在手机 Whisper 里打开“设置 → 窗口流转服务”，再连接本机'**
   String get windowStreamAdbMissing;
 
   /// No description provided for @windowStreamAdbFailed.
@@ -2863,7 +2863,7 @@ abstract class AppLocalizations {
   /// No description provided for @windowStreamNoDevicesHintDesktop.
   ///
   /// In zh, this message translates to:
-  /// **'用数据线连接安卓手机，或在手机的开发者选项里打开“无线调试”。'**
+  /// **'在手机 Whisper 里打开“设置 → 窗口流转服务”，再连接本机；也可以用数据线连接手机。'**
   String get windowStreamNoDevicesHintDesktop;
 
   /// No description provided for @windowStreamNoDevicesHintMobile.
@@ -4495,7 +4495,7 @@ abstract class AppLocalizations {
   /// Android window flow service subtitle when running: what it enables.
   ///
   /// In zh, this message translates to:
-  /// **'已配对的电脑现在可以查看和操作本机应用'**
+  /// **'你配对过的设备现在可以查看和操作本机应用'**
   String get androidWindowServiceRunningHint;
 
   /// Android window flow service status: set up before, but the agent is not running now (e.g. after a reboot).
@@ -4507,7 +4507,7 @@ abstract class AppLocalizations {
   /// Android window flow service subtitle when stopped but already set up once.
   ///
   /// In zh, this message translates to:
-  /// **'打开无线调试后，这里可以重新开启，无需再插电脑'**
+  /// **'打开无线调试后，点下面的开启，不需要电脑'**
   String get androidWindowServiceStoppedHint;
 
   /// Android window flow service status: never set up on this phone.
@@ -4519,7 +4519,7 @@ abstract class AppLocalizations {
   /// Android window flow service subtitle when not set up: what the feature does.
   ///
   /// In zh, this message translates to:
-  /// **'开启后，已配对的电脑可以查看和操作本机应用'**
+  /// **'开启后，配对过的设备可以查看和操作本机应用，不需要电脑'**
   String get androidWindowServiceNeedsSetupHint;
 
   /// Android window flow service primary button: start the service.
@@ -4567,7 +4567,7 @@ abstract class AppLocalizations {
   /// Android setup step 2 subtitle.
   ///
   /// In zh, this message translates to:
-  /// **'在“开发者选项”里打开“无线调试”，并保持本页在同一屏打开“使用配对码配对设备”'**
+  /// **'点这里进入“开发者选项”，打开“无线调试”，再点“使用配对码配对设备”。别离开配对码页面：下拉通知栏，展开 Whisper 的通知，在里面填配对码'**
   String get androidWindowServiceStep2Hint;
 
   /// Android setup step 2 button: deep link to development settings.
@@ -4585,7 +4585,7 @@ abstract class AppLocalizations {
   /// Android setup step 3 subtitle.
   ///
   /// In zh, this message translates to:
-  /// **'填入系统显示的 6 位配对码'**
+  /// **'也可以分屏后填在这里'**
   String get androidWindowServiceStep3Hint;
 
   /// Android setup pairing-code text field label.
@@ -4615,13 +4615,13 @@ abstract class AppLocalizations {
   /// Android window flow service toggle: let Whisper restart the service by itself after the phone reboots.
   ///
   /// In zh, this message translates to:
-  /// **'重启后自动开启'**
+  /// **'打开 Whisper 时自动开启'**
   String get androidWindowServiceAutoStart;
 
   /// Android window flow service auto-start toggle subtitle, stating the security trade-off.
   ///
   /// In zh, this message translates to:
-  /// **'需要授予 Whisper 一项系统权限来开启无线调试；只有你信任的电脑才能连上，随时可在这里关闭'**
+  /// **'手机重启后服务会停止。打开这项后，Whisper 启动或有设备来查看时会自己打开无线调试、开启服务，再把无线调试关上。这需要授予 Whisper 一项系统权限，随时可以在这里关闭'**
   String get androidWindowServiceAutoStartHint;
 
   /// Toast after the service starts.
@@ -4639,7 +4639,7 @@ abstract class AppLocalizations {
   /// Toast when the self-start fails.
   ///
   /// In zh, this message translates to:
-  /// **'开启失败，请确认无线调试已打开并重试'**
+  /// **'服务没有开启，请再试一次'**
   String get androidWindowServiceStartFailed;
 
   /// Toast when pairing with the pairing code fails.
@@ -4657,7 +4657,7 @@ abstract class AppLocalizations {
   /// Android window flow service hint shown when the phone cannot start the agent by itself (no bundled pairing): use a computer once.
   ///
   /// In zh, this message translates to:
-  /// **'将本机连接一次装有 Whisper 并开启窗口流转的电脑即可开启'**
+  /// **'这台手机的系统低于 Android 12，不能自己开启。把它连接一次装有 adb 和 Whisper 的电脑即可'**
   String get androidWindowServiceComputerHint;
 
   /// Shown above an Android phone's (empty) window list on another device when the phone's window-flow service is not running.
@@ -6116,6 +6116,66 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'发送'**
   String get shellDropSendConfirm;
+
+  /// Android window flow service: NotifyTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'窗口流转配对'**
+  String get androidWindowServiceNotifyTitle;
+
+  /// Android window flow service: NotifyEnterCode.
+  ///
+  /// In zh, this message translates to:
+  /// **'填入系统显示的 6 位数字'**
+  String get androidWindowServiceNotifyEnterCode;
+
+  /// Android window flow service: NoPairingService.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有找到配对请求，请先在无线调试里点“使用配对码配对设备”'**
+  String get androidWindowServiceNoPairingService;
+
+  /// Android window flow service: WirelessOff.
+  ///
+  /// In zh, this message translates to:
+  /// **'无线调试没有打开，请连接 Wi-Fi 后打开它'**
+  String get androidWindowServiceWirelessOff;
+
+  /// Android window flow service: NotPaired.
+  ///
+  /// In zh, this message translates to:
+  /// **'配对已失效，请重新配对'**
+  String get androidWindowServiceNotPaired;
+
+  /// Android window flow service: NeedsWifi.
+  ///
+  /// In zh, this message translates to:
+  /// **'无线调试需要手机连接 Wi-Fi'**
+  String get androidWindowServiceNeedsWifi;
+
+  /// Android window flow service: AutoStartFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'没能打开：请先打开无线调试；小米手机还要打开“USB 调试（安全设置）”'**
+  String get androidWindowServiceAutoStartFailed;
+
+  /// Android window flow service: the status notification while the reply notification waits for the code.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在等配对码'**
+  String get androidWindowServiceNotifyWaitingCode;
+
+  /// Android window flow service: hint in the notification reply field for the pairing code.
+  ///
+  /// In zh, this message translates to:
+  /// **'6 位配对码'**
+  String get androidWindowServiceNotifyCodeHint;
+
+  /// Android window flow service: notification button that opens the pairing code reply field.
+  ///
+  /// In zh, this message translates to:
+  /// **'填写'**
+  String get androidWindowServiceNotifyReply;
 }
 
 class _AppLocalizationsDelegate
