@@ -46,6 +46,28 @@ final class StateFile {
         }
     }
 
+    /**
+     * Everything a start left on the phone: it is the shell user's, so removing
+     * the app doesn't touch it. The running jar stays mapped until the exit.
+     */
+    static void deleteAll() {
+        File dir = new File(DIR);
+        File[] state = dir.listFiles();
+        if (state != null) {
+            for (File file : state) {
+                file.delete();
+            }
+        }
+        dir.delete();
+        File[] jars = dir.getParentFile().listFiles(
+                (parent, name) -> name.startsWith("whisper-agent-") && name.endsWith(".jar"));
+        if (jars != null) {
+            for (File jar : jars) {
+                jar.delete();
+            }
+        }
+    }
+
     /** Removes the file if it still describes this process. */
     static void deleteIfOurs(int pid) {
         try {

@@ -42,15 +42,20 @@ import java.util.concurrent.TimeUnit;
  *   with adb or by the phone's Whisper over its own wireless debugging):
  *   it outlives adb and the starter, and serves every desktop and the
  *   phone's Whisper. It exits when a client asks ({@code shutdown}: the
- *   user turned the service off on the phone) or when Whisper is no longer
- *   installed; otherwise it stays until the phone restarts, as the service
- *   page says, however long nobody uses it.</li>
+ *   user turned the service off on the phone) or when Whisper is uninstalled,
+ *   which the system tells it ({@link WhisperWatch}), and then removes its
+ *   files too. Otherwise it stays until the phone restarts, as the service page
+ *   says, however long nobody uses it.</li>
  * </ul>
  */
 final class AgentServer {
 
     static final long GRACE_MS = 20_000;
     static final String DAEMON_SOCKET = "whisper_agent";
+    private static final long LINK_RETRY_MS = 5_000;
+    private static final long LINK_RETRY_MAX_MS = 5 * 60_000;
+    /** Only where the system won't say that Whisper was removed. */
+    private static final long UNWATCHED_CHECK_MS = 30 * 60_000;
     private static final int HELLO_TIMEOUT_MS = 2_000;
 
     private final String socketName;
@@ -73,6 +78,8 @@ final class AgentServer {
     private volatile String reportedViewer = "";
     private int reportedStreams = 0;
     private volatile boolean linked;
+    private volatile boolean watching;
+    private long linkRetryMs = LINK_RETRY_MS;
     private volatile int whisperUid = -1;
     private volatile boolean exiting;
     private int linkFailures;
@@ -151,6 +158,7 @@ final class AgentServer {
                 throw new IOException(e);
             }
             StateFile.write(state);
+            watching = WhisperWatch.start(this);
             timer.execute(this::pushLink);
         }
         scheduleExit();
@@ -162,33 +170,41 @@ final class AgentServer {
     /**
      * Tells the phone's Whisper where this agent is. Calling its provider
      * starts the app's process once if it is not running, so it learns this
-     * even when nobody has it open (it keeps the link for later). Repeated
-     * while it did not take it; afterwards again only when Whisper is
-     * running without being connected (its data was cleared, say).
+     * even when nobody has it open (it keeps the link for later). Runs when the
+     * agent starts and repeats only until Whisper took it: nothing here runs on
+     * a clock after that, unless the system won't say when Whisper is removed.
      */
     private void pushLink() {
-        if (exiting || appSessions() > 0) {
-            schedulePush(60_000);
+        if (exiting) {
             return;
         }
-        // Looked up afresh: nothing else would notice Whisper being removed.
         whisperUid = Catalog.uidOf(PhoneApp.PACKAGE);
         if (whisperUid < 0) {
             linkFailures++;
-            // Whisper was removed: nobody would ever use or stop this agent.
+            // Nobody would ever use or stop this agent.
             if (linkFailures >= 3) {
-                Ln.i("Whisper is not installed; exiting");
-                shutdown();
+                whisperGone();
                 return;
             }
             schedulePush(20_000);
             return;
         }
         linkFailures = 0;
-        if (!linked || whisperRunning()) {
+        if (appSessions() > 0) {
+            // Connected, so it has the link.
+            linked = true;
+        } else if (!linked) {
             linked = phoneApp.link(appLink.port(), appLink.token(), Process.myPid(), jarSha);
         }
-        schedulePush(linked ? 60_000 : 5_000);
+        if (!linked) {
+            schedulePush(linkRetryMs);
+            linkRetryMs = Math.min(linkRetryMs * 2, LINK_RETRY_MAX_MS);
+            return;
+        }
+        linkRetryMs = LINK_RETRY_MS;
+        if (!watching) {
+            schedulePush(UNWATCHED_CHECK_MS);
+        }
     }
 
     private void schedulePush(long delayMs) {
@@ -197,8 +213,20 @@ final class AgentServer {
         }
     }
 
-    private static boolean whisperRunning() {
-        return !Shell.run("pidof " + PhoneApp.PACKAGE).trim().isEmpty();
+    /** From {@link WhisperWatch}. */
+    void whisperRemoved() {
+        timer.execute(() -> {
+            if (Catalog.uidOf(PhoneApp.PACKAGE) < 0) {
+                whisperGone();
+            }
+        });
+    }
+
+    /** Whisper is not installed: nothing of the agent stays behind either. */
+    private void whisperGone() {
+        Ln.i("Whisper is not installed; removing the agent");
+        StateFile.deleteAll();
+        shutdown();
     }
 
     int appSessions() {

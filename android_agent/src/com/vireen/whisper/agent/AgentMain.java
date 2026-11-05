@@ -31,7 +31,7 @@ import java.security.SecureRandom;
  */
 public final class AgentMain {
 
-    public static final String VERSION = "2.0.1";
+    public static final String VERSION = "2.0.2";
 
     /** Exit status of a second persistent agent. */
     static final int ALREADY_RUNNING = 3;

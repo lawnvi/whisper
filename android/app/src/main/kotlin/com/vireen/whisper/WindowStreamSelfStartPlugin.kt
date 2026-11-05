@@ -313,7 +313,12 @@ class WindowStreamSelfStartPlugin : FlutterPlugin, MethodChannel.MethodCallHandl
         context.startActivity(
             android.content.Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS)
                 .putExtra(":settings:fragment_args_key", "toggle_adb_wireless")
-                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+                // Starts the system's settings over: otherwise this only brings
+                // back the page they were left on, Whisper's app info, say.
+                .addFlags(
+                    android.content.Intent.FLAG_ACTIVITY_NEW_TASK or
+                        android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK,
+                ),
         )
         true
     } catch (_: Exception) {

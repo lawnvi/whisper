@@ -2,7 +2,6 @@ package com.vireen.whisper
 
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
@@ -58,22 +57,19 @@ class WindowStreamAgentPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         }
     }
 
-    /** Opens a system settings screen; falls back to app details if missing. */
+    /**
+     * Opens a system settings screen from its start: otherwise this only brings
+     * back the page the settings were left on, Whisper's app info, say.
+     */
     private fun open(context: Context, action: String): Boolean = try {
-        context.startActivity(Intent(action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        context.startActivity(
+            Intent(action).addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK,
+            ),
+        )
         true
     } catch (_: Exception) {
-        try {
-            context.startActivity(
-                Intent(
-                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                    Uri.fromParts("package", context.packageName, null),
-                ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-            )
-            true
-        } catch (_: Exception) {
-            false
-        }
+        false
     }
 
     private companion object {

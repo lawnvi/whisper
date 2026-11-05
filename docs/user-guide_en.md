@@ -169,7 +169,7 @@ You only pair once. The service stops when the phone restarts; tap Start on the 
 
 Android 10 and 11 can't start it by themselves and need a computer with adb installed (Android SDK Platform-Tools; Whisper looks in the Android SDK's default location and on PATH, and the installers do not include it). Turn on USB debugging in the phone's Developer options, connect it to that computer with a cable and allow debugging on the phone. The phone's apps then appear in that computer's flow page. Start it again after the phone restarts.
 
-The service's state is in Whisper on the phone under Settings → Window Flow Service, where you can stop it at any time.
+The service's state is in Whisper on the phone under Settings → Window Flow Service, where you can stop it at any time. Uninstalling Whisper ends the service and removes its files; remove the pairing from the system's Wireless debugging page yourself.
 
 Flowed apps run on a virtual display on the phone, so you can keep using the phone for other things. Also:
 

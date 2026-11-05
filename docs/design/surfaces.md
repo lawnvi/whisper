@@ -219,7 +219,7 @@
 
 **通过 adb 发现的手机**（`lib/window_stream/adb/`）作为一台「在附近」的设备出现在设备列表，点进去是应用分页。不支持时不显示。
 
-**手机自己开启**（`lib/window_stream/android/agent/phone_self_start.dart`）：Android 12 起，手机经自己的无线调试启动 agent，查看的一方不需要 adb。入口在手机的「设置 → 窗口流转服务」，配对码填在通知里（`AdbPairingService`），通知留到有结果为止。
+**手机自己开启**（`lib/window_stream/android/agent/phone_self_start.dart`）：Android 12 起，手机经自己的无线调试启动 agent，查看的一方不需要 adb。入口在手机的「设置 → 窗口流转服务」，配对码填在通知里（`AdbPairingService`），通知留到有结果为止。服务不定时检查：卸载 Whisper 时系统回调通知代理（`WhisperWatch`），代理退出并删掉自己的文件。
 
 **取消**：流转文档里的设备色光晕和背景渐变，固定时长的 `SpringCurve`，顶部设备架（和侧栏重复）。
 
