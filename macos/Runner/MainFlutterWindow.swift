@@ -407,7 +407,9 @@ class MainFlutterWindow: NSWindow {
     flutter.backgroundColor = .clear
     isOpaque = false
     backgroundColor = .clear
-    titlebarSeparatorStyle = .none
+    if #available(macOS 11.0, *) {
+      titlebarSeparatorStyle = .none
+    }
 
     let material = WindowMaterialView(frame: flutter.view.bounds)
     material.material = .sidebar
