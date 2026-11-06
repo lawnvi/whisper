@@ -132,6 +132,10 @@ class RemoteInputWebSocketPacketTransport extends RemoteInputPacketByteTransport
     return transport;
   }
 
+  /// How soon a controller notices the other side has stopped answering
+  /// and hands the keyboard and mouse back.
+  static const controllerPingInterval = Duration(seconds: 5);
+
   static Future<RemoteInputWebSocketPacketTransport> connect(
     Uri uri, {
     required Uint8List mediaMacKey,
@@ -144,6 +148,9 @@ class RemoteInputWebSocketPacketTransport extends RemoteInputPacketByteTransport
       WebSocketChannel channel = IOWebSocketChannel.connect(
         uri,
         customClient: newDirectPeerHttpClient(),
+        // The controlled side can hang and still hold the socket open; only
+        // its side pinged, so this side kept swallowing local input for good.
+        pingInterval: controllerPingInterval,
       );
       await channel.ready;
       channel = await authenticateMediaWebSocketClient(

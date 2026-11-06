@@ -8,6 +8,7 @@
 #include <flutter/plugin_registrar_windows.h>
 #include <flutter/standard_method_codec.h>
 
+#include <dwmapi.h>
 #include <wtsapi32.h>
 
 #include <algorithm>
@@ -2613,18 +2614,92 @@ class RemoteInputPlugin : public flutter::Plugin {
 
   void FlushPendingInjectedButton(int button) {
     const int bit = MouseButtonBit(button);
-    if ((pending_injected_buttons_ & bit) == 0) {
+    if ((pending_injected_buttons_ & bit) == 0 ||
+        (caption_held_buttons_ & bit) != 0) {
       return;
+    }
+    if (button == 0) {
+      HWND caption_window = OwnCaptionButtonWindowAtCursor();
+      if (caption_window != nullptr) {
+        // Pressed alone, it would start the system's tracking of that button
+        // on this thread, which looks only at mouse messages: the release,
+        // which has to come through Dart on this same thread, would never
+        // arrive and Whisper would hang. Held until the release instead.
+        caption_held_buttons_ |= bit;
+        held_caption_window_ = caption_window;
+        return;
+      }
     }
     pending_injected_buttons_ &= ~bit;
     SendMouseButton(button, true);
     SetInjectedButton(button, true);
   }
 
+  // Whisper's own window when one of its minimize, maximize or close buttons
+  // is under the cursor.
+  HWND OwnCaptionButtonWindowAtCursor() const {
+    POINT point = {};
+    if (!GetCursorPos(&point)) {
+      return nullptr;
+    }
+    HWND window = WindowFromPoint(point);
+    if (window == nullptr) {
+      return nullptr;
+    }
+    window = GetAncestor(window, GA_ROOT);
+    DWORD process_id = 0;
+    if (window == nullptr ||
+        GetWindowThreadProcessId(window, &process_id) == 0 ||
+        process_id != GetCurrentProcessId()) {
+      return nullptr;
+    }
+    DWORD_PTR hit = HTNOWHERE;
+    if (SendMessageTimeoutW(
+            window, WM_NCHITTEST, 0,
+            MAKELPARAM(static_cast<WORD>(point.x), static_cast<WORD>(point.y)),
+            SMTO_ABORTIFHUNG | SMTO_BLOCK, 100, &hit) == 0 ||
+        hit == HTCLIENT || hit == HTNOWHERE) {
+      return nullptr;
+    }
+    if (hit == HTMINBUTTON || hit == HTMAXBUTTON || hit == HTCLOSE ||
+        hit == HTHELP || OnDwmCaptionButtons(window, point)) {
+      return window;
+    }
+    return nullptr;
+  }
+
+  // A press lands on the buttons DWM draws, which are wider than the ones
+  // WM_NCHITTEST describes: measured on Windows 11 at 150%, the left 50 px of
+  // the minimize button answered HTCAPTION, and the system's buttons reached
+  // 1 px past the bounds DWM reports.
+  static bool OnDwmCaptionButtons(HWND window, POINT point) {
+    RECT bounds = {};
+    RECT frame = {};
+    if (FAILED(DwmGetWindowAttribute(window, DWMWA_CAPTION_BUTTON_BOUNDS,
+                                     &bounds, sizeof(bounds))) ||
+        !GetWindowRect(window, &frame) || IsRectEmpty(&bounds)) {
+      return false;
+    }
+    OffsetRect(&bounds, frame.left, frame.top);
+    const int slack = MulDiv(4, static_cast<int>(GetDpiForWindow(window)), 96);
+    InflateRect(&bounds, slack, 0);
+    return PtInRect(&bounds, point) != FALSE;
+  }
+
   void ReleaseInjectedButton(int button) {
     const int bit = MouseButtonBit(button);
     const bool is_pending = (pending_injected_buttons_ & bit) != 0;
     const bool is_down = (injected_buttons_ & bit) != 0;
+    if ((caption_held_buttons_ & bit) != 0) {
+      caption_held_buttons_ &= ~bit;
+      pending_injected_buttons_ &= ~bit;
+      // Moved off the buttons before letting go: the system cancels that too.
+      // Which button it is, the system decides from where the click lands.
+      if (OwnCaptionButtonWindowAtCursor() == held_caption_window_) {
+        SendMouseButtonClick(button);
+      }
+      return;
+    }
     if (is_pending && !is_down) {
       pending_injected_buttons_ &= ~bit;
       SendMouseButtonClick(button);
@@ -2656,6 +2731,7 @@ class RemoteInputPlugin : public flutter::Plugin {
     }
     if (is_pending) {
       pending_injected_buttons_ &= ~bit;
+      caption_held_buttons_ &= ~bit;
     }
     if (is_down) {
       SendMouseButton(button, false);
@@ -2668,6 +2744,7 @@ class RemoteInputPlugin : public flutter::Plugin {
       return;
     }
     pending_injected_buttons_ = 0;
+    caption_held_buttons_ = 0;
     SyncInjectedButtons(0);
   }
 
@@ -3202,6 +3279,10 @@ class RemoteInputPlugin : public flutter::Plugin {
   int inactive_event_diagnostic_count_ = 0;
   int injected_buttons_ = 0;
   int pending_injected_buttons_ = 0;
+  // Pending presses kept back because they landed on one of Whisper's own
+  // caption buttons; see FlushPendingInjectedButton.
+  int caption_held_buttons_ = 0;
+  HWND held_caption_window_ = nullptr;
   bool injected_cursor_entered_interior_ = false;
   bool injection_blocked_ = false;
   bool session_notifications_registered_ = false;
