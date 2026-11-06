@@ -3848,7 +3848,13 @@ class _DeviceListScreen extends State<DeviceListScreen>
       }
     }
     final clipboardAutoSyncEnabled = await LocalSetting().clipboardAutoSync();
-    if (isMobile() && !clipboardAutoSyncEnabled) return;
+    if (isMobile() && !clipboardAutoSyncEnabled) {
+      logClipboardSync(
+        ClipboardSyncStep.skipped,
+        reason: ClipboardSyncReason.autoSyncOff,
+      );
+      return;
+    }
     if (generation != _clipboardSyncGeneration) {
       return;
     }
@@ -3869,8 +3875,17 @@ class _DeviceListScreen extends State<DeviceListScreen>
       return;
     }
     final paths = fileDrafts.map((draft) => draft.path).toList(growable: false);
+    if (paths.isNotEmpty) {
+      // The text synced last is no longer on the clipboard: copying the same
+      // text again has to sync again.
+      _clipboardText = '';
+    }
     if (isOwnClipboardFiles(paths)) {
       // The file manager's copy, there for pasting in other apps.
+      logClipboardSync(
+        ClipboardSyncStep.skipped,
+        reason: ClipboardSyncReason.ownFiles,
+      );
       return;
     }
     if (paths.isNotEmpty) {
@@ -3879,6 +3894,10 @@ class _DeviceListScreen extends State<DeviceListScreen>
           sessionId: target.sessionId,
           paths: paths,
         )) {
+          logClipboardSync(
+            ClipboardSyncStep.skipped,
+            reason: ClipboardSyncReason.sessionFiles,
+          );
           return;
         }
       }
@@ -3898,6 +3917,12 @@ class _DeviceListScreen extends State<DeviceListScreen>
       }
     }
     if (fileDrafts.isNotEmpty) {
+      // Files go only to a keyboard and mouse sharing session.
+      logClipboardSync(
+        ClipboardSyncStep.skipped,
+        reason: ClipboardSyncReason.files,
+        count: canPublishRemotePayload ? remoteClipboardTargets.length : 0,
+      );
       if (canPublishRemotePayload) {
         final items = fileDrafts
             .map(RemoteClipboardLocalItem.file)
@@ -3925,6 +3950,12 @@ class _DeviceListScreen extends State<DeviceListScreen>
         return;
       }
       if (image != null && image.isNotEmpty) {
+        _clipboardText = '';
+        logClipboardSync(
+          ClipboardSyncStep.skipped,
+          reason: ClipboardSyncReason.image,
+          count: remoteClipboardTargets.length,
+        );
         final items = <RemoteClipboardLocalItem>[
           RemoteClipboardLocalItem.bytes('Clipboard Image.png', image),
         ];
@@ -3940,6 +3971,11 @@ class _DeviceListScreen extends State<DeviceListScreen>
       }
     }
     if (text == null) {
+      _clipboardText = '';
+      logClipboardSync(
+        ClipboardSyncStep.skipped,
+        reason: ClipboardSyncReason.empty,
+      );
       return;
     }
     if (canPublishRemotePayload) {
@@ -3952,14 +3988,27 @@ class _DeviceListScreen extends State<DeviceListScreen>
       }
     }
     if (shouldIgnoreClipboardSync(text)) {
+      // What another device just sent, coming back from this clipboard.
       _clipboardText = text;
+      logClipboardSync(
+        ClipboardSyncStep.skipped,
+        reason: ClipboardSyncReason.echo,
+      );
       return;
     }
     if (_clipboardText == text) {
+      logClipboardSync(
+        ClipboardSyncStep.skipped,
+        reason: ClipboardSyncReason.unchanged,
+      );
       return;
     }
     _clipboardText = text;
     if (!clipboardAutoSyncEnabled) {
+      logClipboardSync(
+        ClipboardSyncStep.skipped,
+        reason: ClipboardSyncReason.autoSyncOff,
+      );
       return;
     }
     if (generation != _clipboardSyncGeneration) {
@@ -3975,6 +4024,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
         : syncsControlledPeer
         ? <String>[inputState.peerId]
         : <String>[socketManager.receiver];
+    var sent = 0;
     for (final peerId in textPeerIds.toSet()) {
       if (peerId.isEmpty || !socketManager.isConnectedTo(peerId)) {
         continue;
@@ -4007,7 +4057,13 @@ class _DeviceListScreen extends State<DeviceListScreen>
         continue;
       }
       await socketManager.sendMessageTo(peerId, text, clipboard: true);
+      sent += 1;
     }
+    logClipboardSync(
+      sent > 0 ? ClipboardSyncStep.sent : ClipboardSyncStep.skipped,
+      reason: sent > 0 ? null : ClipboardSyncReason.noTarget,
+      count: sent,
+    );
   }
 
   Future<void> _publishRemoteClipboardItems({

@@ -4538,16 +4538,29 @@ class WsSvrManager {
           return;
         }
         final clipboardSessionId = _remoteClipboardFrameSessionId(frame);
-        await _remoteClipboardTransfer.handleFrame(
-          TransferConnectionBinding(
-            peerId: session.remotePeerId,
-            generation: session.connectionGeneration,
-          ),
-          frame,
-          prepareImages:
-              frame.type == WhisperFrameType.clipboardOffer &&
-              await LocalSetting().clipboardAutoSync(),
-        );
+        try {
+          await _remoteClipboardTransfer.handleFrame(
+            TransferConnectionBinding(
+              peerId: session.remotePeerId,
+              generation: session.connectionGeneration,
+            ),
+            frame,
+            prepareImages:
+                frame.type == WhisperFrameType.clipboardOffer &&
+                await LocalSetting().clipboardAutoSync(),
+          );
+        } on Exception catch (error) {
+          // An offer that crossed the end of a sharing session, a temporary
+          // file that could not be written: only this clipboard is lost.
+          // Thrown on, it ended the whole connection, and the side that threw
+          // never reconnects after a protocol failure.
+          logClipboardSync(
+            ClipboardSyncStep.frameDropped,
+            kind: frame.type,
+            error: error,
+          );
+          return;
+        }
         if (frame.type == WhisperFrameType.clipboardOffer &&
             clipboardSessionId != null) {
           await _handleWorkspaceClipboardOffer(
@@ -4718,6 +4731,7 @@ class WsSvrManager {
           );
           if (message.clipboard) {
             if ((await LocalSetting().instance()).clipboard) {
+              logClipboardSync(ClipboardSyncStep.received);
               requireCurrentBusiness();
               await _relayWorkspaceClipboardText(
                 message,

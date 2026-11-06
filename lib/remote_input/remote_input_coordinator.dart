@@ -120,6 +120,10 @@ final class _PendingInjectionEntry {
   int byteLength;
 }
 
+/// How long a Ctrl+V on the controlled side may hold back the input behind
+/// it while the copied files arrive.
+const remoteClipboardPasteHoldLimit = Duration(seconds: 10);
+
 class RemoteInputCoordinator extends ChangeNotifier {
   RemoteInputCoordinator({
     RemoteInputManager? manager,
@@ -1196,20 +1200,28 @@ class RemoteInputCoordinator extends ChangeNotifier {
     }
     traceRemoteClipboard('paste_shortcut_detected');
     final generation = _lifecycle.generation;
-    return prepare(peerId: peerId, sessionId: sessionId).then((result) {
-      if (generation != _lifecycle.generation) {
-        return const <RemoteInputPacketFrame>[];
-      }
-      traceRemoteClipboard('paste_shortcut_result', reason: result.name);
-      if (result == RemoteClipboardPasteResult.notAvailable) {
-        return frames;
-      }
-      if (result == RemoteClipboardPasteResult.failed) {
-        _suppressPasteKeyUp = true;
-        return const <RemoteInputPacketFrame>[];
-      }
-      return frames;
-    });
+    // Every packet behind this one waits for the files, so keyboard and mouse
+    // stop until they are here. Past the limit this Ctrl+V is dropped; the
+    // download goes on, and the next Ctrl+V pastes what it brought.
+    return prepare(peerId: peerId, sessionId: sessionId)
+        .timeout(
+          remoteClipboardPasteHoldLimit,
+          onTimeout: () => RemoteClipboardPasteResult.failed,
+        )
+        .then((result) {
+          if (generation != _lifecycle.generation) {
+            return const <RemoteInputPacketFrame>[];
+          }
+          traceRemoteClipboard('paste_shortcut_result', reason: result.name);
+          if (result == RemoteClipboardPasteResult.notAvailable) {
+            return frames;
+          }
+          if (result == RemoteClipboardPasteResult.failed) {
+            _suppressPasteKeyUp = true;
+            return const <RemoteInputPacketFrame>[];
+          }
+          return frames;
+        });
   }
 
   Map<String, dynamic>? _keyPayload(RemoteInputPacketFrame frame) {

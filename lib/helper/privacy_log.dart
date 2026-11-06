@@ -42,6 +42,7 @@ enum PrivacyErrorKind {
 
 enum PrivacyEvent {
   audioDiagnostic,
+  clipboardSync,
   discoveryState,
   localOperation,
   messageReceived,
@@ -56,6 +57,7 @@ enum PrivacyEvent {
 extension on PrivacyEvent {
   String get wireName => switch (this) {
     PrivacyEvent.audioDiagnostic => 'audio_diagnostic',
+    PrivacyEvent.clipboardSync => 'clipboard_sync',
     PrivacyEvent.discoveryState => 'discovery_state',
     PrivacyEvent.localOperation => 'local_operation',
     PrivacyEvent.messageReceived => 'message_received',
