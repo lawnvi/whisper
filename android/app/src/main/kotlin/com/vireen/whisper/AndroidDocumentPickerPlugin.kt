@@ -1,6 +1,8 @@
 package com.vireen.whisper
 
 import android.app.Activity
+import android.content.ClipData
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
@@ -81,6 +83,8 @@ class AndroidDocumentPickerPlugin :
             "loadThumbnail" -> loadThumbnail(call, result)
             "openDocument" -> openDocument(call, result)
             "openFile" -> openFile(call, result)
+            "shareDocument" -> shareDocument(call, result)
+            "shareFile" -> shareFile(call, result)
             else -> result.notImplemented()
         }
     }
@@ -233,41 +237,81 @@ class AndroidDocumentPickerPlugin :
         result.success(view(uri))
     }
 
+    private fun openFile(call: MethodCall, result: MethodChannel.Result) {
+        val uri = localUri(call.argument<String>("path") ?: "")
+        result.success(uri != null && view(uri))
+    }
+
+    private fun shareDocument(call: MethodCall, result: MethodChannel.Result) {
+        val uri = Uri.parse(call.argument<String>("uri") ?: "")
+        result.success(uri.scheme == "content" && share(uri))
+    }
+
+    private fun shareFile(call: MethodCall, result: MethodChannel.Result) {
+        val uri = localUri(call.argument<String>("path") ?: "")
+        result.success(uri != null && share(uri))
+    }
+
     // A local file is handed over through [LocalFileProvider], which grants
     // the chosen app this one file; it needs no storage access of its own.
-    private fun openFile(call: MethodCall, result: MethodChannel.Result) {
-        val file = File(call.argument<String>("path") ?: "")
+    private fun localUri(path: String): Uri? {
+        val file = File(path)
         if (!file.isFile) {
-            result.success(false)
-            return
+            return null
         }
-        val uri = try {
+        return try {
             FileProvider.getUriForFile(context, "${context.packageName}.local_files", file)
         } catch (_: IllegalArgumentException) {
             // Outside the shared storage the provider covers, e.g. a memory card.
-            result.success(false)
-            return
+            null
         }
-        result.success(view(uri))
     }
 
-    private fun view(uri: Uri): Boolean {
-        val intent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, context.contentResolver.getType(uri) ?: "*/*")
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            if (activity == null) {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    /** The system's share sheet: the file goes on through the app picked there. */
+    private fun share(uri: Uri): Boolean = start { grant ->
+        val send = Intent(Intent.ACTION_SEND).apply {
+            type = context.contentResolver.getType(uri) ?: "*/*"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            // The sheet previews it, and the grant travels with it.
+            clipData = ClipData.newRawUri("", uri)
+            if (grant) {
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
         }
-        return try {
+        Intent.createChooser(send, null).apply {
+            // Sending it back into Whisper means nothing here.
+            putExtra(
+                Intent.EXTRA_EXCLUDE_COMPONENTS,
+                arrayOf(ComponentName(context, MainActivity::class.java)),
+            )
+        }
+    }
+
+    private fun view(uri: Uri): Boolean = start { grant ->
+        Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, context.contentResolver.getType(uri) ?: "*/*")
+            if (grant) {
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+        }
+    }
+
+    private fun start(build: (grant: Boolean) -> Intent): Boolean {
+        fun launch(grant: Boolean) {
+            val intent = build(grant)
+            if (activity == null) {
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
             (activity ?: context).startActivity(intent)
+        }
+        return try {
+            launch(grant = true)
             true
         } catch (_: SecurityException) {
             // A media store entry read through storage access may not be ours
-            // to grant; gallery and player apps read the media store anyway.
-            intent.removeFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            // to grant; gallery, player and chat apps read the media store anyway.
             try {
-                (activity ?: context).startActivity(intent)
+                launch(grant = false)
                 true
             } catch (_: Exception) {
                 false

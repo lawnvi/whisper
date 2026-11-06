@@ -56,6 +56,8 @@ Select the info button at the top right of a conversation, then "Search chat his
 
 Long-press a message on a phone or right-click it on desktop to delete it or enter multi-select. A confirmation appears first: received local files are deleted too by default, or select "Keep received files" to remove only the records. Files you sent are always kept.
 
+On Android, long-press a file message and choose "Share" to send the file on through another app, such as a chat or mail app.
+
 ## Browse files
 
 Switch to "Files" at the top of a conversation (on the device page on a phone) to browse the other device's files as you would in your own file manager. The other device must be connected and running a recent version of Whisper.

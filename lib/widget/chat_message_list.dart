@@ -12,6 +12,7 @@ import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/message.dart';
 import 'package:whisper/theme/whisper_icons.dart';
 import 'package:whisper/theme/whisper_ui.dart';
+import 'package:whisper/state/folder_message.dart';
 import 'package:whisper/state/message_deletion.dart';
 import 'package:whisper/widget/message_deletion_dialog.dart';
 import 'package:whisper/widget/context_menu_region.dart';
@@ -46,6 +47,9 @@ class ChatMessageList extends StatefulWidget {
   final void Function(MessageData message) onOpenFile;
   final void Function(String content) onCopyText;
   final Future<void> Function(MessageData message)? onCopyFile;
+
+  /// On to another app through the system's share sheet: WeChat, mail.
+  final Future<void> Function(MessageData message)? onShareFile;
   final Future<void> Function(MessageData message, {bool deleteFile})
   onDeleteMessage;
   final Future<void> Function(List<MessageData> messages, {bool deleteFiles})
@@ -68,6 +72,7 @@ class ChatMessageList extends StatefulWidget {
     required this.onOpenFile,
     required this.onCopyText,
     this.onCopyFile,
+    this.onShareFile,
     required this.onDeleteMessage,
     required this.onDeleteMessages,
     this.onSelectionModeChanged,
@@ -470,6 +475,14 @@ class _ChatMessageListState extends State<ChatMessageList> {
               '所在文件夹',
           icon: Icons.folder_open_rounded,
           onSelected: () => widget.onOpenContainingFolder(message.path),
+        ),
+      if (isFile &&
+          widget.onShareFile != null &&
+          folderOfferOf(message) == null)
+        ContextMenuActionItem(
+          label: localizations?.shareFile ?? '分享',
+          icon: Icons.share_rounded,
+          onSelected: () => unawaited(widget.onShareFile!(message)),
         ),
       ContextMenuActionItem(
         label: localizations?.delete ?? '删除',

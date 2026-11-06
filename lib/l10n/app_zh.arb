@@ -250,6 +250,8 @@
   "copyFile": "复制文件",
   "fileCopied": "文件已复制",
   "fileCopyFailed": "无法复制文件",
+  "shareFile": "分享",
+  "shareFileFailed": "无法分享文件",
   "themeMode": "主题模式",
   "followSystem": "跟随系统",
   "connectedNow": "当前已连接",

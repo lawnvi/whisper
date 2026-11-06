@@ -239,6 +239,8 @@
   "copyFile": "Copiar archivo",
   "fileCopied": "Archivo copiado",
   "fileCopyFailed": "No se pudo copiar el archivo",
+  "shareFile": "Compartir",
+  "shareFileFailed": "No se pudo compartir el archivo",
   "themeMode": "Modo de tema",
   "followSystem": "Seguir al sistema",
   "connectedNow": "Conectado ahora",

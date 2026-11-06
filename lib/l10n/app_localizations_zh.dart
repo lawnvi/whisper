@@ -504,6 +504,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get fileCopyFailed => '无法复制文件';
 
   @override
+  String get shareFile => '分享';
+
+  @override
+  String get shareFileFailed => '无法分享文件';
+
+  @override
   String get themeMode => '主题模式';
 
   @override

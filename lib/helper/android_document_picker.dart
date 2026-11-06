@@ -49,6 +49,12 @@ abstract class AndroidDocumentPickerPlatform {
 
   /// Opens a local file in another app; false when it couldn't be handed over.
   Future<bool> openFile(String path) async => false;
+
+  /// Sends a file on through the system's share sheet, to another app;
+  /// false when it couldn't be handed over.
+  Future<bool> shareDocument(String uri) async => false;
+
+  Future<bool> shareFile(String path) async => false;
 }
 
 class AndroidDocumentPicker implements AndroidDocumentPickerPlatform {
@@ -129,6 +135,22 @@ class AndroidDocumentPicker implements AndroidDocumentPickerPlatform {
   @override
   Future<bool> openFile(String path) async {
     return await _channel.invokeMethod<bool>('openFile', <String, Object?>{
+          'path': path,
+        }) ??
+        false;
+  }
+
+  @override
+  Future<bool> shareDocument(String uri) async {
+    return await _channel.invokeMethod<bool>('shareDocument', <String, Object?>{
+          'uri': uri,
+        }) ??
+        false;
+  }
+
+  @override
+  Future<bool> shareFile(String path) async {
+    return await _channel.invokeMethod<bool>('shareFile', <String, Object?>{
           'path': path,
         }) ??
         false;

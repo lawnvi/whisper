@@ -530,6 +530,12 @@ class AppLocalizationsEs extends AppLocalizations {
   String get fileCopyFailed => 'No se pudo copiar el archivo';
 
   @override
+  String get shareFile => 'Compartir';
+
+  @override
+  String get shareFileFailed => 'No se pudo compartir el archivo';
+
+  @override
   String get themeMode => 'Modo de tema';
 
   @override

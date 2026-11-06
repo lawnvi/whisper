@@ -241,6 +241,8 @@
   "copyFile": "Copy File",
   "fileCopied": "File copied",
   "fileCopyFailed": "Could not copy file",
+  "shareFile": "Share",
+  "shareFileFailed": "Could not share file",
   "themeMode": "Theme Mode",
   "followSystem": "Follow System",
   "connectedNow": "Connected now",

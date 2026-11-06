@@ -1012,6 +1012,18 @@ abstract class AppLocalizations {
   /// **'无法复制文件'**
   String get fileCopyFailed;
 
+  /// No description provided for @shareFile.
+  ///
+  /// In zh, this message translates to:
+  /// **'分享'**
+  String get shareFile;
+
+  /// No description provided for @shareFileFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法分享文件'**
+  String get shareFileFailed;
+
   /// No description provided for @themeMode.
   ///
   /// In zh, this message translates to:
