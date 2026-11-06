@@ -420,17 +420,26 @@ class WhisperDialogButton extends StatelessWidget {
   final bool prominent;
   final bool destructive;
 
+  /// On a phone a two-character label would leave the button taller than wide.
+  static const _touchMinWidth = 72.0;
+
   @override
   Widget build(BuildContext context) {
-    return ShellButton(
+    final touch = !isDesktop();
+    final button = ShellButton(
       label: label,
-      touch: !isDesktop(),
+      touch: touch,
       onTap: onPressed,
       kind: destructive
           ? ShellButtonKind.danger
           : prominent
           ? ShellButtonKind.primary
           : ShellButtonKind.normal,
+    );
+    if (!touch) return button;
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minWidth: _touchMinWidth),
+      child: button,
     );
   }
 }

@@ -1671,7 +1671,7 @@ class WhisperLayout {
 
 **圆形勾选**：22，未选 1.5 的 `ink3` 描边，选中 `accent` 底白勾。
 
-**按钮**：胶囊，高 28，左右 13，`note` 中等；`lg` 高 36，左右 20，`body`；触控分别高 44 和 48。填充 `accent` 白字，浅色 `fill` `ink`，无底 `accent`，破坏 `bad` 白字。
+**按钮**：胶囊，高 28，左右 13，`note` 中等；`lg` 高 36，左右 20，`body`；触控分别高 44 和 48，弹层里的 `WhisperDialogButton` 触控时至少宽 72。填充 `accent` 白字，浅色 `fill` `ink`，无底 `accent`，破坏 `bad` 白字。
 
 **分隔线**：`CustomPaint` 或 `Container(height: 1 / devicePixelRatio)`，不要用 `Divider` 的默认样式，它太粗太深。
 
