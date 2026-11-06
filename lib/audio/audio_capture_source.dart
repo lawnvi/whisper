@@ -8,22 +8,30 @@ import 'package:whisper/audio/audio_share_diagnostics.dart';
 
 typedef AudioPacketSink = void Function(AudioPacketFrame packet);
 
+/// The native capture of this source stopped for good after it started, e.g.
+/// no output device could be opened.
+typedef AudioCaptureErrorSink = void Function(PlatformAudioError error);
+
 class AudioCaptureSource {
   AudioCaptureSource({
     required AudioCodec codec,
     required AudioPlatform platform,
     required AudioPacketSink onPacket,
+    AudioCaptureErrorSink? onError,
     AudioShareDiagnostics? diagnostics,
   }) : _codec = codec,
        _platform = platform,
        _onPacket = onPacket,
+       _onError = onError,
        _diagnostics = diagnostics ?? AudioShareDiagnostics.shared;
 
   final AudioCodec _codec;
   final AudioPlatform _platform;
   final AudioPacketSink _onPacket;
+  final AudioCaptureErrorSink? _onError;
   final AudioShareDiagnostics _diagnostics;
   StreamSubscription<PlatformPcmFrame>? _subscription;
+  StreamSubscription<PlatformAudioError>? _errorSubscription;
   final _PcmSampleBuffer _pendingPcm = _PcmSampleBuffer();
   Int16List? _packetPcm;
   String _sessionId = '';
@@ -51,6 +59,7 @@ class AudioCaptureSource {
     _nextPacketSequence = 0;
     _pendingCaptureTimeMicros = 0;
     _subscription = _platform.captureFrames.listen(_handleFrame);
+    _errorSubscription = _platform.captureErrors.listen(_handleError);
     _diagnostics.captureStarted(
       sessionId: sessionId,
       sampleRate: format.sampleRate,
@@ -72,6 +81,8 @@ class AudioCaptureSource {
     _sessionId = '';
     final subscription = _subscription;
     _subscription = null;
+    unawaited(_errorSubscription?.cancel());
+    _errorSubscription = null;
     _pendingPcm.clear();
     _packetPcm = null;
     _pendingCaptureTimeMicros = 0;
@@ -113,6 +124,13 @@ class AudioCaptureSource {
     if (cleanupError != null) {
       Error.throwWithStackTrace(cleanupError, cleanupStackTrace!);
     }
+  }
+
+  void _handleError(PlatformAudioError error) {
+    if (error.sessionId != _sessionId || _stopRequested) {
+      return;
+    }
+    _onError?.call(error);
   }
 
   void _handleFrame(PlatformPcmFrame frame) {

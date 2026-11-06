@@ -106,6 +106,17 @@ class AudioGroupCoordinator extends ChangeNotifier {
   int _playbackGeneration = 0;
   _SinkRejoinContext? _sinkRejoinContext;
 
+  /// Playback stopped because the connection dropped (the computers slept,
+  /// Wi-Fi went), not because the user paused: once that source is connected
+  /// again, this side asks to rejoin by itself. See [peerConnected].
+  String _autoRejoinSourcePeerId = '';
+  int _autoRejoinAttempts = 0;
+  static const _maxAutoRejoinAttempts = 3;
+
+  /// How far ahead of now plus the target latency a packet may be scheduled.
+  /// Capture bursts after a stall stay well under it.
+  static const _maxPlaybackLeadMicros = Duration.microsecondsPerSecond;
+
   /// 在途 sinkJoinRequest 所属 group;应答 offer 到达或流程终止时清空。
   String _pendingSinkJoinGroupId = '';
 
@@ -506,9 +517,28 @@ class AudioGroupCoordinator extends ChangeNotifier {
     }
     _armOfferDeclineIfJoinPending(resolved.groupId);
     _sinkRejoinContext = resolved;
+    _autoRejoinSourcePeerId = '';
     resolved.sendControl(resolved.sourcePeerId, _sinkStopMessage(resolved));
     await _stopPlaybackOnly();
     _setSession(null);
+  }
+
+  /// The connection to [peerId] is up, or its profile was refreshed. Playback
+  /// from it that the connection, not the user, stopped asks to rejoin.
+  void peerConnected(String peerId) {
+    if (peerId.isEmpty || _autoRejoinSourcePeerId != peerId) {
+      return;
+    }
+    _autoRejoinSourcePeerId = '';
+    _autoRejoinAttempts += 1;
+    // The control channel settles right after the connection is registered.
+    Timer(const Duration(seconds: 1), () {
+      if (_sinkRejoinContext?.sourcePeerId != peerId ||
+          _pendingSinkJoinGroupId.isNotEmpty) {
+        return;
+      }
+      unawaited(requestRejoinAsSink());
+    });
   }
 
   /// 播放=重新加入:向源端请求 re-offer,后续复用现有 offer/accept 流程。
@@ -632,6 +662,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
     _playbackTargetLatencyMs = _defaultTargetLatencyMs;
     _playbackSendControl = null;
     _sinkRejoinContext = null;
+    _autoRejoinSourcePeerId = '';
     _pendingSinkJoinGroupId = '';
     _lastPlaybackReportAtMicros = 0;
     _captureFailure = null;
@@ -721,6 +752,8 @@ class AudioGroupCoordinator extends ChangeNotifier {
       _playbackLocalPeerId = localPeerId;
       _lastPlaybackReportAtMicros = 0;
       _sinkRejoinContext = null;
+      _autoRejoinSourcePeerId = '';
+      _autoRejoinAttempts = 0;
       _setSession(AudioGroupSession.offering(
         groupId: offer.groupId,
         streamId: offer.streamId,
@@ -1268,9 +1301,21 @@ class AudioGroupCoordinator extends ChangeNotifier {
       return;
     }
     var nextTargetPlaybackTimeMicros = 0;
-    final captureSource = AudioCaptureSource(
+    late final AudioCaptureSource captureSource;
+    captureSource = AudioCaptureSource(
       codec: codec,
       platform: _platform,
+      // Native capture gave up after it had started. Shown as a failure, and
+      // the next _ensureCaptureStarted may start it again.
+      onError: (error) {
+        if (!identical(_captureSource, captureSource)) {
+          return;
+        }
+        _captureSource = null;
+        _captureGeneration += 1;
+        unawaited(_stopCaptureSource(captureSource));
+        _noteCaptureFailure(error);
+      },
       onPacket: (packet) {
         final current = _session;
         if (current == null ||
@@ -1283,8 +1328,13 @@ class AudioGroupCoordinator extends ChangeNotifier {
             Duration.microsecondsPerMillisecond;
         final targetBaseMicros = _clockMicros() +
             current.targetLatencyMs * Duration.microsecondsPerMillisecond;
+        // Far ahead only when the wall clock went back, as it can when a
+        // computer wakes and sets its time: every packet would land in the
+        // future and none would play until the gap had passed.
         final targetPlaybackTimeMicros =
-            nextTargetPlaybackTimeMicros <= targetBaseMicros
+            nextTargetPlaybackTimeMicros <= targetBaseMicros ||
+                    nextTargetPlaybackTimeMicros - targetBaseMicros >
+                        _maxPlaybackLeadMicros
                 ? targetBaseMicros
                 : nextTargetPlaybackTimeMicros;
         nextTargetPlaybackTimeMicros =
@@ -1634,6 +1684,11 @@ class AudioGroupCoordinator extends ChangeNotifier {
     _playbackSendControl = null;
     _playbackLocalPeerId = '';
     _sinkRejoinContext = rejoinContext;
+    if (failureReason == AudioFailureReason.transport &&
+        rejoinContext != null &&
+        _autoRejoinAttempts < _maxAutoRejoinAttempts) {
+      _autoRejoinSourcePeerId = rejoinContext.sourcePeerId;
+    }
     _setSession(
       current.markSink(
         localPeerId,

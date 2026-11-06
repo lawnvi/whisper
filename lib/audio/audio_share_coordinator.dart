@@ -614,6 +614,17 @@ class AudioShareCoordinator extends ChangeNotifier {
       codec: codec,
       platform: _platform,
       onPacket: transport.send,
+      onError: (error) => _beginUnexpectedFailure(
+        generation: generation,
+        sessionId: message.sessionId,
+        peerId: message.sinkPeerId,
+        role: AudioShareRuntimeRole.source,
+        expectedTransport: transport,
+        failureReason: audioFailureReasonFor(
+          error,
+          context: AudioFailureContext.capture,
+        ),
+      ),
     );
     _transport = transport;
     _captureSource = captureSource;

@@ -5422,6 +5422,9 @@ class WsSvrManager {
         WindowStreamViewer.shared.peerDisconnected(peerId);
       } else {
         _remoteProfilesByPeerId[peerId] = profile;
+        if (_manageSharedCoordinators) {
+          AudioGroupCoordinator.shared.peerConnected(peerId);
+        }
         if (profile.formFactor.isNotEmpty) {
           unawaited(
             DeviceFormFactors.shared.record(peerId, profile.formFactor),

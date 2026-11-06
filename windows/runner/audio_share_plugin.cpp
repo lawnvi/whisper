@@ -34,6 +34,12 @@ namespace {
 using Microsoft::WRL::ComPtr;
 
 constexpr REFERENCE_TIME kBufferDuration100ns = 1000000;  // 100 ms.
+// How often a running capture checks that it still records the default output.
+constexpr auto kDefaultOutputCheckInterval = std::chrono::seconds(1);
+// Between attempts to open the default output again after it failed; a display
+// waking up or the audio service restarting takes a few seconds.
+constexpr auto kCaptureReopenFirstWait = std::chrono::milliseconds(250);
+constexpr auto kCaptureReopenLongestWait = std::chrono::milliseconds(4000);
 
 std::string HResultMessage(HRESULT hr) {
   _com_error error(hr);
@@ -415,6 +421,11 @@ class AudioSharePlugin : public flutter::Plugin {
     }
   }
 
+  // Runs for as long as sharing is on. Waking from sleep, a display that
+  // turns off and takes its speakers with it, or another default output all
+  // end a WASAPI stream with an error; the stream is opened again on whatever
+  // the default output is then, rather than ending in silence that nothing
+  // reports. Only a first open that fails is reported, as before.
   void CaptureLoop(const std::string& session_id) {
     HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     const bool com_initialized = SUCCEEDED(hr);
@@ -434,78 +445,86 @@ class AudioSharePlugin : public flutter::Plugin {
       return;
     }
 
-    ComPtr<IMMDevice> device;
-    hr = enumerator->GetDefaultAudioEndpoint(eRender, eConsole, &device);
-    if (FAILED(hr)) {
-      InvokeCaptureError(session_id, hr);
-      if (com_initialized) {
-        CoUninitialize();
+    uint64_t sequence = 0;
+    bool started = false;
+    auto backoff = kCaptureReopenFirstWait;
+    while (capture_running_.load()) {
+      hr = CaptureDefaultOutput(enumerator.Get(), session_id, &sequence,
+                                &started);
+      if (!capture_running_.load()) {
+        break;
       }
-      return;
+      if (SUCCEEDED(hr)) {
+        // The default output changed: open the new one straight away.
+        backoff = kCaptureReopenFirstWait;
+        continue;
+      }
+      if (!started) {
+        InvokeCaptureError(session_id, hr);
+        break;
+      }
+      WaitWhileCapturing(backoff);
+      backoff = (std::min)(backoff * 2, kCaptureReopenLongestWait);
     }
+
+    if (com_initialized) {
+      CoUninitialize();
+    }
+  }
+
+  // Captures the current default output until it fails, sharing stops (both
+  // S_OK) or another output becomes the default (S_OK).
+  HRESULT CaptureDefaultOutput(IMMDeviceEnumerator* enumerator,
+                               const std::string& session_id,
+                               uint64_t* sequence,
+                               bool* started) {
+    ComPtr<IMMDevice> device;
+    HRESULT hr = enumerator->GetDefaultAudioEndpoint(eRender, eConsole, &device);
+    if (FAILED(hr)) {
+      return hr;
+    }
+    const std::wstring device_id = DeviceId(device.Get());
 
     ComPtr<IAudioClient> audio_client;
     hr = device->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr,
                           reinterpret_cast<void**>(audio_client.GetAddressOf()));
     if (FAILED(hr)) {
-      InvokeCaptureError(session_id, hr);
-      if (com_initialized) {
-        CoUninitialize();
-      }
-      return;
+      return hr;
     }
 
     WAVEFORMATEX* mix_format = nullptr;
     hr = audio_client->GetMixFormat(&mix_format);
     if (FAILED(hr)) {
-      InvokeCaptureError(session_id, hr);
-      if (com_initialized) {
-        CoUninitialize();
-      }
-      return;
+      return hr;
     }
+    std::unique_ptr<WAVEFORMATEX, decltype(&CoTaskMemFree)> format_owner(
+        mix_format, &CoTaskMemFree);
 
     hr = audio_client->Initialize(
         AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_LOOPBACK,
         kBufferDuration100ns, 0, mix_format, nullptr);
     if (FAILED(hr)) {
-      CoTaskMemFree(mix_format);
-      InvokeCaptureError(session_id, hr);
-      if (com_initialized) {
-        CoUninitialize();
-      }
-      return;
+      return hr;
     }
 
     ComPtr<IAudioCaptureClient> capture_client;
     hr = audio_client->GetService(IID_PPV_ARGS(&capture_client));
     if (FAILED(hr)) {
-      CoTaskMemFree(mix_format);
-      InvokeCaptureError(session_id, hr);
-      if (com_initialized) {
-        CoUninitialize();
-      }
-      return;
+      return hr;
     }
 
     hr = audio_client->Start();
     if (FAILED(hr)) {
-      CoTaskMemFree(mix_format);
-      InvokeCaptureError(session_id, hr);
-      if (com_initialized) {
-        CoUninitialize();
-      }
-      return;
+      return hr;
     }
+    *started = true;
 
-    uint64_t sequence = 0;
+    auto next_device_check =
+        std::chrono::steady_clock::now() + kDefaultOutputCheckInterval;
     while (capture_running_.load()) {
       UINT32 packet_frames = 0;
       hr = capture_client->GetNextPacketSize(&packet_frames);
-      if (FAILED(hr)) {
-        break;
-      }
-      while (packet_frames > 0 && capture_running_.load()) {
+      while (SUCCEEDED(hr) && packet_frames > 0 && capture_running_.load()) {
         BYTE* data = nullptr;
         UINT32 frame_count = 0;
         DWORD flags = 0;
@@ -516,12 +535,23 @@ class AudioSharePlugin : public flutter::Plugin {
         }
         auto pcm = ConvertToPcm16(data, frame_count, mix_format, flags);
         capture_client->ReleaseBuffer(frame_count);
-        InvokeCapturePcm(session_id, sequence++,
+        InvokeCapturePcm(session_id, (*sequence)++,
                          static_cast<int>(mix_format->nSamplesPerSec),
                          static_cast<int>(mix_format->nChannels),
                          std::move(pcm));
         hr = capture_client->GetNextPacketSize(&packet_frames);
-        if (FAILED(hr)) {
+      }
+      if (FAILED(hr)) {
+        break;
+      }
+      const auto now = std::chrono::steady_clock::now();
+      if (now >= next_device_check) {
+        next_device_check = now + kDefaultOutputCheckInterval;
+        ComPtr<IMMDevice> current;
+        if (FAILED(enumerator->GetDefaultAudioEndpoint(eRender, eConsole,
+                                                       &current)) ||
+            DeviceId(current.Get()) != device_id) {
+          hr = S_OK;
           break;
         }
       }
@@ -529,9 +559,24 @@ class AudioSharePlugin : public flutter::Plugin {
     }
 
     audio_client->Stop();
-    CoTaskMemFree(mix_format);
-    if (com_initialized) {
-      CoUninitialize();
+    return capture_running_.load() ? hr : S_OK;
+  }
+
+  static std::wstring DeviceId(IMMDevice* device) {
+    LPWSTR id = nullptr;
+    if (device == nullptr || FAILED(device->GetId(&id)) || id == nullptr) {
+      return std::wstring();
+    }
+    std::wstring value(id);
+    CoTaskMemFree(id);
+    return value;
+  }
+
+  void WaitWhileCapturing(std::chrono::milliseconds wait) {
+    const auto until = std::chrono::steady_clock::now() + wait;
+    while (capture_running_.load() &&
+           std::chrono::steady_clock::now() < until) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
   }
 
