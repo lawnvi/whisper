@@ -48,6 +48,7 @@ import 'package:whisper/widget/app_dialogs.dart';
 import 'package:whisper/cast_receiver/cast_receiver_manager.dart';
 import 'package:whisper/widget/glass_dialog.dart';
 import 'package:whisper/widget/island/island_overlay_setting.dart';
+import 'package:whisper/widget/release_notes.dart';
 import 'package:whisper/widget/windows_input_service_setting.dart';
 import 'package:whisper/window_stream/linux/gnome_helper_tile.dart';
 import 'package:whisper/window_stream/linux/gnome_shell_helper.dart';
@@ -530,10 +531,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       Text(l10n.updateAvailableBody(_version, release.version)),
                       if (notes.isNotEmpty) ...<Widget>[
                         const SizedBox(height: 14),
-                        Text(
-                          notes.length > 2000
-                              ? '${notes.substring(0, 2000)}…'
-                              : notes,
+                        ReleaseNotes(
+                          markdown: notes,
+                          onOpen: (uri) => unawaited(
+                            launchUrl(
+                              uri,
+                              mode: LaunchMode.externalApplication,
+                            ),
+                          ),
                         ),
                       ],
                     ],
