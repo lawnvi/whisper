@@ -2704,5 +2704,62 @@
   "shellFirstDeviceHint": "在另一台设备上打开 Whisper，连上同一个网络，它就会出现在这里",
   "@shellFirstDeviceHint": {
     "description": "Empty device list: one line under the title saying how another device turns up on its own, and that it has to be on the same network."
+  },
+  "pasteIslandFiles": "{count} 个文件",
+  "@pasteIslandFiles": {
+    "description": "Floating paste island title when several files are pasted at once.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "pasteIslandFrom": "从 {device} 粘贴",
+  "@pasteIslandFrom": {
+    "description": "Floating paste island detail: which device the pasted files come from.",
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "pasteIslandSecondsLeft": "还剩 {seconds} 秒",
+  "@pasteIslandSecondsLeft": {
+    "description": "Floating paste island detail: time left while files arrive, under a minute.",
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "pasteIslandMinutesLeft": "还剩 {minutes} 分钟",
+  "@pasteIslandMinutesLeft": {
+    "description": "Floating paste island detail: time left while files arrive, a minute or more.",
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "pasteIslandPasted": "已粘贴",
+  "@pasteIslandPasted": {
+    "description": "Floating paste island: the files arrived and were pasted where the shortcut was pressed."
+  },
+  "pasteIslandReady": "已就绪，按 {shortcut} 粘贴",
+  "@pasteIslandReady": {
+    "description": "Floating paste island: the files arrived but another window is in front now, so the user pastes with the shortcut (⌘V or Ctrl+V).",
+    "placeholders": {
+      "shortcut": {
+        "type": "String"
+      }
+    }
+  },
+  "pasteIslandFailed": "没能粘贴",
+  "@pasteIslandFailed": {
+    "description": "Floating paste island: the files did not arrive."
+  },
+  "pasteIslandCanceled": "已取消",
+  "@pasteIslandCanceled": {
+    "description": "Floating paste island: the paste was canceled, or the copied files changed."
   }
 }

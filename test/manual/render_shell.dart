@@ -7,6 +7,11 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/model/LocalDatabase.dart';
+import 'package:whisper/new_ui/paste_island/paste_island_app.dart';
+import 'package:whisper/new_ui/shell/shell_island.dart';
+import 'package:whisper/remote_input/remote_clipboard_paste_watch.dart';
+import 'package:whisper/widget/island/island_activity.dart';
+import 'package:whisper/widget/island/island_center.dart';
 import 'package:whisper/new_ui/shell/shell_device_page.dart';
 import 'package:whisper/new_ui/shell/device_row_status.dart';
 import 'package:whisper/new_ui/shell/shell_data.dart';
@@ -954,6 +959,92 @@ void main() {
       );
       expect(tester.takeException(), isNull);
     });
+  });
+
+  group('the floating paste island', () {
+    for (final (name, stage, seconds, open) in [
+      ('paste-island-open', RemoteClipboardPasteStage.receiving, 12, true),
+      ('paste-island-small', RemoteClipboardPasteStage.receiving, 75, false),
+      ('paste-island-ready', RemoteClipboardPasteStage.ready, null, true),
+      ('paste-island-pasted', RemoteClipboardPasteStage.pasted, null, false),
+    ]) {
+      testWidgets(name, (tester) async {
+        tester.view.physicalSize = const Size(460, 200);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final source = IslandListSource();
+        final center = IslandCenter(sources: [source]);
+        await tester.pumpWidget(
+          _app(
+            RepaintBoundary(
+              key: const ValueKey('shot'),
+              child: DecoratedBox(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Color(0xFFB9D7FF), Color(0xFFF2C9EC)],
+                  ),
+                ),
+                child: Stack(
+                  children: [
+                    ShellIsland(
+                      center: center,
+                      windowWidth: 460,
+                      controlsLeft: 460,
+                      titleRight: 0,
+                      buttonsLeft: 920,
+                      buttonsBottom: 0,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+        IslandActivity activity(RemoteClipboardPasteStage stage) =>
+            IslandActivity(
+              id: 'paste',
+              kind: IslandKind.copy,
+              status: switch (stage) {
+                RemoteClipboardPasteStage.pasted => IslandStatus.done,
+                RemoteClipboardPasteStage.ready => IslandStatus.waiting,
+                _ => IslandStatus.live,
+              },
+              since: DateTime(2026),
+              urgent: true,
+              presenter: PasteIslandPresenter(
+                paste: RemoteClipboardPasteState(
+                  id: 1,
+                  peerId: 'p',
+                  names: const ['设计稿-终版.zip'],
+                  totalBytes: 624000000,
+                  receivedBytes: stage == RemoteClipboardPasteStage.receiving
+                      ? 182000000
+                      : 624000000,
+                  stage: stage,
+                  secondsLeft: seconds,
+                ),
+                device: '小新',
+                onCancel: () {},
+              ),
+            );
+        source.put(activity(RemoteClipboardPasteStage.receiving));
+        await tester.pump(const Duration(milliseconds: 300));
+        await tester.pump(const Duration(seconds: 1));
+        if (stage != RemoteClipboardPasteStage.receiving) {
+          source.put(activity(stage));
+        }
+        if (!open && stage == RemoteClipboardPasteStage.receiving) {
+          await tester.pump(const Duration(seconds: 4));
+        }
+        if (!open) center.collapse();
+        for (var frame = 0; frame < 80; frame++) {
+          await tester.pump(const Duration(milliseconds: 16));
+        }
+        expect(tester.takeException(), isNull);
+        await _render(tester, name);
+        await tester.pump(const Duration(seconds: 12));
+      });
+    }
   });
 
   testWidgets('below 600 it is the phone list', (tester) async {

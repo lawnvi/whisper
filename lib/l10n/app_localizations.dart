@@ -6206,6 +6206,54 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'在另一台设备上打开 Whisper，连上同一个网络，它就会出现在这里'**
   String get shellFirstDeviceHint;
+
+  /// Floating paste island title when several files are pasted at once.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count} 个文件'**
+  String pasteIslandFiles(int count);
+
+  /// Floating paste island detail: which device the pasted files come from.
+  ///
+  /// In zh, this message translates to:
+  /// **'从 {device} 粘贴'**
+  String pasteIslandFrom(String device);
+
+  /// Floating paste island detail: time left while files arrive, under a minute.
+  ///
+  /// In zh, this message translates to:
+  /// **'还剩 {seconds} 秒'**
+  String pasteIslandSecondsLeft(int seconds);
+
+  /// Floating paste island detail: time left while files arrive, a minute or more.
+  ///
+  /// In zh, this message translates to:
+  /// **'还剩 {minutes} 分钟'**
+  String pasteIslandMinutesLeft(int minutes);
+
+  /// Floating paste island: the files arrived and were pasted where the shortcut was pressed.
+  ///
+  /// In zh, this message translates to:
+  /// **'已粘贴'**
+  String get pasteIslandPasted;
+
+  /// Floating paste island: the files arrived but another window is in front now, so the user pastes with the shortcut (⌘V or Ctrl+V).
+  ///
+  /// In zh, this message translates to:
+  /// **'已就绪，按 {shortcut} 粘贴'**
+  String pasteIslandReady(String shortcut);
+
+  /// Floating paste island: the files did not arrive.
+  ///
+  /// In zh, this message translates to:
+  /// **'没能粘贴'**
+  String get pasteIslandFailed;
+
+  /// Floating paste island: the paste was canceled, or the copied files changed.
+  ///
+  /// In zh, this message translates to:
+  /// **'已取消'**
+  String get pasteIslandCanceled;
 }
 
 class _AppLocalizationsDelegate

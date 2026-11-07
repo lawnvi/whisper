@@ -16,6 +16,7 @@ import 'package:whisper/remote_input/remote_input_manager.dart';
 import 'package:whisper/remote_input/remote_input_packet_transport.dart';
 import 'package:whisper/remote_input/remote_input_platform.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
+import 'package:whisper/remote_input/remote_clipboard_paste_watch.dart';
 import 'package:whisper/remote_input/remote_clipboard_transfer.dart';
 import 'package:whisper/remote_input/remote_input_scroll.dart';
 import 'package:whisper/socket/packet_byte_transport.dart';
@@ -32,6 +33,15 @@ typedef RemoteClipboardPastePreparer =
     Future<RemoteClipboardPasteResult> Function({
       required String peerId,
       required String sessionId,
+    });
+
+/// A paste that could not wait for its files: true once they are here and
+/// it should go ahead (see `RemoteClipboardPasteWatch.follow`).
+typedef RemoteClipboardPasteDeferrer =
+    Future<bool> Function({
+      required String sessionId,
+      required Future<RemoteClipboardPasteResult> pending,
+      required Future<Object?> front,
     });
 
 enum RemoteInputRuntimeRole { none, source, sink }
@@ -120,10 +130,6 @@ final class _PendingInjectionEntry {
   int byteLength;
 }
 
-/// How long a Ctrl+V on the controlled side may hold back the input behind
-/// it while the copied files arrive.
-const remoteClipboardPasteHoldLimit = Duration(seconds: 10);
-
 class RemoteInputCoordinator extends ChangeNotifier {
   RemoteInputCoordinator({
     RemoteInputManager? manager,
@@ -169,6 +175,12 @@ class RemoteInputCoordinator extends ChangeNotifier {
   final RemoteInputScrollMultiplierProvider _scrollMultiplierProvider;
   final Duration _nativeInjectionTimeout;
   RemoteClipboardPastePreparer? _remoteClipboardPastePreparer;
+  RemoteClipboardPasteDeferrer? _remoteClipboardPasteDeferrer;
+
+  /// The last key frame that pressed each modifier, to press it again for a
+  /// paste that went ahead later.
+  final Map<RemoteInputModifierSemantic, RemoteInputPacketFrame>
+  _sinkModifierFrames = <RemoteInputModifierSemantic, RemoteInputPacketFrame>{};
 
   RemoteInputRuntimeState _state = const RemoteInputRuntimeState.idle();
   late final RemoteInputLifecycleOwner _lifecycle = _manager.lifecycle
@@ -335,8 +347,10 @@ class RemoteInputCoordinator extends ChangeNotifier {
   void configureRemoteClipboard({
     required RemoteClipboardPastePreparer preparePaste,
     required RemoteClipboardSessionCleaner clearSession,
+    RemoteClipboardPasteDeferrer? deferPaste,
   }) {
     _remoteClipboardPastePreparer = preparePaste;
+    _remoteClipboardPasteDeferrer = deferPaste;
     _manager.configureSessionCleanup(clearSession);
   }
 
@@ -1099,6 +1113,8 @@ class RemoteInputCoordinator extends ChangeNotifier {
               peerId: message.sourcePeerId,
               sessionId: message.sessionId,
               targetPlatform: targetPlatform,
+              inject: (frames) =>
+                  _enqueueInjection(message, frames, sendControl: sendControl),
             );
       if (_shouldTracePackets && _sinkPacketTraceCount < _packetTraceLimit) {
         _sinkPacketTraceCount++;
@@ -1156,6 +1172,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
     required String peerId,
     required String sessionId,
     required RemoteInputPlatformKind targetPlatform,
+    required void Function(List<RemoteInputPacketFrame> frames) inject,
   }) {
     if (frames.length != 1 ||
         frames.single.eventType != RemoteInputEventType.key) {
@@ -1174,6 +1191,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
       if (modifier != null) {
         if (down) {
           _sinkPressedModifiers.add(modifier);
+          _sinkModifierFrames[modifier] = frames.single;
         } else {
           _sinkPressedModifiers.remove(modifier);
         }
@@ -1200,28 +1218,79 @@ class RemoteInputCoordinator extends ChangeNotifier {
     }
     traceRemoteClipboard('paste_shortcut_detected');
     final generation = _lifecycle.generation;
-    // Every packet behind this one waits for the files, so keyboard and mouse
-    // stop until they are here. Past the limit this Ctrl+V is dropped; the
-    // download goes on, and the next Ctrl+V pastes what it brought.
-    return prepare(peerId: peerId, sessionId: sessionId)
-        .timeout(
-          remoteClipboardPasteHoldLimit,
-          onTimeout: () => RemoteClipboardPasteResult.failed,
-        )
+    final front = foregroundWindowToken();
+    final pending = prepare(peerId: peerId, sessionId: sessionId);
+    // Every packet behind this one waits for the files, so only briefly. Past
+    // that this Ctrl+V is put aside and input goes on; once the files are
+    // here it is pressed again, if the same window is still in front.
+    return pending
+        .then<RemoteClipboardPasteResult?>((result) => result)
+        .timeout(remoteClipboardPasteHoldLimit, onTimeout: () => null)
         .then((result) {
           if (generation != _lifecycle.generation) {
             return const <RemoteInputPacketFrame>[];
           }
-          traceRemoteClipboard('paste_shortcut_result', reason: result.name);
+          traceRemoteClipboard(
+            'paste_shortcut_result',
+            reason: result?.name ?? 'deferred',
+          );
           if (result == RemoteClipboardPasteResult.notAvailable) {
             return frames;
           }
-          if (result == RemoteClipboardPasteResult.failed) {
-            _suppressPasteKeyUp = true;
-            return const <RemoteInputPacketFrame>[];
+          if (result == RemoteClipboardPasteResult.prepared) {
+            return frames;
           }
-          return frames;
+          _suppressPasteKeyUp = true;
+          final defer = _remoteClipboardPasteDeferrer;
+          if (result == null && defer != null) {
+            final chord = _pasteChord(frames.single, primaryModifier);
+            unawaited(
+              defer(sessionId: sessionId, pending: pending, front: front).then((
+                paste,
+              ) {
+                if (paste && generation == _lifecycle.generation) {
+                  traceRemoteClipboard('paste_replayed');
+                  inject(chord());
+                }
+              }),
+            );
+          }
+          return const <RemoteInputPacketFrame>[];
         });
+  }
+
+  /// The paste shortcut once more: [pasteDown] and its release, inside the
+  /// [modifier]'s press and release unless that is still held down by then.
+  List<RemoteInputPacketFrame> Function() _pasteChord(
+    RemoteInputPacketFrame pasteDown,
+    RemoteInputModifierSemantic modifier,
+  ) {
+    final modifierDown = _sinkModifierFrames[modifier];
+    return () {
+      final held = _sinkPressedModifiers.contains(modifier);
+      final wrap = !held && modifierDown != null;
+      return <RemoteInputPacketFrame>[
+        if (wrap) _restamped(modifierDown),
+        _restamped(pasteDown),
+        _restamped(pasteDown, down: false),
+        if (wrap) _restamped(modifierDown, down: false),
+      ];
+    };
+  }
+
+  RemoteInputPacketFrame _restamped(
+    RemoteInputPacketFrame frame, {
+    bool down = true,
+  }) {
+    final payload = _keyPayload(frame) ?? <String, dynamic>{};
+    payload['down'] = down;
+    return RemoteInputPacketFrame(
+      sessionId: frame.sessionId,
+      sequence: frame.sequence,
+      timestampMicros: DateTime.now().microsecondsSinceEpoch,
+      eventType: frame.eventType,
+      payload: Uint8List.fromList(utf8.encode(jsonEncode(payload))),
+    );
   }
 
   Map<String, dynamic>? _keyPayload(RemoteInputPacketFrame frame) {

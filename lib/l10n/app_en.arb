@@ -2489,5 +2489,48 @@
   "androidWindowServiceNotifyWaitingCode": "Waiting for the pairing code",
   "androidWindowServiceNotifyCodeHint": "6-digit code",
   "androidWindowServiceNotifyReply": "Enter",
-  "shellFirstDeviceHint": "Open Whisper on another device on the same network and it will appear here"
+  "shellFirstDeviceHint": "Open Whisper on another device on the same network and it will appear here",
+  "pasteIslandFiles": "{count} files",
+  "@pasteIslandFiles": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "pasteIslandFrom": "Pasting from {device}",
+  "@pasteIslandFrom": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "pasteIslandSecondsLeft": "{seconds} s left",
+  "@pasteIslandSecondsLeft": {
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "pasteIslandMinutesLeft": "{minutes} min left",
+  "@pasteIslandMinutesLeft": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "pasteIslandPasted": "Pasted",
+  "pasteIslandReady": "Ready. Press {shortcut} to paste",
+  "@pasteIslandReady": {
+    "placeholders": {
+      "shortcut": {
+        "type": "String"
+      }
+    }
+  },
+  "pasteIslandFailed": "Couldn't paste",
+  "pasteIslandCanceled": "Canceled"
 }

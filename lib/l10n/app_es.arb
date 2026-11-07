@@ -1552,5 +1552,48 @@
   "androidWindowServiceNotifyWaitingCode": "Esperando el código de vinculación",
   "androidWindowServiceNotifyCodeHint": "Código de 6 dígitos",
   "androidWindowServiceNotifyReply": "Escribir",
-  "shellFirstDeviceHint": "Abre Whisper en otro dispositivo de la misma red y aparecerá aquí"
+  "shellFirstDeviceHint": "Abre Whisper en otro dispositivo de la misma red y aparecerá aquí",
+  "pasteIslandFiles": "{count} archivos",
+  "@pasteIslandFiles": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "pasteIslandFrom": "Pegando desde {device}",
+  "@pasteIslandFrom": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "pasteIslandSecondsLeft": "Quedan {seconds} s",
+  "@pasteIslandSecondsLeft": {
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "pasteIslandMinutesLeft": "Quedan {minutes} min",
+  "@pasteIslandMinutesLeft": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "pasteIslandPasted": "Pegado",
+  "pasteIslandReady": "Listo. Pulsa {shortcut} para pegar",
+  "@pasteIslandReady": {
+    "placeholders": {
+      "shortcut": {
+        "type": "String"
+      }
+    }
+  },
+  "pasteIslandFailed": "No se pudo pegar",
+  "pasteIslandCanceled": "Cancelado"
 }

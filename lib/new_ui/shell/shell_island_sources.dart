@@ -6,6 +6,7 @@ import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/model/file_transfer.dart';
 import 'package:whisper/new_ui/shell/shell_island.dart';
 import 'package:whisper/new_ui/shell/shell_requests.dart';
+import 'package:whisper/new_ui/paste_island/paste_island_app.dart';
 import 'package:whisper/remote_files/fs_copies.dart';
 import 'package:whisper/socket/svrmanager.dart';
 import 'package:whisper/theme/whisper_icons.dart';
@@ -39,7 +40,11 @@ class TransferIslandSource extends IslandListSource {
 
   void update(TransferSnapshot snapshot) {
     final id = 'transfer:${snapshot.transferId}';
-    if (FileCopies.shared.holds(snapshot.transferId)) {
+    if (FileCopies.shared.holds(snapshot.transferId) ||
+        (pasteIslandSupported &&
+            WsSvrManager().carriesRemoteClipboardTransfer(
+              snapshot.transferId,
+            ))) {
       remove(id);
       return;
     }
@@ -121,7 +126,7 @@ class _TransferPresenter extends IslandPresenter with MomentViews {
       ? const WhisperIcon(WhisperGlyph.warn, size: 16, color: Radix.amber9)
       : SizedBox.square(
           dimension: 20,
-          child: CustomPaint(painter: _RingPainter(progress ?? 0)),
+          child: CustomPaint(painter: IslandRingPainter(progress ?? 0)),
         );
 
   @override
@@ -148,8 +153,8 @@ class _TransferPresenter extends IslandPresenter with MomentViews {
 }
 
 /// `ring()`: 20 across, 2.5 thick, white on a faint track.
-class _RingPainter extends CustomPainter {
-  const _RingPainter(this.value);
+class IslandRingPainter extends CustomPainter {
+  const IslandRingPainter(this.value);
 
   final double value;
 
@@ -184,7 +189,7 @@ class _RingPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_RingPainter old) => old.value != value;
+  bool shouldRepaint(IslandRingPainter old) => old.value != value;
 }
 
 /// What is simply going on: the network is gone, sound is going out, the pointer

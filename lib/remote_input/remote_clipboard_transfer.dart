@@ -158,6 +158,21 @@ final class RemoteClipboardOfferSnapshot {
   final List<RemoteClipboardOfferItem> items;
 }
 
+/// How far a paste's files have come.
+final class RemoteClipboardDownload {
+  const RemoteClipboardDownload({
+    required this.peerId,
+    required this.names,
+    required this.totalBytes,
+    required this.receivedBytes,
+  });
+
+  final String peerId;
+  final List<String> names;
+  final int totalBytes;
+  final int receivedBytes;
+}
+
 final class RemoteClipboardTransferEngine {
   RemoteClipboardTransferEngine({
     required RemoteClipboardFrameSender sendFrame,
@@ -1061,6 +1076,10 @@ final class RemoteClipboardTransferEngine {
       onStalled: (request) => unawaited(_abandonTransferRequest(request)),
     );
     _transferRequests[sessionId] = request;
+    _carried.addAll(request.transferIds);
+    while (_carried.length > 64) {
+      _carried.remove(_carried.first);
+    }
     _listenToTransfers();
     for (final transferId in request.transferIds) {
       _placements!.expect(transferId, directory.path);
@@ -1095,9 +1114,54 @@ final class RemoteClipboardTransferEngine {
     _updateSubscription ??= placements.updates.listen(_onTransferUpdated);
   }
 
-  /// Whether [transferId] brings a pasted file here.
+  /// Whether [transferId] brings a pasted file here, now or lately.
   bool carriesTransfer(String transferId) =>
+      _carried.contains(transferId) ||
       _transferRequestFor(transferId) != null;
+
+  /// Transfers that brought pasted files, the last few: their final updates
+  /// may come after the paste is over.
+  final Set<String> _carried = <String>{};
+
+  /// How far the files offered for [sessionId] have come. Null when nothing
+  /// is offered there.
+  RemoteClipboardDownload? download(String sessionId) {
+    final offer = _remoteOffers[sessionId];
+    if (offer == null) {
+      return null;
+    }
+    final total = offer.items.fold<int>(0, (sum, item) => sum + item.size);
+    final transfers = _transferRequests[sessionId];
+    final incoming = _incoming[sessionId];
+    final cached = _cached[sessionId];
+    final received = transfers != null && identical(transfers.offer, offer)
+        ? transfers.received.fold<int>(0, (sum, bytes) => sum + bytes)
+        : incoming != null && identical(incoming.offer, offer)
+        ? incoming.offsets.fold<int>(0, (sum, bytes) => sum + bytes)
+        : cached != null && cached.offerId == offer.offerId
+        ? total
+        : 0;
+    return RemoteClipboardDownload(
+      peerId: offer.peerId,
+      names: [for (final item in offer.items) item.name],
+      totalBytes: total,
+      receivedBytes: received.clamp(0, total),
+    );
+  }
+
+  /// The user put the paste away: what is on its way for [sessionId] stops.
+  /// The offer stays, and the next paste starts it again.
+  Future<void> cancelDownload(String sessionId) async {
+    final transfers = _transferRequests[sessionId];
+    if (transfers != null) {
+      await _abandonTransferRequest(transfers);
+    }
+    final incoming = _incoming.remove(sessionId);
+    if (incoming != null) {
+      incoming.complete(RemoteClipboardPasteResult.failed);
+      await incoming.dispose(deleteDirectory: true);
+    }
+  }
 
   _TransferRequest? _transferRequestFor(String transferId) {
     for (final request in _transferRequests.values) {
@@ -1113,8 +1177,9 @@ final class RemoteClipboardTransferEngine {
     if (request == null) {
       return;
     }
-    request.paths[request.transferIds.indexOf(placed.transferId)] =
-        placed.path;
+    final index = request.transferIds.indexOf(placed.transferId);
+    request.paths[index] = placed.path;
+    request.received[index] = request.offer.items[index].size;
     request.touch();
     if (request.paths.every((path) => path != null)) {
       unawaited(_finishTransferRequest(request));
@@ -1136,6 +1201,10 @@ final class RemoteClipboardTransferEngine {
     final request = _transferRequestFor(snapshot.transferId);
     if (request == null) {
       return;
+    }
+    final index = request.transferIds.indexOf(snapshot.transferId);
+    if (request.paths[index] == null) {
+      request.received[index] = snapshot.committedBytes;
     }
     request.touch();
     if (snapshot.state == FileTransferState.failed ||
@@ -1446,6 +1515,7 @@ final class _TransferRequest {
     required this.transferIds,
     required void Function(_TransferRequest request) onStalled,
   }) : paths = List<String?>.filled(transferIds.length, null),
+       received = List<int>.filled(transferIds.length, 0),
        _onStalled = onStalled {
     touch();
   }
@@ -1456,6 +1526,9 @@ final class _TransferRequest {
 
   /// Where each item landed, in offer order.
   final List<String?> paths;
+
+  /// How much of each has come.
+  final List<int> received;
   final void Function(_TransferRequest request) _onStalled;
   final Completer<RemoteClipboardPasteResult> completion =
       Completer<RemoteClipboardPasteResult>();

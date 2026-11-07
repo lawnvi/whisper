@@ -3490,4 +3490,38 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get shellFirstDeviceHint => '在另一台设备上打开 Whisper，连上同一个网络，它就会出现在这里';
+
+  @override
+  String pasteIslandFiles(int count) {
+    return '$count 个文件';
+  }
+
+  @override
+  String pasteIslandFrom(String device) {
+    return '从 $device 粘贴';
+  }
+
+  @override
+  String pasteIslandSecondsLeft(int seconds) {
+    return '还剩 $seconds 秒';
+  }
+
+  @override
+  String pasteIslandMinutesLeft(int minutes) {
+    return '还剩 $minutes 分钟';
+  }
+
+  @override
+  String get pasteIslandPasted => '已粘贴';
+
+  @override
+  String pasteIslandReady(String shortcut) {
+    return '已就绪，按 $shortcut 粘贴';
+  }
+
+  @override
+  String get pasteIslandFailed => '没能粘贴';
+
+  @override
+  String get pasteIslandCanceled => '已取消';
 }

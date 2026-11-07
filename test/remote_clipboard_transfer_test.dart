@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/helper/desktop_clipboard_image.dart';
 import 'package:whisper/model/file_transfer.dart';
 import 'package:whisper/remote_files/fs_placement.dart';
+import 'package:whisper/remote_input/remote_clipboard_paste_watch.dart';
 import 'package:whisper/remote_input/remote_clipboard_transfer.dart';
 import 'package:whisper/socket/bounded_receive_queue.dart';
 import 'package:whisper/socket/peer_connection.dart';
@@ -724,6 +725,80 @@ void main() {
       expect(result, RemoteClipboardPasteResult.prepared);
       expect(link.frames, contains('clipboardData'));
       expect(await File(written.single.single).length(), 3000);
+    });
+  });
+
+  group('a paste that waits for its files', () {
+    RemoteClipboardPasteWatch watch(Object? front, {List<String>? canceled}) =>
+        RemoteClipboardPasteWatch(
+          download: (_) => const RemoteClipboardDownload(
+            peerId: 'peer',
+            names: ['big.zip'],
+            totalBytes: 100,
+            receivedBytes: 40,
+          ),
+          cancelDownload: (sessionId) async => canceled?.add(sessionId),
+          foreground: () async => front,
+        );
+
+    test('pastes only into the window it was asked in', () async {
+      final same = watch('finder');
+      expect(
+        await same.follow(
+          sessionId: 's',
+          pending: Future.value(RemoteClipboardPasteResult.prepared),
+          front: Future.value('finder'),
+        ),
+        isTrue,
+      );
+      expect(same.current!.stage, RemoteClipboardPasteStage.pasted);
+
+      final moved = watch('mail');
+      expect(
+        await moved.follow(
+          sessionId: 's',
+          pending: Future.value(RemoteClipboardPasteResult.prepared),
+          front: Future.value('finder'),
+        ),
+        isFalse,
+      );
+      expect(moved.current!.stage, RemoteClipboardPasteStage.ready);
+    });
+
+    test('pressed again while the files come, it pastes once', () async {
+      final w = watch('finder');
+      final files = Completer<RemoteClipboardPasteResult>();
+      final first = w.follow(
+        sessionId: 's',
+        pending: files.future,
+        front: Future.value('finder'),
+      );
+      final second = w.follow(
+        sessionId: 's',
+        pending: files.future,
+        front: Future.value('finder'),
+      );
+      expect(w.current!.names, ['big.zip']);
+      files.complete(RemoteClipboardPasteResult.prepared);
+      expect(await first, isFalse);
+      expect(await second, isTrue);
+    });
+
+    test('put away, it stops the files and does not paste', () async {
+      final canceled = <String>[];
+      final w = watch('finder', canceled: canceled);
+      final files = Completer<RemoteClipboardPasteResult>();
+      final pasting = w.follow(
+        sessionId: 's',
+        pending: files.future,
+        front: Future.value('finder'),
+      );
+      w.cancel();
+      expect(canceled, ['s']);
+      files.complete(RemoteClipboardPasteResult.failed);
+      expect(await pasting, isFalse);
+      expect(w.current!.stage, RemoteClipboardPasteStage.canceled);
+      w.dispose();
     });
   });
 }

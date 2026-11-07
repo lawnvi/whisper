@@ -39,6 +39,8 @@ import 'package:whisper/new_ui/sound/shell_sound_page.dart';
 import 'package:whisper/new_ui/sound/sound_controller.dart';
 import 'package:whisper/new_ui/shell/whisper_shell.dart';
 import 'package:whisper/new_ui/tray/clipboard_history.dart';
+import 'package:whisper/new_ui/paste_island/paste_island_app.dart';
+import 'package:whisper/new_ui/paste_island/paste_island_host.dart';
 import 'package:whisper/new_ui/tray/tray_host.dart';
 import 'package:whisper/new_ui/tray/tray_model.dart';
 import 'package:whisper/new_ui/shell/shell_connection_check.dart';
@@ -381,6 +383,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
             .prepareRemoteClipboardPaste(peerId: peerId, sessionId: sessionId),
         clearSession: ({required peerId, required sessionId}) => socketManager
             .clearRemoteClipboardSession(peerId: peerId, sessionId: sessionId),
+        deferPaste: socketManager.remoteClipboardPasteWatch.follow,
       );
       _remoteInputCoordinator.platform.configureLocalPasteHandler(
         _prepareLocalWorkspaceClipboardPaste,
@@ -449,10 +452,8 @@ class _DeviceListScreen extends State<DeviceListScreen>
     await _androidSystemShareInbox.initialize();
   }
 
-  Future<bool> _prepareLocalWorkspaceClipboardPaste() async {
-    final result = await socketManager.prepareLatestWorkspaceClipboardPaste();
-    return result != RemoteClipboardPasteResult.failed;
-  }
+  Future<bool> _prepareLocalWorkspaceClipboardPaste() =>
+      socketManager.pasteLatestWorkspaceClipboard();
 
   @override
   void didChangeDependencies() async {
@@ -616,6 +617,15 @@ class _DeviceListScreen extends State<DeviceListScreen>
     await trayManager.setContextMenu(menu);
     trayManager.addListener(this);
     windowManager.addListener(this);
+    if (pasteIslandSupported) {
+      _pasteIsland ??= PasteIslandHost(
+        watch: socketManager.remoteClipboardPasteWatch,
+        deviceName: _deviceName,
+        locale: () => mounted
+            ? Localizations.localeOf(context).languageCode
+            : 'zh',
+      );
+    }
     if (trayPanelSupported) {
       _trayPanel = TrayPanelHost(onAction: _onTrayAction);
       // The list lives in memory: start it from what is on the clipboard now.
@@ -1861,6 +1871,15 @@ class _DeviceListScreen extends State<DeviceListScreen>
   // ---- The tray panel. Its own engine: all it knows crosses from here. ----
 
   TrayPanelHost? _trayPanel;
+  PasteIslandHost? _pasteIsland;
+
+  String _deviceName(String uid) {
+    for (final session in _sessionItems) {
+      if (session.device.uid == uid) return session.device.name;
+    }
+    return '';
+  }
+
   bool _traySending = false;
   final ClipboardHistory _clipHistory = ClipboardHistory();
   String _lastTrayState = '';

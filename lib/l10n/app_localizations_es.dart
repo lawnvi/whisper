@@ -3738,4 +3738,38 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get shellFirstDeviceHint =>
       'Abre Whisper en otro dispositivo de la misma red y aparecerá aquí';
+
+  @override
+  String pasteIslandFiles(int count) {
+    return '$count archivos';
+  }
+
+  @override
+  String pasteIslandFrom(String device) {
+    return 'Pegando desde $device';
+  }
+
+  @override
+  String pasteIslandSecondsLeft(int seconds) {
+    return 'Quedan $seconds s';
+  }
+
+  @override
+  String pasteIslandMinutesLeft(int minutes) {
+    return 'Quedan $minutes min';
+  }
+
+  @override
+  String get pasteIslandPasted => 'Pegado';
+
+  @override
+  String pasteIslandReady(String shortcut) {
+    return 'Listo. Pulsa $shortcut para pegar';
+  }
+
+  @override
+  String get pasteIslandFailed => 'No se pudo pegar';
+
+  @override
+  String get pasteIslandCanceled => 'Cancelado';
 }

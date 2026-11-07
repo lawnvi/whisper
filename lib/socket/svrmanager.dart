@@ -60,6 +60,7 @@ import 'package:whisper/socket/wire_message_codec.dart';
 import 'package:whisper/socket/wire_message_replay.dart';
 import 'package:whisper/socket/wire_input_policy.dart';
 import 'package:whisper/remote_input/remote_input_coordinator.dart';
+import 'package:whisper/remote_input/remote_clipboard_paste_watch.dart';
 import 'package:whisper/remote_input/remote_clipboard_transfer.dart';
 import 'package:whisper/remote_input/remote_input_layout.dart';
 import 'package:whisper/remote_input/remote_input_manager.dart';
@@ -599,6 +600,12 @@ class WsSvrManager {
         placements: TransferPlacements.shared,
       );
 
+  /// Pastes waiting for their files: what the floating island shows.
+  late final RemoteClipboardPasteWatch remoteClipboardPasteWatch =
+      RemoteClipboardPasteWatch(
+        download: _remoteClipboardTransfer.download,
+        cancelDownload: _remoteClipboardTransfer.cancelDownload,
+      );
   Future<void> _workspaceClipboardSerial = Future<void>.value();
   _WorkspaceClipboardOrigin? _workspaceClipboardOrigin;
   int _workspaceClipboardRevision = 0;
@@ -6634,6 +6641,29 @@ class WsSvrManager {
     );
   }
 
+  /// The paste shortcut pressed on this device for files copied on the one
+  /// it controls. True: press it again now. Files still on their way are
+  /// waited for on screen, without holding up the shortcut's caller.
+  Future<bool> pasteLatestWorkspaceClipboard() async {
+    final origin = _workspaceClipboardOrigin;
+    final front = foregroundWindowToken();
+    final pending = prepareLatestWorkspaceClipboardPaste();
+    final early = await pending
+        .then<RemoteClipboardPasteResult?>((result) => result)
+        .timeout(remoteClipboardPasteHoldLimit, onTimeout: () => null);
+    if (early != null) {
+      return early != RemoteClipboardPasteResult.failed;
+    }
+    if (origin == null) {
+      return false;
+    }
+    return remoteClipboardPasteWatch.follow(
+      sessionId: origin.sessionId,
+      pending: pending,
+      front: front,
+    );
+  }
+
   Future<void> clearRemoteClipboardSession({
     required String peerId,
     required String sessionId,
@@ -6645,6 +6675,11 @@ class WsSvrManager {
       peerId: peerId,
     );
   }
+
+  /// Whether [transferId] brings files for a paste, which the floating
+  /// island shows instead of the window's.
+  bool carriesRemoteClipboardTransfer(String transferId) =>
+      _remoteClipboardTransfer.carriesTransfer(transferId);
 
   bool remoteClipboardOwnsPaths({
     required String sessionId,

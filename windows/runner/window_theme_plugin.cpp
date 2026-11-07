@@ -2,6 +2,7 @@
 
 #include <dwmapi.h>
 #include <flutter/encodable_value.h>
+#include <flutter_windows.h>
 #include <flutter/method_channel.h>
 #include <flutter/plugin_registrar.h>
 #include <flutter/plugin_registrar_windows.h>
@@ -143,6 +144,73 @@ class WindowThemePlugin : public flutter::Plugin {
       return;
     }
 
+    // What is in front: the window a paste was asked for in.
+    if (call.method_name() == "foregroundWindow") {
+      result->Success(flutter::EncodableValue(
+          static_cast<int64_t>(reinterpret_cast<intptr_t>(GetForegroundWindow()))));
+      return;
+    }
+
+    // The floating island: see-through, over everything, and never taking
+    // the keyboard from the window the paste was asked for in, not even
+    // when clicked.
+    if (call.method_name() == "becomeIsland") {
+      SetWindowLongPtr(window_, GWL_STYLE, WS_POPUP);
+      SetWindowLongPtr(window_, GWL_EXSTYLE,
+                       WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE);
+      MARGINS margins = {-1, -1, -1, -1};
+      DwmExtendFrameIntoClientArea(window_, &margins);
+      MakeTransparent();
+      SetWindowPos(window_, HWND_TOPMOST, 0, 0, 0, 0,
+                   SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+      result->Success(flutter::EncodableValue(true));
+      return;
+    }
+    // Its top middle at the top middle of the work area of the screen with
+    // the pointer. Resized later, it keeps that point. Sizes are logical.
+    if (call.method_name() == "placeIsland") {
+      const auto* args = std::get_if<flutter::EncodableMap>(call.arguments());
+      const auto* width =
+          args == nullptr ? nullptr : GetMapValue<double>(*args, "width");
+      const auto* height =
+          args == nullptr ? nullptr : GetMapValue<double>(*args, "height");
+      const auto* rescreen =
+          args == nullptr ? nullptr : GetMapValue<bool>(*args, "rescreen");
+      if (width == nullptr || height == nullptr) {
+        result->Success(flutter::EncodableValue(false));
+        return;
+      }
+      if (!island_anchored_ || (rescreen != nullptr && *rescreen)) {
+        POINT cursor{};
+        GetCursorPos(&cursor);
+        HMONITOR monitor = MonitorFromPoint(cursor, MONITOR_DEFAULTTONEAREST);
+        MONITORINFO info{};
+        info.cbSize = sizeof(info);
+        GetMonitorInfo(monitor, &info);
+        island_anchor_ = {(info.rcWork.left + info.rcWork.right) / 2,
+                          info.rcWork.top};
+        island_scale_ = FlutterDesktopGetDpiForMonitor(monitor) / 96.0;
+        island_anchored_ = true;
+      }
+      const int w = static_cast<int>(*width * island_scale_ + 0.5);
+      const int h = static_cast<int>(*height * island_scale_ + 0.5);
+      SetWindowPos(window_, HWND_TOPMOST, island_anchor_.x - w / 2,
+                   island_anchor_.y, w, h, SWP_NOACTIVATE);
+      result->Success(flutter::EncodableValue(true));
+      return;
+    }
+    if (call.method_name() == "showIsland") {
+      SetWindowPos(window_, HWND_TOPMOST, 0, 0, 0, 0,
+                   SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+      result->Success(flutter::EncodableValue(true));
+      return;
+    }
+    if (call.method_name() == "hideIsland") {
+      ShowWindow(window_, SW_HIDE);
+      result->Success(flutter::EncodableValue(true));
+      return;
+    }
+
     // Password managers set this format on what they copy; it must not be
     // remembered in the clipboard history.
     if (call.method_name() == "clipboardIsSensitive") {
@@ -208,8 +276,40 @@ class WindowThemePlugin : public flutter::Plugin {
     ApplyBackdrop();
   }
 
+  // Flutter's transparent pixels show what is behind the window, as
+  // window_manager's transparent background does.
+  void MakeTransparent() {
+    struct AccentPolicy {
+      int state;
+      int flags;
+      int color;
+      int animation;
+    };
+    struct CompositionData {
+      int attribute;
+      PVOID data;
+      ULONG size;
+    };
+    using SetComposition = BOOL(WINAPI*)(HWND, CompositionData*);
+    const HMODULE user32 = GetModuleHandle(TEXT("user32.dll"));
+    const auto set = user32 == nullptr
+                         ? nullptr
+                         : reinterpret_cast<SetComposition>(GetProcAddress(
+                               user32, "SetWindowCompositionAttribute"));
+    if (set == nullptr) {
+      return;
+    }
+    // ACCENT_ENABLE_TRANSPARENTGRADIENT, of no colour; 19 is the accent.
+    AccentPolicy policy = {2, 2, 0, 0};
+    CompositionData data = {19, &policy, sizeof(policy)};
+    set(window_, &data);
+  }
+
   HWND window_ = nullptr;
   int backdrop_ = 0;
+  POINT island_anchor_{};
+  double island_scale_ = 1.0;
+  bool island_anchored_ = false;
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> channel_;
 };
 

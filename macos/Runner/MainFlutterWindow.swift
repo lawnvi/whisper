@@ -137,6 +137,30 @@ final class CaptureCoverPanel: NSPanel {
 /// The tray panel's window. It comes up over an app in full screen without
 /// making Whisper the active app, as menu bar panels do: activating Whisper
 /// there left that space, and the panel never showed.
+/// The app in front and its frontmost window: what a paste was asked for in.
+/// Window numbers and owners need no screen recording permission.
+func foregroundWindowToken() -> String? {
+  guard let app = NSWorkspace.shared.frontmostApplication else {
+    return nil
+  }
+  let pid = app.processIdentifier
+  var number = 0
+  let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
+  if let windows = CGWindowListCopyWindowInfo(options, kCGNullWindowID)
+      as? [[String: Any]] {
+    // Front to back: the first ordinary window it owns is its front one.
+    for info in windows {
+      guard (info[kCGWindowOwnerPID as String] as? Int32) == pid,
+            (info[kCGWindowLayer as String] as? Int) == 0 else {
+        continue
+      }
+      number = info[kCGWindowNumber as String] as? Int ?? 0
+      break
+    }
+  }
+  return "\(pid):\(number)"
+}
+
 final class TrayPanelWindow: NSPanel {
   override var canBecomeKey: Bool { true }
   override var canBecomeMain: Bool { false }
@@ -151,6 +175,8 @@ enum PanelMaterial {
   // The tray panel, and the plugin's window its view moved out of.
   private static var trayPanel: TrayPanelWindow?
   private static var trayOrigin: NSWindow?
+  // Where the floating island hangs from: the top middle of a screen.
+  private static var islandAnchor: NSPoint?
 
   static func register(with controller: FlutterViewController) {
     let channel = FlutterMethodChannel(
@@ -191,6 +217,62 @@ enum PanelMaterial {
         window.orderFrontRegardless()
         window.makeKey()
         window.makeFirstResponder(controller.view)
+        result(true)
+      case "becomeIsland":
+        // The floating island: see-through, over everything, and never the
+        // key window, so what the user types in stays in front.
+        controller.backgroundColor = .clear
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        window.hasShadow = false
+        window.animationBehavior = .none
+        window.level = .statusBar
+        window.collectionBehavior = [
+          .canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle, .stationary,
+        ]
+        if let panel = window as? NSPanel {
+          panel.styleMask.insert(.nonactivatingPanel)
+          panel.becomesKeyOnlyIfNeeded = true
+        }
+        result(true)
+      case "placeIsland":
+        // Its top middle at the top middle of the screen with the pointer,
+        // under the menu bar. Resized later, it keeps that point.
+        let arguments = call.arguments as? [String: Any] ?? [:]
+        let width = (arguments["width"] as? Double) ?? 0
+        let height = (arguments["height"] as? Double) ?? 0
+        if (arguments["rescreen"] as? Bool) == true || islandAnchor == nil {
+          let mouse = NSEvent.mouseLocation
+          let screen = NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) }
+            ?? NSScreen.main
+          if let visible = screen?.visibleFrame {
+            islandAnchor = NSPoint(x: visible.midX, y: visible.maxY)
+          }
+        }
+        guard let anchor = islandAnchor, width > 0, height > 0 else {
+          result(false)
+          return
+        }
+        // Resized while hidden, the engine has nothing to draw into and the
+        // resize waits for a frame that does not come: on screen unseen first.
+        if !window.isVisible {
+          window.alphaValue = 0
+          window.ignoresMouseEvents = true
+          window.orderFrontRegardless()
+        }
+        window.setFrame(
+          NSRect(x: (anchor.x - width / 2).rounded(), y: anchor.y - height,
+                 width: width, height: height),
+          display: true)
+        result(true)
+      case "showIsland":
+        window.alphaValue = 1
+        window.ignoresMouseEvents = false
+        window.orderFrontRegardless()
+        result(true)
+      case "hideIsland":
+        window.orderOut(nil)
+        window.alphaValue = 0
         result(true)
       case "enablePanelMaterial":
         let radius = (call.arguments as? [String: Double])?["radius"] ?? 24
@@ -368,6 +450,10 @@ class MainFlutterWindow: NSWindow {
       binaryMessenger: controller.engine.binaryMessenger)
     channel.setMethodCallHandler { [weak self] call, result in
       if self?.handleWindowMaterialCall(call, result: result) == true {
+        return
+      }
+      if call.method == "foregroundWindow" {
+        result(foregroundWindowToken())
         return
       }
       guard call.method == "setBrightness" else {
