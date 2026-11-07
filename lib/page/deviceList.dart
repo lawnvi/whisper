@@ -3996,6 +3996,8 @@ class _DeviceListScreen extends State<DeviceListScreen>
       );
       return;
     }
+    // The text last sent. Only a send counts: copied while sync was off or
+    // nothing was connected, the same text has to go out the next time.
     if (_clipboardText == text) {
       logClipboardSync(
         ClipboardSyncStep.skipped,
@@ -4003,7 +4005,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
       );
       return;
     }
-    _clipboardText = text;
     if (!clipboardAutoSyncEnabled) {
       logClipboardSync(
         ClipboardSyncStep.skipped,
@@ -4056,6 +4057,8 @@ class _DeviceListScreen extends State<DeviceListScreen>
           target.identityPublicKey.isEmpty) {
         continue;
       }
+      // Before the await: Windows often reports one copy twice.
+      _clipboardText = text;
       await socketManager.sendMessageTo(peerId, text, clipboard: true);
       sent += 1;
     }
