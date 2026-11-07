@@ -2227,6 +2227,7 @@
     }
   },
   "soundSelfIdle": "未播放",
+  "soundSelfSilent": "这台没有声音在放",
   "soundSelfPlaying": "正在播放到 {count} 台设备",
   "@soundSelfPlaying": {
     "placeholders": {
@@ -2269,6 +2270,7 @@
   },
   "soundNoDevices": "没有已连接的设备",
   "soundSinkPaused": "已暂停",
+  "soundSinkWaiting": "没有收到声音",
   "soundSinkResuming": "正在恢复…",
   "soundGain": "增益",
   "soundGainValue": "{value}x",
@@ -2560,6 +2562,7 @@
   "shellManualConnectField": "地址和端口",
   "shellLinksChooseFolder": "选择文件夹",
   "soundMemberStoppedThere": "对方已停止播放",
+  "soundMemberUnheard": "收不到声音",
   "soundMemberStoppedNotice": "{device} 停止了播放",
   "@soundMemberStoppedNotice": {
     "placeholders": {

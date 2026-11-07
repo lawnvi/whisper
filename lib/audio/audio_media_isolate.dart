@@ -211,6 +211,10 @@ class _DesktopCapture implements AudioGroupCapture {
   Future<void>? _nativeStart;
   bool _stopped = false;
   Future<void>? _stopFuture;
+  int _lastSentAtMicros = 0;
+
+  @override
+  int get lastSentAtMicros => _local?.lastSentAtMicros ?? _lastSentAtMicros;
 
   @override
   Future<void> start() async {
@@ -232,6 +236,9 @@ class _DesktopCapture implements AudioGroupCapture {
     }
     _client = client;
     final captureId = _captureId = client.nextId();
+    client.captureListeners[captureId] = (sentAtMicros) {
+      _lastSentAtMicros = sentAtMicros;
+    };
     await client.request<void>((id) => _PrepareCapture(id, captureId, _spec));
     if (_stopped) {
       return;
@@ -279,6 +286,7 @@ class _DesktopCapture implements AudioGroupCapture {
     }
     final client = _client;
     if (client != null && _captureId != 0) {
+      client.captureListeners.remove(_captureId);
       await client.request<void>((id) => _StopCapture(id, _captureId));
     }
     if (failure != null) {
@@ -408,6 +416,8 @@ class _IsolateClient implements AudioRemoteMediaChannels {
   final Map<int, Completer<Object?>> _requests = <int, Completer<Object?>>{};
   final Map<int, _PlaybackListener> playbackListeners =
       <int, _PlaybackListener>{};
+  final Map<int, void Function(int sentAtMicros)> captureListeners =
+      <int, void Function(int sentAtMicros)>{};
   final Map<int, _PendingClaim> _claims = <int, _PendingClaim>{};
   int _nextId = 0;
 
@@ -461,6 +471,8 @@ class _IsolateClient implements AudioRemoteMediaChannels {
           message.sinkPeerId,
           AudioFailureError(message.reason),
         );
+      case _CaptureSent():
+        captureListeners[message.captureId]?.call(message.sentAtMicros);
       case _PlaybackReported():
         playbackListeners[message.playbackId]?.onReport(message.report);
       case _PlaybackFailed():
@@ -722,6 +734,14 @@ class _SinkFailed {
 
   final String sinkPeerId;
   final AudioFailureReason reason;
+}
+
+/// A capture is sending: at most every [_IsolateCapture.sentReportMicros].
+class _CaptureSent {
+  const _CaptureSent(this.captureId, this.sentAtMicros);
+
+  final int captureId;
+  final int sentAtMicros;
 }
 
 class _PlaybackReported {
@@ -1019,6 +1039,8 @@ class _AudioRuntime {
       codec: _createCodec(command.spec.format),
       diagnostics: _diagnostics,
       send: _fanout.send,
+      onSent: (sentAtMicros) =>
+          _main.send(_CaptureSent(command.captureId, sentAtMicros)),
     );
     _captures[command.captureId] = capture;
     _activeCaptureId = command.captureId;
@@ -1236,7 +1258,9 @@ class _IsolateCapture {
     required AudioCodec codec,
     required AudioShareDiagnostics diagnostics,
     required void Function(AudioGroupPacketFrame packet) send,
+    required void Function(int sentAtMicros) onSent,
   }) {
+    var reportedAtMicros = 0;
     final schedule = AudioGroupSourceSchedule(
       clockMicros: _wallClockMicros,
       targetLatencyMs: _spec.targetLatencyMs,
@@ -1262,9 +1286,17 @@ class _IsolateCapture {
             durationMicros: schedule.durationMicros,
           ),
         );
+        final now = _wallClockMicros();
+        if (now - reportedAtMicros >= sentReportMicros) {
+          reportedAtMicros = now;
+          onSent(now);
+        }
       },
     );
   }
+
+  /// How often the main isolate hears that packets are going out.
+  static const int sentReportMicros = 400000;
 
   final AudioGroupCaptureSpec _spec;
   final _CallbackFrames _frames = _CallbackFrames();

@@ -2947,6 +2947,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get soundSelfIdle => '未播放';
 
   @override
+  String get soundSelfSilent => '这台没有声音在放';
+
+  @override
   String soundSelfPlaying(int count) {
     return '正在播放到 $count 台设备';
   }
@@ -2986,6 +2989,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get soundSinkPaused => '已暂停';
+
+  @override
+  String get soundSinkWaiting => '没有收到声音';
 
   @override
   String get soundSinkResuming => '正在恢复…';
@@ -3341,6 +3347,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get soundMemberStoppedThere => '对方已停止播放';
+
+  @override
+  String get soundMemberUnheard => '收不到声音';
 
   @override
   String soundMemberStoppedNotice(String device) {

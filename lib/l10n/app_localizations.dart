@@ -5290,6 +5290,12 @@ abstract class AppLocalizations {
   /// **'未播放'**
   String get soundSelfIdle;
 
+  /// No description provided for @soundSelfSilent.
+  ///
+  /// In zh, this message translates to:
+  /// **'这台没有声音在放'**
+  String get soundSelfSilent;
+
   /// No description provided for @soundSelfPlaying.
   ///
   /// In zh, this message translates to:
@@ -5355,6 +5361,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'已暂停'**
   String get soundSinkPaused;
+
+  /// No description provided for @soundSinkWaiting.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有收到声音'**
+  String get soundSinkWaiting;
 
   /// No description provided for @soundSinkResuming.
   ///
@@ -5937,6 +5949,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'对方已停止播放'**
   String get soundMemberStoppedThere;
+
+  /// No description provided for @soundMemberUnheard.
+  ///
+  /// In zh, this message translates to:
+  /// **'收不到声音'**
+  String get soundMemberUnheard;
 
   /// No description provided for @soundMemberStoppedNotice.
   ///

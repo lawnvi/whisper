@@ -3153,6 +3153,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get soundSelfIdle => 'Sin reproducir';
 
   @override
+  String get soundSelfSilent => 'No suena nada en este dispositivo';
+
+  @override
   String soundSelfPlaying(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -3199,6 +3202,9 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get soundSinkPaused => 'En pausa';
+
+  @override
+  String get soundSinkWaiting => 'No llega sonido';
 
   @override
   String get soundSinkResuming => 'Reanudando…';
@@ -3576,6 +3582,9 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get soundMemberStoppedThere => 'Detenido en ese dispositivo';
+
+  @override
+  String get soundMemberUnheard => 'No le llega el sonido';
 
   @override
   String soundMemberStoppedNotice(String device) {

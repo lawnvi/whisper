@@ -64,6 +64,10 @@ abstract class AudioGroupCapture {
   Future<void> start();
 
   Future<void> stop();
+
+  /// When a packet last went out, or 0. Windows captures nothing while the
+  /// computer plays nothing, so no packets is not by itself a fault.
+  int get lastSentAtMicros;
 }
 
 class AudioGroupPlaybackSpec {
@@ -559,6 +563,9 @@ class _LocalCapture implements AudioGroupCapture {
   bool _stopped = false;
 
   @override
+  int lastSentAtMicros = 0;
+
+  @override
   Future<void> start() async {
     final codec = await _media._codecFactory(_spec.format);
     if (_stopped || _shouldStart?.call() == false) {
@@ -583,6 +590,7 @@ class _LocalCapture implements AudioGroupCapture {
         if (target == null) {
           return;
         }
+        lastSentAtMicros = _media._clockMicros();
         _media._fanout.send(
           audioGroupPacketFrame(
             _spec,

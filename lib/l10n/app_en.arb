@@ -2079,6 +2079,7 @@
   "shellSettingsAboutVersion": "Version {version}",
   "shellSettingsLinksOn": "{count, plural, =1{1 on} other{{count} on}}",
   "soundSelfIdle": "Not playing",
+  "soundSelfSilent": "Nothing is playing on this device",
   "soundSelfPlaying": "Playing on {count} {count, plural, =1{device} other{devices}}",
   "@soundSelfPlaying": {
     "placeholders": {
@@ -2121,6 +2122,7 @@
   },
   "soundNoDevices": "No devices connected",
   "soundSinkPaused": "Paused",
+  "soundSinkWaiting": "No sound coming in",
   "soundSinkResuming": "Resuming…",
   "soundGain": "Gain",
   "soundGainValue": "{value}x",
@@ -2405,6 +2407,7 @@
   "shellManualConnectField": "Address and port",
   "shellLinksChooseFolder": "Choose folder",
   "soundMemberStoppedThere": "Stopped on that device",
+  "soundMemberUnheard": "Not getting the sound",
   "soundMemberStoppedNotice": "{device} stopped playing",
   "connectionCheckNetwork": "This device's network",
   "connectionCheckAddress": "Its address",

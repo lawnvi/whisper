@@ -128,6 +128,24 @@ class AudioGroupCoordinator extends ChangeNotifier {
   /// 重新放行。
   String _declinedOfferGroupId = '';
   double _playbackGain = 1.0;
+
+  // Whether sound really goes out and comes in, which the session alone does
+  // not say: a sink that hears nothing stops reporting, and its last numbers
+  // stayed on screen as if all was well. Looked at every half second while a
+  // group or a playback runs, since nothing arrives to say it stopped.
+  static const int _silentAfterMicros = 2000000;
+  static const int _unheardAfterMicros = 3000000;
+  static const int _starvedAfterMicros = 2500000;
+
+  /// More than a sink keeps: it drops packets before they are due.
+  static const int _maxSinkBufferMicros = 250000;
+  int _captureStartedAtMicros = 0;
+  int _lastQuietAtMicros = 0;
+  final Map<String, int> _sinkHeardAtMicros = <String, int>{};
+  int _playbackStartedAtMicros = 0;
+  int _playbackHeardAtMicros = 0;
+  Timer? _healthTimer;
+  String _healthSignature = '';
   AudioFailureReason? _captureFailure;
 
   AudioGroupSession? get session => _session;
@@ -142,6 +160,88 @@ class AudioGroupCoordinator extends ChangeNotifier {
   /// Why this device's sound could not be captured for the running group, so
   /// a source does not look like it is playing when nothing is heard.
   AudioFailureReason? get captureFailure => _captureFailure;
+
+  /// This device shares, but has had nothing to send for a while: on Windows,
+  /// the computer is playing nothing.
+  bool get sourceSilent {
+    final capture = _captureSource;
+    final current = _session;
+    if (capture == null || current == null || !current.isLive) {
+      return false;
+    }
+    final sent = capture.lastSentAtMicros > _captureStartedAtMicros
+        ? capture.lastSentAtMicros
+        : _captureStartedAtMicros;
+    return _clockMicros() - sent >= _silentAfterMicros;
+  }
+
+  /// A member this device's sound does not reach: it has not reported while
+  /// packets went out, or it holds more than it can play and drops them.
+  bool sinkUnheard(String sinkPeerId) {
+    final current = _session;
+    if (current == null || !current.isLive || _captureSource == null) {
+      return false;
+    }
+    final sink = current.sinks[sinkPeerId];
+    if (sink == null || sink.state != AudioGroupSinkState.active) {
+      return false;
+    }
+    if (sink.bufferTargetMicros > _maxSinkBufferMicros) {
+      return true;
+    }
+    if (sourceSilent) {
+      return false;
+    }
+    var since = _sinkHeardAtMicros[sinkPeerId] ?? 0;
+    if (_lastQuietAtMicros > since) {
+      since = _lastQuietAtMicros;
+    }
+    return _clockMicros() - since > _unheardAfterMicros;
+  }
+
+  /// Playing another device's sound, of which nothing has come for a while.
+  bool get playbackStarved {
+    if (_playback == null) {
+      return false;
+    }
+    final since = _playbackHeardAtMicros > _playbackStartedAtMicros
+        ? _playbackHeardAtMicros
+        : _playbackStartedAtMicros;
+    return _clockMicros() - since > _starvedAfterMicros;
+  }
+
+  void _checkHealth() {
+    final current = _session;
+    final running = (current != null && current.isLive) || _playback != null;
+    if (!running) {
+      _healthTimer?.cancel();
+      _healthTimer = null;
+      _healthSignature = '';
+      return;
+    }
+    _healthTimer ??= Timer.periodic(
+      const Duration(milliseconds: 500),
+      (_) => _checkHealth(),
+    );
+    final silent = sourceSilent;
+    if (silent || _captureSource == null) {
+      // Members get a while to report again once there is sound.
+      _lastQuietAtMicros = _clockMicros();
+    }
+    final signature = [
+      silent,
+      playbackStarved,
+      for (final sinkPeerId in current?.sinks.keys ?? const <String>[])
+        if (sinkUnheard(sinkPeerId)) sinkPeerId,
+    ].join('|');
+    if (signature != _healthSignature) {
+      final first = _healthSignature.isEmpty;
+      _healthSignature = signature;
+      if (!first) {
+        notifyListeners();
+      }
+    }
+  }
 
   bool get canRejoinAsSink => _sinkRejoinContext != null;
 
@@ -659,6 +759,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
     _autoRejoinSourcePeerId = '';
     _pendingSinkJoinGroupId = '';
     _captureFailure = null;
+    _sinkHeardAtMicros.clear();
     await _stopCaptureSource(captureSource);
     await _media.disconnectAllSinks();
     _clockSyncEstimators.clear();
@@ -880,6 +981,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
       final transport = connectedTransport;
       if (transport != null) {
         _media.attachSink(accept.sinkPeerId, transport);
+        _sinkHeardAtMicros[accept.sinkPeerId] = _clockMicros();
       }
     } catch (error) {
       await _ignoreGroupTransportClose(connectedTransport);
@@ -1140,6 +1242,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
         !current.sinks.containsKey(report.sinkPeerId)) {
       return;
     }
+    _sinkHeardAtMicros[report.sinkPeerId] = _clockMicros();
     final next = current.markSink(
       report.sinkPeerId,
       clockOffsetMicros: report.clockOffsetMicros,
@@ -1281,6 +1384,8 @@ class AudioGroupCoordinator extends ChangeNotifier {
       },
     );
     _captureSource = captureSource;
+    _captureStartedAtMicros = _clockMicros();
+    _lastQuietAtMicros = _captureStartedAtMicros;
     try {
       await captureSource.start();
     } catch (error) {
@@ -1405,6 +1510,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
         ),
         onReport: (report) {
           if (identical(_playback, playback)) {
+            _playbackHeardAtMicros = _clockMicros();
             _sendPlaybackLatencyReport(report);
           }
         },
@@ -1432,6 +1538,9 @@ class AudioGroupCoordinator extends ChangeNotifier {
       return false;
     }
     _playback = playback;
+    _playbackStartedAtMicros = _clockMicros();
+    _playbackHeardAtMicros = 0;
+    _checkHealth();
     return true;
   }
 
@@ -1445,6 +1554,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
     _playbackSessionId = '';
     _playbackChannelRole = AudioChannelRole.stereo;
     _playbackTargetLatencyMs = _defaultTargetLatencyMs;
+    _checkHealth();
     await playback?.stop();
   }
 
@@ -1527,10 +1637,13 @@ class AudioGroupCoordinator extends ChangeNotifier {
   void _setSession(AudioGroupSession? session) {
     _session = session;
     notifyListeners();
+    _checkHealth();
   }
 
   @override
   void dispose() {
+    _healthTimer?.cancel();
+    _healthTimer = null;
     _removeChannelLifecycleListener?.call();
     _removeChannelLifecycleListener = null;
     super.dispose();

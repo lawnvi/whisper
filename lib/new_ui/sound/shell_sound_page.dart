@@ -192,7 +192,7 @@ class _SourceView extends StatelessWidget {
               size: _artSize,
               bare: true,
             ),
-            live: live > 0,
+            live: live > 0 && !controller.silent,
             playing: controller.on,
             label: l10n.soundShareThisDevice,
             onTap:
@@ -210,6 +210,8 @@ class _SourceView extends StatelessWidget {
               ? l10n.soundPermissionNeeded
               : failure != null
               ? l10n.audioShareFailed(_failureDetail(l10n, failure))
+              : live > 0 && controller.silent
+              ? l10n.soundSelfSilent
               : live > 0
               ? l10n.soundSelfPlaying(live)
               : rows.isEmpty
@@ -579,6 +581,7 @@ class _MemberText extends StatelessWidget {
       SoundRowPhase.good => (l10n.audioGroupSyncGood, false),
       SoundRowPhase.fair => (l10n.audioGroupSyncFair, true),
       SoundRowPhase.unstable => (l10n.audioGroupSyncUnstable, true),
+      SoundRowPhase.unheard => (l10n.soundMemberUnheard, true),
       _ => (null, false),
     };
     final sink = row.sink;
@@ -591,7 +594,9 @@ class _MemberText extends StatelessWidget {
         l10n.soundMemberFailed(_failureDetail(l10n, row.failure)),
         true,
       ),
-      SoundRowPhase.idle => (null, false),
+      SoundRowPhase.idle ||
+      SoundRowPhase.unheard ||
+      SoundRowPhase.quiet => (null, false),
       _ =>
         row.hasNumbers && sink != null
             ? (
@@ -727,7 +732,8 @@ class _SinkView extends StatelessWidget {
     final l10n = context.shellL10n;
     final source = _source;
     final resuming = view.phase == SoundSinkPhase.resuming;
-    final playing = view.phase == SoundSinkPhase.playing;
+    final receiving = view.phase == SoundSinkPhase.playing;
+    final playing = receiving || view.phase == SoundSinkPhase.waiting;
     return Column(
       children: [
         _ArtButton(
@@ -739,7 +745,7 @@ class _SinkView extends StatelessWidget {
                   bare: true,
                 )
               : deviceArtFor(source, size: _artSize, bare: true),
-          live: playing,
+          live: receiving,
           playing: playing,
           button: view.canPause || view.canResume,
           label: playing ? l10n.mediaActionPause : l10n.soundResume,
@@ -754,6 +760,7 @@ class _SinkView extends StatelessWidget {
         _State(
           text: switch (view.phase) {
             SoundSinkPhase.playing => l10n.shellRowSoundHere,
+            SoundSinkPhase.waiting => l10n.soundSinkWaiting,
             SoundSinkPhase.paused => l10n.soundSinkPaused,
             SoundSinkPhase.resuming => l10n.soundSinkResuming,
           },

@@ -94,6 +94,12 @@ enum SoundRowPhase {
   good,
   fair,
   unstable,
+
+  /// In the group, but this device's sound does not reach it.
+  unheard,
+
+  /// In the group, while this device has nothing to send.
+  quiet,
   failed,
   disconnected,
 
@@ -130,6 +136,8 @@ class SoundRow {
     SoundRowPhase.good ||
     SoundRowPhase.fair ||
     SoundRowPhase.unstable ||
+    SoundRowPhase.unheard ||
+    SoundRowPhase.quiet ||
     SoundRowPhase.soloPlaying => true,
     _ => false,
   };
@@ -150,8 +158,9 @@ class SoundRow {
   };
 }
 
-/// This device is playing another device's sound.
-enum SoundSinkPhase { playing, paused, resuming }
+/// This device is playing another device's sound. [waiting]: playing, but
+/// nothing has come for a while.
+enum SoundSinkPhase { playing, waiting, paused, resuming }
 
 @immutable
 class SoundSinkView {
@@ -236,6 +245,9 @@ class ShellSoundController extends ChangeNotifier {
 
   /// The master switch.
   bool get on => _on && !permissionNeeded;
+
+  /// Sharing, with nothing to send: the computer is playing nothing.
+  bool get silent => _group.sourceSilent;
 
   /// Is it shown at all: only once there are members.
   bool get hasMembers => !_members.isEmpty;
@@ -580,6 +592,14 @@ class ShellSoundController extends ChangeNotifier {
     }
     final sink = _group.session?.sinks[peer];
     if (sink == null) return row(SoundRowPhase.connecting);
+    // Its last numbers stay until it reports again: not shown as good when
+    // nothing reaches it, or when there is nothing to send.
+    if (_group.sinkUnheard(peer)) {
+      return row(SoundRowPhase.unheard, sink: sink);
+    }
+    if (sink.state == AudioGroupSinkState.active && _group.sourceSilent) {
+      return row(SoundRowPhase.quiet, sink: sink);
+    }
     final phase = switch (soundMemberPhaseOf(sink)) {
       SoundMemberPhase.connecting => SoundRowPhase.connecting,
       SoundMemberPhase.calibrating => SoundRowPhase.calibrating,
@@ -608,7 +628,9 @@ class ShellSoundController extends ChangeNotifier {
           _group.session?.sourcePeerId ?? _group.playbackSourcePeerId;
       return SoundSinkView(
         sourcePeerId: source,
-        phase: SoundSinkPhase.playing,
+        phase: _group.playbackStarved
+            ? SoundSinkPhase.waiting
+            : SoundSinkPhase.playing,
         canPause: true,
         canResume: false,
       );

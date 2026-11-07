@@ -1160,6 +1160,7 @@
   "shellSettingsAboutVersion": "Versión {version}",
   "shellSettingsLinksOn": "{count, plural, =1{1 activo} other{{count} activos}}",
   "soundSelfIdle": "Sin reproducir",
+  "soundSelfSilent": "No suena nada en este dispositivo",
   "soundSelfPlaying": "Reproduciendo en {count} {count, plural, =1{dispositivo} other{dispositivos}}",
   "@soundSelfPlaying": {
     "placeholders": {
@@ -1202,6 +1203,7 @@
   },
   "soundNoDevices": "No hay dispositivos conectados",
   "soundSinkPaused": "En pausa",
+  "soundSinkWaiting": "No llega sonido",
   "soundSinkResuming": "Reanudando…",
   "soundGain": "Ganancia",
   "soundGainValue": "{value}x",
@@ -1486,6 +1488,7 @@
   "shellManualConnectField": "Dirección y puerto",
   "shellLinksChooseFolder": "Elegir carpeta",
   "soundMemberStoppedThere": "Detenido en ese dispositivo",
+  "soundMemberUnheard": "No le llega el sonido",
   "soundMemberStoppedNotice": "{device} dejó de reproducir",
   "connectionCheckNetwork": "Red de este dispositivo",
   "connectionCheckAddress": "Su dirección",
