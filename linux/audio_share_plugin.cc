@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <mutex>
 #include <string>
@@ -75,6 +76,39 @@ void RespondSuccess(FlMethodCall* method_call) {
       FL_METHOD_RESPONSE(fl_method_success_response_new(nullptr));
   fl_method_call_respond(method_call, response, nullptr);
 }
+
+void RespondValue(FlMethodCall* method_call, FlValue* value) {
+  g_autoptr(FlMethodResponse) response =
+      FL_METHOD_RESPONSE(fl_method_success_response_new(value));
+  fl_method_call_respond(method_call, response, nullptr);
+}
+
+// Entry points the audio isolate calls directly from its own thread, so the
+// sound does not wait for the main thread (lib/audio/audio_media_isolate.dart).
+// Their addresses go to Dart through "ffiEntryPoints".
+using CaptureCallback = void (*)(int64_t sequence,
+                                 int64_t capture_time_micros,
+                                 int32_t sample_rate,
+                                 int32_t channels,
+                                 int16_t* pcm,
+                                 int32_t sample_count);
+std::mutex g_capture_callback_mutex;
+CaptureCallback g_capture_callback = nullptr;
+
+// Null stops the calls; once this returns none is running.
+void WhisperAudioSetCaptureCallback(CaptureCallback callback) {
+  std::lock_guard<std::mutex> lock(g_capture_callback_mutex);
+  g_capture_callback = callback;
+}
+
+// Frees a buffer handed to the capture callback.
+void WhisperAudioFreeBuffer(void* buffer) {
+  std::free(buffer);
+}
+
+int32_t WhisperAudioWritePcm(int64_t handle,
+                             const int16_t* pcm,
+                             int32_t sample_count);
 
 void RespondError(FlMethodCall* method_call,
                   const char* code,
@@ -204,7 +238,26 @@ class AudioSharePlugin {
         RespondError(method_call, "audio-playback", error);
         return;
       }
-      RespondSuccess(method_call);
+      // The handle direct writes name this playback by.
+      g_autoptr(FlValue) handle = fl_value_new_int(PlaybackHandle());
+      RespondValue(method_call, handle);
+      return;
+    }
+
+    if (std::strcmp(method, "ffiEntryPoints") == 0) {
+      g_autoptr(FlValue) entry = fl_value_new_map();
+      fl_value_set_string_take(entry, "version", fl_value_new_int(1));
+      fl_value_set_string_take(
+          entry, "setCaptureCallback",
+          fl_value_new_int(reinterpret_cast<intptr_t>(
+              &WhisperAudioSetCaptureCallback)));
+      fl_value_set_string_take(
+          entry, "freeBuffer",
+          fl_value_new_int(reinterpret_cast<intptr_t>(&WhisperAudioFreeBuffer)));
+      fl_value_set_string_take(
+          entry, "writePcm",
+          fl_value_new_int(reinterpret_cast<intptr_t>(&WhisperAudioWritePcm)));
+      RespondValue(method_call, entry);
       return;
     }
 
@@ -243,7 +296,39 @@ class AudioSharePlugin {
     fl_method_call_respond_not_implemented(method_call, nullptr);
   }
 
+  // From the audio isolate's thread: 0 when written, 1 when [handle] is not
+  // the playback running now.
+  int32_t WriteFromIsolate(int64_t handle,
+                           const int16_t* pcm,
+                           int32_t sample_count) {
+#if HAVE_PULSE_AUDIO
+    std::lock_guard<std::mutex> lock(playback_mutex_);
+    if (handle != playback_handle_ || playback_stream_ == nullptr) {
+      return 1;
+    }
+    int pulse_error = 0;
+    pa_simple_write(playback_stream_, pcm,
+                    static_cast<size_t>(sample_count) * sizeof(int16_t),
+                    &pulse_error);
+    return 0;
+#else
+    (void)handle;
+    (void)pcm;
+    (void)sample_count;
+    return 1;
+#endif
+  }
+
  private:
+  int64_t PlaybackHandle() {
+#if HAVE_PULSE_AUDIO
+    std::lock_guard<std::mutex> lock(playback_mutex_);
+    return playback_handle_;
+#else
+    return 0;
+#endif
+  }
+
   bool StartPlayback(FlValue* args, std::string* error) {
     const std::string session_id = StringValue(args, "sessionId");
     FlValue* format = Lookup(args, "format");
@@ -277,6 +362,7 @@ class AudioSharePlugin {
     std::lock_guard<std::mutex> lock(playback_mutex_);
     playback_stream_ = stream;
     playback_session_id_ = session_id;
+    ++playback_handle_;
     return true;
 #else
     *error = "PulseAudio support is not available in this Linux build";
@@ -324,6 +410,8 @@ class AudioSharePlugin {
       playback_stream_ = nullptr;
     }
     playback_session_id_.clear();
+    // Writes still naming the old handle are dropped.
+    ++playback_handle_;
 #else
     (void)session_id;
 #endif
@@ -553,6 +641,23 @@ class AudioSharePlugin {
                       int sample_rate,
                       int channels,
                       const std::vector<uint8_t>& pcm) {
+    {
+      std::lock_guard<std::mutex> lock(g_capture_callback_mutex);
+      if (g_capture_callback != nullptr) {
+        const auto sample_count =
+            static_cast<int32_t>(pcm.size() / sizeof(int16_t));
+        if (sample_count > 0) {
+          auto* copy = static_cast<int16_t*>(
+              std::malloc(sample_count * sizeof(int16_t)));
+          if (copy != nullptr) {
+            std::memcpy(copy, pcm.data(), sample_count * sizeof(int16_t));
+            g_capture_callback(sequence, NowMicros(), sample_rate, channels,
+                               copy, sample_count);
+          }
+        }
+        return;
+      }
+    }
     auto* event = new MainThreadEvent();
     event->channel = FL_METHOD_CHANNEL(g_object_ref(channel_));
     event->method = "onCapturePcm";
@@ -581,6 +686,8 @@ class AudioSharePlugin {
   std::mutex playback_mutex_;
   pa_simple* playback_stream_ = nullptr;
   std::string playback_session_id_;
+  // Bumped on every start and stop; see WriteFromIsolate.
+  int64_t playback_handle_ = 0;
 
   std::mutex capture_mutex_;
   pa_simple* capture_stream_ = nullptr;
@@ -591,6 +698,16 @@ class AudioSharePlugin {
 };
 
 AudioSharePlugin* g_plugin = nullptr;
+
+int32_t WhisperAudioWritePcm(int64_t handle,
+                             const int16_t* pcm,
+                             int32_t sample_count) {
+  // The plugin lives for as long as the process.
+  if (pcm == nullptr || sample_count <= 0 || g_plugin == nullptr) {
+    return 1;
+  }
+  return g_plugin->WriteFromIsolate(handle, pcm, sample_count);
+}
 
 void MethodCallCallback(FlMethodChannel*,
                         FlMethodCall* method_call,

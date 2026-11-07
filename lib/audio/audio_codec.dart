@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:opus_codec/opus_codec.dart' as opus_loader;
 import 'package:opus_codec_dart/opus_codec_dart.dart' as opus;
 import 'package:whisper/audio/audio_protocol.dart';
+import 'package:whisper/window_stream/pipeline/worker_opus.dart';
 
 class AudioCodecConfig {
   const AudioCodecConfig({
@@ -95,6 +96,19 @@ class OpusAudioCodec implements AudioCodec {
 
   static Future<OpusAudioCodec> create(AudioCodecConfig config) async {
     await _ensureInitialized();
+    return _create(config);
+  }
+
+  /// In a worker isolate, after [warmUp] ran on the main one; null when
+  /// libopus can't be opened here.
+  static OpusAudioCodec? createInWorker(AudioCodecConfig config) {
+    if (!WorkerOpus.ensure()) {
+      return null;
+    }
+    return _create(config);
+  }
+
+  static OpusAudioCodec _create(AudioCodecConfig config) {
     return OpusAudioCodec._(
       config: config,
       encoder: opus.BufferedOpusEncoder(

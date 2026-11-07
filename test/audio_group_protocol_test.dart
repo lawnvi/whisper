@@ -109,6 +109,61 @@ void main() {
     }
   });
 
+  test(
+    'only a group accept names the sink media port, and only a valid one',
+    () {
+      const accept = AudioGroupControlMessage(
+        action: AudioGroupControlAction.groupAccept,
+        groupId: 'group-1',
+        streamId: 'stream-1',
+        sessionId: 'session-1',
+        sourcePeerId: 'source',
+        sinkPeerId: 'sink',
+        transportToken: 'group-token',
+        mediaPort: 50123,
+      );
+      // The socket manager adds the token to the accept the coordinator built.
+      final sent = accept.withTransportToken('issued-token').toJson();
+      expect(sent['mediaPort'], 50123);
+      expect(AudioGroupControlMessage.fromJson(sent).mediaPort, 50123);
+      // A sink without its own port says nothing: sources use the main one.
+      expect(
+        const AudioGroupControlMessage(
+          action: AudioGroupControlAction.groupAccept,
+          groupId: 'group-1',
+          streamId: 'stream-1',
+          sessionId: 'session-1',
+          sourcePeerId: 'source',
+          sinkPeerId: 'sink',
+          transportToken: 'group-token',
+        ).toJson(),
+        isNot(contains('mediaPort')),
+      );
+      for (final invalid in <Object?>[0, -1, 65536, '50123', 1.5]) {
+        expect(
+          AudioGroupControlMessage.fromJson(<String, dynamic>{
+            ...sent,
+            'mediaPort': invalid,
+          }).mediaPort,
+          0,
+        );
+      }
+      final offer = AudioGroupControlMessage.fromJson(<String, dynamic>{
+        ...const AudioGroupControlMessage(
+          action: AudioGroupControlAction.groupOffer,
+          groupId: 'group-1',
+          streamId: 'stream-1',
+          sessionId: 'session-1',
+          sourcePeerId: 'source',
+          sinkPeerId: 'sink',
+          mediaPort: 50123,
+        ).toJson(),
+        'mediaPort': 50123,
+      });
+      expect(offer.mediaPort, 0);
+    },
+  );
+
   test('AudioGroupPacketFrame encodes synchronized stream metadata', () {
     final packet = AudioGroupPacketFrame(
       groupId: 'group-1',

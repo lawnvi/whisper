@@ -1324,6 +1324,7 @@ class WsSvrManager {
     _audioManager.onGroupPacket = (packet) {
       unawaited(AudioGroupCoordinator.shared.handlePacket(packet));
     };
+    _audioManager.claimBroker = _AudioMediaClaimBroker(this);
     if (_manageSharedCoordinators) {
       WindowStreamViewer.shared
         ..sender = sendWindowStreamControlTo
@@ -1696,6 +1697,56 @@ class WsSvrManager {
       return null;
     }
     return (sessionId: sessions.single, token: tokens.single);
+  }
+
+  /// A media connection to the audio isolate's own port: the checks the main
+  /// port makes for /audio before the proof.
+  SessionUpgradeClaim? _lookupIsolateAudioClaim({
+    required String sessionId,
+    required String token,
+    required Object remoteAddress,
+  }) {
+    if (!_acceptingUpgrades || _systemSleeping) {
+      return null;
+    }
+    if (_admission.tryUpgrade(remoteAddress, DateTime.now()) != null) {
+      return null;
+    }
+    final claim = _sessionUpgradeTokens.lookup(
+      route: '/audio',
+      sessionId: sessionId,
+      token: token,
+      now: DateTime.now(),
+    );
+    if (claim == null) {
+      return null;
+    }
+    if (claim.namespace != 'audio-group' ||
+        !_isExpectedMediaPeerClaim(claim) ||
+        !_isExpectedAudioUpgradeClaim(claim)) {
+      claim.destroy();
+      return null;
+    }
+    return claim;
+  }
+
+  /// After the proof: uses the token up, as the main port does.
+  SessionUpgradeClaim? _consumeIsolateAudioClaim({
+    required String sessionId,
+    required String token,
+    required SessionUpgradeClaim expected,
+  }) {
+    if (!_isExpectedMediaPeerClaim(expected) ||
+        !_isExpectedAudioUpgradeClaim(expected)) {
+      return null;
+    }
+    return _sessionUpgradeTokens.consume(
+      route: '/audio',
+      sessionId: sessionId,
+      token: token,
+      now: DateTime.now(),
+      expected: expected,
+    );
   }
 
   bool _isExpectedMediaPeerClaim(SessionUpgradeClaim claim) {
@@ -6813,4 +6864,32 @@ class WsSvrManager {
 
   Future<void> cancelTransfer(String transferId) =>
       _transferEngine.cancelTransfer(transferId);
+}
+
+final class _AudioMediaClaimBroker implements AudioMediaClaimBroker {
+  _AudioMediaClaimBroker(this._manager);
+
+  final WsSvrManager _manager;
+
+  @override
+  SessionUpgradeClaim? lookup({
+    required String sessionId,
+    required String token,
+    required Object remoteAddress,
+  }) => _manager._lookupIsolateAudioClaim(
+    sessionId: sessionId,
+    token: token,
+    remoteAddress: remoteAddress,
+  );
+
+  @override
+  SessionUpgradeClaim? consume({
+    required String sessionId,
+    required String token,
+    required SessionUpgradeClaim expected,
+  }) => _manager._consumeIsolateAudioClaim(
+    sessionId: sessionId,
+    token: token,
+    expected: expected,
+  );
 }

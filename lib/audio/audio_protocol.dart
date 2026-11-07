@@ -211,6 +211,7 @@ class AudioGroupControlMessage {
     this.latePacketCount = 0,
     this.syncErrorMicros = 0,
     this.errorMessage = '',
+    this.mediaPort = 0,
   });
 
   final AudioGroupControlAction action;
@@ -238,6 +239,10 @@ class AudioGroupControlMessage {
   final int syncErrorMicros;
   final String errorMessage;
 
+  /// In a [AudioGroupControlAction.groupAccept]: the port this sink's audio
+  /// isolate listens on, or 0 for its main port only. Older sources ignore it.
+  final int mediaPort;
+
   AudioGroupControlMessage withTransportToken(String token) {
     return AudioGroupControlMessage(
       action: action,
@@ -264,6 +269,7 @@ class AudioGroupControlMessage {
       latePacketCount: latePacketCount,
       syncErrorMicros: syncErrorMicros,
       errorMessage: errorMessage,
+      mediaPort: mediaPort,
     );
   }
 
@@ -294,6 +300,8 @@ class AudioGroupControlMessage {
         'latePacketCount': latePacketCount,
         'syncErrorMicros': syncErrorMicros,
         'errorMessage': errorMessage,
+        if (action == AudioGroupControlAction.groupAccept && mediaPort > 0)
+          'mediaPort': mediaPort,
       };
 
   factory AudioGroupControlMessage.fromJson(Map<String, dynamic> json) {
@@ -343,8 +351,15 @@ class AudioGroupControlMessage {
       latePacketCount: json['latePacketCount'] as int? ?? 0,
       syncErrorMicros: json['syncErrorMicros'] as int? ?? 0,
       errorMessage: json['errorMessage'] as String? ?? '',
+      mediaPort: json['action'] == AudioGroupControlAction.groupAccept.name
+          ? _mediaPortFromJson(json['mediaPort'])
+          : 0,
     );
   }
+}
+
+int _mediaPortFromJson(Object? value) {
+  return value is int && value > 0 && value <= 65535 ? value : 0;
 }
 
 String _transportTokenFromJson(

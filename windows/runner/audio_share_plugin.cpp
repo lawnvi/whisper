@@ -20,6 +20,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <deque>
 #include <limits>
@@ -47,6 +48,49 @@ constexpr auto kPlaybackReopenWait = std::chrono::seconds(1);
 // waking up or the audio service restarting takes a few seconds.
 constexpr auto kCaptureReopenFirstWait = std::chrono::milliseconds(250);
 constexpr auto kCaptureReopenLongestWait = std::chrono::milliseconds(4000);
+
+// Entry points the audio isolate calls directly from its own thread, so the
+// sound does not wait for the platform thread (lib/audio/
+// audio_media_isolate.dart). Their addresses go to Dart through
+// "ffiEntryPoints".
+using CaptureCallback = void (*)(int64_t sequence,
+                                 int64_t capture_time_micros,
+                                 int32_t sample_rate,
+                                 int32_t channels,
+                                 int16_t* pcm,
+                                 int32_t sample_count);
+std::mutex g_capture_callback_mutex;
+CaptureCallback g_capture_callback = nullptr;
+
+class AudioSharePlugin;
+std::mutex g_plugin_mutex;
+AudioSharePlugin* g_plugin = nullptr;
+
+// Null stops the calls; once this returns none is running.
+void WhisperAudioSetCaptureCallback(CaptureCallback callback) {
+  std::lock_guard<std::mutex> lock(g_capture_callback_mutex);
+  g_capture_callback = callback;
+}
+
+// Frees a buffer handed to the capture callback.
+void WhisperAudioFreeBuffer(void* buffer) {
+  std::free(buffer);
+}
+
+int32_t WhisperAudioWritePcm(int64_t handle,
+                             const int16_t* pcm,
+                             int32_t sample_count);
+
+// COM for whichever thread writes: the audio isolate's may change between
+// calls, and it is in no apartment of its own.
+void EnsureComOnThisThread() {
+  thread_local bool initialized = false;
+  if (!initialized) {
+    initialized = true;
+    // Fails harmlessly (RPC_E_CHANGED_MODE) on the platform thread.
+    CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+  }
+}
 
 std::string HResultMessage(HRESULT hr) {
   _com_error error(hr);
@@ -227,11 +271,36 @@ class AudioSharePlugin : public flutter::Plugin {
             &flutter::StandardMethodCodec::GetInstance())) {
     channel_->SetMethodCallHandler(
         [this](const auto& call, auto result) { HandleMethodCall(call, std::move(result)); });
+    std::lock_guard<std::mutex> lock(g_plugin_mutex);
+    g_plugin = this;
   }
 
   ~AudioSharePlugin() override {
+    {
+      std::lock_guard<std::mutex> lock(g_plugin_mutex);
+      if (g_plugin == this) {
+        g_plugin = nullptr;
+      }
+    }
+    WhisperAudioSetCaptureCallback(nullptr);
     StopCapture();
     StopPlayback();
+  }
+
+  // From the audio isolate's thread: 0 when written, 1 when [handle] is not
+  // the playback running now.
+  int32_t WriteFromIsolate(int64_t handle,
+                           const int16_t* pcm,
+                           int32_t sample_count) {
+    std::lock_guard<std::mutex> lock(playback_mutex_);
+    if (handle != playback_handle_ || playback_session_id_.empty()) {
+      return 1;
+    }
+    const auto* bytes = reinterpret_cast<const uint8_t*>(pcm);
+    std::vector<uint8_t> data(bytes, bytes + sample_count * sizeof(int16_t));
+    std::string error;
+    WritePlaybackLocked(data, &error);
+    return 0;
   }
 
  private:
@@ -280,7 +349,13 @@ class AudioSharePlugin : public flutter::Plugin {
         result->Error("audio-playback", error);
         return;
       }
-      result->Success();
+      int64_t handle = 0;
+      {
+        std::lock_guard<std::mutex> lock(playback_mutex_);
+        handle = playback_handle_;
+      }
+      // The handle direct writes name this playback by.
+      result->Success(flutter::EncodableValue(handle));
       return;
     }
 
@@ -311,6 +386,22 @@ class AudioSharePlugin : public flutter::Plugin {
           args == nullptr ? nullptr : GetMapValue<std::string>(*args, "sessionId");
       StopPlayback(session_id == nullptr ? "" : *session_id);
       result->Success();
+      return;
+    }
+
+    if (method == "ffiEntryPoints") {
+      auto address = [](auto function) {
+        return flutter::EncodableValue(
+            static_cast<int64_t>(reinterpret_cast<intptr_t>(function)));
+      };
+      result->Success(flutter::EncodableValue(flutter::EncodableMap{
+          {flutter::EncodableValue("version"), flutter::EncodableValue(1)},
+          {flutter::EncodableValue("setCaptureCallback"),
+           address(&WhisperAudioSetCaptureCallback)},
+          {flutter::EncodableValue("freeBuffer"),
+           address(&WhisperAudioFreeBuffer)},
+          {flutter::EncodableValue("writePcm"), address(&WhisperAudioWritePcm)},
+      }));
       return;
     }
 
@@ -359,6 +450,7 @@ class AudioSharePlugin : public flutter::Plugin {
       return false;
     }
     playback_session_id_ = session_id;
+    ++playback_handle_;
     return true;
   }
 
@@ -370,11 +462,16 @@ class AudioSharePlugin : public flutter::Plugin {
                      const std::vector<uint8_t>& pcm,
                      std::string* error) {
     std::lock_guard<std::mutex> lock(playback_mutex_);
-    if (playback_session_id_.empty() || session_id != playback_session_id_ ||
-        pcm.empty()) {
+    if (playback_session_id_.empty() || session_id != playback_session_id_) {
       return true;
     }
+    return WritePlaybackLocked(pcm, error);
+  }
 
+  bool WritePlaybackLocked(const std::vector<uint8_t>& pcm, std::string* error) {
+    if (pcm.empty()) {
+      return true;
+    }
     const auto now = std::chrono::steady_clock::now();
     if (wave_out_ != nullptr) {
       CleanupCompletedPlaybackBuffersLocked(now);
@@ -426,6 +523,8 @@ class AudioSharePlugin : public flutter::Plugin {
     }
     ClosePlaybackLocked();
     playback_session_id_.clear();
+    // Writes still naming the old handle are dropped.
+    ++playback_handle_;
   }
 
   // On the default output, as WAVE_MAPPER picks it, in [playback_format_].
@@ -469,17 +568,18 @@ class AudioSharePlugin : public flutter::Plugin {
     return DefaultOutputId() != playback_device_id_;
   }
 
-  // Empty when there is no output, or it can't be asked.
+  // Empty when there is no output, or it can't be asked. Asked on the
+  // calling thread, the platform's or the audio isolate's.
   std::wstring DefaultOutputId() {
-    if (playback_enumerator_ == nullptr &&
-        FAILED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr,
-                                CLSCTX_ALL,
-                                IID_PPV_ARGS(&playback_enumerator_)))) {
+    EnsureComOnThisThread();
+    ComPtr<IMMDeviceEnumerator> enumerator;
+    if (FAILED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr,
+                                CLSCTX_ALL, IID_PPV_ARGS(&enumerator)))) {
       return std::wstring();
     }
     ComPtr<IMMDevice> device;
-    if (FAILED(playback_enumerator_->GetDefaultAudioEndpoint(eRender, eConsole,
-                                                             &device))) {
+    if (FAILED(enumerator->GetDefaultAudioEndpoint(eRender, eConsole,
+                                                   &device))) {
       return std::wstring();
     }
     return DeviceId(device.Get());
@@ -664,16 +764,35 @@ class AudioSharePlugin : public flutter::Plugin {
                         int sample_rate,
                         int channels,
                         std::vector<uint8_t> pcm) {
+    const int64_t capture_time_micros =
+        std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::steady_clock::now().time_since_epoch())
+            .count();
+    {
+      std::lock_guard<std::mutex> lock(g_capture_callback_mutex);
+      if (g_capture_callback != nullptr) {
+        const auto sample_count =
+            static_cast<int32_t>(pcm.size() / sizeof(int16_t));
+        if (sample_count > 0) {
+          auto* copy = static_cast<int16_t*>(
+              std::malloc(sample_count * sizeof(int16_t)));
+          if (copy != nullptr) {
+            std::memcpy(copy, pcm.data(), sample_count * sizeof(int16_t));
+            g_capture_callback(static_cast<int64_t>(sequence),
+                               capture_time_micros, sample_rate, channels,
+                               copy, sample_count);
+          }
+        }
+        return;
+      }
+    }
     flutter::EncodableMap arguments;
     arguments[flutter::EncodableValue("sessionId")] =
         flutter::EncodableValue(session_id);
     arguments[flutter::EncodableValue("sequence")] =
         flutter::EncodableValue(static_cast<int64_t>(sequence));
     arguments[flutter::EncodableValue("captureTimeMicros")] =
-        flutter::EncodableValue(static_cast<int64_t>(
-            std::chrono::duration_cast<std::chrono::microseconds>(
-                std::chrono::steady_clock::now().time_since_epoch())
-                .count()));
+        flutter::EncodableValue(capture_time_micros);
     arguments[flutter::EncodableValue("sampleRate")] =
         flutter::EncodableValue(sample_rate);
     arguments[flutter::EncodableValue("channels")] =
@@ -708,8 +827,8 @@ class AudioSharePlugin : public flutter::Plugin {
   WAVEFORMATEX playback_format_ = {};
   // The default output when the stream was opened, to notice another one.
   std::wstring playback_device_id_;
-  // On the platform thread, whose COM apartment main() sets up.
-  ComPtr<IMMDeviceEnumerator> playback_enumerator_;
+  // Bumped on every start and stop; see WriteFromIsolate.
+  int64_t playback_handle_ = 0;
   // When a buffer last finished, or the first of a queue was written.
   std::chrono::steady_clock::time_point playback_progress_at_;
   std::chrono::steady_clock::time_point next_playback_device_check_;
@@ -717,6 +836,19 @@ class AudioSharePlugin : public flutter::Plugin {
   std::atomic<bool> capture_running_{false};
   std::thread capture_thread_;
 };
+
+int32_t WhisperAudioWritePcm(int64_t handle,
+                             const int16_t* pcm,
+                             int32_t sample_count) {
+  if (pcm == nullptr || sample_count <= 0) {
+    return 1;
+  }
+  std::lock_guard<std::mutex> lock(g_plugin_mutex);
+  if (g_plugin == nullptr) {
+    return 1;
+  }
+  return g_plugin->WriteFromIsolate(handle, pcm, sample_count);
+}
 
 }  // namespace
 

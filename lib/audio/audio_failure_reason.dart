@@ -17,6 +17,17 @@ enum AudioFailureReason {
 
 enum AudioFailureContext { capture, playback, protocol, transport }
 
+/// A failure already sorted into a reason, as it comes back from the audio
+/// isolate (errors themselves don't cross isolates).
+class AudioFailureError implements Exception {
+  const AudioFailureError(this.reason);
+
+  final AudioFailureReason reason;
+
+  @override
+  String toString() => 'AudioFailureError(${reason.name})';
+}
+
 AudioFailureReason audioFailureReasonFromWire(String value) {
   return switch (value) {
     'permission' => AudioFailureReason.permission,
@@ -36,6 +47,9 @@ AudioFailureReason audioFailureReasonFor(
   Object error, {
   required AudioFailureContext context,
 }) {
+  if (error is AudioFailureError) {
+    return error.reason;
+  }
   if (error is PlatformException) {
     final code = error.code.toLowerCase();
     if (code.contains('permission') || code.contains('denied')) {

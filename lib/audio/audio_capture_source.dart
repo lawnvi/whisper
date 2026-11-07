@@ -15,7 +15,7 @@ typedef AudioCaptureErrorSink = void Function(PlatformAudioError error);
 class AudioCaptureSource {
   AudioCaptureSource({
     required AudioCodec codec,
-    required AudioPlatform platform,
+    required AudioCaptureFrames platform,
     required AudioPacketSink onPacket,
     AudioCaptureErrorSink? onError,
     AudioShareDiagnostics? diagnostics,
@@ -26,7 +26,7 @@ class AudioCaptureSource {
        _diagnostics = diagnostics ?? AudioShareDiagnostics.shared;
 
   final AudioCodec _codec;
-  final AudioPlatform _platform;
+  final AudioCaptureFrames _platform;
   final AudioPacketSink _onPacket;
   final AudioCaptureErrorSink? _onError;
   final AudioShareDiagnostics _diagnostics;

@@ -4,7 +4,36 @@ import 'dart:typed_data';
 import 'package:flutter/services.dart';
 import 'package:whisper/audio/audio_protocol.dart';
 
-class AudioPlatform {
+/// Where an [AudioCaptureSource] gets its frames and starts capture.
+abstract interface class AudioCaptureFrames {
+  Stream<PlatformPcmFrame> get captureFrames;
+
+  Stream<PlatformAudioError> get captureErrors;
+
+  Future<void> startCapture({
+    required String sessionId,
+    required AudioStreamFormat format,
+  });
+
+  Future<void> stopCapture({required String sessionId});
+}
+
+/// Addresses of the native functions the audio isolate calls directly.
+class AudioNativeEntryPoints {
+  const AudioNativeEntryPoints({
+    required this.setCaptureCallback,
+    required this.freeBuffer,
+    required this.writePcm,
+  });
+
+  static const int version = 1;
+
+  final int setCaptureCallback;
+  final int freeBuffer;
+  final int writePcm;
+}
+
+class AudioPlatform implements AudioCaptureFrames {
   AudioPlatform({MethodChannel? channel})
     : _channel = channel ?? const MethodChannel(channelName) {
     _channel.setMethodCallHandler(handleNativeMethodCall);
@@ -20,17 +49,55 @@ class AudioPlatform {
       StreamController<PlatformAudioError>.broadcast();
   void Function(String action)? onMediaControl;
 
+  @override
   Stream<PlatformPcmFrame> get captureFrames => _captureFrames.stream;
+  @override
   Stream<PlatformAudioError> get captureErrors => _captureErrors.stream;
 
-  Future<void> startPlayback({
+  /// The native side's entry points for the audio isolate, or null when it
+  /// has none (Android, older builds).
+  Future<AudioNativeEntryPoints?> nativeEntryPoints() async {
+    final Map<Object?, Object?>? entry;
+    try {
+      entry = await _channel.invokeMapMethod<Object?, Object?>(
+        'ffiEntryPoints',
+      );
+    } on MissingPluginException {
+      return null;
+    } on PlatformException {
+      return null;
+    }
+    if (entry == null || entry['version'] != AudioNativeEntryPoints.version) {
+      return null;
+    }
+    final setCaptureCallback = entry['setCaptureCallback'];
+    final freeBuffer = entry['freeBuffer'];
+    final writePcm = entry['writePcm'];
+    if (setCaptureCallback is! int ||
+        freeBuffer is! int ||
+        writePcm is! int ||
+        setCaptureCallback == 0 ||
+        freeBuffer == 0 ||
+        writePcm == 0) {
+      return null;
+    }
+    return AudioNativeEntryPoints(
+      setCaptureCallback: setCaptureCallback,
+      freeBuffer: freeBuffer,
+      writePcm: writePcm,
+    );
+  }
+
+  /// Returns the handle direct writes name this playback by, or 0.
+  Future<int> startPlayback({
     required String sessionId,
     required AudioStreamFormat format,
-  }) {
-    return _channel.invokeMethod<void>('startPlayback', <String, dynamic>{
-      'sessionId': sessionId,
-      'format': format.toJson(),
-    });
+  }) async {
+    final handle = await _channel.invokeMethod<Object?>(
+      'startPlayback',
+      <String, dynamic>{'sessionId': sessionId, 'format': format.toJson()},
+    );
+    return handle is int ? handle : 0;
   }
 
   Future<void> writePcm({
@@ -54,6 +121,7 @@ class AudioPlatform {
     });
   }
 
+  @override
   Future<void> startCapture({
     required String sessionId,
     required AudioStreamFormat format,
@@ -64,6 +132,7 @@ class AudioPlatform {
     });
   }
 
+  @override
   Future<void> stopCapture({required String sessionId}) {
     return _channel.invokeMethod<void>('stopCapture', <String, dynamic>{
       'sessionId': sessionId,

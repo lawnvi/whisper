@@ -3717,8 +3717,98 @@ private let remoteInputShortcutSuppressionCallback: CGEventTapCallBack = {
   return Unmanaged.passUnretained(event)
 }
 
+/// Entry points the audio isolate calls directly from its own thread, so the
+/// sound does not wait for the main thread: AppKit stops it for half a second
+/// whenever a window is minimized or restored. Their addresses go to Dart
+/// through `ffiEntryPoints`.
+enum AudioFfi {
+  typealias CaptureCallback = @convention(c) (
+    Int64, Int64, Int32, Int32, UnsafeMutablePointer<Int16>?, Int32
+  ) -> Void
+
+  private static let captureLock = NSLock()
+  private static var captureCallback: CaptureCallback?
+  static var plugin: AudioSharePlugin?
+
+  /// Null stops the calls; once this returns none is running.
+  static let setCaptureCallback: @convention(c) (UnsafeRawPointer?) -> Void = {
+    pointer in
+    AudioFfi.captureLock.lock()
+    AudioFfi.captureCallback = pointer.map {
+      unsafeBitCast($0, to: CaptureCallback.self)
+    }
+    AudioFfi.captureLock.unlock()
+  }
+
+  /// Frees a buffer handed to the capture callback.
+  static let freeBuffer: @convention(c) (UnsafeMutableRawPointer?) -> Void = {
+    pointer in
+    free(pointer)
+  }
+
+  /// 0 when written, 1 when [handle] is not the playback running now.
+  static let writePcm: @convention(c) (Int64, UnsafePointer<Int16>?, Int32)
+    -> Int32 = { handle, pcm, sampleCount in
+      guard let pcm, sampleCount > 0, let plugin = AudioFfi.plugin else {
+        return 1
+      }
+      let bytes = UnsafeRawBufferPointer(
+        start: pcm, count: Int(sampleCount) * MemoryLayout<Int16>.size)
+      return plugin.writePcm(handle: handle, bytes: bytes) ? 0 : 1
+    }
+
+  /// True when the audio isolate took the buffer.
+  static func deliverCapture(
+    sequence: Int64,
+    captureTimeMicros: Int64,
+    sampleRate: Int,
+    channels: Int,
+    data: Data
+  ) -> Bool {
+    captureLock.lock()
+    defer { captureLock.unlock() }
+    guard let callback = captureCallback else {
+      return false
+    }
+    let sampleCount = data.count / MemoryLayout<Int16>.size
+    guard sampleCount > 0,
+          let copy = malloc(sampleCount * MemoryLayout<Int16>.size) else {
+      return true
+    }
+    data.withUnsafeBytes { raw in
+      if let base = raw.baseAddress {
+        memcpy(copy, base, sampleCount * MemoryLayout<Int16>.size)
+      }
+    }
+    callback(
+      sequence,
+      captureTimeMicros,
+      Int32(sampleRate),
+      Int32(channels),
+      copy.assumingMemoryBound(to: Int16.self),
+      Int32(sampleCount))
+    return true
+  }
+
+  static func entryPoints() -> [String: Any] {
+    func address<T>(_ function: T) -> Int {
+      Int(bitPattern: unsafeBitCast(function, to: UnsafeRawPointer.self))
+    }
+    return [
+      "version": 1,
+      "setCaptureCallback": address(setCaptureCallback),
+      "freeBuffer": address(freeBuffer),
+      "writePcm": address(writePcm),
+    ]
+  }
+}
+
 final class AudioSharePlugin: NSObject, FlutterPlugin {
   private let channel: FlutterMethodChannel
+  // Playback state is used from the main thread and from the audio isolate's
+  // thread (AudioFfi.writePcm).
+  private let playbackLock = NSLock()
+  private var playbackHandle: Int64 = 0
   private var engine: AVAudioEngine?
   private var player: AVAudioPlayerNode?
   private var playbackFormat: AVAudioFormat?
@@ -3732,6 +3822,7 @@ final class AudioSharePlugin: NSObject, FlutterPlugin {
       binaryMessenger: registrar.messenger)
     let instance = AudioSharePlugin(channel: channel)
     registrar.addMethodCallDelegate(instance, channel: channel)
+    AudioFfi.plugin = instance
   }
 
   init(channel: FlutterMethodChannel) {
@@ -3752,8 +3843,7 @@ final class AudioSharePlugin: NSObject, FlutterPlugin {
         return
       }
       do {
-        try startPlayback(sessionId: sessionId, format: format)
-        result(nil)
+        result(NSNumber(value: try startPlayback(sessionId: sessionId, format: format)))
       } catch {
         result(FlutterError(
           code: "audio-playback",
@@ -3779,6 +3869,9 @@ final class AudioSharePlugin: NSObject, FlutterPlugin {
       stopPlayback(sessionId: args?["sessionId"] as? String ?? "")
       result(nil)
 
+    case "ffiEntryPoints":
+      result(AudioFfi.entryPoints())
+
     case "startCapture":
       guard let args = call.arguments as? [String: Any],
             let sessionId = args["sessionId"] as? String,
@@ -3800,8 +3893,11 @@ final class AudioSharePlugin: NSObject, FlutterPlugin {
     }
   }
 
-  private func startPlayback(sessionId: String, format: [String: Any]) throws {
-    stopPlayback()
+  /// Returns the handle direct writes name this playback by.
+  private func startPlayback(sessionId: String, format: [String: Any]) throws -> Int64 {
+    playbackLock.lock()
+    defer { playbackLock.unlock() }
+    stopPlaybackLocked()
     playbackSessionId = sessionId
 
     let sampleRate = Double(format["sampleRate"] as? Int ?? 48000)
@@ -3828,17 +3924,35 @@ final class AudioSharePlugin: NSObject, FlutterPlugin {
     self.player = player
     playbackFormat = audioFormat
     playbackChannels = Int(audioFormat.channelCount)
+    playbackHandle += 1
+    return playbackHandle
   }
 
   private func writePcm(sessionId: String, pcm: Data) {
-    guard sessionId == playbackSessionId,
-          let player = player,
-          let format = playbackFormat,
-          pcm.count > 0 else {
+    playbackLock.lock()
+    defer { playbackLock.unlock() }
+    guard sessionId == playbackSessionId else {
       return
     }
+    pcm.withUnsafeBytes { schedulePcmLocked($0) }
+  }
 
-    guard playbackChannels > 0 else {
+  /// From the audio isolate's thread.
+  fileprivate func writePcm(handle: Int64, bytes: UnsafeRawBufferPointer) -> Bool {
+    playbackLock.lock()
+    defer { playbackLock.unlock() }
+    guard handle == playbackHandle, player != nil else {
+      return false
+    }
+    schedulePcmLocked(bytes)
+    return true
+  }
+
+  private func schedulePcmLocked(_ pcm: UnsafeRawBufferPointer) {
+    guard let player = player,
+          let format = playbackFormat,
+          pcm.count > 0,
+          playbackChannels > 0 else {
       return
     }
     let sourceBytesPerFrame = playbackChannels * MemoryLayout<Int16>.size
@@ -3853,16 +3967,14 @@ final class AudioSharePlugin: NSObject, FlutterPlugin {
     guard let channelData = buffer.floatChannelData else {
       return
     }
-    pcm.withUnsafeBytes { rawBuffer in
-      let bytes = rawBuffer.bindMemory(to: UInt8.self)
-      for frame in 0..<Int(frameCount) {
-        for channel in 0..<playbackChannels {
-          let byteIndex = (frame * playbackChannels + channel) * 2
-          let lo = UInt16(bytes[byteIndex])
-          let hi = UInt16(bytes[byteIndex + 1]) << 8
-          let sample = Int16(littleEndian: Int16(bitPattern: hi | lo))
-          channelData[channel][frame] = Float(sample) / 32768.0
-        }
+    let bytes = pcm.bindMemory(to: UInt8.self)
+    for frame in 0..<Int(frameCount) {
+      for channel in 0..<playbackChannels {
+        let byteIndex = (frame * playbackChannels + channel) * 2
+        let lo = UInt16(bytes[byteIndex])
+        let hi = UInt16(bytes[byteIndex + 1]) << 8
+        let sample = Int16(littleEndian: Int16(bitPattern: hi | lo))
+        channelData[channel][frame] = Float(sample) / 32768.0
       }
     }
     player.scheduleBuffer(buffer, completionHandler: nil)
@@ -3872,9 +3984,15 @@ final class AudioSharePlugin: NSObject, FlutterPlugin {
   }
 
   private func stopPlayback(sessionId: String = "") {
+    playbackLock.lock()
+    defer { playbackLock.unlock() }
     if !sessionId.isEmpty && sessionId != playbackSessionId {
       return
     }
+    stopPlaybackLocked()
+  }
+
+  private func stopPlaybackLocked() {
     player?.stop()
     engine?.stop()
     player = nil
@@ -3882,6 +4000,8 @@ final class AudioSharePlugin: NSObject, FlutterPlugin {
     playbackFormat = nil
     playbackChannels = 0
     playbackSessionId = ""
+    // Writes still naming the old handle are dropped.
+    playbackHandle += 1
   }
 
   private func startCapture(
@@ -4246,6 +4366,15 @@ private final class MacSystemAudioCapture: NSObject, SCStreamDelegate, SCStreamO
     let currentSequence = sequence
     sequence += 1
     let captureTimeMicros = Int64(Date().timeIntervalSince1970 * 1_000_000)
+    if AudioFfi.deliverCapture(
+      sequence: Int64(currentSequence),
+      captureTimeMicros: captureTimeMicros,
+      sampleRate: captured.sampleRate,
+      channels: captured.channels,
+      data: captured.data
+    ) {
+      return
+    }
     DispatchQueue.main.async { [channel, sessionId, captured] in
       channel.invokeMethod("onCapturePcm", arguments: [
         "sessionId": sessionId,

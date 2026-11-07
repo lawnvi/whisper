@@ -30,6 +30,37 @@ final class AudioMediaChannelClosedEvent {
   final Object? error;
 }
 
+/// Checks and uses up the token of a media connection that came to the audio
+/// isolate's own port, with the main port's rules.
+abstract interface class AudioMediaClaimBroker {
+  /// The claim, still unused, or null when the connection is not accepted.
+  SessionUpgradeClaim? lookup({
+    required String sessionId,
+    required String token,
+    required Object remoteAddress,
+  });
+
+  /// Uses the token up; null when it is no longer valid.
+  SessionUpgradeClaim? consume({
+    required String sessionId,
+    required String token,
+    required SessionUpgradeClaim expected,
+  });
+}
+
+/// Media channels the audio isolate holds, closed along with this manager's.
+abstract interface class AudioRemoteMediaChannels {
+  /// Those matching every filter given; with [keepMediaMacKey], those whose
+  /// key is a different one.
+  Future<void> closeChannels({
+    String? sessionId,
+    String? peerId,
+    String? namespace,
+    Uint8List? keepMediaMacKey,
+    bool expected = false,
+  });
+}
+
 enum AudioShareSessionState { offering, connected, stopped, failed }
 
 class AudioShareSession {
@@ -75,6 +106,12 @@ class AudioShareManager {
 
   AudioPacketCallback? onPacket;
   AudioGroupPacketCallback? onGroupPacket;
+
+  /// Set by the socket manager while its server runs.
+  AudioMediaClaimBroker? claimBroker;
+
+  /// Set while the audio isolate listens on its own port.
+  AudioRemoteMediaChannels? remoteChannels;
   final Uuid _uuid;
   final AudioShareDiagnostics _diagnostics;
   final Map<String, AudioShareSession> _sessions =
@@ -232,28 +269,45 @@ class AudioShareManager {
     String sessionId, {
     String? peerId,
     String? namespace,
-  }) {
-    return _closeMatchingChannels(
-      (claim) =>
-          claim.sessionId == sessionId &&
-          (peerId == null || claim.peerId == peerId) &&
-          (namespace == null || claim.namespace == namespace),
-      expected: true,
-    );
+  }) async {
+    await Future.wait(<Future<void>>[
+      _closeMatchingChannels(
+        (claim) =>
+            claim.sessionId == sessionId &&
+            (peerId == null || claim.peerId == peerId) &&
+            (namespace == null || claim.namespace == namespace),
+        expected: true,
+      ),
+      ?remoteChannels?.closeChannels(
+        sessionId: sessionId,
+        peerId: peerId,
+        namespace: namespace,
+        expected: true,
+      ),
+    ]);
   }
 
-  Future<void> closePeerChannels(String peerId) {
-    return _closeMatchingChannels((claim) => claim.peerId == peerId);
+  Future<void> closePeerChannels(String peerId) async {
+    await Future.wait(<Future<void>>[
+      _closeMatchingChannels((claim) => claim.peerId == peerId),
+      ?remoteChannels?.closeChannels(peerId: peerId),
+    ]);
   }
 
   Future<void> closeSupersededPeerChannels(
     String peerId, {
     required Uint8List mediaMacKey,
-  }) {
-    return _closeMatchingChannels(
-      (claim) =>
-          claim.peerId == peerId && !claim.matchesMediaMacKey(mediaMacKey),
-    );
+  }) async {
+    await Future.wait(<Future<void>>[
+      _closeMatchingChannels(
+        (claim) =>
+            claim.peerId == peerId && !claim.matchesMediaMacKey(mediaMacKey),
+      ),
+      ?remoteChannels?.closeChannels(
+        peerId: peerId,
+        keepMediaMacKey: mediaMacKey,
+      ),
+    ]);
   }
 
   Future<void> _closeMatchingChannels(
@@ -496,6 +550,10 @@ class AudioShareManager {
   }
 
   Future<void> closeChannels() {
+    final remote = remoteChannels?.closeChannels(expected: true);
+    if (remote != null) {
+      unawaited(remote.catchError((Object _) {}));
+    }
     final existing = _closeChannelsFuture;
     if (existing != null) {
       return existing;

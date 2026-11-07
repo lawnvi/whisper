@@ -175,6 +175,10 @@ final class PrivacyLog {
     throw ArgumentError('Unsupported privacy log field type');
   }
 
+  /// A line another isolate's [PrivacyLog] already formatted (the audio
+  /// isolate's diagnostics), written where this isolate's lines go.
+  static void forward(String line) => _developerSink(line);
+
   static void _developerSink(String line) {
     developer.log(line, name: 'whisper.privacy');
     AppLog.shared.write(line);
