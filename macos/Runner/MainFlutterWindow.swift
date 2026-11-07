@@ -51,6 +51,13 @@ private func migrateSandboxedPreferencesIfNeeded() {
 }
 
 private enum RemoteInputTraceEvent: String {
+  // System audio capture, which shares this one opt-in sink.
+  case audioCaptureAsleep = "audio_capture_asleep"
+  case audioCaptureWoke = "audio_capture_woke"
+  case audioCaptureStalled = "audio_capture_stalled"
+  case audioCaptureRestarting = "audio_capture_restarting"
+  case audioCaptureRestarted = "audio_capture_restarted"
+  case audioCaptureRestartFailed = "audio_capture_restart_failed"
   case captureCompanion = "capture_companion"
   case capturePauseIgnored = "capture_pause_ignored"
   case captureSignal = "capture_signal"
@@ -3927,6 +3934,13 @@ private final class MacSystemAudioCapture: NSObject, SCStreamDelegate, SCStreamO
     let channels: Int
   }
 
+  /// The stream sends silence too, so this long without a buffer while the
+  /// screens are awake means it stopped.
+  private static let stallLimit: TimeInterval = 3
+  /// Between attempts to open the stream again; a display waking up takes a
+  /// moment to be offered for capture.
+  private static let restartWaits: [UInt64] = [0, 1, 2, 4, 8]
+
   private let channel: FlutterMethodChannel
   private let sampleQueue = DispatchQueue(label: "com.vireen.whisper.audio.capture")
   private let stateQueue = DispatchQueue(label: "com.vireen.whisper.audio.capture.state")
@@ -3934,6 +3948,13 @@ private final class MacSystemAudioCapture: NSObject, SCStreamDelegate, SCStreamO
   private var stopRequested = false
   private var sessionId = ""
   private var sequence: Int64 = 0
+  private var sampleRate = 48000
+  private var channels = 2
+  private var lastSampleAt = Date()
+  private var restarting = false
+  private var retryNow = false
+  private var watchdog: DispatchSourceTimer?
+  private var observers: [NSObjectProtocol] = []
   private var audioBufferListStorage: UnsafeMutableRawPointer?
   private var audioBufferListStorageSize = 0
 
@@ -3954,9 +3975,13 @@ private final class MacSystemAudioCapture: NSObject, SCStreamDelegate, SCStreamO
     try throwIfStopRequested()
     self.sessionId = sessionId
     sequence = 0
+    sampleRate = format["sampleRate"] as? Int ?? 48000
+    channels = max(1, min(format["channels"] as? Int ?? 2, 2))
+    try await startStream()
+    watchForStops()
+  }
 
-    let sampleRate = format["sampleRate"] as? Int ?? 48000
-    let channels = max(1, min(format["channels"] as? Int ?? 2, 2))
+  private func startStream() async throws {
     let content = try await SCShareableContent.excludingDesktopWindows(
       false,
       onScreenWindowsOnly: true)
@@ -4000,13 +4025,159 @@ private final class MacSystemAudioCapture: NSObject, SCStreamDelegate, SCStreamO
     }
   }
 
+  /// Turning the display off stops the stream without a word, and it stays
+  /// stopped when the display comes back: sharing went silent for good. So
+  /// it is opened again after a wake, or when nothing has come for a while.
+  private func watchForStops() {
+    let center = NSWorkspace.shared.notificationCenter
+    var added: [NSObjectProtocol] = []
+    added.append(center.addObserver(
+      forName: NSWorkspace.screensDidSleepNotification, object: nil, queue: .main
+    ) { _ in
+      traceRemoteInput(.audioCaptureAsleep)
+    })
+    for name in [NSWorkspace.screensDidWakeNotification, NSWorkspace.didWakeNotification] {
+      added.append(center.addObserver(forName: name, object: nil, queue: .main) {
+        [weak self] _ in
+        traceRemoteInput(.audioCaptureWoke)
+        self?.stateQueue.async { self?.lastSampleAt = Date() }
+        self?.restart()
+      })
+    }
+    let watching = stateQueue.sync { () -> Bool in
+      guard !stopRequested else {
+        return false
+      }
+      lastSampleAt = Date()
+      observers = added
+      let timer = DispatchSource.makeTimerSource(queue: stateQueue)
+      timer.schedule(deadline: .now() + 1, repeating: 1)
+      timer.setEventHandler { [weak self] in
+        // Silent past the limit, or left with no stream by a restart the
+        // screens going off cut short and no wake reported.
+        guard let self = self,
+              !self.stopRequested, !self.restarting, !Self.displaysAsleep(),
+              Date().timeIntervalSince(self.lastSampleAt) > Self.stallLimit else {
+          return
+        }
+        traceRemoteInput(.audioCaptureStalled)
+        DispatchQueue.main.async { self.restart() }
+      }
+      timer.resume()
+      watchdog = timer
+      return true
+    }
+    if !watching {
+      added.forEach { center.removeObserver($0) }
+    }
+  }
+
+  private func restart() {
+    let old = stateQueue.sync { () -> SCStream?? in
+      guard !stopRequested, !restarting else {
+        // A wake while attempts wait between tries: try again at once.
+        retryNow = true
+        return .none
+      }
+      restarting = true
+      retryNow = false
+      let current = stream
+      stream = nil
+      return .some(current)
+    }
+    guard case .some(let previous) = old else {
+      return
+    }
+    traceRemoteInput(.audioCaptureRestarting)
+    // A stream that died may never finish stopping: not waited for.
+    Task {
+      try? await previous?.stopCapture()
+    }
+    Task {
+      var started = false
+      var asleep = false
+      for wait in Self.restartWaits {
+        await waitBeforeRetry(seconds: wait)
+        if isStopRequested {
+          break
+        }
+        // No display is offered while the screens are off. The wake starts
+        // this again; attempts now would only use up the tries and report a
+        // failure that ends the sharing.
+        if Self.displaysAsleep() {
+          asleep = true
+          break
+        }
+        do {
+          try await startStreamWithin(seconds: 5)
+          started = true
+          traceRemoteInput(.audioCaptureRestarted)
+          break
+        } catch {
+          traceRemoteInput(.audioCaptureRestartFailed, count: Int(wait))
+          continue
+        }
+      }
+      let stopped = stateQueue.sync { () -> Bool in
+        restarting = false
+        lastSampleAt = Date()
+        return stopRequested
+      }
+      if !started && !stopped && !asleep {
+        sendError(sessionId: sessionId, message: "System audio capture stopped")
+      }
+    }
+  }
+
+  /// Asked of the system each time: a missed notification can't leave it wrong.
+  private static func displaysAsleep() -> Bool {
+    CGDisplayIsAsleep(CGMainDisplayID()) != 0
+  }
+
+  /// The wait between tries, cut short by a wake.
+  private func waitBeforeRetry(seconds: UInt64) async {
+    var left = seconds * 4
+    while left > 0 {
+      if stateQueue.sync(execute: { retryNow }) {
+        break
+      }
+      try? await Task.sleep(nanoseconds: 250_000_000)
+      left -= 1
+    }
+    stateQueue.sync { retryNow = false }
+  }
+
+  /// Opening a stream while the displays come back can wait on the system for
+  /// good; such an attempt counts as failed.
+  private func startStreamWithin(seconds: UInt64) async throws {
+    try await withThrowingTaskGroup(of: Void.self) { group in
+      group.addTask { [self] in
+        try await startStream()
+      }
+      group.addTask {
+        try await Task.sleep(nanoseconds: seconds * 1_000_000_000)
+        throw NSError(
+          domain: "AudioSharePlugin",
+          code: 3,
+          userInfo: [NSLocalizedDescriptionKey: "Opening system audio capture timed out"])
+      }
+      try await group.next()
+      group.cancelAll()
+    }
+  }
+
   func stop() {
-    let stream = stateQueue.sync { () -> SCStream? in
+    let (stream, observers) = stateQueue.sync { () -> (SCStream?, [NSObjectProtocol]) in
       stopRequested = true
+      watchdog?.cancel()
+      watchdog = nil
       let current = self.stream
       self.stream = nil
-      return current
+      let watching = self.observers
+      self.observers = []
+      return (current, watching)
     }
+    observers.forEach { NSWorkspace.shared.notificationCenter.removeObserver($0) }
     Task {
       try? await stream?.stopCapture()
     }
@@ -4028,6 +4199,9 @@ private final class MacSystemAudioCapture: NSObject, SCStreamDelegate, SCStreamO
           let captured = pcm16Data(from: sampleBuffer) else {
       return
     }
+    stateQueue.async { [weak self] in
+      self?.lastSampleAt = Date()
+    }
     let currentSequence = sequence
     sequence += 1
     let captureTimeMicros = Int64(Date().timeIntervalSince1970 * 1_000_000)
@@ -4044,7 +4218,10 @@ private final class MacSystemAudioCapture: NSObject, SCStreamDelegate, SCStreamO
   }
 
   func stream(_ stream: SCStream, didStopWithError error: Error) {
-    sendError(sessionId: sessionId, message: error.localizedDescription)
+    // Tried again first; reported only if it can't be opened.
+    DispatchQueue.main.async { [weak self] in
+      self?.restart()
+    }
   }
 
   func sendError(sessionId: String, message: String) {
