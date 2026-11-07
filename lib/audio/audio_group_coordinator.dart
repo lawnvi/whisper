@@ -114,8 +114,16 @@ class AudioGroupCoordinator extends ChangeNotifier {
   static const _maxAutoRejoinAttempts = 3;
 
   /// How far ahead of now plus the target latency a packet may be scheduled.
-  /// Capture bursts after a stall stay well under it.
-  static const _maxPlaybackLeadMicros = Duration.microsecondsPerSecond;
+  /// A burst of packets after a stall (minimizing or restoring the window on
+  /// macOS stops the main thread for half a second) would push every later
+  /// packet that far ahead too, past what a sink buffers: the sink drops each
+  /// one before it is due and nothing plays. The rest of such a burst is
+  /// dropped instead.
+  static const _maxPlaybackLeadMicros = 60000;
+
+  /// Further ahead than this, the wall clock went back, as it can when a
+  /// computer wakes and sets its time: scheduling starts again from now.
+  static const _clockJumpLeadMicros = Duration.microsecondsPerSecond;
 
   /// 在途 sinkJoinRequest 所属 group;应答 offer 到达或流程终止时清空。
   String _pendingSinkJoinGroupId = '';
@@ -1328,13 +1336,13 @@ class AudioGroupCoordinator extends ChangeNotifier {
             Duration.microsecondsPerMillisecond;
         final targetBaseMicros = _clockMicros() +
             current.targetLatencyMs * Duration.microsecondsPerMillisecond;
-        // Far ahead only when the wall clock went back, as it can when a
-        // computer wakes and sets its time: every packet would land in the
-        // future and none would play until the gap had passed.
+        final leadMicros = nextTargetPlaybackTimeMicros - targetBaseMicros;
+        if (leadMicros > _maxPlaybackLeadMicros &&
+            leadMicros <= _clockJumpLeadMicros) {
+          return;
+        }
         final targetPlaybackTimeMicros =
-            nextTargetPlaybackTimeMicros <= targetBaseMicros ||
-                    nextTargetPlaybackTimeMicros - targetBaseMicros >
-                        _maxPlaybackLeadMicros
+            leadMicros <= 0 || leadMicros > _clockJumpLeadMicros
                 ? targetBaseMicros
                 : nextTargetPlaybackTimeMicros;
         nextTargetPlaybackTimeMicros =
