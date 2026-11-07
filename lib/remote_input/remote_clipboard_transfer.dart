@@ -4,9 +4,11 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 import 'package:whisper/helper/desktop_clipboard_image.dart';
+import 'package:whisper/helper/helper.dart' show getClipboardText;
 import 'package:whisper/helper/privacy_log.dart';
 import 'package:whisper/model/file_transfer.dart';
 import 'package:whisper/remote_files/fs_placement.dart';
@@ -158,6 +160,26 @@ final class RemoteClipboardOfferSnapshot {
   final List<RemoteClipboardOfferItem> items;
 }
 
+/// What is on the clipboard now, put back by the function it returns; null
+/// when there is nothing it can put back.
+typedef RemoteClipboardKeeper = Future<Future<void> Function()?> Function();
+
+/// The desktop clipboard's files or text.
+Future<Future<void> Function()?> keepDesktopClipboard() async {
+  const channel = MethodChannel(DesktopClipboardImageReader.channelName);
+  try {
+    final paths = await channel.invokeListMethod<String>('readFilePaths');
+    if (paths != null && paths.isNotEmpty) {
+      return () => const DesktopClipboardFileWriter().writeFilePaths(paths);
+    }
+  } on Object {
+    // No files to keep.
+  }
+  final text = await getClipboardText();
+  if (text == null || text.isEmpty) return null;
+  return () => Clipboard.setData(ClipboardData(text: text));
+}
+
 /// How far a paste's files have come.
 final class RemoteClipboardDownload {
   const RemoteClipboardDownload({
@@ -186,7 +208,9 @@ final class RemoteClipboardTransferEngine {
     RemoteClipboardFileSender? sendFile,
     Future<void> Function(String transferId)? cancelTransfer,
     TransferPlacements? placements,
+    RemoteClipboardKeeper? keepClipboard,
   }) : _sendFrame = sendFrame,
+       _keepClipboard = keepClipboard,
        _currentBinding = currentBinding,
        _sessionValidator = sessionValidator,
        _writer = writer,
@@ -215,6 +239,29 @@ final class RemoteClipboardTransferEngine {
   final Future<void> Function(String transferId)? _cancelTransfer;
   final TransferPlacements? _placements;
 
+  /// Puts back what was copied after a paste was asked for, once the files
+  /// that paste waited for have been pasted.
+  final RemoteClipboardKeeper? _keepClipboard;
+  final Map<String, Future<void> Function()> _restores =
+      <String, Future<void> Function()>{};
+  DateTime _ownWriteUntil = DateTime(0);
+
+  /// The clipboard changed because of this: not something the user copied.
+  bool get writingClipboard => DateTime.now().isBefore(_ownWriteUntil);
+
+  void _markOwnWrite() {
+    _ownWriteUntil = DateTime.now().add(const Duration(milliseconds: 1500));
+  }
+
+  /// The paste for [sessionId] went in: what was copied since comes back.
+  void restoreAfterPaste(String sessionId) {
+    final restore = _restores.remove(sessionId);
+    if (restore == null) return;
+    Timer(const Duration(milliseconds: 1500), () {
+      _markOwnWrite();
+      unawaited(restore().catchError((Object _) {}));
+    });
+  }
   bool get _sendsTransfers =>
       _sendFile != null && _cancelTransfer != null && _placements != null;
   final Map<String, _TransferRequest> _transferRequests =
@@ -317,14 +364,18 @@ final class RemoteClipboardTransferEngine {
     return sent;
   }
 
+  /// The clipboard for [sessionId] changed or went away. A paste already
+  /// waiting for its files goes on, unless [endsPaste]: the session itself is
+  /// over.
   Future<void> clearSession(
     String sessionId, {
     bool notifyPeer = false,
     String peerId = '',
+    bool endsPaste = false,
   }) async {
     _sourceOffers.remove(sessionId);
     final remote = _remoteOffers[sessionId];
-    final cleanup = _removeRemoteOffer(sessionId);
+    final cleanup = _removeRemoteOffer(sessionId, endsPaste: endsPaste);
     try {
       if (notifyPeer && peerId.isNotEmpty) {
         final binding = _currentBinding(peerId);
@@ -356,7 +407,9 @@ final class RemoteClipboardTransferEngine {
       for (final offer in _remoteOffers.values)
         if (offer.peerId == peerId) offer.sessionId,
     };
-    await Future.wait(sessionIds.map(clearSession));
+    await Future.wait(
+      sessionIds.map((sessionId) => clearSession(sessionId, endsPaste: true)),
+    );
   }
 
   Future<RemoteClipboardPasteResult> preparePaste({
@@ -378,18 +431,31 @@ final class RemoteClipboardTransferEngine {
       return RemoteClipboardPasteResult.notAvailable;
     }
     final materialized = await _materializeRemoteOffer(offer);
-    if (!_isCurrentRemoteOffer(offer) ||
-        !identical(_latestRemoteOffer, offer)) {
+    // Copied over while its files came: the paste asked for them still gets
+    // them. Anything else about an offer that left is over.
+    final leftover = materialized == RemoteClipboardPasteResult.prepared
+        ? _leftovers[offer.offerId]
+        : null;
+    if (leftover == null &&
+        (!_isCurrentRemoteOffer(offer) ||
+            !identical(_latestRemoteOffer, offer))) {
       return RemoteClipboardPasteResult.notAvailable;
     }
     if (materialized != RemoteClipboardPasteResult.prepared) {
       traceRemoteClipboard('paste_prepare_done', reason: materialized.name);
       return materialized;
     }
-    final cached = _cached[sessionId];
+    final cached = leftover ?? _cached[sessionId];
     if (cached == null || cached.offerId != offer.offerId) {
       return RemoteClipboardPasteResult.failed;
     }
+    // Something else was copied since the paste: it comes back afterwards.
+    _restores.remove(sessionId);
+    if (leftover != null) {
+      final restore = await _keepClipboard?.call();
+      if (restore != null) _restores[sessionId] = restore;
+    }
+    _markOwnWrite();
     final written = await _writer.writeFilePaths(
       cached.paths,
       asImage: cached.asImage,
@@ -786,11 +852,11 @@ final class RemoteClipboardTransferEngine {
   ) async {
     traceRemoteClipboard('transfers_start', count: offer.items.length);
     try {
+      // What was asked for is sent, even if the clipboard changed since: the
+      // paste on the other device waits for it.
       for (var index = 0; index < offer.items.length; index++) {
-        if (!identical(_sourceOffers[offer.sessionId], offer)) {
-          throw const FileSystemException('clipboard offer replaced');
-        }
         final path = await offer.items[index].resolvePath!();
+        _placements?.markEphemeral(transferIds[index]);
         if (!await _sendFile!(offer.peerId, path, transferIds[index])) {
           throw const FileSystemException('clipboard transfer not sent');
         }
@@ -1082,7 +1148,7 @@ final class RemoteClipboardTransferEngine {
     }
     _listenToTransfers();
     for (final transferId in request.transferIds) {
-      _placements!.expect(transferId, directory.path);
+      _placements!.expect(transferId, directory.path, ephemeral: true);
     }
     final binding = _currentBinding(offer.peerId);
     if (binding == null ||
@@ -1126,7 +1192,8 @@ final class RemoteClipboardTransferEngine {
   /// How far the files offered for [sessionId] have come. Null when nothing
   /// is offered there.
   RemoteClipboardDownload? download(String sessionId) {
-    final offer = _remoteOffers[sessionId];
+    final offer =
+        _transferRequests[sessionId]?.offer ?? _remoteOffers[sessionId];
     if (offer == null) {
       return null;
     }
@@ -1221,18 +1288,23 @@ final class RemoteClipboardTransferEngine {
     }
     _transferRequests.remove(sessionId);
     request.stop();
+    final paths = List<String>.unmodifiable(request.paths.cast<String>());
     if (!_isCurrentRemoteOffer(request.offer)) {
-      request.complete(RemoteClipboardPasteResult.notAvailable);
-      await request.directory
-          .delete(recursive: true)
-          .catchError((_) => request.directory);
+      // Copied over while it came: still the paste's.
+      _retire(
+        _CachedPaste(
+          offerId: request.offer.offerId,
+          directory: request.directory,
+          paths: paths,
+          createdAt: DateTime.now(),
+          asImage: false,
+        ),
+      );
+      traceRemoteClipboard('cache_ready', success: true, reason: 'left');
+      request.complete(RemoteClipboardPasteResult.prepared);
       return;
     }
-    _storeCached(
-      request.offer,
-      request.directory,
-      List<String>.unmodifiable(request.paths.cast<String>()),
-    );
+    _storeCached(request.offer, request.directory, paths);
     traceRemoteClipboard('cache_ready', success: true);
     request.complete(RemoteClipboardPasteResult.prepared);
   }
@@ -1264,37 +1336,65 @@ final class RemoteClipboardTransferEngine {
     return cleanup;
   }
 
-  Future<void> _removeRemoteOffer(String sessionId) async {
+  Future<void> _removeRemoteOffer(
+    String sessionId, {
+    bool endsPaste = false,
+  }) async {
     final removed = _remoteOffers.remove(sessionId);
     if (identical(_latestRemoteOffer, removed)) {
       _latestRemoteOffer = null;
     }
     final request = _incoming.remove(sessionId);
-    final transfers = _transferRequests.remove(sessionId);
+    // A paste waiting for its files was asked for before this: it goes on.
+    final transfers = endsPaste ? _transferRequests.remove(sessionId) : null;
     // Detach all old state before asynchronous file cleanup can yield to a
     // replacement offer or a local clipboard change.
     final cached = _cached.remove(sessionId);
     _cacheTimers.remove(sessionId)?.cancel();
+    // Only the content changed: what was pasted may still be being copied out.
+    if (cached != null && !endsPaste) _retire(cached);
     request?.complete(RemoteClipboardPasteResult.failed);
     await Future.wait([
       if (request != null) request.dispose(deleteDirectory: true),
       if (transfers != null) _abandonTransferRequest(transfers),
-      if (cached != null) cached.dispose(),
+      if (cached != null && endsPaste) cached.dispose(),
     ]);
   }
 
   Future<void> _removeCached(String sessionId) async {
     _cacheTimers.remove(sessionId)?.cancel();
-    await _cached.remove(sessionId)?.dispose();
+    final cached = _cached.remove(sessionId);
+    if (cached != null) _retire(cached);
+  }
+
+  /// Files pasted lately, kept a while after their offer left: the file
+  /// manager may still be copying them out, and a paste that waited for them
+  /// pastes them yet.
+  final Map<String, _CachedPaste> _leftovers = <String, _CachedPaste>{};
+
+  void _retire(_CachedPaste cached) {
+    _leftovers[cached.offerId] = cached;
+    Timer(_cacheTtl, () {
+      if (identical(_leftovers[cached.offerId], cached)) {
+        _leftovers.remove(cached.offerId);
+      }
+      unawaited(cached.dispose());
+    });
   }
 
   bool ownsClipboardPaths(String sessionId, List<String> paths) {
-    final cached = _cached[sessionId];
-    if (cached == null || paths.length != cached.paths.length) {
+    return <_CachedPaste?>[
+      _cached[sessionId],
+      ..._leftovers.values,
+    ].any((cached) => cached != null && _samePaths(cached.paths, paths));
+  }
+
+  static bool _samePaths(List<String> cached, List<String> paths) {
+    if (paths.length != cached.length) {
       return false;
     }
     for (var index = 0; index < paths.length; index++) {
-      if (p.normalize(paths[index]) != p.normalize(cached.paths[index])) {
+      if (p.normalize(paths[index]) != p.normalize(cached[index])) {
         return false;
       }
     }

@@ -46,6 +46,16 @@ class TransferPlacements extends ChangeNotifier {
   /// [transferId] is a copy this device sends for the file manager.
   void markQuiet(String transferId) => _quiet.add(transferId);
 
+  /// Files for a paste on another device (or this one): whatever their end,
+  /// the island has said so, so the conversation never shows them, not even
+  /// failed ones (there is nothing there to try again).
+  final _ephemeral = <String>{};
+
+  void markEphemeral(String transferId) {
+    _quiet.add(transferId);
+    _ephemeral.add(transferId);
+  }
+
   bool isQuiet(String transferId) =>
       transferId.isNotEmpty &&
       (_quiet.contains(transferId) || _pending.containsKey(transferId));
@@ -78,8 +88,10 @@ class TransferPlacements extends ChangeNotifier {
     String transferId,
     String directory, {
     Duration lifetime = const Duration(days: 2),
+    bool ephemeral = false,
   }) {
     _quiet.add(transferId);
+    if (ephemeral) _ephemeral.add(transferId);
     _pending[transferId] = (
       directory: directory,
       until: DateTime.now().add(lifetime),
@@ -135,6 +147,7 @@ class TransferPlacements extends ChangeNotifier {
     if (stoppedThere) {
       await forgetRecord?.call(snapshot.transferId);
       _quiet.remove(snapshot.transferId);
+      _ephemeral.remove(snapshot.transferId);
       _resumed.remove(snapshot.transferId);
       notifyListeners();
       return;
@@ -143,9 +156,13 @@ class TransferPlacements extends ChangeNotifier {
       case FileTransferState.completed:
         await forgetRecord?.call(snapshot.transferId);
         _quiet.remove(snapshot.transferId);
+        _ephemeral.remove(snapshot.transferId);
         _resumed.remove(snapshot.transferId);
         notifyListeners();
       case FileTransferState.failed || FileTransferState.canceled:
+        if (_ephemeral.remove(snapshot.transferId)) {
+          await forgetRecord?.call(snapshot.transferId);
+        }
         _quiet.remove(snapshot.transferId);
         _resumed.remove(snapshot.transferId);
         notifyListeners();

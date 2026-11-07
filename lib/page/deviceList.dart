@@ -381,8 +381,12 @@ class _DeviceListScreen extends State<DeviceListScreen>
       _remoteInputCoordinator.configureRemoteClipboard(
         preparePaste: ({required peerId, required sessionId}) => socketManager
             .prepareRemoteClipboardPaste(peerId: peerId, sessionId: sessionId),
-        clearSession: ({required peerId, required sessionId}) => socketManager
-            .clearRemoteClipboardSession(peerId: peerId, sessionId: sessionId),
+        clearSession: ({required peerId, required sessionId}) =>
+            socketManager.clearRemoteClipboardSession(
+              peerId: peerId,
+              sessionId: sessionId,
+              endsPaste: true,
+            ),
         deferPaste: socketManager.remoteClipboardPasteWatch.follow,
       );
       _remoteInputCoordinator.platform.configureLocalPasteHandler(
@@ -3849,6 +3853,8 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
   @override
   void onClipboardChanged() async {
+    // A paste's files going in, or what was copied coming back after it.
+    if (socketManager.remoteClipboardWritingNow) return;
     unawaited(_recordClipboard());
     final generation = ++_clipboardSyncGeneration;
     final inputState = _remoteInputCoordinator.state;

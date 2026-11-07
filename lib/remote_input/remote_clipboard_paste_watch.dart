@@ -90,15 +90,18 @@ final class RemoteClipboardPasteWatch extends ChangeNotifier {
   RemoteClipboardPasteWatch({
     required RemoteClipboardDownload? Function(String sessionId) download,
     required Future<void> Function(String sessionId) cancelDownload,
+    void Function(String sessionId)? pasted,
     Future<Object?> Function() foreground = foregroundWindowToken,
     Duration poll = const Duration(milliseconds: 250),
   }) : _download = download,
        _cancelDownload = cancelDownload,
+       _pasted = pasted,
        _foreground = foreground,
        _poll = poll;
 
   final RemoteClipboardDownload? Function(String sessionId) _download;
   final Future<void> Function(String sessionId) _cancelDownload;
+  final void Function(String sessionId)? _pasted;
   final Future<Object?> Function() _foreground;
   final Duration _poll;
 
@@ -163,6 +166,7 @@ final class RemoteClipboardPasteWatch extends ChangeNotifier {
       follow,
       same ? RemoteClipboardPasteStage.pasted : RemoteClipboardPasteStage.ready,
     );
+    if (same) _pasted?.call(sessionId);
     return same;
   }
 

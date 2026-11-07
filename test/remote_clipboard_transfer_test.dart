@@ -365,7 +365,7 @@ void main() {
       expect(await File(writtenPaths.single).readAsBytes(), bytes);
 
       final cachedPath = writtenPaths.single;
-      await sink.clearSession('session');
+      await sink.clearSession('session', endsPaste: true);
       expect(await File(cachedPath).exists(), isFalse);
       await root.delete(recursive: true);
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -574,7 +574,11 @@ void main() {
       List<String> frames,
       List<String> sentAsFiles,
     })
-    pair({required bool newSource, required bool newSink}) {
+    pair({
+      required bool newSource,
+      required bool newSink,
+      Future<void>? landAfter,
+    }) {
       final frames = <String>[];
       final sentAsFiles = <String>[];
       final placements = TransferPlacements();
@@ -602,6 +606,7 @@ void main() {
             ? null
             : (peerId, path, transferId) async {
                 sentAsFiles.add(transferId);
+                await landAfter;
                 final landed = await File(
                   path,
                 ).copy('${downloads.path}/${path.split('/').last}');
@@ -649,6 +654,50 @@ void main() {
         sentAsFiles: sentAsFiles,
       );
     }
+
+    test(
+      'copied over while its files come, the paste still gets them',
+      () async {
+        final land = Completer<void>();
+        final link = pair(
+          newSource: true,
+          newSink: true,
+          landAfter: land.future,
+        );
+        final item = await file('report.pdf', 3000);
+        await link.source.publish(
+          peerId: 'sink',
+          sessionId: 's',
+          items: [item],
+        );
+        final pasting = link.sink.preparePaste(
+          peerId: 'source',
+          sessionId: 's',
+        );
+        await pumpEventQueue();
+        expect(link.sentAsFiles, hasLength(1));
+        // Something else copied on both sides while the file is on its way.
+        await link.sink.clearSession('s');
+        await link.source.clearSession('s', notifyPeer: true, peerId: 'sink');
+        land.complete();
+        expect(await pasting, RemoteClipboardPasteResult.prepared);
+        expect(written.single.single, endsWith('report.pdf'));
+        expect(link.sink.ownsClipboardPaths('s', written.single), isTrue);
+      },
+    );
+
+    test('the session over, a waiting paste stops', () async {
+      final land = Completer<void>();
+      final link = pair(newSource: true, newSink: true, landAfter: land.future);
+      final item = await file('report.pdf', 3000);
+      await link.source.publish(peerId: 'sink', sessionId: 's', items: [item]);
+      final pasting = link.sink.preparePaste(peerId: 'source', sessionId: 's');
+      await pumpEventQueue();
+      await link.sink.clearSession('s', endsPaste: true);
+      land.complete();
+      expect(await pasting, isNot(RemoteClipboardPasteResult.prepared));
+      expect(written, isEmpty);
+    });
 
     test('both new: a large file comes as a transfer, on paste only', () async {
       final link = pair(newSource: true, newSink: true);

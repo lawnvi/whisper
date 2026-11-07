@@ -598,6 +598,7 @@ class WsSvrManager {
         sendFile: _sendCopiedFile,
         cancelTransfer: cancelTransfer,
         placements: TransferPlacements.shared,
+        keepClipboard: keepDesktopClipboard,
       );
 
   /// Pastes waiting for their files: what the floating island shows.
@@ -605,7 +606,13 @@ class WsSvrManager {
       RemoteClipboardPasteWatch(
         download: _remoteClipboardTransfer.download,
         cancelDownload: _remoteClipboardTransfer.cancelDownload,
+        pasted: _remoteClipboardTransfer.restoreAfterPaste,
       );
+
+  /// The clipboard just changed because a paste went in or was undone: not
+  /// a copy to sync.
+  bool get remoteClipboardWritingNow =>
+      _remoteClipboardTransfer.writingClipboard;
   Future<void> _workspaceClipboardSerial = Future<void>.value();
   _WorkspaceClipboardOrigin? _workspaceClipboardOrigin;
   int _workspaceClipboardRevision = 0;
@@ -5808,7 +5815,7 @@ class WsSvrManager {
         send: (_) async => false,
       );
     } else if (route == '/input') {
-      await _remoteClipboardTransfer.clearSession(sessionId);
+      await _remoteClipboardTransfer.clearSession(sessionId, endsPaste: true);
       await _remoteInputManager.closeSessionChannels(
         sessionId,
         peerId: peerId,
@@ -6668,11 +6675,13 @@ class WsSvrManager {
     required String peerId,
     required String sessionId,
     bool notifyPeer = false,
+    bool endsPaste = false,
   }) {
     return _remoteClipboardTransfer.clearSession(
       sessionId,
       notifyPeer: notifyPeer,
       peerId: peerId,
+      endsPaste: endsPaste,
     );
   }
 
