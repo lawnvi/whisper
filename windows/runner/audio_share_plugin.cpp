@@ -34,8 +34,15 @@ namespace {
 using Microsoft::WRL::ComPtr;
 
 constexpr REFERENCE_TIME kBufferDuration100ns = 1000000;  // 100 ms.
-// How often a running capture checks that it still records the default output.
+// How often a running capture or playback checks that it is still on the
+// default output.
 constexpr auto kDefaultOutputCheckInterval = std::chrono::seconds(1);
+// A queued playback buffer this long without any finishing: the stream is tied
+// to an output that has gone (a display asleep with its speakers, a device
+// unplugged) and plays nothing, while waveOutWrite still takes everything.
+constexpr auto kPlaybackStallLimit = std::chrono::milliseconds(1500);
+// Between attempts to open playback again when no output would take it.
+constexpr auto kPlaybackReopenWait = std::chrono::seconds(1);
 // Between attempts to open the default output again after it failed; a display
 // waking up or the audio service restarting takes a few seconds.
 constexpr auto kCaptureReopenFirstWait = std::chrono::milliseconds(250);
@@ -342,32 +349,50 @@ class AudioSharePlugin : public flutter::Plugin {
     wave_format.nAvgBytesPerSec =
         wave_format.nSamplesPerSec * wave_format.nBlockAlign;
 
-    HWAVEOUT wave_out = nullptr;
-    const MMRESULT open_result = waveOutOpen(
-        &wave_out, WAVE_MAPPER, &wave_format, 0, 0, CALLBACK_NULL);
+    std::lock_guard<std::mutex> lock(playback_mutex_);
+    playback_format_ = wave_format;
+    const MMRESULT open_result = OpenPlaybackLocked();
     if (open_result != MMSYSERR_NOERROR) {
       if (error != nullptr) {
         *error = MmResultMessage(open_result);
       }
       return false;
     }
-
-    std::lock_guard<std::mutex> lock(playback_mutex_);
-    wave_out_ = wave_out;
     playback_session_id_ = session_id;
     return true;
   }
 
+  // Each write also looks after the stream: waking from sleep or a display
+  // that turns off can leave it on an output that is gone, silent and taking
+  // every buffer for good. It is opened again on whatever the default output
+  // is then; with no output at all, what arrives is dropped until one comes.
   bool WritePlayback(const std::string& session_id,
                      const std::vector<uint8_t>& pcm,
                      std::string* error) {
     std::lock_guard<std::mutex> lock(playback_mutex_);
-    if (wave_out_ == nullptr || session_id != playback_session_id_ ||
+    if (playback_session_id_.empty() || session_id != playback_session_id_ ||
         pcm.empty()) {
       return true;
     }
 
-    CleanupCompletedPlaybackBuffersLocked();
+    const auto now = std::chrono::steady_clock::now();
+    if (wave_out_ != nullptr) {
+      CleanupCompletedPlaybackBuffersLocked(now);
+      if (PlaybackNeedsReopenLocked(now)) {
+        ClosePlaybackLocked();
+        next_playback_reopen_ = now;
+      }
+    }
+    if (wave_out_ == nullptr) {
+      if (now < next_playback_reopen_) {
+        return true;
+      }
+      if (OpenPlaybackLocked() != MMSYSERR_NOERROR) {
+        next_playback_reopen_ = now + kPlaybackReopenWait;
+        return true;
+      }
+    }
+
     auto buffer = std::make_unique<WaveOutBuffer>(pcm);
     const MMRESULT prepare_result =
         waveOutPrepareHeader(wave_out_, &buffer->header, sizeof(WAVEHDR));
@@ -387,6 +412,9 @@ class AudioSharePlugin : public flutter::Plugin {
       }
       return false;
     }
+    if (playback_buffers_.empty()) {
+      playback_progress_at_ = now;
+    }
     playback_buffers_.push_back(std::move(buffer));
     return true;
   }
@@ -396,19 +424,69 @@ class AudioSharePlugin : public flutter::Plugin {
     if (!session_id.empty() && session_id != playback_session_id_) {
       return;
     }
-    if (wave_out_ != nullptr) {
-      waveOutReset(wave_out_);
-      for (auto& buffer : playback_buffers_) {
-        waveOutUnprepareHeader(wave_out_, &buffer->header, sizeof(WAVEHDR));
-      }
-      playback_buffers_.clear();
-      waveOutClose(wave_out_);
-      wave_out_ = nullptr;
-    }
+    ClosePlaybackLocked();
     playback_session_id_.clear();
   }
 
-  void CleanupCompletedPlaybackBuffersLocked() {
+  // On the default output, as WAVE_MAPPER picks it, in [playback_format_].
+  MMRESULT OpenPlaybackLocked() {
+    HWAVEOUT wave_out = nullptr;
+    const MMRESULT result = waveOutOpen(&wave_out, WAVE_MAPPER,
+                                        &playback_format_, 0, 0, CALLBACK_NULL);
+    if (result != MMSYSERR_NOERROR) {
+      return result;
+    }
+    wave_out_ = wave_out;
+    playback_device_id_ = DefaultOutputId();
+    const auto now = std::chrono::steady_clock::now();
+    playback_progress_at_ = now;
+    next_playback_device_check_ = now + kDefaultOutputCheckInterval;
+    return MMSYSERR_NOERROR;
+  }
+
+  void ClosePlaybackLocked() {
+    if (wave_out_ == nullptr) {
+      return;
+    }
+    waveOutReset(wave_out_);
+    for (auto& buffer : playback_buffers_) {
+      waveOutUnprepareHeader(wave_out_, &buffer->header, sizeof(WAVEHDR));
+    }
+    playback_buffers_.clear();
+    waveOutClose(wave_out_);
+    wave_out_ = nullptr;
+  }
+
+  bool PlaybackNeedsReopenLocked(std::chrono::steady_clock::time_point now) {
+    if (!playback_buffers_.empty() &&
+        now - playback_progress_at_ > kPlaybackStallLimit) {
+      return true;
+    }
+    if (now < next_playback_device_check_) {
+      return false;
+    }
+    next_playback_device_check_ = now + kDefaultOutputCheckInterval;
+    return DefaultOutputId() != playback_device_id_;
+  }
+
+  // Empty when there is no output, or it can't be asked.
+  std::wstring DefaultOutputId() {
+    if (playback_enumerator_ == nullptr &&
+        FAILED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr,
+                                CLSCTX_ALL,
+                                IID_PPV_ARGS(&playback_enumerator_)))) {
+      return std::wstring();
+    }
+    ComPtr<IMMDevice> device;
+    if (FAILED(playback_enumerator_->GetDefaultAudioEndpoint(eRender, eConsole,
+                                                             &device))) {
+      return std::wstring();
+    }
+    return DeviceId(device.Get());
+  }
+
+  void CleanupCompletedPlaybackBuffersLocked(
+      std::chrono::steady_clock::time_point now) {
     auto it = playback_buffers_.begin();
     while (it != playback_buffers_.end()) {
       auto& buffer = *it;
@@ -418,6 +496,7 @@ class AudioSharePlugin : public flutter::Plugin {
       }
       waveOutUnprepareHeader(wave_out_, &buffer->header, sizeof(WAVEHDR));
       it = playback_buffers_.erase(it);
+      playback_progress_at_ = now;
     }
   }
 
@@ -626,6 +705,15 @@ class AudioSharePlugin : public flutter::Plugin {
   HWAVEOUT wave_out_ = nullptr;
   std::string playback_session_id_;
   std::deque<std::unique_ptr<WaveOutBuffer>> playback_buffers_;
+  WAVEFORMATEX playback_format_ = {};
+  // The default output when the stream was opened, to notice another one.
+  std::wstring playback_device_id_;
+  // On the platform thread, whose COM apartment main() sets up.
+  ComPtr<IMMDeviceEnumerator> playback_enumerator_;
+  // When a buffer last finished, or the first of a queue was written.
+  std::chrono::steady_clock::time_point playback_progress_at_;
+  std::chrono::steady_clock::time_point next_playback_device_check_;
+  std::chrono::steady_clock::time_point next_playback_reopen_;
   std::atomic<bool> capture_running_{false};
   std::thread capture_thread_;
 };
