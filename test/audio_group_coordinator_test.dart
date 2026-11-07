@@ -27,6 +27,32 @@ void main() {
   final mediaKey = Uint8List.fromList(List<int>.generate(32, (index) => index));
 
   group('AudioGroupCoordinator', () {
+    test('a sink that never answers the offer is given up on', () async {
+      final coordinator = AudioGroupCoordinator(
+        groupIdFactory: () => 'group-1',
+        streamIdFactory: () => 'stream-1',
+        sessionIdFactory: () => 'session-1',
+        offerAnswerLimit: const Duration(milliseconds: 40),
+      );
+      addTearDown(coordinator.dispose);
+      // The offer went down with a connection that was being replaced.
+      coordinator.startGroup(
+        sourcePeerId: 'mac',
+        sinks: const {'pc': AudioChannelRole.stereo},
+        format: format,
+        sendControl: (_, _) {},
+      );
+      expect(
+        coordinator.session!.sinks['pc']!.state,
+        AudioGroupSinkState.offered,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+      expect(
+        coordinator.session!.sinks['pc']!.state,
+        AudioGroupSinkState.failed,
+      );
+    });
+
     late MethodChannel channel;
     late List<MethodCall> calls;
     late AudioPlatform platform;
@@ -524,6 +550,81 @@ void main() {
           hasLength(1),
         );
         expect(coordinator.session, isNull);
+      },
+    );
+
+    test(
+      'capture that fails to start is tried again while members listen',
+      () async {
+        var starts = 0;
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, (call) async {
+              calls.add(call);
+              if (call.method == 'startCapture' && ++starts == 1) {
+                // System audio capture now and then does not open in time.
+                throw PlatformException(code: 'audio-capture');
+              }
+              return null;
+            });
+        final coordinator = AudioGroupCoordinator(
+          platform: platform,
+          codecFactory: _pcmCodec,
+          transportFactory: (_) async => _FakeAudioGroupTransport(),
+          groupIdFactory: () => 'group-retry',
+          streamIdFactory: () => 'stream-retry',
+          sessionIdFactory: () => 'offered-session',
+          clockMicros: () => 61000,
+          captureRetryWaits: const [Duration(milliseconds: 20)],
+        );
+        addTearDown(coordinator.dispose);
+        coordinator.startGroup(
+          sourcePeerId: 'mac',
+          sinks: const <String, AudioChannelRole>{
+            'phone': AudioChannelRole.stereo,
+          },
+          format: format,
+          sendControl: (_, __) {},
+        );
+        await coordinator.handleControlMessage(
+          const AudioGroupControlMessage(
+            action: AudioGroupControlAction.groupAccept,
+            groupId: 'group-retry',
+            streamId: 'stream-retry',
+            sessionId: 'phone-session',
+            sourcePeerId: 'mac',
+            sinkPeerId: 'phone',
+            channelRole: AudioChannelRole.stereo,
+            path: '/audio',
+          ),
+          localPeerId: 'mac',
+          remoteHost: 'phone.local',
+          remotePort: 10002,
+          sendControl: (_, __) {},
+        );
+        await coordinator
+            .handleControlMessage(
+              const AudioGroupControlMessage(
+                action: AudioGroupControlAction.clockReport,
+                groupId: 'group-retry',
+                streamId: 'stream-retry',
+                sessionId: 'phone-session',
+                sourcePeerId: 'mac',
+                sinkPeerId: 'phone',
+                sentAtMicros: 1000,
+                receivedAtMicros: 51000,
+                sinkClockMicros: 52000,
+              ),
+              localPeerId: 'mac',
+              remoteHost: 'phone.local',
+              remotePort: 10002,
+              sendControl: (_, __) {},
+            )
+            .then<void>((_) {}, onError: (Object _) {});
+        expect(coordinator.captureFailure, isNotNull);
+
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+        expect(starts, 2);
+        expect(coordinator.captureFailure, isNull);
       },
     );
 

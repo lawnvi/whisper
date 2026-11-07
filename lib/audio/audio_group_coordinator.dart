@@ -36,6 +36,12 @@ class AudioGroupCoordinator extends ChangeNotifier {
     AudioGroupIdFactory? groupIdFactory,
     AudioGroupIdFactory? streamIdFactory,
     AudioGroupIdFactory? sessionIdFactory,
+    this.offerAnswerLimit = const Duration(seconds: 10),
+    this.captureRetryWaits = const [
+      Duration(seconds: 2),
+      Duration(seconds: 5),
+      Duration(seconds: 10),
+    ],
   })  : _manager = manager,
         _media = media ??
             LocalAudioGroupMedia(
@@ -319,6 +325,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
     _sinkAcceptGenerations.clear();
     _captureGeneration += 1;
     _captureFailure = null;
+    _captureRetries = 0;
     final groupId = _groupIdFactory();
     final streamId = _streamIdFactory();
     var nextSession = AudioGroupSession.offering(
@@ -336,6 +343,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
         sinkPeerId,
         sessionId: sessionId,
       );
+      _awaitAnswer(sinkPeerId, sessionId);
       sendControl(
         sinkPeerId,
         AudioGroupControlMessage(
@@ -382,19 +390,21 @@ class AudioGroupCoordinator extends ChangeNotifier {
       }
       _sinkAcceptGenerations[sink.sinkPeerId] =
           (_sinkAcceptGenerations[sink.sinkPeerId] ?? 0) + 1;
-      sendControl(
-        sink.sinkPeerId,
-        AudioGroupControlMessage(
-          action: AudioGroupControlAction.groupStop,
-          groupId: current.groupId,
-          streamId: current.streamId,
-          sessionId: sink.sessionId,
-          sourcePeerId: current.sourcePeerId,
-          sinkPeerId: sink.sinkPeerId,
-          channelRole: sink.channelRole,
-          targetLatencyMs: current.targetLatencyMs,
-        ),
-      );
+      if (!sink.isTerminal) {
+        sendControl(
+          sink.sinkPeerId,
+          AudioGroupControlMessage(
+            action: AudioGroupControlAction.groupStop,
+            groupId: current.groupId,
+            streamId: current.streamId,
+            sessionId: sink.sessionId,
+            sourcePeerId: current.sourcePeerId,
+            sinkPeerId: sink.sinkPeerId,
+            channelRole: sink.channelRole,
+            targetLatencyMs: current.targetLatencyMs,
+          ),
+        );
+      }
       await _media.disconnectSink(sink.sinkPeerId);
       nextSinks.remove(sink.sinkPeerId);
     }
@@ -411,6 +421,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
           channelRole: channelRole,
           state: AudioGroupSinkState.offered,
         );
+        _awaitAnswer(sinkPeerId, sessionId);
         sendControl(
           sinkPeerId,
           AudioGroupControlMessage(
@@ -630,6 +641,10 @@ class AudioGroupCoordinator extends ChangeNotifier {
       return;
     }
     for (final sink in current.sinks.values) {
+      // Over already (the connection went, or it stopped): the device may
+      // have restarted since and not know the session, and an older one
+      // drops the whole connection over a stop it can't place.
+      if (sink.isTerminal) continue;
       sendControl(
         sink.sinkPeerId,
         AudioGroupControlMessage(
@@ -784,6 +799,13 @@ class AudioGroupCoordinator extends ChangeNotifier {
   }
 
   Future<void> stopLocal() async {
+    for (final timer in _offerTimers.values) {
+      timer.cancel();
+    }
+    _offerTimers.clear();
+    _captureRetry?.cancel();
+    _captureRetry = null;
+    _captureRetries = 0;
     _groupGeneration += 1;
     _sinkAcceptGenerations.clear();
     _captureGeneration += 1;
@@ -1453,6 +1475,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
       }
       return;
     }
+    _captureRetries = 0;
     if (_captureFailure != null) {
       _captureFailure = null;
       notifyListeners();
@@ -1490,6 +1513,34 @@ class AudioGroupCoordinator extends ChangeNotifier {
       _captureFailure = reason;
       notifyListeners();
     }
+    _retryCaptureLater();
+  }
+
+  /// Waits before capture is started again after it failed while members
+  /// still listen: system audio capture now and then does not open in time,
+  /// and nothing else would start it again. Not for a missing permission.
+  final List<Duration> captureRetryWaits;
+  int _captureRetries = 0;
+  Timer? _captureRetry;
+
+  void _retryCaptureLater() {
+    if (_captureFailure == AudioFailureReason.permission ||
+        _captureRetries >= captureRetryWaits.length) {
+      return;
+    }
+    final wait = captureRetryWaits[_captureRetries++];
+    _captureRetry?.cancel();
+    _captureRetry = Timer(wait, () {
+      _captureRetry = null;
+      final current = _session;
+      if (current == null ||
+          !current.isLive ||
+          current.activeSinks.isEmpty ||
+          _captureSource != null) {
+        return;
+      }
+      unawaited(_ensureCaptureStarted(current).catchError((Object _) {}));
+    });
   }
 
   Future<void> _stopCaptureSource(AudioGroupCapture? captureSource) {
@@ -1605,6 +1656,34 @@ class AudioGroupCoordinator extends ChangeNotifier {
     await playback?.stop();
   }
 
+  /// How long an offered sink has to answer. An offer can go down with a
+  /// connection that was being replaced, and nothing would ever say so: the
+  /// sink would wait as offered for good.
+  final Duration offerAnswerLimit;
+  final Map<String, Timer> _offerTimers = <String, Timer>{};
+
+  void _awaitAnswer(String sinkPeerId, String sessionId) {
+    _offerTimers.remove(sessionId)?.cancel();
+    _offerTimers[sessionId] = Timer(offerAnswerLimit, () {
+      _offerTimers.remove(sessionId);
+      final current = _session;
+      final sink = current?.sinks[sinkPeerId];
+      if (current == null ||
+          sink == null ||
+          sink.sessionId != sessionId ||
+          sink.state != AudioGroupSinkState.offered) {
+        return;
+      }
+      final next = current.markSink(
+        sinkPeerId,
+        state: AudioGroupSinkState.failed,
+        lastError: AudioFailureReason.transport.name,
+      );
+      _setSession(next);
+      _stopCaptureIfNoActiveSinks(next);
+    });
+  }
+
   void _markSinkFailed(String sinkPeerId, Object error) {
     final current = _session;
     if (current == null) {
@@ -1691,6 +1770,11 @@ class AudioGroupCoordinator extends ChangeNotifier {
   void dispose() {
     _healthTimer?.cancel();
     _healthTimer = null;
+    for (final timer in _offerTimers.values) {
+      timer.cancel();
+    }
+    _offerTimers.clear();
+    _captureRetry?.cancel();
     _removeChannelLifecycleListener?.call();
     _removeChannelLifecycleListener = null;
     super.dispose();

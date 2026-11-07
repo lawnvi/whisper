@@ -5188,6 +5188,20 @@ class WsSvrManager {
             authenticatedPeerId: session.remotePeerId,
             localPeerId: session.localProfile.uid,
           ).requireAccepted();
+          // Stopping a session this device doesn't know (it restarted since,
+          // or the session ended here first) changes nothing: not a reason to
+          // drop the connection, and the offer right behind it with it.
+          if ((control.action == AudioGroupControlAction.groupReject ||
+                  control.action == AudioGroupControlAction.groupStop ||
+                  control.action == AudioGroupControlAction.error) &&
+              !_wireControlSessions.knows(
+                namespace: 'audio-group',
+                sessionId: control.sessionId,
+              )) {
+            requireCurrentBusiness();
+            await _ackMessage(message);
+            break;
+          }
           _wireControlSessions
               .validateAndRemember(
                 namespace: 'audio-group',

@@ -404,11 +404,13 @@ void main() {
       await world.controller.toggle(xiaomiDevice.uid);
       await world.controller.toggle(xiaomiDevice.uid);
 
+      // No stop to the one that failed: it may not know the session any more
+      // (it restarted), and an older device drops the connection over one.
       expect(
         world.sentGroup
             .where((sent) => sent.$1 == xiaomiDevice.uid)
             .map((sent) => sent.$2.action),
-        [AudioGroupControlAction.groupStop, AudioGroupControlAction.groupOffer],
+        [AudioGroupControlAction.groupOffer],
       );
     });
   });
