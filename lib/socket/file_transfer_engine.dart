@@ -273,6 +273,8 @@ class FileTransferEngine {
     Future<void> Function(File file, int timestamp)? setPublishedFileTimestamp,
     PrivacyLog? privacyLogger,
     FileTransferV3FlowParameters? flowLimits,
+    FileTransferV3FlowParameters? Function(String transferId)?
+    incomingFlowLimitsFor,
     DateTime Function()? now,
     TransferAckTimerFactory? progressTimerFactory,
     FolderTransferStore folderStore = const FolderTransferStore(),
@@ -317,6 +319,7 @@ class FileTransferEngine {
            ((Platform.isAndroid || Platform.isIOS)
                ? FileTransferV3FlowParameters.mobile
                : FileTransferV3FlowParameters.desktop),
+       _incomingFlowLimitsFor = incomingFlowLimitsFor,
        _now = now ?? DateTime.now,
        _progressTimerFactory = progressTimerFactory ?? Timer.new,
        _folderStore = folderStore,
@@ -370,6 +373,14 @@ class FileTransferEngine {
   _setPublishedFileTimestamp;
   final PrivacyLog _privacyLogger;
   final FileTransferV3FlowParameters _flowLimits;
+
+  /// Narrower limits for some incoming transfers (clipboard files, which
+  /// share the link with keyboard, mouse and sound).
+  final FileTransferV3FlowParameters? Function(String transferId)?
+  _incomingFlowLimitsFor;
+
+  FileTransferV3FlowParameters _incomingFlowLimits(String transferId) =>
+      _incomingFlowLimitsFor?.call(transferId) ?? _flowLimits;
   final FolderTransferStore _folderStore;
   final Future<FolderScanResult> Function(String path) _scanFolder;
 
@@ -2226,7 +2237,7 @@ class FileTransferEngine {
     );
     _incomingFlows[transfer.transferId] = selectFileTransferV3FlowParameters(
       offer: metadata,
-      localLimits: _flowLimits,
+      localLimits: _incomingFlowLimits(transfer.transferId),
     );
     if (isTerminalFileTransferState(transfer.state)) {
       requireCurrent();
@@ -2404,7 +2415,7 @@ class FileTransferEngine {
             message.content,
             size: message.size,
           ),
-          localLimits: _flowLimits,
+          localLimits: _incomingFlowLimits(transfer.transferId),
         );
       } on FileTransferV3MetadataException {
         return _IncomingReadyResult.unavailable;

@@ -6,6 +6,8 @@ import 'dart:typed_data';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/helper/desktop_clipboard_image.dart';
+import 'package:whisper/model/file_transfer.dart';
+import 'package:whisper/remote_files/fs_placement.dart';
 import 'package:whisper/remote_input/remote_clipboard_transfer.dart';
 import 'package:whisper/socket/bounded_receive_queue.dart';
 import 'package:whisper/socket/peer_connection.dart';
@@ -526,4 +528,202 @@ void main() {
           .setMockMethodCallHandler(writerChannel, null);
     },
   );
+
+  group('files as file transfers', () {
+    late Directory root;
+    late Directory sourceDir;
+    late Directory downloads;
+    late List<List<String>> written;
+    const channel = MethodChannel('test_clipboard_transfers_writer');
+
+    setUp(() async {
+      root = await Directory.systemTemp.createTemp('whisper-clip-transfer');
+      sourceDir = await Directory('${root.path}/source').create();
+      downloads = await Directory('${root.path}/downloads').create();
+      written = [];
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+            written.add(
+              ((call.arguments as Map)['paths'] as List).cast<String>(),
+            );
+            return true;
+          });
+    });
+
+    tearDown(() async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+      await root.delete(recursive: true);
+    });
+
+    Future<RemoteClipboardLocalItem> file(String name, int size) async {
+      final path = '${sourceDir.path}/$name';
+      await File(path).writeAsBytes(List<int>.generate(size, (i) => i % 251));
+      return RemoteClipboardLocalItem.file(
+        ClipboardFileDraft(path: path, fileName: name, size: size),
+      );
+    }
+
+    /// A source and a sink joined back to back. [newSource] and [newSink]
+    /// say which can use file transfers; [sentAsFiles] collects what the
+    /// source sent that way, and lands it as the transfer engine would.
+    ({
+      RemoteClipboardTransferEngine source,
+      RemoteClipboardTransferEngine sink,
+      List<String> frames,
+      List<String> sentAsFiles,
+    })
+    pair({required bool newSource, required bool newSink}) {
+      final frames = <String>[];
+      final sentAsFiles = <String>[];
+      final placements = TransferPlacements();
+      late RemoteClipboardTransferEngine source;
+      late RemoteClipboardTransferEngine sink;
+      const toSink = TransferConnectionBinding(peerId: 'sink', generation: 1);
+      const toSource = TransferConnectionBinding(
+        peerId: 'source',
+        generation: 1,
+      );
+      bool valid({
+        required String peerId,
+        required String sessionId,
+        required bool sourceIsLocal,
+      }) => true;
+      source = RemoteClipboardTransferEngine(
+        currentBinding: (_) => toSink,
+        sessionValidator: valid,
+        sendFrame: (_, frame) async {
+          frames.add(frame.type.name);
+          await sink.handleFrame(toSource, frame);
+          return true;
+        },
+        sendFile: !newSource
+            ? null
+            : (peerId, path, transferId) async {
+                sentAsFiles.add(transferId);
+                final landed = await File(
+                  path,
+                ).copy('${downloads.path}/${path.split('/').last}');
+                // As the engine reports it once the file is verified.
+                unawaited(
+                  placements.onTransferUpdated(
+                    TransferSnapshot(
+                      transferId: transferId,
+                      messageUuid: transferId,
+                      peerUid: 'source',
+                      direction: FileTransferDirection.incoming,
+                      state: FileTransferState.completed,
+                      finalPath: landed.path,
+                      tempPath: '',
+                      size: await landed.length(),
+                      committedBytes: await landed.length(),
+                      lastError: '',
+                      updatedAt: 0,
+                    ),
+                  ),
+                );
+                return true;
+              },
+        cancelTransfer: newSource ? (_) async {} : null,
+        placements: newSource ? TransferPlacements() : null,
+      );
+      sink = RemoteClipboardTransferEngine(
+        currentBinding: (_) => toSource,
+        sessionValidator: valid,
+        directoryProvider: () async => root,
+        writer: const DesktopClipboardFileWriter(channel: channel),
+        sendFrame: (_, frame) async {
+          frames.add(frame.type.name);
+          unawaited(source.handleFrame(toSink, frame));
+          return true;
+        },
+        sendFile: newSink ? (_, __, ___) async => false : null,
+        cancelTransfer: newSink ? (_) async {} : null,
+        placements: newSink ? placements : null,
+      );
+      return (
+        source: source,
+        sink: sink,
+        frames: frames,
+        sentAsFiles: sentAsFiles,
+      );
+    }
+
+    test('both new: a large file comes as a transfer, on paste only', () async {
+      final link = pair(newSource: true, newSink: true);
+      // Over the frame limits, which only transfers take.
+      final big = RemoteClipboardLocalItem(
+        name: 'big.bin',
+        size: remoteClipboardMaxFileBytes + 1,
+        openRead: () => const Stream.empty(),
+        resolvePath: () async => '${sourceDir.path}/big.bin',
+      );
+      expect(
+        await link.source.publish(
+          peerId: 'sink',
+          sessionId: 'session',
+          items: [big],
+        ),
+        isTrue,
+      );
+      // An older sink turns it down: it must not keep pasting the last one.
+      expect(link.frames.take(2), ['clipboardClear', 'clipboardOffer']);
+      expect(link.sentAsFiles, isEmpty, reason: 'nothing before the paste');
+
+      final small = await file('notes.txt', 3000);
+      expect(
+        await link.source.publish(
+          peerId: 'sink',
+          sessionId: 'session',
+          items: [small, await file('photo.jpg', 5000)],
+        ),
+        isTrue,
+      );
+      expect(link.sentAsFiles, isEmpty);
+      final result = await link.sink
+          .preparePaste(peerId: 'source', sessionId: 'session')
+          .timeout(const Duration(seconds: 5));
+      expect(result, RemoteClipboardPasteResult.prepared);
+      expect(link.sentAsFiles, hasLength(2));
+      expect(link.frames, isNot(contains('clipboardData')));
+      final paths = written.single;
+      expect(paths.map((path) => path.split('/').last), [
+        'notes.txt',
+        'photo.jpg',
+      ]);
+      expect(await File(paths.first).length(), 3000);
+      expect(await File(paths.last).length(), 5000);
+    });
+
+    test('an older sink still gets frames', () async {
+      final link = pair(newSource: true, newSink: false);
+      await link.source.publish(
+        peerId: 'sink',
+        sessionId: 'session',
+        items: [await file('notes.txt', 3000)],
+      );
+      final result = await link.sink
+          .preparePaste(peerId: 'source', sessionId: 'session')
+          .timeout(const Duration(seconds: 5));
+      expect(result, RemoteClipboardPasteResult.prepared);
+      expect(link.sentAsFiles, isEmpty);
+      expect(link.frames, contains('clipboardData'));
+      expect(await File(written.single.single).length(), 3000);
+    });
+
+    test('an older source still sends frames', () async {
+      final link = pair(newSource: false, newSink: true);
+      await link.source.publish(
+        peerId: 'sink',
+        sessionId: 'session',
+        items: [await file('notes.txt', 3000)],
+      );
+      final result = await link.sink
+          .preparePaste(peerId: 'source', sessionId: 'session')
+          .timeout(const Duration(seconds: 5));
+      expect(result, RemoteClipboardPasteResult.prepared);
+      expect(link.frames, contains('clipboardData'));
+      expect(await File(written.single.single).length(), 3000);
+    });
+  });
 }

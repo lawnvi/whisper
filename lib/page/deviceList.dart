@@ -4091,11 +4091,13 @@ class _DeviceListScreen extends State<DeviceListScreen>
     required String sessionId,
     required List<RemoteClipboardLocalItem> items,
   }) async {
+    // The widest limits: the engine applies the narrower ones of frames when
+    // the files can't go as transfers.
     if (items.isEmpty ||
-        items.length > remoteClipboardMaxItems ||
-        items.any((item) => item.size > remoteClipboardMaxFileBytes) ||
+        items.length > remoteClipboardTransferMaxItems ||
+        items.any((item) => item.size > remoteClipboardTransferMaxFileBytes) ||
         items.fold<int>(0, (sum, item) => sum + item.size) >
-            remoteClipboardMaxBatchBytes) {
+            remoteClipboardTransferMaxBatchBytes) {
       traceRemoteClipboard('publish_skipped', reason: 'settings_or_limits');
       return;
     }

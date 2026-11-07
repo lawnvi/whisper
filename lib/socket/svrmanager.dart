@@ -541,6 +541,10 @@ class WsSvrManager {
       <String, Set<Completer<PeerProfile?>>>{};
   late final FileTransferEngine _transferEngine = FileTransferEngine(
     currentConnectionBinding: _peerConnections.currentBinding,
+    incomingFlowLimitsFor: (transferId) =>
+        _remoteClipboardTransfer.carriesTransfer(transferId)
+        ? FileTransferV3FlowParameters.sharedLink
+        : null,
     authenticatedIdentityHashForConnection: (binding) {
       final session = _sessionsByPeerId[binding.peerId];
       if (session == null ||
@@ -588,7 +592,13 @@ class WsSvrManager {
             _peerConnections.sendToAwaitedIfCurrent(binding, frame.encode()),
         currentBinding: _peerConnections.currentBinding,
         sessionValidator: _validateRemoteClipboardSession,
+        // Files go as quiet transfers, like file-manager copies: no message
+        // in the conversation, placed where the paste waits for them.
+        sendFile: _sendCopiedFile,
+        cancelTransfer: cancelTransfer,
+        placements: TransferPlacements.shared,
       );
+
   Future<void> _workspaceClipboardSerial = Future<void>.value();
   _WorkspaceClipboardOrigin? _workspaceClipboardOrigin;
   int _workspaceClipboardRevision = 0;

@@ -188,7 +188,7 @@ Flowed apps run on a virtual display on the phone, so you can keep using the pho
 - A regular conversation syncs only to the connected, trusted device.
 - Keyboard and mouse sharing syncs to the connected devices taking part, and the most recent copy wins.
 - Synced content never enters the chat history.
-- Image and file clipboards sync only during keyboard and mouse sharing on desktop, within per-file and batch size limits.
+- Image and file clipboards sync only during keyboard and mouse sharing on desktop. Files start moving when you paste: between two up-to-date devices, up to 64 GB per file and 20 files at a time, with progress on the island for large ones (paste again once they arrive if the first paste gave up); with older versions, 64 MB per file and 128 MB in all.
 
 Android syncs text only. Under the [Android 10 privacy restriction](https://developer.android.com/about/versions/10/privacy/changes#clipboard-data), Whisper cannot read what you copy in another app while it is in the background; it checks the clipboard and sends the change when you return to it.
 
