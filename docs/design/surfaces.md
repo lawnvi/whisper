@@ -432,7 +432,7 @@
 **剪贴板历史是新功能**，现在的 App 没有。默认：只放内存，最多 5 条，退出就清空，不写数据库。本地存储没有加密，密码不能落盘。
 
 - **敏感内容不记录**：macOS 的 `org.nspasteboard.ConcealedType`，Windows 的 `ExcludeClipboardContentFromMonitorProcessing`，Linux 的 `x-kde-passwordManagerHint`。要原生代码读，没验证过。读不到标记的平台，历史默认关闭，等用户决定。
-- **只记文字和截图**。来自别的设备的同步内容也记，来源写那台设备。
+- **只记文字和截图**，不记文件：复制文件时剪贴板里附带的文件名也不记。来自别的设备的同步内容也记，来源写那台设备。
 - **拷贝回去算一次普通的复制**，会按现有规则自动同步。`lib/helper/clipboard_write_suppression.dart` 防止这次写入又被记成新条目。
 
 ### 各平台的托盘

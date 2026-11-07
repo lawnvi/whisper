@@ -1878,6 +1878,13 @@ class _DeviceListScreen extends State<DeviceListScreen>
     } on Object {
       return;
     }
+    // Text only. A file copied in Finder also puts its name on the clipboard
+    // as text, and that showed up in the history as if it were some.
+    try {
+      if ((await _clipboardFileReader.readFileDrafts()).isNotEmpty) return;
+    } on Object {
+      // Can't tell: record it as before.
+    }
     final text = await getClipboardText();
     if (text == null || !mounted) return;
     _clipHistory.add(
