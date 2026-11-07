@@ -535,9 +535,9 @@ class _TrayPanelBodyState extends State<TrayPanelBody> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                _TrayIcon(
-                  glyph: WhisperGlyph.window,
-                  size: 15,
+                // In words: a window glyph alone was not read as the way
+                // back to the main window.
+                _TextButton(
                   label: l10n.shellTrayOpen,
                   onTap: () => on('openMain'),
                 ),
