@@ -43,6 +43,15 @@ class _TrayPanelAppState extends State<TrayPanelApp> with WindowListener {
   }
 
   Future<void> _start() async {
+    // macOS: a panel that opens over an app in full screen. First, for
+    // window_manager keeps hold of the window it finds when it starts.
+    if (Platform.isMacOS) {
+      try {
+        await _theme.invokeMethod<bool>('becomeTrayPanel');
+      } on Object {
+        // An older runner: a plain window, as before.
+      }
+    }
     await windowManager.ensureInitialized();
     // On Windows this is what creates the plugin's taskbar object, and
     // setSkipTaskbar below crashes the whole process without it.
@@ -53,7 +62,8 @@ class _TrayPanelAppState extends State<TrayPanelApp> with WindowListener {
     await windowManager.setHasShadow(true);
     await windowManager.setAlwaysOnTop(true);
     await windowManager.setResizable(false);
-    await windowManager.setSkipTaskbar(true);
+    // On macOS this is the whole app's Dock icon, not this window's.
+    if (!Platform.isMacOS) await windowManager.setSkipTaskbar(true);
     await windowManager.setSize(Size(_width, _height));
     try {
       await _theme.invokeMethod<bool>('enablePanelMaterial', {
@@ -93,9 +103,15 @@ class _TrayPanelAppState extends State<TrayPanelApp> with WindowListener {
             maxHeight: (a['maxHeight'] as num).toDouble(),
           );
           await _place();
-          if (Platform.isMacOS) await windowManager.setOpacity(0);
-          await windowManager.show();
-          await windowManager.focus();
+          if (Platform.isMacOS) {
+            await windowManager.setOpacity(0);
+            // Not windowManager.show: it activates Whisper, and over an app
+            // in full screen that leaves its space.
+            await _theme.invokeMethod<bool>('showTrayPanel');
+          } else {
+            await windowManager.show();
+            await windowManager.focus();
+          }
           if (mounted) {
             setState(() {
               _shown = true;

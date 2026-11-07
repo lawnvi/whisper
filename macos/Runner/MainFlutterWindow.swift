@@ -134,12 +134,23 @@ final class CaptureCoverPanel: NSPanel {
   override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }
 }
 
+/// The tray panel's window. It comes up over an app in full screen without
+/// making Whisper the active app, as menu bar panels do: activating Whisper
+/// there left that space, and the panel never showed.
+final class TrayPanelWindow: NSPanel {
+  override var canBecomeKey: Bool { true }
+  override var canBecomeMain: Bool { false }
+}
+
 /// The redesigned UI's tray panel: a window of its own, with its own engine,
 /// that shows the desktop through a rounded material.
 enum PanelMaterial {
   private static var channels: [FlutterMethodChannel] = []
   private static var coverPanel: CaptureCoverPanel?
   private static var coverOrigin: NSWindow?
+  // The tray panel, and the plugin's window its view moved out of.
+  private static var trayPanel: TrayPanelWindow?
+  private static var trayOrigin: NSWindow?
 
   static func register(with controller: FlutterViewController) {
     let channel = FlutterMethodChannel(
@@ -151,6 +162,36 @@ enum PanelMaterial {
         return
       }
       switch call.method {
+      case "becomeTrayPanel":
+        // Before window_manager first looks: it keeps the window it finds.
+        guard !(window is TrayPanelWindow) else {
+          result(true)
+          return
+        }
+        let panel = TrayPanelWindow(contentRect: window.frame,
+          styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        panel.isReleasedWhenClosed = false
+        panel.isFloatingPanel = true
+        panel.hidesOnDeactivate = false
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
+        window.orderOut(nil)
+        window.contentViewController = nil
+        panel.contentViewController = controller
+        trayPanel = panel
+        trayOrigin = window
+        result(true)
+      case "showTrayPanel":
+        // On whatever space is showing, a full-screen app's too, over it,
+        // and taking the keyboard without making Whisper the active app.
+        window.level = .statusBar
+        window.collectionBehavior.formUnion([.canJoinAllSpaces, .fullScreenAuxiliary])
+        if let panel = window as? NSPanel {
+          panel.styleMask.insert(.nonactivatingPanel)
+        }
+        window.orderFrontRegardless()
+        window.makeKey()
+        window.makeFirstResponder(controller.view)
+        result(true)
       case "enablePanelMaterial":
         let radius = (call.arguments as? [String: Double])?["radius"] ?? 24
         controller.backgroundColor = .clear
