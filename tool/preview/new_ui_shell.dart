@@ -192,7 +192,6 @@ class _PreviewState extends State<_Preview> {
           );
         },
         openDiagnostics: (_) {},
-        openSelfNotes: () {},
         canControl: (d) => d.platform != 'android' && d.uid != 'ub',
         openControl: (d) => unawaited(
           ShellContent.push<void>(

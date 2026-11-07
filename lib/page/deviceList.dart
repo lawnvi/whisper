@@ -2666,7 +2666,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
     openShareLinks: _shellOpenShareLinks,
     openSettings: () => unawaited(_shellOpenSettings()),
     openDiagnostics: _shellOpenConnectionCheck,
-    openSelfNotes: () => unawaited(_openSelfNotes()),
     buildConversation: (context, target) => SendMessageScreen(
       key: ValueKey('shell-chat-${target.uid}'),
       device: target,
@@ -2688,7 +2687,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
     buildSelfPanel: (context) => ShellSelfPanel(
       self: device,
       onEnterAddress: () => _openPairingQr(startWithAddress: true),
-      onOpenNotes: () => unawaited(_openSelfNotes()),
     ),
     buildCard: (context, target, close) {
       final l10n = AppLocalizations.of(context)!;
