@@ -253,8 +253,7 @@ enum PanelMaterial {
           result(false)
           return
         }
-        // Resized while hidden, the engine has nothing to draw into and the
-        // resize waits for a frame that does not come: on screen unseen first.
+        // On screen unseen first: it shows once it has drawn at this size.
         if !window.isVisible {
           window.alphaValue = 0
           window.ignoresMouseEvents = true

@@ -59,9 +59,18 @@ class _PasteIslandAppState extends State<PasteIslandApp> {
   bool _visible = false;
   IslandStage _stage = IslandStage.hidden;
 
+  /// macOS: no frame goes to the engine until the window has its size, as
+  /// for the tray panel (see `TrayPanelApp`): the first resize after a frame
+  /// waits a second.
+  bool _firstFrameHeld = false;
+
   @override
   void initState() {
     super.initState();
+    if (Platform.isMacOS) {
+      WidgetsBinding.instance.deferFirstFrame();
+      _firstFrameHeld = true;
+    }
     _center.addListener(_onStage);
     unawaited(_start());
   }
@@ -99,6 +108,11 @@ class _PasteIslandAppState extends State<PasteIslandApp> {
       _settle?.cancel();
       if (!_visible) {
         await _place(_compactSize, rescreen: true);
+        if (_firstFrameHeld) {
+          _firstFrameHeld = false;
+          WidgetsBinding.instance.allowFirstFrame();
+          await WidgetsBinding.instance.endOfFrame;
+        }
         await _theme.invokeMethod<bool>('showIsland');
         _visible = true;
         // On Windows a window resized while hidden goes on showing what it

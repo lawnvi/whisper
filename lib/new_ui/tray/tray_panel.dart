@@ -36,9 +36,18 @@ class _TrayPanelAppState extends State<TrayPanelApp> with WindowListener {
   final _content = GlobalKey();
   double _height = 200;
 
+  /// macOS: no frame goes to the engine until the panel has its size. Once
+  /// one has, every resize waits for a frame of the new size, and the first
+  /// waits its full second, so the first open took seconds.
+  bool _firstFrameHeld = false;
+
   @override
   void initState() {
     super.initState();
+    if (Platform.isMacOS) {
+      WidgetsBinding.instance.deferFirstFrame();
+      _firstFrameHeld = true;
+    }
     unawaited(_start());
   }
 
@@ -103,6 +112,11 @@ class _TrayPanelAppState extends State<TrayPanelApp> with WindowListener {
             maxHeight: (a['maxHeight'] as num).toDouble(),
           );
           await _place();
+          if (_firstFrameHeld) {
+            _firstFrameHeld = false;
+            WidgetsBinding.instance.allowFirstFrame();
+            await WidgetsBinding.instance.endOfFrame;
+          }
           if (Platform.isMacOS) {
             await windowManager.setOpacity(0);
             // Not windowManager.show: it activates Whisper, and over an app
