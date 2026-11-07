@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
@@ -766,7 +767,11 @@ class ShellInputController extends ChangeNotifier {
       sendControlTo: _backend.sendControl,
       retryPeerIds: {peerId},
     );
-    if (!updated && plan.targets.isNotEmpty) await _begin(plan);
+    if (updated) {
+      _sentPlan = _planSignature(plan);
+    } else if (plan.targets.isNotEmpty) {
+      await _begin(plan);
+    }
   });
 
   Future<void> _start() async {
@@ -790,7 +795,9 @@ class ShellInputController extends ChangeNotifier {
         sendControlTo: _backend.sendControl,
         workspaceRoutes: plan.routes,
       );
+      _sentPlan = _planSignature(plan);
     } on Object catch (error) {
+      _sentPlan = '';
       _startFailure = remoteInputFailureReasonFor(
         error,
         context: RemoteInputFailureContext.protocol,
@@ -799,6 +806,7 @@ class ShellInputController extends ChangeNotifier {
   }
 
   Future<void> _stop() async {
+    _sentPlan = '';
     if (_workspace.isControllerLive) {
       await _workspace.stopControllerWorkspace(
         sendControlTo: _backend.sendControl,
@@ -826,17 +834,67 @@ class ShellInputController extends ChangeNotifier {
     final plan = await _plan();
     _excluded = plan.excluded;
     if (plan.targets.isEmpty) {
+      _sentPlan = '';
       await _workspace.stopControllerWorkspace(
         sendControlTo: _backend.sendControl,
       );
       return;
     }
+    final signature = _planSignature(plan);
+    if (signature == _sentPlan) return;
     final updated = await _workspace.updateControllerWorkspaceRoutes(
       targets: plan.targets,
       workspaceRoutes: plan.routes,
       sendControlTo: _backend.sendControl,
     );
-    if (!updated) await _begin(plan);
+    if (updated) {
+      _sentPlan = signature;
+    } else {
+      await _begin(plan);
+    }
+  });
+
+  /// What the workspace was last given. Each update restarts capture, which
+  /// took a pointer that was on the other screen back to this one and left
+  /// the two sides out of step: it crossed, came back, then would not cross.
+  /// Every visit to the page and every rebuild of the device list updated it,
+  /// with nothing changed. The old arrangement page only did on a change.
+  String _sentPlan = '';
+
+  static String _planSignature(InputTargetPlan plan) => jsonEncode({
+    'targets': [
+      for (final target in plan.targets)
+        [
+          target.peerId,
+          target.peerName,
+          target.host,
+          target.port,
+          target.layoutEdge.name,
+          target.releaseHotkey,
+          target.isMutuallyTrusted,
+          target.remoteCanInject,
+          target.path,
+          target.sourceDisplayId,
+          target.sourceEdge?.name,
+          target.sourceSegmentStart,
+          target.sourceSegmentEnd,
+          target.sinkDisplayId,
+          target.sinkEdge?.name,
+          target.sinkSegmentStart,
+          target.sinkSegmentEnd,
+          [for (final mapping in target.edgeMappings) mapping.toJson()],
+          [for (final mapping in target.injectionMappings) mapping.toJson()],
+        ],
+    ],
+    'routes': [
+      for (final route in plan.routes)
+        [
+          route.routeId,
+          route.sourcePeerId,
+          route.sinkPeerId,
+          route.mapping.toJson(),
+        ],
+    ],
   });
 
   Future<InputTargetPlan> _plan() async {
