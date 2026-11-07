@@ -51,6 +51,8 @@ class TransferPlacements extends ChangeNotifier {
   /// failed ones (there is nothing there to try again).
   final _ephemeral = <String>{};
 
+  bool isEphemeral(String transferId) => _ephemeral.contains(transferId);
+
   void markEphemeral(String transferId) {
     _quiet.add(transferId);
     _ephemeral.add(transferId);

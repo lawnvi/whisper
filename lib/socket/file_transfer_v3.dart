@@ -52,15 +52,14 @@ final class FileTransferV3FlowParameters {
     windowSize: fileTransferV3MobileWindowSize,
   );
 
-  /// Beside keyboard, mouse and sound on the same network: a receiver asks
-  /// for this much in flight at most, so their packets never queue long
-  /// behind it (1 MiB is about 9 ms on gigabit, 27 ms at 37 MB/s Wi-Fi),
-  /// while the window still covers a LAN's round trip at full speed. The
-  /// smallest every version accepts.
+  /// Beside keyboard, mouse and sound on the same network: small chunks, so
+  /// the sender's pacer (`TransferPacer`) can space them evenly, and at most
+  /// 4 MiB on the way, which is what can queue ahead of their packets before
+  /// the pacer notices.
   static const sharedLink = FileTransferV3FlowParameters(
     chunkSize: fileTransferV3LegacyFramePayloadSize,
-    ackIntervalSize: fileTransferV3LegacyFramePayloadSize,
-    windowSize: 2 * fileTransferV3LegacyFramePayloadSize,
+    ackIntervalSize: 2 * fileTransferV3LegacyFramePayloadSize,
+    windowSize: 8 * fileTransferV3LegacyFramePayloadSize,
   );
 
   final int chunkSize;

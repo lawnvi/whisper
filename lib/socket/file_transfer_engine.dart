@@ -31,6 +31,7 @@ import 'package:whisper/socket/outgoing_progress_estimator.dart';
 import 'package:whisper/socket/peer_connection.dart';
 import 'package:whisper/socket/peer_transfer_runtime.dart';
 import 'package:whisper/socket/transfer_ack_watchdog.dart';
+import 'package:whisper/socket/transfer_pacer.dart';
 import 'package:whisper/socket/whisper_frame_v3.dart';
 import 'package:whisper/socket/wire_input_policy.dart';
 import 'package:whisper/socket/wire_message_codec.dart';
@@ -275,6 +276,7 @@ class FileTransferEngine {
     FileTransferV3FlowParameters? flowLimits,
     FileTransferV3FlowParameters? Function(String transferId)?
     incomingFlowLimitsFor,
+    TransferPacer? Function(String transferId)? outgoingPacerFor,
     DateTime Function()? now,
     TransferAckTimerFactory? progressTimerFactory,
     FolderTransferStore folderStore = const FolderTransferStore(),
@@ -320,6 +322,7 @@ class FileTransferEngine {
                ? FileTransferV3FlowParameters.mobile
                : FileTransferV3FlowParameters.desktop),
        _incomingFlowLimitsFor = incomingFlowLimitsFor,
+       _outgoingPacerFor = outgoingPacerFor,
        _now = now ?? DateTime.now,
        _progressTimerFactory = progressTimerFactory ?? Timer.new,
        _folderStore = folderStore,
@@ -381,6 +384,10 @@ class FileTransferEngine {
 
   FileTransferV3FlowParameters _incomingFlowLimits(String transferId) =>
       _incomingFlowLimitsFor?.call(transferId) ?? _flowLimits;
+
+  /// Paces some outgoing transfers (clipboard files) to what keyboard, mouse
+  /// and sound leave free.
+  final TransferPacer? Function(String transferId)? _outgoingPacerFor;
   final FolderTransferStore _folderStore;
   final Future<FolderScanResult> Function(String path) _scanFolder;
 
@@ -2870,6 +2877,15 @@ class FileTransferEngine {
           ? _ackWatchdog.currentWindow(transfer.transferId)
           : null;
       final length = math.min(flow.chunkSize, windowEnd - cursor);
+      final pacer = _outgoingPacerFor?.call(transfer.transferId);
+      if (pacer != null) {
+        await pacer.take(length);
+        if (_transferRuntime.activeOutgoingFor(transfer.peerUid) !=
+                transfer.transferId ||
+            _outgoingStopRequests.contains(transfer.transferId)) {
+          return cursor;
+        }
+      }
       final buffer = AuthenticatedPayloadBuffer.allocate(
         WhisperFrameV3.headerLength + length,
       );

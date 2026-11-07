@@ -55,6 +55,7 @@ import 'package:whisper/window_stream/remote/window_stream_control.dart';
 import 'package:whisper/window_stream/remote/window_stream_host.dart';
 import 'package:whisper/window_stream/window_stream_support.dart';
 import 'package:whisper/socket/transport_close_guard.dart';
+import 'package:whisper/socket/transfer_pacer.dart';
 import 'package:whisper/socket/whisper_frame_v3.dart';
 import 'package:whisper/socket/wire_message_codec.dart';
 import 'package:whisper/socket/wire_message_replay.dart';
@@ -542,6 +543,10 @@ class WsSvrManager {
       <String, Set<Completer<PeerProfile?>>>{};
   late final FileTransferEngine _transferEngine = FileTransferEngine(
     currentConnectionBinding: _peerConnections.currentBinding,
+    outgoingPacerFor: (transferId) =>
+        TransferPlacements.shared.isEphemeral(transferId)
+        ? _clipboardPacer
+        : null,
     incomingFlowLimitsFor: (transferId) =>
         _remoteClipboardTransfer.carriesTransfer(transferId)
         ? FileTransferV3FlowParameters.sharedLink
@@ -600,6 +605,11 @@ class WsSvrManager {
         placements: TransferPlacements.shared,
         keepClipboard: keepDesktopClipboard,
       );
+
+  /// Clipboard files give way to sound, keyboard and mouse.
+  final TransferPacer _clipboardPacer = TransferPacer(
+    audioStrained: () => AudioGroupCoordinator.shared.audioStrained,
+  );
 
   /// Pastes waiting for their files: what the floating island shows.
   late final RemoteClipboardPasteWatch remoteClipboardPasteWatch =
