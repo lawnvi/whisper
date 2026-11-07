@@ -782,6 +782,19 @@ class _DeviceListScreen extends State<DeviceListScreen>
     }
   }
 
+  /// Lit while sound goes to a device or plays here, as the tray reads it.
+  /// The switch alone stayed lit after every member had dropped off.
+  bool _soundInProgress() {
+    final group = _audioGroupCoordinator.session;
+    // Only this device's own sharing: a member sees the others in it too.
+    final sending =
+        group != null &&
+        group.isLive &&
+        group.sourcePeerId == device?.uid &&
+        group.sinks.values.any((sink) => !sink.isTerminal);
+    return sending || _audioGroupCoordinator.isPlaybackActive;
+  }
+
   void _handleDesktopAudioChanged() {
     if (mounted) {
       setState(() {});
@@ -2388,9 +2401,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
       factsFor: _shellFacts,
       isPaired: _isTrustedDevice,
       loading: device == null,
-      soundActive:
-          ShellSoundController.shared.on ||
-          ShellSoundController.shared.sinkView != null,
+      soundActive: _soundInProgress(),
       inputActive:
           ShellInputController.shared.on ||
           ShellInputController.shared.controlledBy != null,
