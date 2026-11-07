@@ -64,6 +64,7 @@ private enum RemoteInputTraceEvent: String {
   case injectionStopped = "injection_stopped"
   case shortcutFiltered = "shortcut_filtered"
   case shortcutPosted = "shortcut_posted"
+  case tapReenabled = "tap_reenabled"
   case virtualCapsDown = "virtual_caps_down"
   case virtualCapsUp = "virtual_caps_up"
   case virtualKeyboardActivated = "virtual_keyboard_activated"
@@ -1206,6 +1207,18 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     }
     moveCaptureCursorToLocalEdge(edgeUnit: releaseEdgeUnit)
     showCaptureCursorIfNeeded()
+  }
+
+  /// macOS turns a tap off when its callback runs late (waking from sleep, a
+  /// busy main thread) or for some user input, and says so through the
+  /// callback. Left off, the edge was never seen again: the pointer stopped
+  /// crossing until something restarted capture, opening the window for one.
+  fileprivate func reenableTap(type: CGEventType, shortcut: Bool) {
+    guard let tap = shortcut ? shortcutSuppressionEventTap : eventTap else {
+      return
+    }
+    CGEvent.tapEnable(tap: tap, enable: true)
+    traceRemoteInput(.tapReenabled, count: Int(type.rawValue))
   }
 
   fileprivate func handleEvent(type: CGEventType, event: CGEvent) -> Bool {
@@ -2528,7 +2541,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       options: .defaultTap,
       eventsOfInterest: mask,
       callback: remoteInputShortcutSuppressionCallback,
-      userInfo: nil) else {
+      userInfo: Unmanaged.passUnretained(self).toOpaque()) else {
       return false
     }
     let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
@@ -3630,13 +3643,24 @@ private let remoteInputEventCallback: CGEventTapCallBack = {
   let plugin = Unmanaged<RemoteInputPlugin>
     .fromOpaque(userInfo)
     .takeUnretainedValue()
+  if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+    plugin.reenableTap(type: type, shortcut: false)
+    return Unmanaged.passUnretained(event)
+  }
   return plugin.handleEvent(type: type, event: event)
     ? nil
     : Unmanaged.passUnretained(event)
 }
 
 private let remoteInputShortcutSuppressionCallback: CGEventTapCallBack = {
-  _, type, event, _ in
+  _, type, event, userInfo in
+  if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+    if let userInfo = userInfo {
+      Unmanaged<RemoteInputPlugin>.fromOpaque(userInfo).takeUnretainedValue()
+        .reenableTap(type: type, shortcut: true)
+    }
+    return Unmanaged.passUnretained(event)
+  }
   if event.getIntegerValueField(.eventSourceUserData) ==
       remoteInputShortcutEventMarker {
     traceRemoteInput(.shortcutFiltered, count: Int(type.rawValue))
