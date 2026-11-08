@@ -56,6 +56,10 @@ class FilesDevice {
   RemoteFilesClient? client;
   FilesDeviceState state;
 
+  /// It was asked to allow browsing in this window: asking now is asking
+  /// again.
+  bool asked = false;
+
   bool get isLocal => id == localId;
   bool get isPhone => platform == 'android' || platform == 'ios';
 }
@@ -440,21 +444,28 @@ class FilesController extends ChangeNotifier {
     }
   }
 
-  /// Shows [device]'s first place, asking it for access first if needed.
+  /// Shows [device]'s first place. One that has not allowed browsing is
+  /// asked only with [ask]: opening the window or picking a device shows it
+  /// with a button that asks, so that looking around never puts a question
+  /// on the other device's screen.
   Future<void> open(
     FilesDevice device, {
     String? root,
     String path = '',
+    bool ask = false,
   }) async {
     if (device.browser == null) {
       final client = device.client;
-      if (client == null ||
+      if (!ask ||
+          client == null ||
           device.state == FilesDeviceState.offline ||
           device.state == FilesDeviceState.unsupported) {
         _show(FilesLocation(device.id, '', ''));
         return;
       }
-      device.state = FilesDeviceState.waiting;
+      device
+        ..asked = true
+        ..state = FilesDeviceState.waiting;
       _show(FilesLocation(device.id, '', ''));
       try {
         final info = await client.open();
@@ -500,7 +511,7 @@ class FilesController extends ChangeNotifier {
     if (current != null) {
       current.client = RemoteFilesClient(current.id);
       current.state = FilesDeviceState.idle;
-      await open(current);
+      await open(current, ask: true);
     }
   }
 

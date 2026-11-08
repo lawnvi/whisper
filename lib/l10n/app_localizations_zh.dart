@@ -3545,4 +3545,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get inputElevatedHint => '前面是管理员窗口：单击一下，再移过去';
+
+  @override
+  String get remoteFilesAsk => '请求访问';
 }

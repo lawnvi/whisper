@@ -2544,5 +2544,6 @@
   "pasteIslandQueued": "After the one before",
   "shellDropSendFiles": "{count} files, {size}",
   "shellDropSendItems": "{count} items",
-  "inputElevatedHint": "An administrator window is in front: click, then move across"
+  "inputElevatedHint": "An administrator window is in front: click, then move across",
+  "remoteFilesAsk": "Ask to Browse"
 }

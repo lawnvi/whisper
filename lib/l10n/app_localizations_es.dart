@@ -3794,4 +3794,7 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get inputElevatedHint =>
       'Hay una ventana de administrador delante: haz clic y luego pasa';
+
+  @override
+  String get remoteFilesAsk => 'Pedir acceso';
 }

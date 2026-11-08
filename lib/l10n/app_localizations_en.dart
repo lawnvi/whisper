@@ -3753,4 +3753,7 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get inputElevatedHint =>
       'An administrator window is in front: click, then move across';
+
+  @override
+  String get remoteFilesAsk => 'Ask to Browse';
 }

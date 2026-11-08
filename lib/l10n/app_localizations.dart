@@ -4678,7 +4678,7 @@ abstract class AppLocalizations {
   /// **'请求已过期，请确认对方在设备旁后重试。'**
   String get remoteFilesNoAnswerDetail;
 
-  /// File browser: shown after the user stopped waiting for the other device to allow browsing; a button asks again.
+  /// File browser: another device whose files have not been allowed in this window yet (not asked, or the user stopped waiting); a button asks.
   ///
   /// In zh, this message translates to:
   /// **'浏览 {device} 的文件需要对方允许'**
@@ -6284,6 +6284,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'前面是管理员窗口：单击一下，再移过去'**
   String get inputElevatedHint;
+
+  /// File browser: the button under a device that has not allowed browsing yet in this window; only it sends the request, so opening the window or picking a device never asks the other device by itself.
+  ///
+  /// In zh, this message translates to:
+  /// **'请求访问'**
+  String get remoteFilesAsk;
 }
 
 class _AppLocalizationsDelegate

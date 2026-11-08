@@ -1607,5 +1607,6 @@
   "pasteIslandQueued": "Después del anterior",
   "shellDropSendFiles": "{count} archivos, {size}",
   "shellDropSendItems": "{count} elementos",
-  "inputElevatedHint": "Hay una ventana de administrador delante: haz clic y luego pasa"
+  "inputElevatedHint": "Hay una ventana de administrador delante: haz clic y luego pasa",
+  "remoteFilesAsk": "Pedir acceso"
 }

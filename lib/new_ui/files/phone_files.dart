@@ -306,7 +306,7 @@ class _PhoneFilesViewState extends State<PhoneFilesView> {
     if (where == null) {
       // Not allowed to look there yet: ask, then pick the folder over there.
       _startCopy(items);
-      unawaited(controller.open(device));
+      unawaited(controller.open(device, ask: true));
       return;
     }
     if (await actions.copy(items, where) && mounted) {
@@ -1081,7 +1081,7 @@ class _PhoneFilesViewState extends State<PhoneFilesView> {
       FilesDeviceState.idle => state(
         l10n.remoteFilesNotAsked(name),
         action: retry(
-          l10n.remoteFilesAskAgain,
+          device.asked ? l10n.remoteFilesAskAgain : l10n.remoteFilesAsk,
           () => unawaited(controller.retry()),
         ),
       ),

@@ -1965,7 +1965,7 @@
   },
   "remoteFilesNotAsked": "浏览 {device} 的文件需要对方允许",
   "@remoteFilesNotAsked": {
-    "description": "File browser: shown after the user stopped waiting for the other device to allow browsing; a button asks again.",
+    "description": "File browser: another device whose files have not been allowed in this window yet (not asked, or the user stopped waiting); a button asks.",
     "placeholders": {
       "device": {
         "type": "String"
@@ -2799,5 +2799,9 @@
   "inputElevatedHint": "前面是管理员窗口：单击一下，再移过去",
   "@inputElevatedHint": {
     "description": "Windows, sharing keyboard and mouse from this computer: shown beside the pointer at the edge leading to another device when an administrator's window (Task Manager, say) is in front and the pointer cannot go across by moving alone. A click there lets it."
+  },
+  "remoteFilesAsk": "请求访问",
+  "@remoteFilesAsk": {
+    "description": "File browser: the button under a device that has not allowed browsing yet in this window; only it sends the request, so opening the window or picking a device never asks the other device by itself."
   }
 }

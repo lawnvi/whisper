@@ -1048,7 +1048,7 @@ class _FinderViewState extends State<FinderView> {
       FilesDeviceState.idle => state(
         l10n.remoteFilesNotAsked(name),
         action: retry(
-          l10n.remoteFilesAskAgain,
+          device.asked ? l10n.remoteFilesAskAgain : l10n.remoteFilesAsk,
           () => unawaited(controller.retry()),
         ),
       ),
