@@ -1,6 +1,10 @@
 #include "window_theme_plugin.h"
 
 #include <dwmapi.h>
+#include <exdisp.h>
+#include <shlguid.h>
+#include <shlobj.h>
+#include <shobjidl.h>
 #include <flutter/encodable_value.h>
 #include <flutter_windows.h>
 #include <flutter/method_channel.h>
@@ -36,6 +40,98 @@ constexpr INT_PTR kChosenLight = 1;
 constexpr INT_PTR kChosenDark = 2;
 
 bool g_next_window_is_panel = false;
+
+std::string Utf8(const wchar_t* text) {
+  if (text == nullptr || *text == 0) {
+    return std::string();
+  }
+  const int size = WideCharToMultiByte(CP_UTF8, 0, text, -1, nullptr, 0,
+                                       nullptr, nullptr);
+  std::string out(size > 0 ? size - 1 : 0, '\0');
+  if (size > 1) {
+    WideCharToMultiByte(CP_UTF8, 0, text, -1, out.data(), size, nullptr,
+                        nullptr);
+  }
+  return out;
+}
+
+// The folder File Explorer shows in [window], or the desktop's: where a
+// paste pressed there puts its files. Null for any other window, and for a
+// folder that is not a place on disk (This PC, a library).
+std::optional<std::pair<std::string, std::string>> FolderShownIn(
+    HWND window) {
+  wchar_t name[64] = {};
+  GetClassNameW(window, name, 64);
+  PIDLIST_ABSOLUTE pidl = nullptr;
+  if (wcscmp(name, L"Progman") == 0 || wcscmp(name, L"WorkerW") == 0) {
+    if (FAILED(SHGetKnownFolderIDList(FOLDERID_Desktop, 0, nullptr, &pidl))) {
+      return std::nullopt;
+    }
+  } else if (wcscmp(name, L"CabinetWClass") == 0) {
+    IShellWindows* windows = nullptr;
+    if (FAILED(CoCreateInstance(CLSID_ShellWindows, nullptr, CLSCTX_ALL,
+                                IID_PPV_ARGS(&windows)))) {
+      return std::nullopt;
+    }
+    long count = 0;
+    windows->get_Count(&count);
+    for (long i = 0; i < count && pidl == nullptr; ++i) {
+      VARIANT index;
+      VariantInit(&index);
+      index.vt = VT_I4;
+      index.lVal = i;
+      IDispatch* dispatch = nullptr;
+      if (FAILED(windows->Item(index, &dispatch)) || dispatch == nullptr) {
+        continue;
+      }
+      IWebBrowserApp* app = nullptr;
+      if (SUCCEEDED(dispatch->QueryInterface(IID_PPV_ARGS(&app)))) {
+        SHANDLE_PTR handle = 0;
+        IServiceProvider* provider = nullptr;
+        IShellBrowser* browser = nullptr;
+        IShellView* view = nullptr;
+        HWND view_window = nullptr;
+        IFolderView* folder_view = nullptr;
+        IPersistFolder2* folder = nullptr;
+        // Tabs share the window: the tab shown is the one whose view is.
+        if (SUCCEEDED(app->get_HWND(&handle)) &&
+            reinterpret_cast<HWND>(handle) == window &&
+            SUCCEEDED(app->QueryInterface(IID_PPV_ARGS(&provider))) &&
+            SUCCEEDED(provider->QueryService(SID_STopLevelBrowser,
+                                             IID_PPV_ARGS(&browser))) &&
+            SUCCEEDED(browser->QueryActiveShellView(&view)) &&
+            SUCCEEDED(view->GetWindow(&view_window)) &&
+            IsWindowVisible(view_window) &&
+            SUCCEEDED(view->QueryInterface(IID_PPV_ARGS(&folder_view))) &&
+            SUCCEEDED(folder_view->GetFolder(IID_PPV_ARGS(&folder)))) {
+          folder->GetCurFolder(&pidl);
+        }
+        if (folder) folder->Release();
+        if (folder_view) folder_view->Release();
+        if (view) view->Release();
+        if (browser) browser->Release();
+        if (provider) provider->Release();
+        app->Release();
+      }
+      dispatch->Release();
+    }
+    windows->Release();
+  }
+  if (pidl == nullptr) {
+    return std::nullopt;
+  }
+  wchar_t path[MAX_PATH] = {};
+  const bool on_disk = SHGetPathFromIDListW(pidl, path) != FALSE;
+  PWSTR display = nullptr;
+  SHGetNameFromIDList(pidl, SIGDN_NORMALDISPLAY, &display);
+  std::optional<std::pair<std::string, std::string>> result;
+  if (on_disk && path[0] != 0) {
+    result = std::make_pair(Utf8(path), Utf8(display ? display : path));
+  }
+  if (display) CoTaskMemFree(display);
+  CoTaskMemFree(pidl);
+  return result;
+}
 
 template <typename T>
 const T* GetMapValue(const flutter::EncodableMap& map, const char* key) {
@@ -141,6 +237,24 @@ class WindowThemePlugin : public flutter::Plugin {
       ShowWindow(window_, SW_HIDE);
       SetLayeredWindowAttributes(window_, 0, 0, LWA_ALPHA);
       result->Success(flutter::EncodableValue(true));
+      return;
+    }
+
+    // The folder shown in front (File Explorer or the desktop): where a paste
+    // pressed now would go.
+    if (call.method_name() == "foregroundFolder") {
+      const auto folder =
+          FolderShownIn(GetAncestor(GetForegroundWindow(), GA_ROOT));
+      if (!folder) {
+        result->Success();
+        return;
+      }
+      result->Success(flutter::EncodableValue(flutter::EncodableMap{
+          {flutter::EncodableValue("path"),
+           flutter::EncodableValue(folder->first)},
+          {flutter::EncodableValue("name"),
+           flutter::EncodableValue(folder->second)},
+      }));
       return;
     }
 

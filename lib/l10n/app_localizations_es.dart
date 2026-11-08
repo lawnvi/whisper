@@ -3772,4 +3772,12 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get pasteIslandCanceled => 'Cancelado';
+
+  @override
+  String pasteIslandPlaced(String folder) {
+    return 'Guardado en $folder';
+  }
+
+  @override
+  String get pasteIslandQueued => 'Después del anterior';
 }

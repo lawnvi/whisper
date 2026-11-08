@@ -686,6 +686,54 @@ void main() {
       },
     );
 
+    test('put into a folder, nothing there is overwritten', () async {
+      final link = pair(newSource: true, newSink: true);
+      final item = await file('report.pdf', 3000);
+      await link.source.publish(peerId: 'sink', sessionId: 's', items: [item]);
+      expect(
+        await link.sink.preparePaste(peerId: 'source', sessionId: 's'),
+        RemoteClipboardPasteResult.prepared,
+      );
+      final folder = await Directory('${root.path}/desk').create();
+      await File('${folder.path}/report.pdf').writeAsString('mine');
+      final key = link.sink.pasteKey('s')!;
+      expect(await link.sink.placeInto(key, folder.path), isTrue);
+      expect(await File('${folder.path}/report.pdf').readAsString(), 'mine');
+      expect(await File('${folder.path}/report 2.pdf').length(), 3000);
+    });
+
+    test('a paste while another one\'s files come waits its turn', () async {
+      final land = Completer<void>();
+      final link = pair(newSource: true, newSink: true, landAfter: land.future);
+      final first = await file('first.bin', 3000);
+      await link.source.publish(peerId: 'sink', sessionId: 's', items: [first]);
+      final pastingFirst = link.sink.preparePaste(
+        peerId: 'source',
+        sessionId: 's',
+      );
+      await pumpEventQueue();
+      // Something else copied, and pasted, before the first came.
+      final second = await file('second.bin', 2000);
+      await link.source.publish(
+        peerId: 'sink',
+        sessionId: 's',
+        items: [second],
+      );
+      final pastingSecond = link.sink.preparePaste(
+        peerId: 'source',
+        sessionId: 's',
+      );
+      await pumpEventQueue();
+      expect(link.sentAsFiles, hasLength(2));
+      land.complete();
+      expect(await pastingFirst, RemoteClipboardPasteResult.prepared);
+      expect(await pastingSecond, RemoteClipboardPasteResult.prepared);
+      expect(written.map((paths) => paths.single.split('/').last).toSet(), {
+        'first.bin',
+        'second.bin',
+      });
+    });
+
     test('the session over, a waiting paste stops', () async {
       final land = Completer<void>();
       final link = pair(newSource: true, newSink: true, landAfter: land.future);
@@ -812,6 +860,65 @@ void main() {
         isFalse,
       );
       expect(moved.current!.stage, RemoteClipboardPasteStage.ready);
+    });
+
+    test(
+      'files asked in a folder go into it, not wherever its window went',
+      () async {
+        final placedIn = <String>[];
+        final w = RemoteClipboardPasteWatch(
+          download: (_) => null,
+          cancelDownload: (_) async {},
+          // The same window, which may show another folder by now.
+          foreground: () async => 'explorer',
+          place: (sessionId, directory) async {
+            placedIn.add(directory);
+            return true;
+          },
+        );
+        expect(
+          await w.follow(
+            sessionId: 's',
+            pending: Future.value(RemoteClipboardPasteResult.prepared),
+            front: Future.value('explorer'),
+            folder: Future.value((path: '/Users/me/Desktop', name: '桌面')),
+          ),
+          isFalse,
+        );
+        expect(placedIn, ['/Users/me/Desktop']);
+        expect(w.current!.stage, RemoteClipboardPasteStage.placed);
+        expect(w.current!.folder, '桌面');
+      },
+    );
+
+    test('two pastes of different files each go in', () async {
+      var offer = 'a';
+      final w = RemoteClipboardPasteWatch(
+        download: (_) => null,
+        cancelDownload: (_) async {},
+        pasteKey: (_) => offer,
+        foreground: () async => 'explorer',
+      );
+      final firstFiles = Completer<RemoteClipboardPasteResult>();
+      final first = w.follow(
+        sessionId: 's',
+        pending: firstFiles.future,
+        front: Future.value('explorer'),
+      );
+      offer = 'b';
+      final second = w.follow(
+        sessionId: 's',
+        pending: Future.value(RemoteClipboardPasteResult.prepared),
+        front: Future.value('explorer'),
+      );
+      expect(await second, isTrue);
+      firstFiles.complete(RemoteClipboardPasteResult.prepared);
+      expect(await first, isTrue);
+      expect(w.pastes.map((paste) => paste.stage), [
+        RemoteClipboardPasteStage.pasted,
+        RemoteClipboardPasteStage.pasted,
+      ]);
+      w.dispose();
     });
 
     test('pressed again while the files come, it pastes once', () async {

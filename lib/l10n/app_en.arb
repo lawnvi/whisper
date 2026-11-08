@@ -2532,5 +2532,14 @@
     }
   },
   "pasteIslandFailed": "Couldn't paste",
-  "pasteIslandCanceled": "Canceled"
+  "pasteIslandCanceled": "Canceled",
+  "pasteIslandPlaced": "Saved to {folder}",
+  "@pasteIslandPlaced": {
+    "placeholders": {
+      "folder": {
+        "type": "String"
+      }
+    }
+  },
+  "pasteIslandQueued": "After the one before"
 }

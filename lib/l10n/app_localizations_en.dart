@@ -3731,4 +3731,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get pasteIslandCanceled => 'Canceled';
+
+  @override
+  String pasteIslandPlaced(String folder) {
+    return 'Saved to $folder';
+  }
+
+  @override
+  String get pasteIslandQueued => 'After the one before';
 }

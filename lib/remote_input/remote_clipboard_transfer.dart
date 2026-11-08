@@ -253,17 +253,53 @@ final class RemoteClipboardTransferEngine {
     _ownWriteUntil = DateTime.now().add(const Duration(milliseconds: 1500));
   }
 
-  /// The paste for [sessionId] went in: what was copied since comes back.
-  void restoreAfterPaste(String sessionId) {
-    final restore = _restores.remove(sessionId);
+  /// The files each paste put on the clipboard, by what was copied (its
+  /// offer id, the paste's key).
+  final Map<String, List<String>> _prepared = <String, List<String>>{};
+
+  /// Which paste a shortcut pressed now in [sessionId] is: what is offered
+  /// there.
+  String? pasteKey(String sessionId) => _remoteOffers[sessionId]?.offerId;
+
+  /// Copies the files of the paste [key] into [directory], under names free
+  /// there: for a paste asked in a folder whose window is no longer in front.
+  /// They stay on the clipboard as well.
+  Future<bool> placeInto(String key, String directory) async {
+    final paths = _prepared[key];
+    if (paths == null || paths.isEmpty) return false;
+    for (final path in paths) {
+      final target = await TransferPlacements.freeName(
+        directory,
+        p.basename(path),
+      );
+      await File(path).copy(target);
+    }
+    traceRemoteClipboard('placed', count: paths.length);
+    return true;
+  }
+
+  /// The paste [key] went in: what was copied since comes back.
+  void restoreAfterPaste(String key) {
+    final restore = _restores.remove(key);
     if (restore == null) return;
     Timer(const Duration(milliseconds: 1500), () {
       _markOwnWrite();
       unawaited(restore().catchError((Object _) {}));
     });
   }
+
+  /// The clipboard is a paste's from its write until it has surely been
+  /// pasted (or put back).
+  Future<void> _pasteLane = Future<void>.value();
+  String? _laneKey;
+  static const _pasteTurn = Duration(seconds: 2);
+
   bool get _sendsTransfers =>
       _sendFile != null && _cancelTransfer != null && _placements != null;
+
+  /// Pastes whose files are on their way, by offer id. Several at once: a
+  /// paste pressed while another one's files come waits its turn instead of
+  /// cancelling it.
   final Map<String, _TransferRequest> _transferRequests =
       <String, _TransferRequest>{};
   StreamSubscription<PlacedTransfer>? _placedSubscription;
@@ -317,7 +353,8 @@ final class RemoteClipboardTransferEngine {
       _sourceOffers.remove(sessionId);
       return false;
     }
-    if (viaTransfer && _validatedLocalItems(items, viaTransfer: false) == null) {
+    if (viaTransfer &&
+        _validatedLocalItems(items, viaTransfer: false) == null) {
       // An older device turns this offer down and would keep pasting the
       // previous one: it hears that the clipboard was cleared first.
       await _sendFrame(
@@ -449,17 +486,46 @@ final class RemoteClipboardTransferEngine {
     if (cached == null || cached.offerId != offer.offerId) {
       return RemoteClipboardPasteResult.failed;
     }
-    // Something else was copied since the paste: it comes back afterwards.
-    _restores.remove(sessionId);
-    if (leftover != null) {
-      final restore = await _keepClipboard?.call();
-      if (restore != null) _restores[sessionId] = restore;
+    // One paste at a time from the clipboard: other files written over the
+    // first before its paste has read them would paste the wrong ones. The
+    // same files again need no turn of their own.
+    Completer<void>? turn;
+    if (_laneKey != offer.offerId) {
+      final previous = _pasteLane;
+      final mine = turn = Completer<void>();
+      _pasteLane = mine.future;
+      _laneKey = offer.offerId;
+      await previous;
     }
-    _markOwnWrite();
-    final written = await _writer.writeFilePaths(
-      cached.paths,
-      asImage: cached.asImage,
-    );
+    final bool written;
+    try {
+      // Something else was copied since the paste: it comes back afterwards.
+      _restores.remove(offer.offerId);
+      if (leftover != null) {
+        final restore = await _keepClipboard?.call();
+        if (restore != null) _restores[offer.offerId] = restore;
+      }
+      _markOwnWrite();
+      // The last few: only a paste still being followed asks for them.
+      _prepared.remove(offer.offerId);
+      _prepared[offer.offerId] = cached.paths;
+      while (_prepared.length > 16) {
+        _prepared.remove(_prepared.keys.first);
+      }
+      written = await _writer.writeFilePaths(
+        cached.paths,
+        asImage: cached.asImage,
+      );
+    } finally {
+      final mine = turn;
+      if (mine != null) {
+        final key = offer.offerId;
+        Timer(_pasteTurn, () {
+          if (_laneKey == key) _laneKey = null;
+          mine.complete();
+        });
+      }
+    }
     traceRemoteClipboard('clipboard_written', success: written);
     final result = written
         ? RemoteClipboardPasteResult.prepared
@@ -1112,14 +1178,11 @@ final class RemoteClipboardTransferEngine {
     _RemoteOffer offer,
   ) async {
     final sessionId = offer.sessionId;
-    final existing = _transferRequests[sessionId];
-    if (existing != null && existing.offer.offerId == offer.offerId) {
+    final existing = _transferRequests[offer.offerId];
+    if (existing != null) {
       return existing.completion.future;
     }
     await _removeCached(sessionId);
-    if (existing != null) {
-      await _abandonTransferRequest(existing);
-    }
     if (!_isCurrentRemoteOffer(offer)) {
       return RemoteClipboardPasteResult.notAvailable;
     }
@@ -1129,11 +1192,13 @@ final class RemoteClipboardTransferEngine {
     );
     await directory.create(recursive: true);
     if (!_isCurrentRemoteOffer(offer) ||
-        _transferRequests.containsKey(sessionId)) {
-      await directory.delete(recursive: true).catchError((_) => directory);
-      return _transferRequests[sessionId]?.offer.offerId == offer.offerId
-          ? _transferRequests[sessionId]!.completion.future
-          : RemoteClipboardPasteResult.notAvailable;
+        _transferRequests.containsKey(offer.offerId)) {
+      final started = _transferRequests[offer.offerId];
+      if (started == null) {
+        await directory.delete(recursive: true).catchError((_) => directory);
+      }
+      return started?.completion.future ??
+          RemoteClipboardPasteResult.notAvailable;
     }
     final request = _TransferRequest(
       offer: offer,
@@ -1141,7 +1206,7 @@ final class RemoteClipboardTransferEngine {
       transferIds: [for (final _ in offer.items) _uuid.v4()],
       onStalled: (request) => unawaited(_abandonTransferRequest(request)),
     );
-    _transferRequests[sessionId] = request;
+    _transferRequests[offer.offerId] = request;
     _carried.addAll(request.transferIds);
     while (_carried.length > 64) {
       _carried.remove(_carried.first);
@@ -1182,30 +1247,30 @@ final class RemoteClipboardTransferEngine {
 
   /// Whether [transferId] brings a pasted file here, now or lately.
   bool carriesTransfer(String transferId) =>
-      _carried.contains(transferId) ||
-      _transferRequestFor(transferId) != null;
+      _carried.contains(transferId) || _transferRequestFor(transferId) != null;
 
   /// Transfers that brought pasted files, the last few: their final updates
   /// may come after the paste is over.
   final Set<String> _carried = <String>{};
 
-  /// How far the files offered for [sessionId] have come. Null when nothing
-  /// is offered there.
-  RemoteClipboardDownload? download(String sessionId) {
+  /// How far the files of the paste [key] have come. Null when they are
+  /// not known (any more).
+  RemoteClipboardDownload? download(String key) {
+    final transfers = _transferRequests[key];
     final offer =
-        _transferRequests[sessionId]?.offer ?? _remoteOffers[sessionId];
+        transfers?.offer ??
+        _remoteOffers.values.where((offer) => offer.offerId == key).firstOrNull;
     if (offer == null) {
       return null;
     }
     final total = offer.items.fold<int>(0, (sum, item) => sum + item.size);
-    final transfers = _transferRequests[sessionId];
-    final incoming = _incoming[sessionId];
-    final cached = _cached[sessionId];
-    final received = transfers != null && identical(transfers.offer, offer)
+    final incoming = _incoming[offer.sessionId];
+    final cached = _cached[offer.sessionId];
+    final received = transfers != null
         ? transfers.received.fold<int>(0, (sum, bytes) => sum + bytes)
         : incoming != null && identical(incoming.offer, offer)
         ? incoming.offsets.fold<int>(0, (sum, bytes) => sum + bytes)
-        : cached != null && cached.offerId == offer.offerId
+        : (cached != null && cached.offerId == key) || _leftovers[key] != null
         ? total
         : 0;
     return RemoteClipboardDownload(
@@ -1216,14 +1281,18 @@ final class RemoteClipboardTransferEngine {
     );
   }
 
-  /// The user put the paste away: what is on its way for [sessionId] stops.
+  /// The user put the paste [key] away: what is on its way for it stops.
   /// The offer stays, and the next paste starts it again.
-  Future<void> cancelDownload(String sessionId) async {
-    final transfers = _transferRequests[sessionId];
+  Future<void> cancelDownload(String key) async {
+    final transfers = _transferRequests[key];
     if (transfers != null) {
       await _abandonTransferRequest(transfers);
     }
-    final incoming = _incoming.remove(sessionId);
+    final sessionId = _incoming.entries
+        .where((entry) => entry.value.offer.offerId == key)
+        .map((entry) => entry.key)
+        .firstOrNull;
+    final incoming = sessionId == null ? null : _incoming.remove(sessionId);
     if (incoming != null) {
       incoming.complete(RemoteClipboardPasteResult.failed);
       await incoming.dispose(deleteDirectory: true);
@@ -1273,7 +1342,10 @@ final class RemoteClipboardTransferEngine {
     if (request.paths[index] == null) {
       request.received[index] = snapshot.committedBytes;
     }
-    request.touch();
+    // Pastes from the same device wait behind this one: not stalled.
+    for (final other in _transferRequests.values) {
+      if (other.offer.peerId == request.offer.peerId) other.touch();
+    }
     if (snapshot.state == FileTransferState.failed ||
         snapshot.state == FileTransferState.canceled) {
       traceRemoteClipboard('transfer_failed', reason: snapshot.state.name);
@@ -1282,11 +1354,11 @@ final class RemoteClipboardTransferEngine {
   }
 
   Future<void> _finishTransferRequest(_TransferRequest request) async {
-    final sessionId = request.offer.sessionId;
-    if (!identical(_transferRequests[sessionId], request)) {
+    final key = request.offer.offerId;
+    if (!identical(_transferRequests[key], request)) {
       return;
     }
-    _transferRequests.remove(sessionId);
+    _transferRequests.remove(key);
     request.stop();
     final paths = List<String>.unmodifiable(request.paths.cast<String>());
     if (!_isCurrentRemoteOffer(request.offer)) {
@@ -1311,9 +1383,9 @@ final class RemoteClipboardTransferEngine {
 
   /// Cancels what is still on its way and drops what arrived.
   Future<void> _abandonTransferRequest(_TransferRequest request) async {
-    final sessionId = request.offer.sessionId;
-    if (identical(_transferRequests[sessionId], request)) {
-      _transferRequests.remove(sessionId);
+    final key = request.offer.offerId;
+    if (identical(_transferRequests[key], request)) {
+      _transferRequests.remove(key);
     }
     request.stop();
     request.complete(RemoteClipboardPasteResult.failed);
@@ -1346,7 +1418,12 @@ final class RemoteClipboardTransferEngine {
     }
     final request = _incoming.remove(sessionId);
     // A paste waiting for its files was asked for before this: it goes on.
-    final transfers = endsPaste ? _transferRequests.remove(sessionId) : null;
+    final ended = endsPaste
+        ? [
+            for (final request in _transferRequests.values)
+              if (request.offer.sessionId == sessionId) request,
+          ]
+        : const <_TransferRequest>[];
     // Detach all old state before asynchronous file cleanup can yield to a
     // replacement offer or a local clipboard change.
     final cached = _cached.remove(sessionId);
@@ -1356,7 +1433,7 @@ final class RemoteClipboardTransferEngine {
     request?.complete(RemoteClipboardPasteResult.failed);
     await Future.wait([
       if (request != null) request.dispose(deleteDirectory: true),
-      if (transfers != null) _abandonTransferRequest(transfers),
+      for (final request in ended) _abandonTransferRequest(request),
       if (cached != null && endsPaste) cached.dispose(),
     ]);
   }

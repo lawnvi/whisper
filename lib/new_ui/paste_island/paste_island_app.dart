@@ -35,7 +35,7 @@ class PasteIslandApp extends StatefulWidget {
 class _PasteIslandAppState extends State<PasteIslandApp> {
   /// The island lays itself out in this much; the window shows the part of
   /// it the island is in, so the rest of the screen keeps its clicks.
-  static const _area = Size(_openWidth + 2 * _openMargin, 200);
+  static const _area = Size(_openWidth + 2 * _openMargin, 360);
   static const _openWidth = 372.0, _compactMax = 260.0, _pill = 34.0;
 
   /// Room for the island's shadows: `WhisperShadow.islandClosed` and
@@ -43,18 +43,19 @@ class _PasteIslandAppState extends State<PasteIslandApp> {
   static const _compactMargin = 20.0, _openMargin = 44.0, _openBelow = 60.0;
   static const _top = 9.0;
 
-  /// The card's height with one paste in it, generously.
-  static const _openHeight = 80.0;
+  /// The open card: its padding, and a row per paste (`_Moment`), at most
+  /// this many counted.
+  static const _cardPadding = 20.0, _rowHeight = 46.0, _rowsAtMost = 5;
 
   final _source = IslandListSource();
   late final IslandCenter _center = IslandCenter(sources: [_source]);
 
   String? _host;
   String _locale = 'zh';
-  String _device = '';
-  RemoteClipboardPasteState? _paste;
+  final Map<int, String> _devices = {};
+  final Set<int> _seen = {};
   final Map<int, DateTime> _since = {};
-  Timer? _settle;
+  final Map<int, Timer> _settles = {};
   Timer? _resize;
   bool _visible = false;
   IslandStage _stage = IslandStage.hidden;
@@ -99,13 +100,15 @@ class _PasteIslandAppState extends State<PasteIslandApp> {
   Future<void> _onState(Map<String, dynamic> map) async {
     _host = map['host'] as String? ?? _host;
     _locale = map['locale'] as String? ?? _locale;
-    _device = map['device'] as String? ?? '';
-    final paste = RemoteClipboardPasteState.fromMap(map['paste']);
-    if (paste == null) return;
-    final fresh = _paste?.id != paste.id;
-    if (mounted) setState(() => _paste = paste);
+    final pastes = <RemoteClipboardPasteState>[];
+    for (final raw in map['pastes'] as List? ?? const []) {
+      final paste = RemoteClipboardPasteState.fromMap(raw);
+      if (paste == null) continue;
+      pastes.add(paste);
+      _devices[paste.id] = (raw as Map)['device'] as String? ?? '';
+    }
+    final fresh = pastes.any((paste) => !_seen.contains(paste.id));
     if (fresh) {
-      _settle?.cancel();
       if (!_visible) {
         await _place(_compactSize, rescreen: true);
         if (_firstFrameHeld) {
@@ -123,15 +126,26 @@ class _PasteIslandAppState extends State<PasteIslandApp> {
         }
       }
     }
-    _put(paste);
+    final ids = {for (final paste in pastes) 'paste:${paste.id}'};
+    for (final activity in _source.activities) {
+      if (!ids.contains(activity.id)) _source.remove(activity.id);
+    }
+    for (final paste in pastes) {
+      _seen.add(paste.id);
+      _put(paste);
+    }
+    // More rows in the open card: a taller window.
+    if (_stage == IslandStage.expanded) unawaited(_place(_openSize));
   }
 
   void _put(RemoteClipboardPasteState paste) {
     final id = 'paste:${paste.id}';
     final status = switch (paste.stage) {
       RemoteClipboardPasteStage.receiving => IslandStatus.live,
-      // Waits for the user: the card opens and says what to press.
-      RemoteClipboardPasteStage.ready => IslandStatus.waiting,
+      // The card opens: what to press, or where the files went while the
+      // user was in another window.
+      RemoteClipboardPasteStage.ready ||
+      RemoteClipboardPasteStage.placed => IslandStatus.waiting,
       RemoteClipboardPasteStage.pasted => IslandStatus.done,
       RemoteClipboardPasteStage.failed => IslandStatus.failed,
       RemoteClipboardPasteStage.canceled => IslandStatus.ended,
@@ -145,15 +159,22 @@ class _PasteIslandAppState extends State<PasteIslandApp> {
         urgent: true,
         presenter: PasteIslandPresenter(
           paste: paste,
-          device: _device,
-          onCancel: () => unawaited(_send('cancel')),
+          device: _devices[paste.id] ?? '',
+          onCancel: () => unawaited(_send('cancel', paste.id)),
         ),
       ),
     );
     switch (paste.stage) {
+      case RemoteClipboardPasteStage.placed:
+        // Done: it says where the files went for as long as a done thing
+        // stays, then goes.
+        _settles[paste.id] ??= Timer(
+          IslandCenter.doneLingers,
+          () => _source.remove(id),
+        );
       case RemoteClipboardPasteStage.ready || RemoteClipboardPasteStage.failed:
         // Open for as long as trouble is, then away: nothing to try here.
-        _later(
+        _settles[paste.id] ??= Timer(
           IslandCenter.troubleOpen + const Duration(seconds: 1),
           () => _source.put(_ended(id, paste)),
         );
@@ -168,29 +189,29 @@ class _PasteIslandAppState extends State<PasteIslandApp> {
       IslandActivity(
         id: id,
         kind: IslandKind.copy,
-        status: paste.stage == RemoteClipboardPasteStage.ready
-            ? IslandStatus.done
-            : IslandStatus.ended,
+        status: paste.stage == RemoteClipboardPasteStage.failed
+            ? IslandStatus.ended
+            : IslandStatus.done,
         since: _since[paste.id] ?? DateTime.now(),
         urgent: true,
         presenter: PasteIslandPresenter(
           paste: paste,
-          device: _device,
+          device: _devices[paste.id] ?? '',
           onCancel: null,
         ),
       );
-
-  void _later(Duration delay, VoidCallback f) {
-    _settle?.cancel();
-    _settle = Timer(delay, f);
-  }
 
   Size get _compactSize => const Size(
     _compactMax + 2 * _compactMargin,
     _top + _pill + _compactMargin,
   );
-  Size get _openSize =>
-      const Size(_openWidth + 2 * _openMargin, _top + _openHeight + _openBelow);
+  Size get _openSize {
+    final rows = _source.activities.length.clamp(1, _rowsAtMost);
+    return Size(
+      _openWidth + 2 * _openMargin,
+      _top + _cardPadding + _rowHeight * rows + _openBelow,
+    );
+  }
 
   /// The window follows the island: as big as the card the moment it opens,
   /// back to the capsule once it has gone small, away once it has left.
@@ -230,17 +251,19 @@ class _PasteIslandAppState extends State<PasteIslandApp> {
   }
 
   /// Back to the main engine, which does the work.
-  Future<void> _send(String action) async {
+  Future<void> _send(String action, int id) async {
     final host = _host;
     if (host == null) return;
     await WindowController.fromWindowId(
       host,
-    ).invokeMethod<void>('pasteIsland', {'action': action});
+    ).invokeMethod<void>('pasteIsland', {'action': action, 'id': id});
   }
 
   @override
   void dispose() {
-    _settle?.cancel();
+    for (final timer in _settles.values) {
+      timer.cancel();
+    }
     _resize?.cancel();
     _center.removeListener(_onStage);
     super.dispose();
@@ -311,6 +334,7 @@ class PasteIslandPresenter extends IslandPresenter with MomentViews {
       child: CustomPaint(painter: IslandRingPainter(paste.progress ?? 0)),
     ),
     RemoteClipboardPasteStage.pasted ||
+    RemoteClipboardPasteStage.placed ||
     RemoteClipboardPasteStage.ready => const WhisperIcon(
       WhisperGlyph.check,
       size: 16,
@@ -325,6 +349,12 @@ class PasteIslandPresenter extends IslandPresenter with MomentViews {
     switch (paste.stage) {
       case RemoteClipboardPasteStage.receiving:
         final seconds = paste.secondsLeft;
+        if (paste.queued) {
+          return [
+            if (device.isNotEmpty) l10n.pasteIslandFrom(device),
+            l10n.pasteIslandQueued,
+          ].join(' · ');
+        }
         return [
           if (device.isNotEmpty) l10n.pasteIslandFrom(device),
           ?_percent,
@@ -335,6 +365,8 @@ class PasteIslandPresenter extends IslandPresenter with MomentViews {
         ].join(' · ');
       case RemoteClipboardPasteStage.pasted:
         return l10n.pasteIslandPasted;
+      case RemoteClipboardPasteStage.placed:
+        return l10n.pasteIslandPlaced(paste.folder);
       case RemoteClipboardPasteStage.ready:
         return l10n.pasteIslandReady(Platform.isMacOS ? '⌘V' : 'Ctrl+V');
       case RemoteClipboardPasteStage.failed:
@@ -351,7 +383,7 @@ class PasteIslandPresenter extends IslandPresenter with MomentViews {
     return IslandMoment(
       leading: _leading,
       title: _title(l10n),
-      value: receiving ? _percent : null,
+      value: receiving && !paste.queued ? _percent : null,
       detail: _detail(l10n),
       stopLabel: l10n.cancel,
       onStop: receiving ? onCancel : null,

@@ -161,6 +161,48 @@ func foregroundWindowToken() -> String? {
   return "\(pid):\(number)"
 }
 
+/// The folder a paste pressed in Finder now goes to: its front window's, or
+/// the desktop. Finder says (insertion location), once the user lets Whisper
+/// ask it; the first time macOS asks them. Nil when Finder is not in front or
+/// can't be asked. Answers on the main queue.
+func foregroundFolder(_ done: @escaping ([String: String]?) -> Void) {
+  guard let app = NSWorkspace.shared.frontmostApplication,
+        app.bundleIdentifier == "com.apple.finder" else {
+    done(nil)
+    return
+  }
+  let task = Process()
+  task.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+  task.arguments = [
+    "-e", "tell application \"Finder\" to POSIX path of (insertion location as alias)",
+  ]
+  let output = Pipe()
+  task.standardOutput = output
+  task.standardError = FileHandle.nullDevice
+  task.terminationHandler = { finished in
+    let data = output.fileHandleForReading.readDataToEndOfFile()
+    var answer: [String: String]?
+    if finished.terminationStatus == 0,
+       let text = String(data: data, encoding: .utf8)?
+         .trimmingCharacters(in: .whitespacesAndNewlines),
+       !text.isEmpty {
+      let path = (text as NSString).standardizingPath
+      answer = ["path": path, "name": FileManager.default.displayName(atPath: path)]
+    }
+    DispatchQueue.main.async { done(answer) }
+  }
+  do {
+    try task.run()
+  } catch {
+    done(nil)
+    return
+  }
+  // Finder busy or stuck: no folder rather than a paste that never ends.
+  DispatchQueue.global().asyncAfter(deadline: .now() + 3) {
+    if task.isRunning { task.terminate() }
+  }
+}
+
 final class TrayPanelWindow: NSPanel {
   override var canBecomeKey: Bool { true }
   override var canBecomeMain: Bool { false }
@@ -453,6 +495,10 @@ class MainFlutterWindow: NSWindow {
       }
       if call.method == "foregroundWindow" {
         result(foregroundWindowToken())
+        return
+      }
+      if call.method == "foregroundFolder" {
+        foregroundFolder { result($0) }
         return
       }
       guard call.method == "setBrightness" else {

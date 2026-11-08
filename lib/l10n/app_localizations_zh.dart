@@ -3524,4 +3524,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get pasteIslandCanceled => '已取消';
+
+  @override
+  String pasteIslandPlaced(String folder) {
+    return '已放到「$folder」';
+  }
+
+  @override
+  String get pasteIslandQueued => '等前一个传完';
 }

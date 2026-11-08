@@ -42,6 +42,7 @@ typedef RemoteClipboardPasteDeferrer =
       required String sessionId,
       required Future<RemoteClipboardPasteResult> pending,
       required Future<Object?> front,
+      Future<PasteFolder?>? folder,
     });
 
 enum RemoteInputRuntimeRole { none, source, sink }
@@ -1219,6 +1220,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
     traceRemoteClipboard('paste_shortcut_detected');
     final generation = _lifecycle.generation;
     final front = foregroundWindowToken();
+    final folder = foregroundFolder();
     final pending = prepare(peerId: peerId, sessionId: sessionId);
     // Every packet behind this one waits for the files, so only briefly. Past
     // that this Ctrl+V is put aside and input goes on; once the files are
@@ -1245,9 +1247,12 @@ class RemoteInputCoordinator extends ChangeNotifier {
           if (result == null && defer != null) {
             final chord = _pasteChord(frames.single, primaryModifier);
             unawaited(
-              defer(sessionId: sessionId, pending: pending, front: front).then((
-                paste,
-              ) {
+              defer(
+                sessionId: sessionId,
+                pending: pending,
+                front: front,
+                folder: folder,
+              ).then((paste) {
                 if (paste && generation == _lifecycle.generation) {
                   traceRemoteClipboard('paste_replayed');
                   inject(chord());

@@ -32,6 +32,8 @@
 	<string>NSApplication</string>
 	<key>NSDownloadsFolderUsageDescription</key>
     <string>Save Files</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Whisper asks Finder which folder you pasted in, so files from another device still go there if you switch windows while they arrive.</string>
 	<key>NSAudioCaptureUsageDescription</key>
 	<string>Whisper plays the sound of a window you stream on the device that shows it, instead of on this Mac.</string>
 	<key>NSLocalNetworkUsageDescription</key>

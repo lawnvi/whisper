@@ -616,7 +616,9 @@ class WsSvrManager {
       RemoteClipboardPasteWatch(
         download: _remoteClipboardTransfer.download,
         cancelDownload: _remoteClipboardTransfer.cancelDownload,
+        pasteKey: _remoteClipboardTransfer.pasteKey,
         pasted: _remoteClipboardTransfer.restoreAfterPaste,
+        place: _remoteClipboardTransfer.placeInto,
       );
 
   /// The clipboard just changed because a paste went in or was undone: not
@@ -6678,6 +6680,7 @@ class WsSvrManager {
   Future<bool> pasteLatestWorkspaceClipboard() async {
     final origin = _workspaceClipboardOrigin;
     final front = foregroundWindowToken();
+    final folder = foregroundFolder();
     final pending = prepareLatestWorkspaceClipboardPaste();
     final early = await pending
         .then<RemoteClipboardPasteResult?>((result) => result)
@@ -6692,6 +6695,7 @@ class WsSvrManager {
       sessionId: origin.sessionId,
       pending: pending,
       front: front,
+      folder: folder,
     );
   }
 

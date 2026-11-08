@@ -6254,6 +6254,18 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'已取消'**
   String get pasteIslandCanceled;
+
+  /// Floating paste island: the paste was pressed in a folder (or on the desktop), and its files, once here, were put straight into it; {folder} is its name as the system shows it.
+  ///
+  /// In zh, this message translates to:
+  /// **'已放到「{folder}」'**
+  String pasteIslandPlaced(String folder);
+
+  /// Floating paste island: this paste was pressed while an earlier paste's files were still coming; its files come once those are done.
+  ///
+  /// In zh, this message translates to:
+  /// **'等前一个传完'**
+  String get pasteIslandQueued;
 }
 
 class _AppLocalizationsDelegate

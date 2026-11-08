@@ -36,7 +36,8 @@ class PasteIslandHost {
   void dispose() => _watch.removeListener(_changed);
 
   void _changed() {
-    if (_watch.current == null) return;
+    // Nothing to show and no window yet: none is made.
+    if (_watch.pastes.isEmpty && _window == null) return;
     unawaited(_push());
   }
 
@@ -51,14 +52,16 @@ class PasteIslandHost {
       do {
         _again = false;
         await (_starting ??= _start());
-        final paste = _watch.current;
+        final pastes = _watch.pastes;
         final window = _window;
-        if (!_ready || paste == null || window == null) return;
+        if (!_ready || window == null) return;
         await window.invokeMethod<void>('state', {
           'host': _myId,
           'locale': _locale(),
-          'device': _deviceName(paste.peerId),
-          'paste': paste.toMap(),
+          'pastes': [
+            for (final paste in pastes)
+              {...paste.toMap(), 'device': _deviceName(paste.peerId)},
+          ],
         });
       } while (_again);
     } on Object {
@@ -101,7 +104,8 @@ class PasteIslandHost {
   }
 
   Future<void> _onCall(Object? arguments) async {
-    final action = (arguments as Map?)?['action'];
-    if (action == 'cancel') _watch.cancel();
+    final call = arguments as Map?;
+    final id = call?['id'];
+    if (call?['action'] == 'cancel') _watch.cancel(id is int ? id : null);
   }
 }
