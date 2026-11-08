@@ -2,35 +2,15 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Two companion docs are authoritative and should be treated as part of these instructions:
-- `AGENTS.md` — setup/verification commands, project structure, code style, security notes, and commit conventions.
-- `DESIGN.md` — the only source of UI rules: grammar, tokens, do's and don'ts. Read it before any UI work. Start at `docs/design/README.md` when implementing the redesign: it links `surfaces.md` (per-screen specs), `flutter.md` (tested code), `migration.md` (the steps and what each one delivered), `decisions.md` (why, what was rejected, what is open) and the local prototype. Feature specs must not define visual values.
+@AGENTS.md
 
-This file focuses on the big-picture architecture that is not obvious from reading any single file.
+`AGENTS.md` above holds the commands, project structure, code organization and style, testing rules, security notes and commit conventions. `DESIGN.md` is the only source of UI rules: grammar, tokens, do's and don'ts. Read it before any UI work. Start at `docs/design/README.md` when implementing the redesign: it links `surfaces.md` (per-screen specs), `flutter.md` (tested code), `migration.md` (the steps and what each one delivered), `decisions.md` (why, what was rejected, what is open) and the local prototype. Feature specs must not define visual values.
+
+What follows is the big-picture architecture that is not obvious from reading any single file.
 
 ## What this is
 
 Whisper is a Flutter LAN-collaboration app (Android, macOS, Linux, Windows; iOS runner kept but untested) that moves text, files, clipboard, Android notifications, desktop system audio, and keyboard/mouse input between trusted devices on the same network over a direct WebSocket connection. Trusted devices can also browse and mount each other's files and show each other's windows and apps (window flow); share links serve files to browsers on the LAN. It is **not** related to the OpenAI Whisper speech model. Authenticated application data uses X25519 and XChaCha20-Poly1305; discovery metadata and local storage are not encrypted, and the implementation has not had an independent cryptographic audit. `whisper-web/` is a separate Next.js 15 product site.
-
-## Common commands
-
-```bash
-flutter pub get                                          # install deps
-flutter analyze                                          # lint (CI gate)
-flutter test                                             # all tests (CI gate)
-flutter test test/<name>_test.dart                       # single test file
-flutter run                                              # run on current platform
-./script/build_and_run.sh                                # build+sign+run macOS debug app
-./script/build_and_run.sh --verify                       # verify macOS build/sign/launch
-./script/build_and_run.sh package-macos                  # package macOS DMG
-./script/test_remote_input_keys.sh                       # remote-input key matrix suite
-
-# Code generation — REQUIRED after the matching source change:
-dart run build_runner build --delete-conflicting-outputs # after Drift schema edits
-flutter gen-l10n                                          # after ARB (l10n) edits
-```
-
-`whisper-web/`: `cd whisper-web && npm install && npm run dev` (also `npm run build`, `npm run lint`).
 
 ## Architecture
 
@@ -62,14 +42,3 @@ Drift (SQLite) database in `LocalDatabase.dart`. `device.dart`, `message.dart` (
 ### Other
 - `lib/new_ui/` the interface (shell, phone, settings, files, sound, input, tray), `lib/page/` screens and the page-level logic behind it, `lib/widget/` reusable UI, `lib/helper/` platform helpers (files, clipboard sync, notifications, Android background service, desktop startup), `lib/theme/` (`AppTheme` + `WhisperPalette` tokens — see DESIGN.md), `lib/l10n/` ARB files (zh/en/es).
 - `android/ ios/ macos/ linux/ windows/` native runners; platform-specific behavior should stay behind the helper/coordinator/native-plugin boundaries.
-
-## Generated files — never hand-edit
-- `lib/model/LocalDatabase.g.dart` → edit Drift source, run build_runner.
-- `lib/l10n/app_localizations*.dart` → edit ARB files, run `flutter gen-l10n`.
-- All user-facing strings must be localized via ARB; do not hardcode copy in widgets.
-
-## Testing notes
-`test/` keeps what would break quietly and cost a lot: protocols, security boundaries, data safety, the state machines that decide what is sent or started, main paths over real sockets, stress bounds and hard-to-find regressions. Layout and text-of-the-source tests were removed on purpose: don't add them back. A few source checks stay for what nothing can run here (release workflows, manifests, privacy of native logs, the FFI entry points, a single platform workaround). `test/manual/` holds scripts that render screens to images and are not part of `flutter test`. What stays and what is only temporary is set out in `AGENTS.md`「Testing Instructions」: a change adds no long-lived test by default. Run `flutter analyze` + `flutter test` before claiming readiness. If native platform behavior can't be verified locally, document the platform, the command not run, and the residual risk.
-
-## Conventions
-Conventional Commits with a concrete scope: `feat(remote-input): …`, `fix(db): …`, `chore: …`. Scopes seen here: `remote-input`, `audio`, `db`, `clipboard`, `socket`, `linux`, `windows`, `macos`, `android`, `ios`, `web`, `l10n`, `release`. Do not commit secrets; `keystore/whisper.keystore` is tracked but must not be rotated without approval. `WHISPER_REMOTE_INPUT_TRACE=1` enables verbose remote-input tracing.
