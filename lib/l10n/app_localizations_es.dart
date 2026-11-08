@@ -2981,6 +2981,59 @@ class AppLocalizationsEs extends AppLocalizations {
   String get shellCardWake => 'Despertar';
 
   @override
+  String get shellCardNetwork => 'Red';
+
+  @override
+  String get networkTitle => 'Red';
+
+  @override
+  String get networkGrade => 'Calidad';
+
+  @override
+  String get networkLatency => 'Latencia';
+
+  @override
+  String get networkJitter => 'Variación';
+
+  @override
+  String get networkLoss => 'Perdidos';
+
+  @override
+  String get networkGradeMeasuring => 'Midiendo…';
+
+  @override
+  String get networkGradeGood => 'Buena';
+
+  @override
+  String get networkGradeFair => 'Regular';
+
+  @override
+  String get networkGradePoor => 'Mala';
+
+  @override
+  String get networkGradeUnreachable => 'Puerto inaccesible';
+
+  @override
+  String get networkVerdictMeasuring =>
+      'Midiendo: se prueba su puerto cada dos segundos.';
+
+  @override
+  String get networkVerdictGood =>
+      'Baja y estable: el teclado y el ratón responden al momento y los archivos van a toda velocidad.';
+
+  @override
+  String get networkVerdictFair =>
+      'Funciona, pero el teclado y el ratón van con algo de retraso y los archivos más lentos.';
+
+  @override
+  String get networkVerdictPoor =>
+      'Latencia alta o pérdidas frecuentes: el teclado y el ratón se traban y los archivos van lentos. Wi-Fi de 5 GHz, acercarse al router o un cable ayudan mucho.';
+
+  @override
+  String get networkVerdictUnreachable =>
+      'No se llega a su puerto: la conexión se hizo desde el otro lado, así que no se puede medir la latencia.';
+
+  @override
   String wakeSent(String device) {
     return 'Se envió una señal para despertar a $device. Se volverá a conectar al despertar.';
   }

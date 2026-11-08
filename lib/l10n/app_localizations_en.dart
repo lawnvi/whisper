@@ -2945,6 +2945,59 @@ class AppLocalizationsEn extends AppLocalizations {
   String get shellCardWake => 'Wake';
 
   @override
+  String get shellCardNetwork => 'Network';
+
+  @override
+  String get networkTitle => 'Network';
+
+  @override
+  String get networkGrade => 'Quality';
+
+  @override
+  String get networkLatency => 'Latency';
+
+  @override
+  String get networkJitter => 'Jitter';
+
+  @override
+  String get networkLoss => 'Lost';
+
+  @override
+  String get networkGradeMeasuring => 'Measuring…';
+
+  @override
+  String get networkGradeGood => 'Good';
+
+  @override
+  String get networkGradeFair => 'Fair';
+
+  @override
+  String get networkGradePoor => 'Poor';
+
+  @override
+  String get networkGradeUnreachable => 'Port unreachable';
+
+  @override
+  String get networkVerdictMeasuring =>
+      'Measuring: its port is tried every two seconds.';
+
+  @override
+  String get networkVerdictGood =>
+      'Low and steady: keyboard and mouse feel direct, and files go at full speed.';
+
+  @override
+  String get networkVerdictFair =>
+      'Usable, but keyboard and mouse lag a little and files go slower than usual.';
+
+  @override
+  String get networkVerdictPoor =>
+      'High latency or frequent loss: keyboard and mouse stutter and files go slowly. 5 GHz Wi-Fi, a spot nearer the router or a cable helps a lot.';
+
+  @override
+  String get networkVerdictUnreachable =>
+      'Its port can\'t be reached: the connection was made from the other side, so latency can\'t be measured.';
+
+  @override
   String wakeSent(String device) {
     return 'Sent $device a wake signal. It reconnects once it wakes.';
   }

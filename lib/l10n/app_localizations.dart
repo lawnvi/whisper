@@ -5002,6 +5002,102 @@ abstract class AppLocalizations {
   /// **'唤醒'**
   String get shellCardWake;
 
+  /// No description provided for @shellCardNetwork.
+  ///
+  /// In zh, this message translates to:
+  /// **'网络'**
+  String get shellCardNetwork;
+
+  /// No description provided for @networkTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'网络状况'**
+  String get networkTitle;
+
+  /// No description provided for @networkGrade.
+  ///
+  /// In zh, this message translates to:
+  /// **'质量'**
+  String get networkGrade;
+
+  /// No description provided for @networkLatency.
+  ///
+  /// In zh, this message translates to:
+  /// **'延迟'**
+  String get networkLatency;
+
+  /// No description provided for @networkJitter.
+  ///
+  /// In zh, this message translates to:
+  /// **'波动'**
+  String get networkJitter;
+
+  /// No description provided for @networkLoss.
+  ///
+  /// In zh, this message translates to:
+  /// **'丢失'**
+  String get networkLoss;
+
+  /// No description provided for @networkGradeMeasuring.
+  ///
+  /// In zh, this message translates to:
+  /// **'测量中…'**
+  String get networkGradeMeasuring;
+
+  /// No description provided for @networkGradeGood.
+  ///
+  /// In zh, this message translates to:
+  /// **'良好'**
+  String get networkGradeGood;
+
+  /// No description provided for @networkGradeFair.
+  ///
+  /// In zh, this message translates to:
+  /// **'一般'**
+  String get networkGradeFair;
+
+  /// No description provided for @networkGradePoor.
+  ///
+  /// In zh, this message translates to:
+  /// **'较差'**
+  String get networkGradePoor;
+
+  /// No description provided for @networkGradeUnreachable.
+  ///
+  /// In zh, this message translates to:
+  /// **'连不上端口'**
+  String get networkGradeUnreachable;
+
+  /// No description provided for @networkVerdictMeasuring.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在测量，每两秒连一次对方的端口。'**
+  String get networkVerdictMeasuring;
+
+  /// No description provided for @networkVerdictGood.
+  ///
+  /// In zh, this message translates to:
+  /// **'延迟低又稳定：键鼠跟手，传文件能跑满网速。'**
+  String get networkVerdictGood;
+
+  /// No description provided for @networkVerdictFair.
+  ///
+  /// In zh, this message translates to:
+  /// **'能用，但键鼠会有点拖，传文件比平时慢。'**
+  String get networkVerdictFair;
+
+  /// No description provided for @networkVerdictPoor.
+  ///
+  /// In zh, this message translates to:
+  /// **'延迟高或经常丢包：键鼠会卡，传文件很慢。换到 5 GHz 的 Wi-Fi、靠近路由器或插网线会好很多。'**
+  String get networkVerdictPoor;
+
+  /// No description provided for @networkVerdictUnreachable.
+  ///
+  /// In zh, this message translates to:
+  /// **'连不上对方的端口：现在的连接是对方发起的，测不了延迟。'**
+  String get networkVerdictUnreachable;
+
   /// No description provided for @wakeSent.
   ///
   /// In zh, this message translates to:

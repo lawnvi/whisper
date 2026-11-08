@@ -7,6 +7,7 @@ import 'package:whisper/helper/toast.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/new_ui/shell/shell_parts.dart';
+import 'package:whisper/new_ui/shell/shell_network_quality.dart';
 import 'package:whisper/new_ui/shell/shell_wake.dart';
 import 'package:whisper/page/remote_files/files_copy_island.dart';
 import 'package:whisper/page/remote_files/files_icons.dart';
@@ -361,6 +362,12 @@ class _ShellDeviceCardState extends State<ShellDeviceCard> {
                       ),
                   ],
                 ),
+                if (on) ...[
+                  const SizedBox(height: 20),
+                  ShellGroup(
+                    children: [ShellNetworkRow(device: device, touch: touch)],
+                  ),
+                ],
                 if (widget.onSearchHistory != null) ...[
                   const SizedBox(height: 20),
                   ShellGroup(

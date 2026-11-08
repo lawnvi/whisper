@@ -2778,6 +2778,55 @@ class AppLocalizationsZh extends AppLocalizations {
   String get shellCardWake => '唤醒';
 
   @override
+  String get shellCardNetwork => '网络';
+
+  @override
+  String get networkTitle => '网络状况';
+
+  @override
+  String get networkGrade => '质量';
+
+  @override
+  String get networkLatency => '延迟';
+
+  @override
+  String get networkJitter => '波动';
+
+  @override
+  String get networkLoss => '丢失';
+
+  @override
+  String get networkGradeMeasuring => '测量中…';
+
+  @override
+  String get networkGradeGood => '良好';
+
+  @override
+  String get networkGradeFair => '一般';
+
+  @override
+  String get networkGradePoor => '较差';
+
+  @override
+  String get networkGradeUnreachable => '连不上端口';
+
+  @override
+  String get networkVerdictMeasuring => '正在测量，每两秒连一次对方的端口。';
+
+  @override
+  String get networkVerdictGood => '延迟低又稳定：键鼠跟手，传文件能跑满网速。';
+
+  @override
+  String get networkVerdictFair => '能用，但键鼠会有点拖，传文件比平时慢。';
+
+  @override
+  String get networkVerdictPoor =>
+      '延迟高或经常丢包：键鼠会卡，传文件很慢。换到 5 GHz 的 Wi-Fi、靠近路由器或插网线会好很多。';
+
+  @override
+  String get networkVerdictUnreachable => '连不上对方的端口：现在的连接是对方发起的，测不了延迟。';
+
+  @override
   String wakeSent(String device) {
     return '已向 $device 发送唤醒信号，醒来后会自动连上';
   }

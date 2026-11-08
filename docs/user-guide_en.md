@@ -31,6 +31,8 @@ The QR code carries both the LAN address and the device identity, so there is no
 
 On Linux, discovery depends on Avahi. On networks that block mDNS / Bonjour, connecting by IP is more reliable.
 
+Once connected, the "Network" row on the device card shows the link's quality and latency; select it for jitter and loss. High latency, a lot of jitter or loss makes keyboard and mouse stutter and files slow; 5 GHz Wi-Fi, a spot nearer the router or a cable helps a lot.
+
 ### Wake a sleeping computer
 
 Once a computer has connected, Whisper remembers its network cards. After it goes to sleep and drops off, select "Wake" on its device card. Starting keyboard and mouse sharing also wakes computers in the layout that are asleep, and they reconnect once awake.
