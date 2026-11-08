@@ -72,6 +72,23 @@ void main() {
     expect(pacer.rate, lessThan(before));
   });
 
+  test('only a receiver that answers every second is held to two seconds', () {
+    const window = 64 << 20;
+    expect(pacer.inFlight('t', window, timely: false), window);
+    expect(pacer.inFlight('t', window, timely: true), 2 << 20);
+    // An old receiver answers only once a whole interval is in.
+    pacer.acknowledged('t', 0, interval: 32 << 20, size: 100 << 20);
+    now = now.add(const Duration(seconds: 1));
+    pacer.acknowledged('t', 32 << 20, interval: 32 << 20, size: 100 << 20);
+    expect(pacer.inFlight('t', window, timely: false), window);
+    // This one answered a second later with less than an interval: 100 KiB/s.
+    pacer.acknowledged('u', 0, interval: 32 << 20, size: 100 << 20);
+    now = now.add(const Duration(seconds: 1));
+    pacer.acknowledged('u', 100 << 10, interval: 32 << 20, size: 100 << 20);
+    expect(pacer.inFlight('u', window, timely: false), lessThan(1 << 20));
+    expect(pacer.queueDelay, greaterThanOrEqualTo(Duration.zero));
+  });
+
   test('with nothing live it holds nothing back', () async {
     final free = TransferPacer(audioStrained: () => true, active: () => false);
     addTearDown(free.dispose);

@@ -13,8 +13,10 @@ import 'dart:math' as math;
 /// below that for a while. With nothing live it holds nothing back.
 ///
 /// Whatever is going, frames are kept to a quarter second of what the link
-/// has been seen to carry, so on a slow link no one frame holds up the
-/// messages behind it for long.
+/// has been seen to carry, and, with a receiver that answers every second,
+/// what is unconfirmed to two seconds of it: on a slow link a whole file
+/// handed to the connection at once would hold up every message behind it
+/// for minutes.
 class TransferPacer {
   TransferPacer({
     required bool Function() audioStrained,
@@ -57,6 +59,13 @@ class TransferPacer {
   /// The last answer of each transfer: where it was and when it came.
   final Map<String, (int, DateTime)> _answered = {};
 
+  /// Bytes per second each transfer's receiver confirmed, smoothed.
+  final Map<String, double> _rateOf = {};
+
+  /// Transfers whose receiver was seen answering before a whole interval
+  /// came in: it answers every second (`IncomingAckClock`).
+  final Set<String> _timely = {};
+
   /// Bytes per second the receivers confirmed, smoothed.
   double? _confirmed;
 
@@ -83,13 +92,25 @@ class TransferPacer {
   Duration get queueDelay {
     final now = _answerTime;
     final quickest = _quickest;
-    if (now == null || quickest == null) return Duration.zero;
+    if (now == null || quickest == null || now < quickest) {
+      return Duration.zero;
+    }
     return now - quickest;
   }
 
-  /// How big the next frame may be, at most [chunk].
-  int frameBytes(int chunk) {
-    final confirmed = _confirmed;
+  /// How much of [transferId] may be on its way unconfirmed, at most
+  /// [window]. Only a receiver that answers every second ([timely], or seen
+  /// doing so) can be held to less: another would never answer at all.
+  int inFlight(String transferId, int window, {required bool timely}) {
+    if (!timely && !_timely.contains(transferId)) return window;
+    final confirmed = _rateOf[transferId];
+    final limit = confirmed == null ? 2 << 20 : (confirmed * 2).round();
+    return math.max(4 * _minFrame, math.min(window, limit));
+  }
+
+  /// How big the next frame of [transferId] may be, at most [chunk].
+  int frameBytes(int chunk, [String? transferId]) {
+    final confirmed = _rateOf[transferId] ?? _confirmed;
     // Not known yet: start no bigger than the frames of old versions.
     final wanted = confirmed == null
         ? 512 * 1024
@@ -130,8 +151,14 @@ class TransferPacer {
     }
   }
 
-  /// The receiver of [transferId] has everything before [durableOffset].
-  void acknowledged(String transferId, int durableOffset) {
+  /// The receiver of [transferId] has everything before [durableOffset], of
+  /// [size], answering every [interval] bytes or sooner.
+  void acknowledged(
+    String transferId,
+    int durableOffset, {
+    int? interval,
+    int? size,
+  }) {
     final now = _now();
     final frames = _sent[transferId];
     DateTime? sentAt;
@@ -144,11 +171,14 @@ class TransferPacer {
       final took = now.difference(sentAt);
       final quickest = _quickest;
       final seen = _quickestSeen;
-      if (quickest == null ||
-          took < quickest ||
-          seen == null ||
-          now.difference(seen) > _quickestMemory) {
+      if (quickest == null || took < quickest) {
         _quickest = took;
+        _quickestSeen = now;
+      } else if (seen == null || now.difference(seen) > _quickestMemory) {
+        // Not seen lately: the link may have changed. Start again from the
+        // better of this answer and the usual one.
+        final usual = _answerTime ?? took;
+        _quickest = took < usual ? took : usual;
         _quickestSeen = now;
       }
       final before = _answerTime;
@@ -157,6 +187,12 @@ class TransferPacer {
     final last = _answered[transferId];
     _answered[transferId] = (durableOffset, now);
     if (last == null) return;
+    if (interval != null &&
+        size != null &&
+        durableOffset < size &&
+        durableOffset - last.$1 < interval) {
+      _timely.add(transferId);
+    }
     final elapsed = now.difference(last.$2);
     if (elapsed < const Duration(milliseconds: 200)) return;
     final sample =
@@ -165,12 +201,16 @@ class TransferPacer {
         Duration.microsecondsPerSecond;
     final before = _confirmed;
     _confirmed = before == null ? sample : before * 0.7 + sample * 0.3;
+    final own = _rateOf[transferId];
+    _rateOf[transferId] = own == null ? sample : own * 0.7 + sample * 0.3;
   }
 
   /// [transferId] is over.
   void forget(String transferId) {
     _sent.remove(transferId);
     _answered.remove(transferId);
+    _rateOf.remove(transferId);
+    _timely.remove(transferId);
   }
 
   /// Looks at how things are and sets the rate. Runs by itself while the

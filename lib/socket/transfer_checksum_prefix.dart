@@ -62,3 +62,26 @@ Future<ParallelStreamingChecksum> parallelChecksumForSourcePrefix(
     rethrow;
   }
 }
+
+/// The checksum of a file being sent, worked out as its frames go.
+final class OutgoingChecksumState {
+  OutgoingChecksumState({required this.checksum, required this.offset});
+
+  final ParallelStreamingChecksum checksum;
+  int offset;
+  bool closed = false;
+
+  Future<String> finish({required int expectedOffset}) async {
+    if (offset != expectedOffset) {
+      throw StateError('Outgoing checksum has not covered the whole file');
+    }
+    closed = true;
+    return checksum.close();
+  }
+
+  Future<void> dispose() async {
+    if (closed) return;
+    closed = true;
+    await checksum.dispose();
+  }
+}

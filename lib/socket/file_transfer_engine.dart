@@ -1,3 +1,5 @@
+export 'package:whisper/socket/transfer_outcomes.dart';
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -28,6 +30,7 @@ import 'package:whisper/socket/folder_transfer_sink.dart';
 import 'package:whisper/socket/folder_write_pool.dart';
 import 'package:whisper/socket/folder_transfer_source.dart';
 import 'package:whisper/socket/incoming_transfer_parts.dart';
+import 'package:whisper/socket/transfer_outcomes.dart';
 import 'package:whisper/socket/transfer_checksum_prefix.dart';
 import 'package:whisper/socket/outgoing_progress_estimator.dart';
 import 'package:whisper/socket/peer_transfer_runtime.dart';
@@ -60,28 +63,6 @@ final class _TransferOperationLaneEntry {
   int users = 0;
 }
 
-final class _OutgoingChecksumState {
-  _OutgoingChecksumState({required this.checksum, required this.offset});
-
-  final ParallelStreamingChecksum checksum;
-  int offset;
-  bool closed = false;
-
-  Future<String> finish({required int expectedOffset}) async {
-    if (offset != expectedOffset) {
-      throw StateError('Outgoing checksum has not covered the whole file');
-    }
-    closed = true;
-    return checksum.close();
-  }
-
-  Future<void> dispose() async {
-    if (closed) return;
-    closed = true;
-    await checksum.dispose();
-  }
-}
-
 final class _TransferAdmissionRejected implements Exception {
   const _TransferAdmissionRejected(this.decision);
 
@@ -90,53 +71,14 @@ final class _TransferAdmissionRejected implements Exception {
 
 enum _IncomingReadyResult { retained, sendFailed, unavailable }
 
-/// How an attempt to send a folder ended, for the caller to explain.
-enum FolderSendOutcome {
-  sent,
-  notConnected,
-  peerUnsupported,
-  invalidName,
-  unreadable,
-  tooManyEntries,
-  tooLarge,
-  rejected,
-}
-
 /// A folder being received: the worker writing it, and how much of its
 /// stream the sender has been told is safe.
-final class _IncomingFolder {
-  _IncomingFolder({required this.session, required this.ackedOffset});
-
-  final FolderReceiveSession session;
-  int ackedOffset;
-  bool ackPending = false;
-
-  /// Repeats the last acknowledgement while the worker is busy, see
-  /// [FileTransferEngine._keepIncomingFolderAlive].
-  Timer? keepAlive;
-  bool acknowledgedSinceKeepAlive = false;
-
-  /// Whether the sender was told to send in this session. It was not if
-  /// staging already held the whole folder.
-  bool announced = false;
-}
-
 /// What one file or directory is assumed to cost on disk beyond its bytes
 /// when deciding whether a folder fits: the usual allocation block.
 const int _folderEntryStorageOverhead = 4096;
 
 Future<FolderScanResult> _scanFolderInBackground(String path) =>
     Isolate.run(() => scanFolderForTransfer(path));
-
-enum FileTransferDiagnosticKind {
-  outgoingFailed,
-  incomingFailed,
-  resumeResetDeferred,
-  reservationCleanupFailed,
-  completionDispatchFailed,
-  temporaryFileCleanupFailed,
-  visibilityNotificationFailed,
-}
 
 Future<void> _setFileLastModified(File file, int timestamp) {
   return file.setLastModified(DateTime.fromMillisecondsSinceEpoch(timestamp));
@@ -331,8 +273,8 @@ class FileTransferEngine {
       <String, VerifiedTransferSnapshot>{};
   final Map<String, int> _receivingTransferOffsets = <String, int>{};
   final Map<String, int> _receivingTransferSequences = <String, int>{};
-  final Map<String, _IncomingFolder> _incomingFolders =
-      <String, _IncomingFolder>{};
+  final Map<String, IncomingFolder> _incomingFolders =
+      <String, IncomingFolder>{};
   final Map<String, int> _incomingProgressDispatchTimes = <String, int>{};
   final DateTime Function() _now;
   final TransferAckTimerFactory _progressTimerFactory;
@@ -346,8 +288,8 @@ class FileTransferEngine {
       <String, FileTransferV3FlowParameters>{};
   final Map<String, FileTransferV3FlowParameters> _incomingFlows =
       <String, FileTransferV3FlowParameters>{};
-  final Map<String, _OutgoingChecksumState> _outgoingChecksums =
-      <String, _OutgoingChecksumState>{};
+  final Map<String, OutgoingChecksumState> _outgoingChecksums =
+      <String, OutgoingChecksumState>{};
   final Map<String, FileTransferSource> _outgoingTransferSources =
       <String, FileTransferSource>{};
   final Map<String, TransferConnectionBinding> _operationConnectionBindings =
@@ -2740,7 +2682,16 @@ class FileTransferEngine {
         _outgoingFlows[transfer.transferId] ??
         FileTransferV3FlowParameters.legacy;
     final durableOffset = offset;
-    final windowEnd = math.min(transfer.size, durableOffset + flow.windowSize);
+    final pacer = _outgoingPacerFor?.call(transfer.transferId);
+    final timely =
+        (_remoteProfileFor(transfer.peerUid)?.protocolVersion ?? 0) >=
+        IncomingAckClock.sinceProtocolVersion;
+    final windowEnd = math.min(
+      transfer.size,
+      durableOffset +
+          (pacer?.inFlight(transfer.transferId, flow.windowSize, timely: timely) ??
+              flow.windowSize),
+    );
     var sequence = _outgoingTransferSequences[transfer.transferId] ?? 0;
     var cursor =
         _outgoingWindowEndOffsets[transfer.transferId] ?? durableOffset;
@@ -2765,9 +2716,9 @@ class FileTransferEngine {
       final expectedWindow = armWatchdog
           ? _ackWatchdog.currentWindow(transfer.transferId)
           : null;
-      final pacer = _outgoingPacerFor?.call(transfer.transferId);
       final length = math.min(
-        pacer?.frameBytes(flow.chunkSize) ?? flow.chunkSize,
+        pacer?.frameBytes(flow.chunkSize, transfer.transferId) ??
+            flow.chunkSize,
         windowEnd - cursor,
       );
       if (pacer != null) {
@@ -2884,7 +2835,7 @@ class FileTransferEngine {
     return cursor;
   }
 
-  Future<_OutgoingChecksumState> _outgoingChecksumStateFor(
+  Future<OutgoingChecksumState> _outgoingChecksumStateFor(
     FileTransferData transfer,
     FileTransferSource source, {
     required int requiredOffset,
@@ -2899,7 +2850,7 @@ class FileTransferEngine {
       algorithm: transfer.checksumAlgorithm,
       end: requiredOffset,
     );
-    final state = _OutgoingChecksumState(
+    final state = OutgoingChecksumState(
       checksum: checksum,
       offset: requiredOffset,
     );
@@ -3159,21 +3110,50 @@ class FileTransferEngine {
       answered: transfer.committedBytes,
       interval: ackInterval,
     )) {
-      final durableOffset = await _flushIncomingFileTransferV3(
-        transfer,
-        committedBytes,
-      );
-      final updated = await _updateTransfer(
-        transfer.transferId,
-        state: FileTransferState.transferring,
-        committedBytes: durableOffset,
-        lastError: '',
-      );
-      if (updated != null) {
-        _receivingTransfers[updated.transferId] = updated;
-        await _sendFileTransferV3Ack(updated, durableOffset);
-      }
+      await _ackIncoming(transfer, committedBytes);
+    } else {
+      // The sender may be waiting for this answer before it sends more.
+      final id = transfer.transferId;
+      _incomingAckClock.remind(id, () => unawaited(_ackIncomingLate(id)));
     }
+  }
+
+  Future<void> _ackIncoming(FileTransferData transfer, int received) async {
+    final durableOffset = await _flushIncomingFileTransferV3(transfer, received);
+    final updated = await _updateTransfer(
+      transfer.transferId,
+      state: FileTransferState.transferring,
+      committedBytes: durableOffset,
+      lastError: '',
+    );
+    if (updated == null) return;
+    _receivingTransfers[updated.transferId] = updated;
+    await _sendFileTransferV3Ack(updated, durableOffset);
+  }
+
+  /// A second went by with no frame after data still unanswered.
+  Future<void> _ackIncomingLate(String transferId) async {
+    final transfer = _receivingTransfers[transferId];
+    final connection = transfer == null
+        ? null
+        : _currentConnectionBinding(transfer.peerUid);
+    if (transfer == null || connection == null) return;
+    await _runTransferOperation(
+      transferId,
+      connection: connection,
+      operation: () async {
+        final current = _receivingTransfers[transferId];
+        final received = _receivingTransferOffsets[transferId];
+        if (current == null ||
+            received == null ||
+            received <= current.committedBytes ||
+            received >= current.size ||
+            isTerminalFileTransferState(current.state)) {
+          return;
+        }
+        await _ackIncoming(current, received);
+      },
+    );
   }
 
   Future<void> _handleIncomingFileTransferV3Error(
@@ -3421,7 +3401,12 @@ class FileTransferEngine {
       _now().millisecondsSinceEpoch,
     );
     final pacer = _outgoingPacerFor?.call(transfer.transferId);
-    pacer?.acknowledged(transfer.transferId, durableOffset);
+    pacer?.acknowledged(
+      transfer.transferId,
+      durableOffset,
+      interval: _outgoingFlows[transfer.transferId]?.ackIntervalSize,
+      size: transfer.size,
+    );
     if (durableOffset >= transfer.size) {
       pacer?.forget(transfer.transferId);
       _untrackOutgoingProgress(transfer.transferId);
@@ -4098,7 +4083,7 @@ class FileTransferEngine {
     _receivingTransfers[transferId] = updated;
     _receivingTransferOffsets[transferId] = durableOffset;
     _receivingTransferSequences[transferId] = 0;
-    final incoming = _IncomingFolder(
+    final incoming = IncomingFolder(
       session: session,
       ackedOffset: durableOffset,
     );
@@ -4168,7 +4153,7 @@ class FileTransferEngine {
   /// tick although the worker still has part of the stream to write. The
   /// sender reads it as the folder still being worked on rather than the
   /// peer having stopped.
-  void _keepIncomingFolderAlive(String transferId, _IncomingFolder incoming) {
+  void _keepIncomingFolderAlive(String transferId, IncomingFolder incoming) {
     if (!identical(_incomingFolders[transferId], incoming)) {
       incoming.keepAlive?.cancel();
       return;
@@ -4194,7 +4179,7 @@ class FileTransferEngine {
 
   void _handleIncomingFolderProgress(
     String transferId,
-    _IncomingFolder incoming,
+    IncomingFolder incoming,
     FolderReceiveProgress progress,
   ) {
     if (!identical(_incomingFolders[transferId], incoming)) {
@@ -4226,7 +4211,7 @@ class FileTransferEngine {
   /// closed or replaced in the meantime. A failure fails the transfer.
   Future<void> _runIncomingFolderOperation(
     String transferId,
-    _IncomingFolder incoming,
+    IncomingFolder incoming,
     Future<void> Function() operation,
   ) async {
     if (!identical(_incomingFolders[transferId], incoming)) {
@@ -4269,7 +4254,7 @@ class FileTransferEngine {
   /// that stays silent.
   Future<void> _acknowledgeIncomingFolder(
     String transferId,
-    _IncomingFolder incoming,
+    IncomingFolder incoming,
   ) async {
     final current = _receivingTransfers[transferId];
     final durableOffset = incoming.session.latest.durableOffset;
@@ -4297,7 +4282,7 @@ class FileTransferEngine {
   /// trailer: move the folder out of staging and report how it turned out.
   Future<void> _finalizeIncomingFolderTransfer(
     String transferId,
-    _IncomingFolder incoming,
+    IncomingFolder incoming,
     FolderReceiveSummary summary,
   ) async {
     final stored = await _database().fetchFileTransfer(transferId);
