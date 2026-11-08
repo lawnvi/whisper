@@ -27,6 +27,7 @@ import 'package:whisper/socket/folder_transfer_scan.dart';
 import 'package:whisper/socket/folder_transfer_sink.dart';
 import 'package:whisper/socket/folder_write_pool.dart';
 import 'package:whisper/socket/folder_transfer_source.dart';
+import 'package:whisper/socket/incoming_transfer_parts.dart';
 import 'package:whisper/socket/outgoing_progress_estimator.dart';
 import 'package:whisper/socket/peer_transfer_runtime.dart';
 import 'package:whisper/socket/transfer_ack_watchdog.dart';
@@ -77,42 +78,6 @@ final class _OutgoingChecksumState {
     if (closed) return;
     closed = true;
     await checksum.dispose();
-  }
-}
-
-final class _IncomingWritePipeline {
-  _IncomingWritePipeline({required this.writtenOffset});
-
-  Future<void> _tail = Future<void>.value();
-  Object? _error;
-  StackTrace? _stackTrace;
-  int writtenOffset;
-
-  void add(
-    RandomAccessFile writer,
-    Uint8List payload, {
-    required int endOffset,
-  }) {
-    _tail = _tail.then((_) async {
-      if (_error != null) {
-        return;
-      }
-      try {
-        await writer.writeFrom(payload);
-        writtenOffset = endOffset;
-      } catch (error, stackTrace) {
-        _error = error;
-        _stackTrace = stackTrace;
-      }
-    });
-  }
-
-  Future<void> drain() async {
-    await _tail;
-    final error = _error;
-    if (error != null) {
-      Error.throwWithStackTrace(error, _stackTrace ?? StackTrace.current);
-    }
   }
 }
 
@@ -413,8 +378,9 @@ class FileTransferEngine {
   final Map<String, IOSink> _receivingTransferSinks = <String, IOSink>{};
   final Map<String, RandomAccessFile> _receivingTransferWritersV3 =
       <String, RandomAccessFile>{};
-  final Map<String, _IncomingWritePipeline> _receivingWritePipelines =
-      <String, _IncomingWritePipeline>{};
+  late final IncomingAckClock _incomingAckClock = IncomingAckClock(now: _now);
+  final Map<String, IncomingWritePipeline> _receivingWritePipelines =
+      <String, IncomingWritePipeline>{};
   final Map<String, FileTransferData> _receivingTransfers =
       <String, FileTransferData>{};
   final Map<String, ParallelStreamingChecksum> _receivingChecksums =
@@ -3182,7 +3148,7 @@ class FileTransferEngine {
       final openedWriter = await tempFile.open(mode: FileMode.writeOnlyAppend);
       writer = openedWriter;
       _receivingTransferWritersV3[transfer.transferId] = writer;
-      _receivingWritePipelines[transfer.transferId] = _IncomingWritePipeline(
+      _receivingWritePipelines[transfer.transferId] = IncomingWritePipeline(
         writtenOffset: frame.offset,
       );
       _receivingTransfers[transfer.transferId] = transfer;
@@ -3202,7 +3168,7 @@ class FileTransferEngine {
     }
     final writePipeline = _receivingWritePipelines.putIfAbsent(
       transfer.transferId,
-      () => _IncomingWritePipeline(writtenOffset: frame.offset),
+      () => IncomingWritePipeline(writtenOffset: frame.offset),
     );
     final committedBytes = frame.offset + frame.payload.length;
     writePipeline.add(writer, frame.payload, endOffset: committedBytes);
@@ -3241,7 +3207,12 @@ class FileTransferEngine {
     final ackInterval =
         _incomingFlows[transfer.transferId]?.ackIntervalSize ??
         fileTransferV3LegacyAckIntervalSize;
-    if (committedBytes - transfer.committedBytes >= ackInterval) {
+    if (_incomingAckClock.due(
+      transfer.transferId,
+      received: committedBytes,
+      answered: transfer.committedBytes,
+      interval: ackInterval,
+    )) {
       final durableOffset = await _flushIncomingFileTransferV3(
         transfer,
         committedBytes,
@@ -3389,6 +3360,7 @@ class FileTransferEngine {
     FileTransferData transfer,
     int durableOffset,
   ) async {
+    _incomingAckClock.answered(transfer.transferId);
     await _sendFileTransferV3ControlTo(
       transfer.peerUid,
       FileTransferV3Control(
@@ -4790,6 +4762,7 @@ class FileTransferEngine {
     bool flush = false,
   }) async {
     final writer = _receivingTransferWritersV3.remove(transferId);
+    _incomingAckClock.forget(transferId);
     final writePipeline = _receivingWritePipelines.remove(transferId);
     if (writer != null) {
       try {

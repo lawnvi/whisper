@@ -532,6 +532,39 @@ void main() {
     );
   });
 
+  test('a file on a slow link hears from its receiver every second', () async {
+    // The receiver used to answer only once a whole ack interval had come
+    // in. On a slow link that took longer than the sender waits, so it gave
+    // the receiver up for gone and the transfer never got anywhere.
+    const size = 4 * 1024 * _kib;
+    final file = File(p.join(temp.path, 'slow.bin'))
+      ..writeAsBytesSync(_pattern(size, 3));
+    connect(ackIntervalSize: 8 * 1024 * _kib);
+    sender.beforeDeliver = (frame) async {
+      if (frame.type == WhisperFrameType.fileData) {
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+      }
+    };
+    final acks = <int>[];
+    receiver.onSend = (frame) {
+      if (frame.type == WhisperFrameType.fileAck) acks.add(frame.offset);
+      return true;
+    };
+
+    expect(
+      await sender.engine.sendFileTo(
+        'receiver',
+        file.path,
+        messageId: '0f8a2c3e-5b6d-4e7f-8a9b-0c1d2e3f4a5b',
+      ),
+      isTrue,
+    );
+    final transferId = _onlyTransferId(sender);
+    await receiver.waitForState(transferId, FileTransferState.completed);
+
+    expect(acks.where((offset) => offset > 0 && offset < size), isNotEmpty);
+  });
+
   test('an interrupted folder continues where it stopped', () async {
     _writeTree(source, sampleTree());
     connect();
