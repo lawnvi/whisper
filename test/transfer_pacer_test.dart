@@ -75,7 +75,7 @@ void main() {
   test('only a receiver that answers every second is held to two seconds', () {
     const window = 64 << 20;
     expect(pacer.inFlight('t', window, timely: false), window);
-    expect(pacer.inFlight('t', window, timely: true), 2 << 20);
+    expect(pacer.inFlight('t', window, timely: true), 256 << 10);
     // An old receiver answers only once a whole interval is in.
     pacer.acknowledged('t', 0, interval: 32 << 20, size: 100 << 20);
     now = now.add(const Duration(seconds: 1));

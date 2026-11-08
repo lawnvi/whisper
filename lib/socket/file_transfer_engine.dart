@@ -58,17 +58,6 @@ typedef TransferMessageBuilder =
       String? receiverOverride,
     });
 
-final class _TransferOperationLaneEntry {
-  final Lock lock = Lock();
-  int users = 0;
-}
-
-final class _TransferAdmissionRejected implements Exception {
-  const _TransferAdmissionRejected(this.decision);
-
-  final FileTransferAdmission decision;
-}
-
 enum _IncomingReadyResult { retained, sendFailed, unavailable }
 
 /// A folder being received: the worker writing it, and how much of its
@@ -298,10 +287,10 @@ class FileTransferEngine {
       <String, TransferConnectionBinding>{};
   final Map<String, TransferConnectionBinding> _incomingConnectionBindings =
       <String, TransferConnectionBinding>{};
-  final Map<String, _TransferOperationLaneEntry> _transferOperationLanes =
-      <String, _TransferOperationLaneEntry>{};
-  final Map<String, _TransferOperationLaneEntry> _transferSendLanes =
-      <String, _TransferOperationLaneEntry>{};
+  final Map<String, TransferOperationLane> _transferOperationLanes =
+      <String, TransferOperationLane>{};
+  final Map<String, TransferOperationLane> _transferSendLanes =
+      <String, TransferOperationLane>{};
   final Map<String, int> _outgoingIntentEpochs = <String, int>{};
   final Set<String> _blockedOutgoingPeers = <String>{};
 
@@ -1247,7 +1236,7 @@ class FileTransferEngine {
     }
     final lockEntry = _transferOperationLanes.putIfAbsent(
       frame.transferId,
-      _TransferOperationLaneEntry.new,
+      TransferOperationLane.new,
     );
     lockEntry.users++;
     try {
@@ -1282,7 +1271,7 @@ class FileTransferEngine {
   }) async {
     final lane = _transferOperationLanes.putIfAbsent(
       transferId,
-      _TransferOperationLaneEntry.new,
+      TransferOperationLane.new,
     );
     lane.users++;
     try {
@@ -1311,7 +1300,7 @@ class FileTransferEngine {
   ) async {
     final lane = _transferSendLanes.putIfAbsent(
       transferId,
-      _TransferOperationLaneEntry.new,
+      TransferOperationLane.new,
     );
     lane.users++;
     try {
@@ -1421,12 +1410,12 @@ class FileTransferEngine {
               claimAdmission = result;
               if (result.decision != FileTransferAdmission.admitted &&
                   result.decision != FileTransferAdmission.existing) {
-                throw _TransferAdmissionRejected(result.decision);
+                throw TransferAdmissionRejected(result.decision);
               }
               return result.message!;
             },
           );
-        } on _TransferAdmissionRejected catch (error) {
+        } on TransferAdmissionRejected catch (error) {
           if (_isSessionCurrent(requireCurrent)) {
             await _sendFileOfferError(
               message,
@@ -2683,9 +2672,11 @@ class FileTransferEngine {
         FileTransferV3FlowParameters.legacy;
     final durableOffset = offset;
     final pacer = _outgoingPacerFor?.call(transfer.transferId);
+    // A folder's receiver answers from its worker, on its own schedule.
     final timely =
+        !_isFolderTransfer(transfer) &&
         (_remoteProfileFor(transfer.peerUid)?.protocolVersion ?? 0) >=
-        IncomingAckClock.sinceProtocolVersion;
+            IncomingAckClock.sinceProtocolVersion;
     final windowEnd = math.min(
       transfer.size,
       durableOffset +
@@ -3404,8 +3395,11 @@ class FileTransferEngine {
     pacer?.acknowledged(
       transfer.transferId,
       durableOffset,
-      interval: _outgoingFlows[transfer.transferId]?.ackIntervalSize,
+      interval: _isFolderTransfer(transfer)
+          ? null
+          : _outgoingFlows[transfer.transferId]?.ackIntervalSize,
       size: transfer.size,
+      since: transfer.committedBytes,
     );
     if (durableOffset >= transfer.size) {
       pacer?.forget(transfer.transferId);

@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:synchronized/synchronized.dart';
+import 'package:whisper/model/LocalDatabase.dart' show FileTransferAdmission;
 import 'package:whisper/socket/folder_transfer_sink.dart';
 
 /// Writes what arrives for one transfer in order, without making the frame
@@ -57,9 +59,14 @@ final class IncomingAckClock {
   /// Receivers on this protocol version or later answer this way.
   static const sinceProtocolVersion = 13;
 
+  /// The first answer comes once this much is in, without waiting a
+  /// second: it tells the sender how fast the link is before it sends more.
+  static const firstAfter = 128 * 1024;
+
   final Duration every;
   final DateTime Function() _now;
   final Map<String, DateTime> _since = <String, DateTime>{};
+  final Set<String> _answeredOnce = <String>{};
 
   /// Whether [received] bytes, against [answered] when it last said so,
   /// call for an answer now.
@@ -71,6 +78,10 @@ final class IncomingAckClock {
   }) {
     if (received <= answered) return false;
     if (received - answered >= interval) return true;
+    if (!_answeredOnce.contains(transferId) &&
+        received - answered >= firstAfter) {
+      return true;
+    }
     final since = _since.putIfAbsent(transferId, _now);
     return _now().difference(since) >= every;
   }
@@ -92,11 +103,13 @@ final class IncomingAckClock {
 
   void answered(String transferId) {
     _since[transferId] = _now();
+    _answeredOnce.add(transferId);
     _reminders.remove(transferId)?.cancel();
   }
 
   void forget(String transferId) {
     _since.remove(transferId);
+    _answeredOnce.remove(transferId);
     _reminders.remove(transferId)?.cancel();
   }
 }
@@ -117,4 +130,16 @@ final class IncomingFolder {
   /// Whether the sender was told to send in this session. It was not if
   /// staging already held the whole folder.
   bool announced = false;
+}
+
+/// One transfer's operations, one at a time.
+final class TransferOperationLane {
+  final Lock lock = Lock();
+  int users = 0;
+}
+
+final class TransferAdmissionRejected implements Exception {
+  const TransferAdmissionRejected(this.decision);
+
+  final FileTransferAdmission decision;
 }

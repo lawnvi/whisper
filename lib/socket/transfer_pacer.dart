@@ -104,7 +104,9 @@ class TransferPacer {
   int inFlight(String transferId, int window, {required bool timely}) {
     if (!timely && !_timely.contains(transferId)) return window;
     final confirmed = _rateOf[transferId];
-    final limit = confirmed == null ? 2 << 20 : (confirmed * 2).round();
+    // Until the first answer says how fast the link is, little: on a slow
+    // link even a few megabytes queue for minutes.
+    final limit = confirmed == null ? 128 << 10 : (confirmed * 2).round();
     return math.max(4 * _minFrame, math.min(window, limit));
   }
 
@@ -152,12 +154,14 @@ class TransferPacer {
   }
 
   /// The receiver of [transferId] has everything before [durableOffset], of
-  /// [size], answering every [interval] bytes or sooner.
+  /// [size], answering every [interval] bytes or sooner; it had [since]
+  /// before.
   void acknowledged(
     String transferId,
     int durableOffset, {
     int? interval,
     int? size,
+    int? since,
   }) {
     final now = _now();
     final frames = _sent[transferId];
@@ -186,13 +190,15 @@ class TransferPacer {
     }
     final last = _answered[transferId];
     _answered[transferId] = (durableOffset, now);
-    if (last == null) return;
+    final previous = last?.$1 ?? since;
     if (interval != null &&
         size != null &&
+        previous != null &&
         durableOffset < size &&
-        durableOffset - last.$1 < interval) {
+        durableOffset - previous < interval) {
       _timely.add(transferId);
     }
+    if (last == null) return;
     final elapsed = now.difference(last.$2);
     if (elapsed < const Duration(milliseconds: 200)) return;
     final sample =
