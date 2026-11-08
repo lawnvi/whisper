@@ -25,13 +25,14 @@
 ## Verification Commands
 
 - Analyze Dart/Flutter code: `flutter analyze`
+- Check that no file grew past its size limit: `dart run tool/check_sizes.dart`
 - Run all Flutter tests: `flutter test`
 - Run one focused test: `flutter test test/<name>_test.dart`
 - Run the remote-input key matrix suite: `./script/test_remote_input_keys.sh`
 - Verify the macOS app builds, signs, launches, and has a running process: `./script/build_and_run.sh --verify`
 - Check product-site linting when working in `whisper-web/`: `cd whisper-web && npm run lint`
 
-CI currently runs `flutter pub get`, `flutter analyze`, and `flutter test` on pull requests and pushes to `main`.
+CI runs `flutter pub get`, `flutter analyze`, the size check, a check that generated localizations are up to date, and `flutter test` on pull requests and pushes to `main`.
 
 ## Project Structure
 
@@ -76,6 +77,23 @@ CI currently runs `flutter pub get`, `flutter analyze`, and `flutter test` on pu
 - Follow `DESIGN.md` for all UI. The code has not migrated yet: see `docs/design/README.md`. New UI uses the tokens in `docs/design/flutter.md`; do not write raw values in widgets.
 - Add concise comments only for non-obvious protocol, platform, or concurrency behavior.
 
+## Code Organization
+
+The code base grew by adding to whatever file was nearest. These rules stop that; `dart run tool/check_sizes.dart` enforces the first one in CI.
+
+- **Size.** A Dart file stays under 1000 lines, a native file (Swift, C/C++, Kotlin, Java) under 1500. Files already over it are listed in `tool/size_baseline.txt` and may only shrink: split before adding to them, then run `dart run tool/check_sizes.dart --update`. Aim for functions under 60 lines; one over 150 lines is a split waiting to happen.
+- **One job per file.** A new feature gets its own files in its subsystem instead of a section in a big one. `lib/socket/svrmanager.dart` only connects and routes: a new message type is handled by its subsystem's coordinator. Pages assemble widgets; what decides what is sent or started lives in a coordinator or controller beside them.
+- **One native plugin per file.** `macos/Runner/MainFlutterWindow.swift` sets up the window and registers plugins; each plugin's code lives in its own file. The same goes for the Windows and Linux runners.
+- **Write it once.** Logic that every platform needs goes in Dart, with only the system calls in native code. Before writing a helper, search for an existing one; a block copied a second time gets extracted.
+- **UI reaches the network through `WsSvrManager` and `ISocketEvent`.** Don't import other `lib/socket/` internals from `lib/page/`, `lib/new_ui/` or `lib/widget/`; a few still do and are moved when touched.
+- **No copies of production code.** A probe or tool uses the real sources or is deleted after use; it never keeps a copy that drifts.
+- **Third-party source** lives in its own directory (`android_agent/upstream/`, `third_party/`) with a note on the upstream version, license, any patches and when to drop it. It doesn't count towards sizes and is never edited in place without that note.
+
+## Changing A Protocol Or The Database
+
+- **Wire format.** A peer's profile rejects unknown fields, so a new field or message is sent only to peers whose protocol version knows it (see `formFactor` in `lib/state/peer_profile.dart`). Say what an older peer does with it, and when versions can't work together, tell the user which device to update. Keep the test for older and newer peers.
+- **Database.** Bump the schema version, make the migration step idempotent, regenerate with build_runner, and test both a fresh database and an upgrade from the previous version.
+
 ## Testing Instructions
 
 Tests are for what would break quietly and cost a lot. They are not a record of the work. Most checks made while working are temporary: run them, then throw them away.
@@ -118,7 +136,7 @@ Tests are for what would break quietly and cost a lot. They are not a record of 
 - Release signing uses GitHub secrets such as `MACOS_CERTIFICATE_P12_BASE64`, `MACOS_CERTIFICATE_PASSWORD`, `MACOS_KEYCHAIN_PASSWORD`, `KEY_PASSWORD`, and `STORE_PASSWORD`.
 - Local macOS signing can use `WHISPER_MACOS_*` environment variables from `script/build_and_run.sh`; never include secret values in docs or commits.
 - `WHISPER_REMOTE_INPUT_TRACE=1` enables verbose remote-input tracing and may expose device/session details in logs.
-- The optional Windows lock screen input service (`windows/runner/input_service.cpp`) is `whisper.exe` itself, copied into Program Files and run as LocalSystem. It only injects while the session is locked; do not widen it to UAC prompts, elevated windows, or the user's desktop, or run it from a user-writable folder, without an explicit security review. Its roles must return from `wWinMain` before anything touches Flutter, which is delay-loaded so the copy can start on its own.
+- The optional Windows lock screen input service (`windows/runner/input_service.cpp`) is `whisper.exe` itself, copied into Program Files and run as LocalSystem. By default it only injects while the session is locked. UAC prompts and administrator windows on the unlocked desktop are reachable only when an administrator turns on `HKLM\SOFTWARE\Whisper\InputService\AllowElevated` (the switch in Settings); a request can never widen that. Don't widen it further, or run it from a user-writable folder, without an explicit security review. Its roles must return from `wWinMain` before anything touches Flutter, which is delay-loaded so the copy can start on its own.
 
 ## Collaboration Rules
 

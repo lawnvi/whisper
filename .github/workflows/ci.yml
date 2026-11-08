@@ -37,5 +37,13 @@ jobs:
       - name: Run flutter analyze
         run: flutter analyze
 
+      - name: Check file sizes
+        run: dart run tool/check_sizes.dart
+
+      - name: Check generated localizations are up to date
+        run: |
+          flutter gen-l10n
+          git diff --exit-code -- lib/l10n
+
       - name: Run flutter test
         run: flutter test

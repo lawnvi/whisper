@@ -1,3 +1,6 @@
+// A command-line benchmark: it reports by printing.
+// ignore_for_file: avoid_print
+
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
