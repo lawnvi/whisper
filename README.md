@@ -12,7 +12,7 @@ LAN file transfer, software KVM, clipboard sync, audio and window streaming betw
 ![Platform](https://img.shields.io/badge/platform-Android%20%7C%20macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)
 [![License](https://img.shields.io/badge/license-MIT-green)](./LICENSE)
 
-[官网](https://whisper.127014.xyz/zh) · [下载](https://github.com/lawnvi/whisper/releases) · [使用指南](docs/user-guide.md) · [English](./README_en.md)
+[官网](https://whisper.127014.xyz/zh) · [下载](https://github.com/lawnvi/whisper/releases) · [使用指南](docs/user-guide.md) · [排障指南](docs/troubleshooting.md) · [English](./README_en.md)
 
 </div>
 
@@ -120,6 +120,8 @@ Linux 的自动发现依赖 Avahi。视频预览和电视投屏需要系统装�
 | macOS 上键鼠共享没有反应 | 按提示在系统设置里授予辅助功能权限，然后重新打开 Whisper |
 | 提示 Whisper 没有正常运行 | 点提示上的「查看」或在设置里打开「诊断信息」，可以拷贝或反馈 |
 | Windows 锁屏或 UAC 时无法操作 | 需要安装包附带的系统服务，见[使用指南](docs/user-guide.md#windows-锁屏与-uac) |
+
+装不上、连不上等更多问题，见 [排障指南](docs/troubleshooting.md)。
 
 ## 安全说明
 

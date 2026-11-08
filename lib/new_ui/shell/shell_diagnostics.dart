@@ -38,7 +38,9 @@ class ShellDiagnostics extends StatefulWidget {
 }
 
 class _ShellDiagnosticsState extends State<ShellDiagnostics> {
-  static final _issues = Uri.https('github.com', '/lawnvi/whisper/issues/new');
+  static final _issues = Uri.https('github.com', '/lawnvi/whisper/issues/new', {
+    'template': 'bug_report.yml',
+  });
 
   String? _address;
   var _busy = false;

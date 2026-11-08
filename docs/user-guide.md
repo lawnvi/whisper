@@ -1,6 +1,6 @@
 # Whisper 使用指南
 
-[English](user-guide_en.md) · [返回 README](../README.md)
+[English](user-guide_en.md) · [排障指南](troubleshooting.md) · [返回 README](../README.md)
 
 - [连接设备](#连接设备)
 - [发送文本和文件](#发送文本和文件)

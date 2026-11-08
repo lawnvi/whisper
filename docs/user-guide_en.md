@@ -1,6 +1,6 @@
 # Whisper User Guide
 
-[中文](user-guide.md) · [Back to README](../README_en.md)
+[中文](user-guide.md) · [Troubleshooting](troubleshooting_en.md) · [Back to README](../README_en.md)
 
 - [Connect devices](#connect-devices)
 - [Send text and files](#send-text-and-files)

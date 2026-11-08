@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 排障指南 / Troubleshooting
+    url: https://github.com/lawnvi/whisper/blob/HEAD/docs/troubleshooting.md
+    about: 装不上、连不上、权限和常见问题 / Install, connection, permission and common problems
+  - name: 使用指南 / User guide
+    url: https://github.com/lawnvi/whisper/blob/HEAD/docs/user-guide.md
+    about: 每项功能怎么用 / How each feature works

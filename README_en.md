@@ -10,7 +10,7 @@ Move text, files, clipboard, audio, keyboard/mouse input, and app windows direct
 ![Platform](https://img.shields.io/badge/platform-Android%20%7C%20macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)
 [![License](https://img.shields.io/badge/license-MIT-green)](./LICENSE)
 
-[Website](https://whisper.127014.xyz/en) · [Download](https://github.com/lawnvi/whisper/releases) · [User guide](docs/user-guide_en.md) · [中文](./README.md)
+[Website](https://whisper.127014.xyz/en) · [Download](https://github.com/lawnvi/whisper/releases) · [User guide](docs/user-guide_en.md) · [Troubleshooting](docs/troubleshooting_en.md) · [中文](./README.md)
 
 </div>
 
@@ -118,6 +118,8 @@ On Wayland, keyboard and mouse sharing supports GNOME and KDE Plasma. GNOME asks
 | No keyboard/mouse on macOS | Grant Accessibility in System Settings, then reopen Whisper |
 | Whisper says it is not running properly | Select "View" on the notice or open "Diagnostics" in Settings to copy or report it |
 | Windows lock screen or UAC | Needs the system service from the installer; see the [user guide](docs/user-guide_en.md#windows-lock-screen-and-uac) |
+
+For install, connection and other problems, see [Troubleshooting](docs/troubleshooting_en.md).
 
 ## Security
 
