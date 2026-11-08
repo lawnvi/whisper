@@ -80,7 +80,7 @@ class TransferPacer {
   static const _queueLimit = Duration(milliseconds: 80);
   static const _troubleMemory = Duration(minutes: 1);
   static const _quickestMemory = Duration(seconds: 30);
-  static const _minFrame = 64 * 1024;
+  static const _minFrame = 16 * 1024;
 
   /// Bytes per second now.
   double get rate => _rate;

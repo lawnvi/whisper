@@ -52,7 +52,7 @@ void main() {
     pacer.acknowledged('t', 0);
     now = now.add(const Duration(seconds: 1));
     pacer.acknowledged('t', 200 << 10); // a slow link: 200 KiB/s
-    expect(pacer.frameBytes(4 << 20), 64 << 10);
+    expect(pacer.frameBytes(4 << 20), 48 << 10);
   });
 
   test('answers coming back later than the link takes empty slow it down', () {
@@ -75,7 +75,7 @@ void main() {
   test('only a receiver that answers every second is held to two seconds', () {
     const window = 64 << 20;
     expect(pacer.inFlight('t', window, timely: false), window);
-    expect(pacer.inFlight('t', window, timely: true), 256 << 10);
+    expect(pacer.inFlight('t', window, timely: true), 128 << 10);
     // An old receiver answers only once a whole interval is in.
     pacer.acknowledged('t', 0, interval: 32 << 20, size: 100 << 20);
     now = now.add(const Duration(seconds: 1));
