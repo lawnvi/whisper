@@ -1604,5 +1604,7 @@
       }
     }
   },
-  "pasteIslandQueued": "Después del anterior"
+  "pasteIslandQueued": "Después del anterior",
+  "shellDropSendFiles": "{count} archivos, {size}",
+  "shellDropSendItems": "{count} elementos"
 }

@@ -3780,4 +3780,14 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get pasteIslandQueued => 'Después del anterior';
+
+  @override
+  String shellDropSendFiles(int count, String size) {
+    return '$count archivos, $size';
+  }
+
+  @override
+  String shellDropSendItems(int count) {
+    return '$count elementos';
+  }
 }

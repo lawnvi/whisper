@@ -2774,5 +2774,26 @@
   "pasteIslandQueued": "等前一个传完",
   "@pasteIslandQueued": {
     "description": "Floating paste island: this paste was pressed while an earlier paste's files were still coming; its files come once those are done."
+  },
+  "shellDropSendFiles": "{count} 个文件，共 {size}",
+  "shellDropSendItems": "{count} 项",
+  "@shellDropSendFiles": {
+    "description": "Under the title of the sheet asking before sending files dropped on a device: how many files and their total size.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "@shellDropSendItems": {
+    "description": "Under the title of the sheet asking before sending what was dropped on a device, when folders are among it: how many items.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   }
 }

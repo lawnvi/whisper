@@ -3532,4 +3532,14 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get pasteIslandQueued => '等前一个传完';
+
+  @override
+  String shellDropSendFiles(int count, String size) {
+    return '$count 个文件，共 $size';
+  }
+
+  @override
+  String shellDropSendItems(int count) {
+    return '$count 项';
+  }
 }

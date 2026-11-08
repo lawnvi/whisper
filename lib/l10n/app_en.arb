@@ -2541,5 +2541,7 @@
       }
     }
   },
-  "pasteIslandQueued": "After the one before"
+  "pasteIslandQueued": "After the one before",
+  "shellDropSendFiles": "{count} files, {size}",
+  "shellDropSendItems": "{count} items"
 }

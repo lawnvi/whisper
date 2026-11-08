@@ -6266,6 +6266,18 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'等前一个传完'**
   String get pasteIslandQueued;
+
+  /// Under the title of the sheet asking before sending files dropped on a device: how many files and their total size.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count} 个文件，共 {size}'**
+  String shellDropSendFiles(int count, String size);
+
+  /// Under the title of the sheet asking before sending what was dropped on a device, when folders are among it: how many items.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count} 项'**
+  String shellDropSendItems(int count);
 }
 
 class _AppLocalizationsDelegate

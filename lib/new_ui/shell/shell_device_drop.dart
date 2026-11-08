@@ -154,21 +154,45 @@ Future<bool> showShellDropSend(
 }) async =>
     await showShellSheet<bool>(
       context,
-      builder: (_) => ShellDropSendSheet(name: device.name, paths: paths),
+      builder: (_) => ShellDropSendSheet(
+        name: device.name,
+        paths: paths,
+        art: deviceArtFor(device, size: 48),
+      ),
     ) ==
     true;
 
+/// DESIGN.md「提示框」: a question, so like a macOS alert. Who the files go
+/// to at the top, what goes in the middle, the two answers sharing a row.
 class ShellDropSendSheet extends StatelessWidget {
   const ShellDropSendSheet({
     super.key,
     required this.name,
     required this.paths,
+    this.art,
   });
 
   static const _shown = 4;
 
   final String name;
   final List<String> paths;
+
+  /// The device the files go to.
+  final Widget? art;
+
+  /// For more than one: how many, and how much when they are all files.
+  String? _summary(AppLocalizations l10n) {
+    if (paths.length < 2) return null;
+    var bytes = 0;
+    for (final path in paths) {
+      final stat = FileStat.statSync(path);
+      if (stat.type != FileSystemEntityType.file) {
+        return l10n.shellDropSendItems(paths.length);
+      }
+      bytes += stat.size;
+    }
+    return l10n.shellDropSendFiles(paths.length, formatSize(bytes));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -191,17 +215,30 @@ class ShellDropSendSheet extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            if (art case final art?) ...[
+              Center(child: art),
+              const SizedBox(height: 12),
+            ],
             Text(
               l10n.shellDropSendTitle(name),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: type.head,
                 fontWeight: FontWeight.w600,
                 color: c.ink,
               ),
             ),
-            const SizedBox(height: 14),
+            if (_summary(l10n) case final summary?) ...[
+              const SizedBox(height: 4),
+              Text(
+                summary,
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: type.note, color: c.ink2),
+              ),
+            ],
+            const SizedBox(height: 16),
             ShellGroup(
               flat: true,
               inset: 60,
@@ -213,20 +250,29 @@ class ShellDropSendSheet extends StatelessWidget {
               const SizedBox(height: 8),
               Text(
                 l10n.shellDropSendMore(paths.length - _shown),
+                textAlign: TextAlign.center,
                 style: TextStyle(fontSize: type.note, color: c.ink2),
               ),
             ],
           ],
         ),
         actions: Row(
-          mainAxisAlignment: MainAxisAlignment.end,
           children: [
-            ShellButton(label: l10n.cancel, onTap: () => close(false)),
+            Expanded(
+              child: ShellButton(
+                label: l10n.cancel,
+                large: true,
+                onTap: () => close(false),
+              ),
+            ),
             const SizedBox(width: 8),
-            ShellButton(
-              label: l10n.shellDropSendConfirm,
-              kind: ShellButtonKind.primary,
-              onTap: () => close(true),
+            Expanded(
+              child: ShellButton(
+                label: l10n.shellDropSendConfirm,
+                kind: ShellButtonKind.primary,
+                large: true,
+                onTap: () => close(true),
+              ),
             ),
           ],
         ),
