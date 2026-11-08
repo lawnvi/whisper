@@ -3,13 +3,11 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:whisper/helper/local.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/new_ui/input/input_controller.dart';
 import 'package:whisper/new_ui/input/input_rules.dart';
 import 'package:whisper/new_ui/share/share_parts.dart';
 import 'package:whisper/new_ui/shell/shell_parts.dart';
-import 'package:whisper/remote_input/remote_input_coordinator.dart';
 import 'package:whisper/remote_input/remote_input_layout.dart';
 import 'package:whisper/state/chat_session_list.dart';
 import 'package:whisper/theme/whisper_device_art.dart';

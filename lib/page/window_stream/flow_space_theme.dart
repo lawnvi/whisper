@@ -1,13 +1,9 @@
 import 'package:whisper/theme/whisper_ui.dart';
-import 'package:whisper/theme/radix_colors.dart';
 import 'dart:io' show Platform;
 import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/physics.dart';
-
-import '../../theme/app_theme.dart';
 
 /// Design tokens of the Flow Space (see the window-stream design doc,
 /// "流转空间：设计语言"). Shared by the desktop, tablet and phone layouts.

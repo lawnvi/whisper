@@ -1,0 +1,9 @@
+# Tests keep the project's lints except the stricter ones about futures and
+# dynamic calls: a test often fires something off to see what happens, or
+# reads decoded JSON as it comes.
+include: ../analysis_options.yaml
+
+linter:
+  rules:
+    unawaited_futures: false
+    avoid_dynamic_calls: false

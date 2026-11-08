@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ffi';
-import 'dart:typed_data';
 
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
@@ -866,9 +865,9 @@ class WindowStreamHost {
     // A desktop app's window may not say which listed app it belongs to
     // (Windows: a shortcut's id against the program's path). Failing that,
     // the window that came, or that came to the front, after the launch.
-    final known = {for (final window in before ?? const []) window.id};
+    final known = {for (final window in before ?? const <RemoteWindowInfo>[]) window.id};
     final wasActive = {
-      for (final window in before ?? const [])
+      for (final window in before ?? const <RemoteWindowInfo>[])
         if (window.active) window.id,
     };
     RemoteWindowInfo? arrived(List<RemoteWindowInfo>? windows) {

@@ -45,7 +45,6 @@ import 'package:whisper/socket/auth_session_keys.dart';
 import 'package:whisper/socket/device_identity.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:whisper/new_ui/capture/capture_flow.dart';
 import 'package:whisper/new_ui/capture/capture_overlay.dart';
 import 'package:whisper/new_ui/paste_island/paste_island_app.dart';
@@ -177,20 +176,22 @@ Future<void> main(List<String> arguments) async {
     await _applyDesktopWindowTheme(themeMode);
 
     WindowOptions windowOptions = WhisperWindow.options(Size(width, height));
-    windowManager.waitUntilReadyToShow(windowOptions, () async {
-      // WindowOptions applies native frame values after the first theme sync.
-      await _applyDesktopWindowTheme(themeMode);
-      await WhisperWindow.enableMaterial(brightness);
-      if (Platform.isWindows) {
-        await windowManager.setMinimizable(true);
-      }
-      // Started at login: stay in the tray until someone opens the window.
-      if (arguments.contains(desktopStartupHiddenArgument)) {
-        return;
-      }
-      await windowManager.show();
-      await windowManager.focus();
-    });
+    unawaited(
+      windowManager.waitUntilReadyToShow(windowOptions, () async {
+        // WindowOptions applies native frame values after the first theme sync.
+        await _applyDesktopWindowTheme(themeMode);
+        await WhisperWindow.enableMaterial(brightness);
+        if (Platform.isWindows) {
+          await windowManager.setMinimizable(true);
+        }
+        // Started at login: stay in the tray until someone opens the window.
+        if (arguments.contains(desktopStartupHiddenArgument)) {
+          return;
+        }
+        await windowManager.show();
+        await windowManager.focus();
+      }),
+    );
   }
 
   // 初始化通知帮助类

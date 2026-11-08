@@ -1,8 +1,6 @@
-import 'package:whisper/theme/whisper_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:whisper/l10n/app_localizations.dart';
-import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/widget/glass_dialog.dart';
 
 /// Null cancels, true deletes received files, false keeps all files.

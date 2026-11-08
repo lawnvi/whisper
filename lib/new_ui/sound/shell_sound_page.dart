@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:ui' show FontFeature;
 
 import 'package:flutter/material.dart';
 import 'package:whisper/audio/audio_failure_reason.dart';
@@ -12,7 +11,6 @@ import 'package:whisper/new_ui/shell/shell_parts.dart';
 import 'package:whisper/new_ui/sound/sound_controller.dart';
 import 'package:whisper/new_ui/sound/sound_rules.dart';
 import 'package:whisper/state/chat_session_list.dart';
-import 'package:whisper/theme/radix_colors.dart';
 import 'package:whisper/theme/whisper_device_art.dart';
 import 'package:whisper/theme/whisper_icons.dart';
 import 'package:whisper/theme/whisper_ui.dart';

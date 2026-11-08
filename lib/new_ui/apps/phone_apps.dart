@@ -2,11 +2,9 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
 import 'package:whisper/new_ui/apps/apps_parts.dart';
 import 'package:whisper/new_ui/phone/phone_parts.dart';
 import 'package:whisper/new_ui/shell/shell_parts.dart';
-import 'package:whisper/theme/whisper_icons.dart';
 import 'package:whisper/theme/whisper_ui.dart';
 
 /// A window open somewhere: 正在流转.

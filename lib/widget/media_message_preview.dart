@@ -1,11 +1,8 @@
 import 'package:whisper/theme/whisper_ui.dart';
-import 'package:whisper/theme/radix_colors.dart';
 import 'dart:async';
 import 'dart:collection';
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:typed_data';
-import 'dart:ui' show FontFeature;
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
@@ -19,7 +16,6 @@ import 'package:whisper/helper/memory_bounded_image.dart';
 import 'package:whisper/helper/toast.dart';
 import 'package:whisper/helper/video_thumbnail.dart';
 import 'package:whisper/l10n/app_localizations.dart';
-import 'package:whisper/theme/app_theme.dart';
 
 enum MediaFileKind { image, video, audio, other }
 

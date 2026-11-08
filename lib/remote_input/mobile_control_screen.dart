@@ -17,7 +17,6 @@ import 'package:whisper/remote_input/mobile_pointer_settings.dart';
 import 'package:whisper/remote_input/mobile_touchpad.dart';
 import 'package:whisper/remote_input/remote_input_coordinator.dart';
 import 'package:whisper/remote_input/remote_input_lifecycle.dart';
-import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/theme/whisper_ui.dart';
 import 'package:whisper/widget/glass_bottom_sheet.dart';
 import 'package:whisper/widget/subtle_motion.dart';

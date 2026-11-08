@@ -10,7 +10,6 @@ import 'package:whisper/new_ui/shell/shell_parts.dart';
 import 'package:whisper/socket/svrmanager.dart';
 import 'package:whisper/state/app_health.dart';
 import 'package:whisper/state/diagnostic_report.dart';
-import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/theme/whisper_ui.dart';
 
 /// What to say about a problem, on the island and here.

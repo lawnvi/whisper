@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
 
 import '../../../l10n/app_localizations.dart';
 import '../../../page/remote_files/files_copy_island.dart';

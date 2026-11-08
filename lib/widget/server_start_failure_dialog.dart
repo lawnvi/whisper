@@ -2,7 +2,6 @@ import 'package:whisper/theme/whisper_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/state/server_start_failure.dart';
-import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/widget/glass_dialog.dart';
 
 enum ServerStartRecovery { retry, settings }

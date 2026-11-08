@@ -1,6 +1,4 @@
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../widget/device_glyph.dart';
 import '../../window_stream/core/window_stream_models.dart';

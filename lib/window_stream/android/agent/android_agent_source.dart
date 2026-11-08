@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 
@@ -328,7 +327,7 @@ class AndroidAgentSource implements WindowSource, ClosesTasks {
         final png = result is Map ? result['png'] : null;
         return png is String ? base64Decode(png) : null;
       } catch (_) {
-        _icons.remove(appId);
+        unawaited(_icons.remove(appId));
         return null;
       }
     }();

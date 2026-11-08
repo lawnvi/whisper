@@ -3,8 +3,6 @@ import 'dart:math' as math;
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../helper/transfer_notification_aggregator.dart';
 import '../../l10n/app_localizations.dart';

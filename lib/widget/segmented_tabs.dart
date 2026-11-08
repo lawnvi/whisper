@@ -1,6 +1,5 @@
 import 'package:whisper/theme/whisper_ui.dart';
 import 'package:flutter/material.dart';
-import 'package:whisper/theme/app_theme.dart';
 
 class WhisperTabBar extends StatelessWidget {
   const WhisperTabBar({

@@ -1,6 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/services.dart';
 import 'package:open_dir/open_dir.dart';
@@ -166,7 +166,7 @@ void openFile(String path) async {
       _logFileOperation(FileOperationKind.platformChannel, error: error);
     }
   }
-  OpenFilex.open(path);
+  unawaited(OpenFilex.open(path));
 }
 
 Future<void> openDir(String path, {bool parent = false}) async {

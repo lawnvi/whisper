@@ -3,7 +3,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
-import 'dart:typed_data';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
@@ -44,8 +43,6 @@ import 'package:whisper/remote_input/remote_input_layout.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
 import 'package:whisper/socket/file_transfer_engine.dart'
     show FolderSendOutcome;
-import 'package:whisper/socket/folder_transfer_manifest.dart'
-    show folderManifestMaxEntries;
 import 'package:whisper/socket/svrmanager.dart';
 import 'package:whisper/state/connection_attempt.dart';
 import 'package:whisper/state/connection_coordinator.dart';
@@ -53,7 +50,6 @@ import 'package:whisper/state/folder_message.dart';
 import 'package:whisper/state/transfer_speed_meter.dart';
 import 'package:whisper/state/pairing_request.dart';
 import 'package:whisper/state/peer_endpoint.dart';
-import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/theme/whisper_ui.dart';
 import 'package:whisper/new_ui/shell/shell_device_drop.dart';
 import 'package:whisper/new_ui/shell/shell_device_card.dart';
@@ -78,7 +74,6 @@ import '../helper/helper.dart';
 
 import '../helper/notification.dart';
 
-import 'dart:io' show Platform;
 
 import '../l10n/app_localizations.dart';
 import 'package:whisper/widget/subtle_motion.dart';
@@ -443,7 +438,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
         !isLocal &&
         socketManager.isConnectedTo(currentDevice.uid) &&
         (await LocalSetting().isListenAndroid())) {
-      startAndroidListening();
+      unawaited(startAndroidListening());
     }
     await _syncAndroidKeepAliveService();
   }
@@ -488,7 +483,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
     await _loadTransferSnapshotsForMessages(page);
   }
 
-  _insertItem(index, item) {
+  void _insertItem(int index, MessageData item) {
     final existingIndex = item.uuid.isEmpty
         ? -1
         : messageList.indexWhere((message) => message.uuid == item.uuid);
@@ -2040,7 +2035,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
         setState(() {
           device = stored;
         });
-        _refreshCurrentDeviceState();
+        unawaited(_refreshCurrentDeviceState());
         return true;
       }
       if (result.status != ConnectionAttemptStatus.cancelled) {
@@ -2541,7 +2536,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
   ) {
     var content = messageData.content ?? "";
     if (messageData.type == MessageEnum.Notification) {
-      var data = jsonDecode(messageData.content ?? "{}");
+      final decoded = jsonDecode(messageData.content ?? "{}");
+      final data = decoded is Map ? decoded : const <String, Object?>{};
       content = "【${data['app']}】${data['title']}\n${data['text']}";
     }
     final c = context.wc;

@@ -8,7 +8,6 @@ import 'package:clipboard_watcher/clipboard_watcher.dart';
 import 'package:dbus/dbus.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:whisper/audio/audio_group_coordinator.dart';
 import 'package:whisper/audio/audio_protocol.dart';
@@ -57,7 +56,6 @@ import 'package:whisper/helper/toast.dart';
 import 'package:whisper/helper/windows_system_theme.dart';
 import 'package:whisper/helper/transfer_failure_message.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/widgets.dart';
 import 'package:flutter_notification_listener_plus/flutter_notification_listener_plus.dart';
 import 'package:intl/intl.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -121,7 +119,6 @@ import '../window_stream/android/phone_identity.dart';
 import '../window_stream/window_stream_coordinator.dart';
 import 'remote_files/remote_files_page.dart';
 import 'window_stream/flow_space_page.dart';
-import 'dart:io' show Platform;
 
 enum DeviceListOperationKind {
   temporaryFileCleanup,
@@ -471,7 +468,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     if (isFirst) {
       unawaited(_startUp());
     } else {
-      _refreshDevice();
+      unawaited(_refreshDevice());
     }
     socketManager.registerEvent(this, uid: device?.uid ?? "", primary: true);
     super.didChangeDependencies();
@@ -564,6 +561,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     }
     await windowManager.setPreventClose(true);
     await _showTrayIcon();
+    if (!mounted) return;
 
     Menu menu = Menu(
       items: [
@@ -1445,7 +1443,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
       return;
     }
 
-    _broadcastSubscription?.cancel();
+    unawaited(_broadcastSubscription?.cancel());
     _broadcastSubscription = broadcast.eventStream!.listen((event) {
       _logDiscovery(
         DiscoveryDiagnosticKind.broadcastEvent,
@@ -1457,7 +1455,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     if (mounted && identical(_broadcast, broadcast)) _isBroadcasting = true;
   }
 
-  Future<void> _stopBroadcast({close = true}) async {
+  Future<void> _stopBroadcast({bool close = true}) async {
     _broadcastRestartTimer?.cancel();
     _broadcastRestartTimer = null;
     final subscription = _broadcastSubscription;
@@ -1484,7 +1482,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     }
 
     // If you want to listen to the discovery :
-    _discoverySubscription?.cancel();
+    unawaited(_discoverySubscription?.cancel());
     _discoverySubscription = discovery.eventStream!.listen((event) async {
       if (!mounted || !identical(_discovery, discovery)) return;
       _logDiscovery(
@@ -1619,7 +1617,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
                 devices.insert(0, visibleDevice);
               }
             });
-            _refreshDevice();
+            unawaited(_refreshDevice());
             if (!isLost) {
               await _attemptAutoConnect();
             }
@@ -3825,8 +3823,8 @@ class _DeviceListScreen extends State<DeviceListScreen>
       return;
     }
     var rect = await windowManager.getBounds();
-    LocalSetting().setWindowWidth(rect.width);
-    LocalSetting().setWindowHeight(rect.height);
+    unawaited(LocalSetting().setWindowWidth(rect.width));
+    unawaited(LocalSetting().setWindowHeight(rect.height));
   }
 
   @override
@@ -3836,8 +3834,8 @@ class _DeviceListScreen extends State<DeviceListScreen>
       return;
     }
     var rect = await windowManager.getBounds();
-    LocalSetting().setWindowWidth(rect.width);
-    LocalSetting().setWindowHeight(rect.height);
+    unawaited(LocalSetting().setWindowWidth(rect.width));
+    unawaited(LocalSetting().setWindowHeight(rect.height));
   }
 
   @override

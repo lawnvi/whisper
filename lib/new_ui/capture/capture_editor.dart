@@ -12,7 +12,6 @@ import 'package:whisper/helper/toast.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/new_ui/capture/capture_marks.dart';
 import 'package:whisper/new_ui/capture/capture_tools.dart';
-import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/theme/whisper_ui.dart';
 import 'package:whisper/theme/whisper_window.dart';
 

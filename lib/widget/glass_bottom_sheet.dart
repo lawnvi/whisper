@@ -1,9 +1,7 @@
 import 'package:whisper/theme/whisper_ui.dart';
-import 'package:whisper/theme/radix_colors.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/widget/frosted_modal_route.dart';
 import 'package:whisper/widget/glass_dialog.dart';
 

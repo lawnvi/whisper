@@ -7,8 +7,6 @@ import 'dart:ui' show PlatformDispatcher, Size;
 
 import 'package:flutter/foundation.dart';
 
-import '../../core/media_packet.dart';
-import '../../core/window_input_event.dart';
 import '../../core/window_stream_models.dart';
 import '../../pipeline/native_input_decoder.dart';
 import '../../remote/window_stream_control.dart';
@@ -49,11 +47,6 @@ class PhoneCaptureBackend implements WindowCaptureBackend {
   Set<String> _capabilities = const {};
   StreamSubscription<AgentLinkInfo?>? _linkChanges;
 
-  /// Whether a connect attempt lately found the agent. [supported] is read
-  /// synchronously for every control message, so it reports this cached
-  /// answer and refreshes it in the background.
-  bool _available = false;
-
   final _streams = <int, _PhoneStream>{};
   final _apps = <String, String>{}; // package -> label
   int _nextCapture = 1;
@@ -84,7 +77,6 @@ class PhoneCaptureBackend implements WindowCaptureBackend {
     _linkChanges ??= PhoneAgentLink.changes.listen((link) {
       // A fresh agent: drop the old connection so the next use reconnects.
       _link = link;
-      _available = false;
       final control = _control;
       _control = null;
       unawaited(control?.close());
@@ -105,7 +97,6 @@ class PhoneCaptureBackend implements WindowCaptureBackend {
   Future<AgentControlClient?> _connect() async {
     final link = _link ??= await PhoneAgentLink.current();
     if (link == null) {
-      _available = false;
       return null;
     }
     try {
@@ -113,7 +104,6 @@ class PhoneCaptureBackend implements WindowCaptureBackend {
       final hello = await control.call('hello', const {});
       if (hello is! Map) {
         await control.close();
-        _available = false;
         return null;
       }
       _capabilities = {
@@ -124,16 +114,13 @@ class PhoneCaptureBackend implements WindowCaptureBackend {
         control.done.then((_) {
           if (identical(_control, control)) {
             _control = null;
-            _available = false;
           }
         }),
       );
       _control = control;
-      _available = true;
       WindowStreamLog.write('phone agent link up ($link.port)');
       return control;
     } catch (error) {
-      _available = false;
       _link = null; // The port may be stale; read it again next time.
       WindowStreamLog.write('phone agent link failed: $error');
       return null;

@@ -1,8 +1,6 @@
 import 'package:whisper/theme/whisper_ui.dart';
-import 'package:whisper/theme/radix_colors.dart';
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -15,7 +13,6 @@ import 'package:whisper/helper/helper.dart' show formatSize;
 import 'package:whisper/helper/memory_bounded_image.dart';
 import 'package:whisper/helper/video_thumbnail.dart';
 import 'package:whisper/l10n/app_localizations.dart';
-import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/widget/media_message_preview.dart'
     show MediaFileKind, mediaFileKindFor;
 

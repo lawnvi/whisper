@@ -654,8 +654,6 @@ class FuseMount {
   static const _statfs = 17;
   static const _release = 18;
   static const _fsync = 20;
-  static const _setxattr = 21;
-  static const _removexattr = 24;
   static const _flush = 25;
   static const _init = 26;
   static const _opendir = 27;

@@ -28,7 +28,6 @@ import 'package:whisper/socket/folder_transfer_sink.dart';
 import 'package:whisper/socket/folder_write_pool.dart';
 import 'package:whisper/socket/folder_transfer_source.dart';
 import 'package:whisper/socket/outgoing_progress_estimator.dart';
-import 'package:whisper/socket/peer_connection.dart';
 import 'package:whisper/socket/peer_transfer_runtime.dart';
 import 'package:whisper/socket/transfer_ack_watchdog.dart';
 import 'package:whisper/socket/transfer_pacer.dart';
@@ -1981,24 +1980,6 @@ class FileTransferEngine {
             const Duration(milliseconds: _progressDispatchIntervalMs),
             _tickOutgoingProgress,
           );
-  }
-
-  Future<FileTransferData?> _emitTransferById(String transferId) async {
-    final data = await _database().fetchFileTransfer(transferId);
-    if (data != null) {
-      _dispatchTransferData(data);
-    }
-    return data;
-  }
-
-  Future<FileTransferData> _persistTransfer(
-    FileTransferData data, {
-    void Function()? requireCurrent,
-  }) async {
-    requireCurrent?.call();
-    await _database().upsertFileTransfer(data);
-    _dispatchTransferData(data);
-    return data;
   }
 
   Future<FileTransferData?> _updateTransfer(

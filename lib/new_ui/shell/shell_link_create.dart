@@ -7,7 +7,6 @@ import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/new_ui/phone/phone_parts.dart';
 import 'package:whisper/new_ui/shell/shell_parts.dart';
 import 'package:whisper/new_ui/shell/shell_share_links.dart';
-import 'package:whisper/share_links/share_link.dart';
 import 'package:whisper/share_links/share_link_store.dart';
 import 'package:whisper/share_links/share_routes.dart';
 import 'package:whisper/theme/whisper_ui.dart';
@@ -23,9 +22,9 @@ Future<ShareLink?> showShellLinkCreate(
   final links = store ?? ShareLinkStore.shared;
   Widget builder(BuildContext context) =>
       ShellLinkCreate(store: links, paths: paths, name: name);
-  final link = isDesktop()
-      ? await showShellSheet<ShareLink>(context, builder: builder)
-      : await showPhoneSheet<ShareLink>(context, builder: builder);
+  final link = await (isDesktop()
+      ? showShellSheet<ShareLink>(context, builder: builder)
+      : showPhoneSheet<ShareLink>(context, builder: builder));
   if (link != null && context.mounted) {
     await showShellLinkDetail(context, link, links);
   }

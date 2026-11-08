@@ -2,13 +2,11 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:shelf/shelf.dart' as shelf;
 import 'package:shelf/shelf_io.dart' as shelf_io;
 import 'package:shelf_web_socket/shelf_web_socket.dart';
 import 'package:uuid/uuid.dart';
-import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:whisper/debug/automation_hooks.dart' show DebugPairingRequests;
@@ -38,7 +36,6 @@ import 'package:whisper/socket/media_upgrade_proof.dart';
 import 'package:whisper/socket/outgoing_text_retry.dart';
 import 'package:whisper/socket/peer_connection.dart';
 import 'package:whisper/socket/peer_socket_session.dart';
-import 'package:whisper/socket/peer_transfer_runtime.dart';
 import 'package:whisper/socket/quick_send_identity_gate.dart';
 import 'package:whisper/socket/socket_admission.dart';
 import 'package:whisper/socket/session_upgrade_token_registry.dart';
@@ -72,9 +69,7 @@ import 'package:whisper/state/connection_attempt.dart';
 import 'package:whisper/state/pairing_request.dart';
 import 'package:whisper/state/peer_reconnect_controller.dart';
 import 'package:whisper/state/peer_profile.dart';
-import 'package:path/path.dart' as p;
 
-import '../helper/file.dart';
 import '../helper/notification.dart';
 import 'package:whisper/socket/direct_peer_http_client.dart';
 
@@ -1091,7 +1086,7 @@ class WsSvrManager {
         logger.i('处理 websocket 关闭失败: $error\n$stackTrace');
       } finally {
         if (identical(_socketCleanups[sink], cleanup)) {
-          _socketCleanups.remove(sink);
+          unawaited(_socketCleanups.remove(sink));
         }
         _socketCloseGuards.remove(sink);
       }
@@ -3587,20 +3582,6 @@ class WsSvrManager {
     _dispatchToAll((event) => event.onMessage(message));
   }
 
-  Future<bool> _sendBytesToPeer(String peerId, Object bytes) async {
-    if (peerId.isNotEmpty) {
-      return _peerConnections.sendToAwaited(peerId, bytes);
-    }
-    if (peerId.isEmpty) {
-      final sink = _sink;
-      if (sink != null) {
-        return _sendBytesOnSink(sink, bytes);
-      }
-      return false;
-    }
-    return false;
-  }
-
   Future<bool> _send(String message) async {
     final payload = _messageFrame(Uint8List.fromList(utf8.encode(message)));
     if (_peerConnections.isConnectedTo(receiver)) {
@@ -4842,15 +4823,18 @@ class WsSvrManager {
         }
       case MessageEnum.Notification:
         {
-          var data = jsonDecode(message.content ?? "{}");
+          final decoded = jsonDecode(message.content ?? "{}");
+          final data = decoded is Map ? decoded : const <String, Object?>{};
           final ignoreNotification = await LocalSetting()
               .ignoreAndroidNotification();
           requireCurrentBusiness();
           if (!ignoreNotification) {
             if (supportNotification() && data['text'] != null) {
-              NotificationHelper().showNotification(
-                title: "【${data['app']}】 ${data['title']}",
-                body: data['text'] ?? "",
+              unawaited(
+                NotificationHelper().showNotification(
+                  title: "【${data['app']}】 ${data['title']}",
+                  body: data['text'] ?? "",
+                ),
               );
               if (isVerificationCodeNotificationPackage(data['package'])) {
                 var code = verifyCode(

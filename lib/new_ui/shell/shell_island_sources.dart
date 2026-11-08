@@ -1,4 +1,3 @@
-import 'package:whisper/theme/radix_colors.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';

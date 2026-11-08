@@ -5,7 +5,6 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/remote_input/mobile_input_controller.dart';
-import 'package:whisper/theme/app_theme.dart';
 
 /// Physical key semantics, using the same symbol positions as the desktop map.
 const mobileControlSymbols = <String, (String, bool)>{

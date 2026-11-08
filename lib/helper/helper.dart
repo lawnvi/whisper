@@ -1,9 +1,8 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:device_info_plus/device_info_plus.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:logger/logger.dart';
@@ -78,7 +77,7 @@ Future<String> localUUID() async {
   var uuid = sp.getString("_uuid") ?? "";
   if (uuid.isEmpty) {
     uuid = LocalUuid.v4();
-    sp.setString("_uuid", uuid);
+    unawaited(sp.setString("_uuid", uuid));
   }
   return uuid;
 }
@@ -345,27 +344,6 @@ void markOwnClipboardFiles(Iterable<String> paths) {
 /// there; folders are left out of what clipboard sync reads.
 bool isOwnClipboardFiles(List<String> paths) =>
     paths.isNotEmpty && paths.every(_ownClipboardFiles.contains);
-
-void pickFile(var callback) async {
-  await FilePicker.getDirectoryPath();
-  // 打开文件选择器
-  FilePickerResult? result = await FilePicker.pickFiles();
-
-  if (result != null) {
-    PlatformFile file = result.files.first;
-    privacyLog.event(PrivacyEvent.localOperation, <PrivacyField, Object>{
-      PrivacyField.kind: LocalOperationKind.filePicker,
-      PrivacyField.state: LocalOperationState.selected,
-      PrivacyField.bytes: file.size,
-    });
-    callback(file.path);
-  } else {
-    privacyLog.event(PrivacyEvent.localOperation, <PrivacyField, Object>{
-      PrivacyField.kind: LocalOperationKind.filePicker,
-      PrivacyField.state: LocalOperationState.canceled,
-    });
-  }
-}
 
 final RegExp _verificationKeywordPattern = RegExp(
   r'验证码|驗證碼|校验码|校驗碼|动态码|動態碼|'

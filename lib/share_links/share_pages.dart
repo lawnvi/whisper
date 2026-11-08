@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-import 'package:flutter/widgets.dart' show Locale;
 import 'package:path/path.dart' as p;
 
 import '../l10n/app_localizations.dart';
@@ -749,14 +748,6 @@ const _alertGlyph =
     'cx="12" cy="12" r="9" fill="currentColor"/><path d="M12 7.5v5.5" '
     'stroke="#fff" stroke-width="2" stroke-linecap="round"/><circle cx="12" '
     'cy="16.3" r="1.2" fill="#fff"/></svg>';
-
-const _shieldGlyph =
-    '<svg class="glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 '
-    '3.5l7 2.6v5.4c0 4.4-2.9 7.6-7 9-4.1-1.4-7-4.6-7-9V6.1z" fill="none" '
-    'stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>'
-    '<path d="M9 12l2.1 2.1L15.2 10" fill="none" stroke="currentColor" '
-    'stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>'
-    '</svg>';
 
 const _linkOffGlyph =
     '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4 4 0 0 0 '

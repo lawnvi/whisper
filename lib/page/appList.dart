@@ -1,17 +1,14 @@
 import 'package:whisper/theme/whisper_ui.dart';
-import 'package:whisper/theme/radix_colors.dart';
 import 'dart:typed_data';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:installed_apps/app_info.dart';
 import 'package:installed_apps/installed_apps.dart';
 import 'package:whisper/helper/android_privacy_permission.dart';
 import 'package:whisper/helper/helper.dart';
 import 'package:whisper/helper/local.dart';
 import 'package:whisper/helper/toast.dart';
 import 'package:whisper/l10n/app_localizations.dart';
-import 'package:whisper/theme/app_theme.dart';
 
 typedef AppListLoader = Future<AppListPresentation> Function();
 typedef AppListPermissionRequester = Future<bool> Function();

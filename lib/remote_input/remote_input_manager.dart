@@ -460,7 +460,7 @@ class RemoteInputManager {
         try {
           while (_channels.isNotEmpty || _channelCloses.isNotEmpty) {
             for (final channel in _channels.keys.toList(growable: false)) {
-              _trackChannelClose(channel);
+              unawaited(_trackChannelClose(channel));
             }
             final closes = _channelCloses.values.toList(growable: false);
             if (closes.isNotEmpty) {

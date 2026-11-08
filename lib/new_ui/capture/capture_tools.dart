@@ -1,5 +1,4 @@
 import 'dart:math' as math;
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -7,7 +6,6 @@ import 'package:flutter/services.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/new_ui/capture/capture_marks.dart';
 import 'package:whisper/new_ui/shell/shell_parts.dart';
-import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/theme/whisper_icons.dart';
 import 'package:whisper/theme/whisper_ui.dart';
 

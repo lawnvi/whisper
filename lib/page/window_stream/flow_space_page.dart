@@ -11,7 +11,6 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
 import '../../helper/toast.dart';
@@ -880,7 +879,7 @@ class _FlowSpacePageState extends State<FlowSpacePage> {
   /// has seen it go; a window that stays (asking whether to save) says so.
   Future<void> _closeTask(WindowSource source, TaskEntry task) async {
     if (source is! ClosesTasks) {
-      HapticFeedback.mediumImpact();
+      unawaited(HapticFeedback.mediumImpact());
       final session = _sessionOf(source, task);
       if (session != null) {
         await _coordinator.close(session);
@@ -891,7 +890,7 @@ class _FlowSpacePageState extends State<FlowSpacePage> {
     if (_closingTasks.contains(key)) {
       return;
     }
-    HapticFeedback.mediumImpact();
+    unawaited(HapticFeedback.mediumImpact());
     setState(() => _closingTasks.add(key));
     final session = _sessionOf(source, task);
     final outcome = source is ConfirmsTaskClose
@@ -914,7 +913,7 @@ class _FlowSpacePageState extends State<FlowSpacePage> {
       case TaskCloseOutcome.closed:
         break;
       case TaskCloseOutcome.stillOpen:
-        HapticFeedback.heavyImpact();
+        unawaited(HapticFeedback.heavyImpact());
         showAppToast(
           l10n.windowStreamCloseStillOpen(_appName(source, task)),
           tone: AppToastTone.warning,

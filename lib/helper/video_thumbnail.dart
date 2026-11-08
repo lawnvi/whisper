@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:crypto/crypto.dart';
@@ -68,7 +67,7 @@ class VideoThumbnailCache {
       return cached;
     }
     while (_entries.length >= capacity) {
-      _entries.remove(_entries.keys.first);
+      unawaited(_entries.remove(_entries.keys.first));
     }
     late final Future<VideoThumbnail?> result;
     result = _pending.then((_) async {

@@ -717,10 +717,6 @@ class _ConsumeAnswer {
   final bool consumed;
 }
 
-class _Shutdown {
-  const _Shutdown();
-}
-
 class _Reply {
   const _Reply(this.id, {this.value, this.failure});
 
@@ -803,13 +799,7 @@ Future<void> _audioIsolateMain(_IsolateStart start) async {
   final runtime = _AudioRuntime(start.main, _NativeAudio(start.entry));
   final receive = ReceivePort();
   start.main.send(receive.sendPort);
-  receive.listen((message) {
-    if (message is _Shutdown) {
-      unawaited(runtime.shutdown().whenComplete(receive.close));
-      return;
-    }
-    runtime.handle(message);
-  });
+  receive.listen(runtime.handle);
 }
 
 typedef AudioCaptureCallbackNative =
@@ -1190,22 +1180,6 @@ class _AudioRuntime {
   }
 
   AudioShareDiagnostics get diagnostics => _diagnostics;
-
-  Future<void> shutdown() async {
-    for (final captureId in _captures.keys.toList(growable: false)) {
-      await _stopCapture(captureId);
-    }
-    for (final playback in _playbacks.values.toList(growable: false)) {
-      await playback.close(expected: true);
-    }
-    _playbacks.clear();
-    await _fanout.closeAll();
-    for (final link in _links.values) {
-      await link.close();
-    }
-    _links.clear();
-    await _server?.close();
-  }
 }
 
 int _wallClockMicros() => DateTime.now().microsecondsSinceEpoch;

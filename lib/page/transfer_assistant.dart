@@ -97,8 +97,6 @@ class _TransferAssistantScreenState extends State<TransferAssistantScreen> {
   Object? _loadError;
   int _requestGeneration = 0;
 
-  bool get _isSearching => _query.isNotEmpty;
-
   @override
   void initState() {
     super.initState();

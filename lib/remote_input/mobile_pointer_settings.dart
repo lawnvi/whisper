@@ -1,11 +1,9 @@
-import 'package:whisper/theme/whisper_ui.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:whisper/helper/local.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/remote_input/mobile_input_controller.dart';
-import 'package:whisper/theme/app_theme.dart';
 
 class MobilePointerSettings extends StatelessWidget {
   const MobilePointerSettings({

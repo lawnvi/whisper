@@ -441,7 +441,7 @@ class _LinkRowState extends State<_LinkRow> {
 
   Future<void> _menu(Offset at) async {
     final text = AppLocalizations.of(context)!;
-    HapticFeedback.mediumImpact();
+    unawaited(HapticFeedback.mediumImpact());
     await showFilesMenu(
       context,
       position: at,

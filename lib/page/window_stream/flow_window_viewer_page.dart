@@ -1,8 +1,6 @@
 import 'package:whisper/theme/radix_colors.dart';
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:typed_data';
-import 'dart:ui' show PlatformDispatcher;
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';

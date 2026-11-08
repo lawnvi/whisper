@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -558,7 +557,7 @@ final class RemoteClipboardTransferEngine {
       );
       return RemoteClipboardPasteResult.failed;
     } finally {
-      _materializations.remove(offer);
+      unawaited(_materializations.remove(offer));
     }
   }
 

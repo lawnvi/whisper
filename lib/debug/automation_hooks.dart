@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:developer' as developer;
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
@@ -21,7 +20,6 @@ import '../page/window_stream/flow_open.dart' show flowWindowRoute;
 import '../remote_files/fs_client.dart';
 import '../remote_files/fs_host.dart';
 import '../remote_files/fs_host_files.dart';
-import '../remote_files/fs_paths.dart';
 import '../remote_files/fs_platform.dart';
 import '../remote_files/mount/remote_mounts.dart';
 import '../remote_input/remote_input_coordinator.dart';

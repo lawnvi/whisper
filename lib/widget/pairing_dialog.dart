@@ -98,6 +98,14 @@ Future<void> showPairingDialog(
       unawaited(cancellationSubscription?.cancel());
       return;
     }
+    // The page that asked went away while the app was in the background:
+    // nothing is left to show the prompt on, so the request is declined.
+    if (!context.mounted) {
+      removeDismissListener?.call();
+      unawaited(cancellationSubscription?.cancel());
+      resolve(false);
+      return;
+    }
   }
   bool? decision;
   try {
@@ -112,18 +120,18 @@ Future<void> showPairingDialog(
           : PairingDialog(request: request, onResolved: dismiss);
     }
 
-    decision = !isDesktop()
-        ? await _pushPairPage(
+    decision = await (!isDesktop()
+        ? _pushPairPage(
             context,
             WhisperPageRoute<bool>(
               builder: (context) => present(context, page: true),
             ),
           )
-        : await showWhisperDialog<bool>(
+        : showWhisperDialog<bool>(
             context,
             barrierDismissible: false,
             builder: (context) => present(context, page: false),
-          );
+          ));
   } finally {
     routeOpen = false;
     removeDismissListener?.call();

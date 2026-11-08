@@ -14,7 +14,6 @@ import 'package:whisper/socket/file_path_policy.dart';
 import 'package:whisper/socket/file_transfer_engine.dart';
 import 'package:whisper/socket/file_transfer_source.dart';
 import 'package:whisper/socket/file_transfer_v3.dart';
-import 'package:whisper/socket/peer_connection.dart';
 import 'package:whisper/socket/transfer_ack_watchdog.dart';
 import 'package:whisper/socket/whisper_frame_v3.dart';
 import 'package:whisper/socket/wire_input_policy.dart';

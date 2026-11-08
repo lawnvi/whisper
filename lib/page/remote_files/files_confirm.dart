@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:whisper/theme/radix_colors.dart';
 import 'dart:math' as math;
 
@@ -20,7 +21,7 @@ Future<bool> showFilesConfirm(
   List<String> names = const [],
   IconData icon = CupertinoIcons.trash,
 }) async {
-  HapticFeedback.mediumImpact();
+  unawaited(HapticFeedback.mediumImpact());
   final wide = MediaQuery.sizeOf(context).width >= 700;
   final confirmed = await Navigator.of(context).push<bool>(
     _ConfirmRoute(

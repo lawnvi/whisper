@@ -215,7 +215,6 @@ class _PreviewState extends State<_Preview> {
               required VoidCallback onClose,
               required ValueChanged<int> onOpenTab,
             }) {
-              Future<void> nothing() async {}
               return page
                   ? ShellPhoneDevicePage(
                       device: d,

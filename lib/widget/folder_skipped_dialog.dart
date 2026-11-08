@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:whisper/helper/folder_transfer_store.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/socket/folder_transfer_manifest.dart';
-import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/widget/glass_dialog.dart';
 
 String folderSkipReasonLabel(AppLocalizations l10n, FolderSkipReason reason) =>

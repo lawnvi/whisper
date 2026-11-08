@@ -4,9 +4,7 @@ import 'package:whisper/new_ui/shell/shell_parts.dart';
 import 'package:whisper/theme/whisper_ui.dart';
 import 'dart:async';
 
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../../remote_files/fs_copies.dart';

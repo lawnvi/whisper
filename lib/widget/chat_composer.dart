@@ -3,14 +3,12 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' show BoxWidthStyle;
 
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:whisper/helper/desktop_clipboard_image.dart';
 import 'package:whisper/helper/helper.dart';
 import 'package:whisper/helper/memory_bounded_image.dart';
 import 'package:whisper/l10n/app_localizations.dart';
-import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/theme/whisper_icons.dart';
 import 'package:whisper/theme/whisper_ui.dart';
 import 'package:whisper/widget/context_menu_region.dart';

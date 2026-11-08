@@ -1,7 +1,6 @@
 import 'package:whisper/theme/radix_colors.dart';
 import 'package:whisper/new_ui/shell/shell_requests.dart';
 import 'dart:async';
-import 'dart:ui' show FontFeature;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';

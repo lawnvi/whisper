@@ -13,7 +13,6 @@ import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/new_ui/shell/shell_link_create.dart';
 import 'package:whisper/new_ui/shell/shell_parts.dart';
 import 'package:whisper/page/remote_files/files_share_sheet.dart';
-import 'package:whisper/share_links/share_link.dart';
 import 'package:whisper/share_links/share_link_store.dart';
 import 'package:whisper/theme/whisper_icons.dart';
 import 'package:whisper/theme/whisper_ui.dart';

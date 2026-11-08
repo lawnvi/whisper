@@ -1,8 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:whisper/new_ui/shell/shell_manual_connect.dart';
 import 'package:whisper/new_ui/shell/shell_parts.dart';
 import 'package:whisper/new_ui/shell/shell_touch.dart';

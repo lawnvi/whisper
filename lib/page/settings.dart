@@ -924,7 +924,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await openDirectory(_path);
       return;
     }
-    openDir(_path);
+    unawaited(openDir(_path));
   }
 
   Future<void> _launchInBrowser(Uri url) async {
@@ -1153,7 +1153,7 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
                         onChanged: (bool value) async {
                           await WsSvrManager().setPeerTrust(device.uid, value);
                           await ConnectionCoordinator().refreshTrustState();
-                          _refreshDevice();
+                          unawaited(_refreshDevice());
                         },
                       ),
                     ),
@@ -1167,7 +1167,7 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
                             device.uid,
                             value,
                           );
-                          _refreshDevice();
+                          unawaited(_refreshDevice());
                         },
                       ),
                     ),
@@ -1240,7 +1240,7 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
                           } else {
                             await deleteDevice(device.uid);
                           }
-                          if (!mounted) {
+                          if (!context.mounted) {
                             return;
                           }
                           Navigator.popUntil(context, (route) => route.isFirst);
