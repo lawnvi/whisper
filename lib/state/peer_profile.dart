@@ -16,15 +16,71 @@ abstract final class DeviceFormFactor {
   static const sinceProtocolVersion = 12;
 }
 
+/// A network card that can wake a computer from sleep: its hardware address
+/// and whether it is wired (Wi-Fi seldom wakes one). A computer sends its own
+/// so others can wake it after it has gone to sleep ([PeerProfile.wake]).
+final class WakeTarget {
+  const WakeTarget({required this.mac, required this.wired});
+
+  /// Sent from this protocol version on.
+  static const sinceProtocolVersion = 13;
+  static const maxPerDevice = 4;
+  static final RegExp _macPattern = RegExp(r'^[0-9a-f]{2}(:[0-9a-f]{2}){5}$');
+
+  /// Lower case, colon separated.
+  final String mac;
+  final bool wired;
+
+  /// Any common spelling ("AA-BB-CC-DD-EE-FF", "aa:bb:…") to [mac]'s, or null
+  /// for what isn't one card's address.
+  static String? normalize(String raw) {
+    final hex = raw.replaceAll(RegExp(r'[-:.\s]'), '').toLowerCase();
+    if (!RegExp(r'^[0-9a-f]{12}$').hasMatch(hex)) return null;
+    final mac = [
+      for (var i = 0; i < 12; i += 2) hex.substring(i, i + 2),
+    ].join(':');
+    // All zeros is no address; an odd first byte is a group address.
+    if (mac == '00:00:00:00:00:00' || int.parse(hex[1], radix: 16).isOdd) {
+      return null;
+    }
+    return mac;
+  }
+
+  Map<String, Object> toJson() => <String, Object>{'mac': mac, 'wired': wired};
+
+  static WakeTarget fromJson(Object? json) {
+    if (json is! Map || json.length != 2) {
+      throw const FormatException('Invalid wake target');
+    }
+    final mac = json['mac'];
+    final wired = json['wired'];
+    if (mac is! String ||
+        wired is! bool ||
+        !_macPattern.hasMatch(mac) ||
+        normalize(mac) != mac) {
+      throw const FormatException('Invalid wake target');
+    }
+    return WakeTarget(mac: mac, wired: wired);
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is WakeTarget && other.mac == mac && other.wired == wired;
+
+  @override
+  int get hashCode => Object.hash(mac, wired);
+}
+
 class WirePeerProfile {
   const WirePeerProfile({
     required this.uid,
     required this.name,
     required this.platform,
-    this.protocolVersion = 12,
+    this.protocolVersion = 13,
     this.capabilities = const PeerCapabilities(),
     this.displayTopology,
     this.formFactor = '',
+    this.wake = const <WakeTarget>[],
   });
 
   static const Set<String> _allowedKeys = <String>{
@@ -35,6 +91,7 @@ class WirePeerProfile {
     'capabilities',
     'displayTopology',
     'formFactor',
+    'wake',
   };
 
   final String uid;
@@ -48,6 +105,9 @@ class WirePeerProfile {
   /// said (a computer, an older version).
   final String formFactor;
 
+  /// This computer's network cards that can wake it; empty on phones.
+  final List<WakeTarget> wake;
+
   WirePeerProfile forProtocolVersion(int version) => WirePeerProfile(
     uid: uid,
     name: name,
@@ -56,6 +116,7 @@ class WirePeerProfile {
     capabilities: capabilities,
     displayTopology: displayTopology,
     formFactor: formFactor,
+    wake: wake,
   );
 
   Map<String, Object?> toJson() => <String, Object?>{
@@ -68,6 +129,8 @@ class WirePeerProfile {
     if (formFactor.isNotEmpty &&
         protocolVersion >= DeviceFormFactor.sinceProtocolVersion)
       'formFactor': formFactor,
+    if (wake.isNotEmpty && protocolVersion >= WakeTarget.sinceProtocolVersion)
+      'wake': <Object>[for (final target in wake) target.toJson()],
   };
 
   String toJsonString() => jsonEncode(toJson());
@@ -120,6 +183,13 @@ class WirePeerProfile {
     final formFactor = json.containsKey('formFactor')
         ? _requiredProfileString(json, 'formFactor', maxBytes: 16)
         : '';
+    final wakeValue = json['wake'];
+    if (json.containsKey('wake') &&
+        (protocolVersion < WakeTarget.sinceProtocolVersion ||
+            wakeValue is! List ||
+            wakeValue.length > WakeTarget.maxPerDevice)) {
+      throw const FormatException('Invalid profile wake targets');
+    }
     return WirePeerProfile(
       uid: uid,
       name: name,
@@ -131,6 +201,9 @@ class WirePeerProfile {
       ),
       displayTopology: topology,
       formFactor: formFactor,
+      wake: wakeValue is List
+          ? List<WakeTarget>.unmodifiable(wakeValue.map(WakeTarget.fromJson))
+          : const <WakeTarget>[],
     );
   }
 
@@ -145,7 +218,8 @@ class WirePeerProfile {
           _canonicalJson(capabilities.toJson()) &&
       _canonicalJson(other.displayTopology?.toJson()) ==
           _canonicalJson(displayTopology?.toJson()) &&
-      other.formFactor == formFactor;
+      other.formFactor == formFactor &&
+      _sameWake(other.wake, wake);
 
   @override
   int get hashCode => Object.hash(
@@ -156,6 +230,7 @@ class WirePeerProfile {
     _canonicalJson(capabilities.toJson()),
     _canonicalJson(displayTopology?.toJson()),
     formFactor,
+    Object.hashAll(wake),
   );
 }
 
@@ -165,10 +240,11 @@ class PeerProfile {
     required this.trustedPeerIds,
     required this.autoApproveNewDevices,
     required this.autoConnectEnabled,
-    this.protocolVersion = 12,
+    this.protocolVersion = 13,
     this.capabilities = const PeerCapabilities(),
     this.displayTopology,
     this.formFactor = '',
+    this.wake = const <WakeTarget>[],
   });
 
   final DeviceData device;
@@ -181,6 +257,9 @@ class PeerProfile {
 
   /// See [WirePeerProfile.formFactor].
   final String formFactor;
+
+  /// See [WirePeerProfile.wake].
+  final List<WakeTarget> wake;
 
   bool trustsPeer(String peerId) {
     return trustedPeerIds.contains(peerId);
@@ -238,6 +317,7 @@ class PeerProfile {
       capabilities: wire.capabilities,
       displayTopology: wire.displayTopology,
       formFactor: wire.formFactor,
+      wake: wire.wake,
     );
   }
 
@@ -249,7 +329,16 @@ class PeerProfile {
     capabilities: capabilities,
     displayTopology: displayTopology,
     formFactor: formFactor,
+    wake: wake,
   );
+}
+
+bool _sameWake(List<WakeTarget> a, List<WakeTarget> b) {
+  if (a.length != b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) return false;
+  }
+  return true;
 }
 
 RemoteInputTopology? _topologyFromJson(Object? value) {

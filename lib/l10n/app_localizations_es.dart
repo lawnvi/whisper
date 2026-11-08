@@ -2978,6 +2978,14 @@ class AppLocalizationsEs extends AppLocalizations {
   String get shellCardDiagnostics => 'Diagnóstico de conexión';
 
   @override
+  String get shellCardWake => 'Despertar';
+
+  @override
+  String wakeSent(String device) {
+    return 'Se envió una señal para despertar a $device. Se volverá a conectar al despertar.';
+  }
+
+  @override
   String get shellCardDisconnect => 'Desconectar';
 
   @override

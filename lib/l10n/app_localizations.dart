@@ -4996,6 +4996,18 @@ abstract class AppLocalizations {
   /// **'连接诊断'**
   String get shellCardDiagnostics;
 
+  /// No description provided for @shellCardWake.
+  ///
+  /// In zh, this message translates to:
+  /// **'唤醒'**
+  String get shellCardWake;
+
+  /// No description provided for @wakeSent.
+  ///
+  /// In zh, this message translates to:
+  /// **'已向 {device} 发送唤醒信号，醒来后会自动连上'**
+  String wakeSent(String device);
+
   /// No description provided for @shellCardDisconnect.
   ///
   /// In zh, this message translates to:

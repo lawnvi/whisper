@@ -87,6 +87,61 @@ void main() {
     });
   });
 
+  group('wake targets', () {
+    const desk = WirePeerProfile(
+      uid: 'desk',
+      name: 'Desk',
+      platform: 'windows',
+      wake: <WakeTarget>[
+        WakeTarget(mac: '00:1a:2b:3c:4d:5e', wired: true),
+        WakeTarget(mac: 'a4:5e:60:01:02:03', wired: false),
+      ],
+    );
+
+    test('a computer sends its cards to peers of this version', () {
+      final decoded = WirePeerProfile.fromJson(desk.toJson());
+      expect(decoded.wake, desk.wake);
+      expect(decoded.canonicalDigest(), desk.canonicalDigest());
+      expect(PeerProfile.fromWire(decoded).toWireProfile(), desk);
+    });
+
+    test('a peer on 12 (0.0.59) is never sent them', () {
+      final legacy = desk.forProtocolVersion(12);
+      expect(legacy.toJson(), isNot(contains('wake')));
+      expect(WirePeerProfile.fromJson(legacy.toJson()).wake, isEmpty);
+    });
+
+    test('rejects what is not a short list of unicast addresses', () {
+      final good = desk.toJson();
+      for (final bad in <Object?>[
+        'x',
+        List<Object>.filled(5, desk.wake.first.toJson()),
+        <Object>[<String, Object>{'mac': '00:1A:2B:3C:4D:5E', 'wired': true}],
+        <Object>[<String, Object>{'mac': '01:00:5e:00:00:01', 'wired': true}],
+        <Object>[<String, Object>{'mac': '00:00:00:00:00:00', 'wired': true}],
+        <Object>[<String, Object>{'mac': '00:1a:2b:3c:4d:5e'}],
+      ]) {
+        expect(
+          () => WirePeerProfile.fromJson({...good, 'wake': bad}),
+          throwsFormatException,
+          reason: '$bad',
+        );
+      }
+      expect(
+        () => WirePeerProfile.fromJson({...good, 'protocolVersion': 12}),
+        throwsFormatException,
+        reason: 'a version that does not know the field cannot send it',
+      );
+    });
+
+    test('reads the spellings systems print', () {
+      expect(WakeTarget.normalize('00-1A-2B-3C-4D-5E'), '00:1a:2b:3c:4d:5e');
+      expect(WakeTarget.normalize('00:1a:2b:3c:4d:5e'), '00:1a:2b:3c:4d:5e');
+      expect(WakeTarget.normalize('N/A'), isNull);
+      expect(WakeTarget.normalize('00-00-00-00-00-00'), isNull);
+    });
+  });
+
   group('wire display topology validation', () {
     Map<String, Object?> profileWith(Object? topology) => <String, Object?>{
       'uid': 'peer-a',

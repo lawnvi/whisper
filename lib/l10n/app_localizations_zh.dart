@@ -2775,6 +2775,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String get shellCardDiagnostics => '连接诊断';
 
   @override
+  String get shellCardWake => '唤醒';
+
+  @override
+  String wakeSent(String device) {
+    return '已向 $device 发送唤醒信号，醒来后会自动连上';
+  }
+
+  @override
   String get shellCardDisconnect => '断开连接';
 
   @override

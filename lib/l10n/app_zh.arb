@@ -2108,6 +2108,15 @@
   "shellCardBrowse": "浏览我的文件",
   "shellCardChange": "修改我的文件",
   "shellCardDiagnostics": "连接诊断",
+  "shellCardWake": "唤醒",
+  "wakeSent": "已向 {device} 发送唤醒信号，醒来后会自动连上",
+  "@wakeSent": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
   "shellCardDisconnect": "断开连接",
   "shellCardRemove": "删除设备",
   "shellCardSound": "声音",

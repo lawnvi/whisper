@@ -2002,6 +2002,15 @@
   "shellCardBrowse": "Browse my files",
   "shellCardChange": "Change my files",
   "shellCardDiagnostics": "Connection diagnostics",
+  "shellCardWake": "Wake",
+  "wakeSent": "Sent {device} a wake signal. It reconnects once it wakes.",
+  "@wakeSent": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
   "shellCardDisconnect": "Disconnect",
   "shellCardRemove": "Delete device",
   "shellCardSound": "Sound",

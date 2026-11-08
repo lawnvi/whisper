@@ -262,6 +262,9 @@ bool _isLoopbackInterface(String name) {
       normalized.contains('loopback');
 }
 
+/// Docker, VPN, Hyper-V and other software network cards, by name.
+bool isLikelyVirtualInterface(String name) => _isLikelyVirtualInterface(name);
+
 bool _isLikelyVirtualInterface(String name) {
   final normalized = name.toLowerCase();
   const prefixes = <String>[

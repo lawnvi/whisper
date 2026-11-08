@@ -12,6 +12,7 @@ import 'package:whisper/remote_input/remote_input_exit_shortcut.dart';
 import 'package:whisper/remote_input/remote_input_failure_reason.dart';
 import 'package:whisper/remote_input/remote_input_layout.dart';
 import 'package:whisper/remote_input/remote_input_workspace_coordinator.dart';
+import 'package:whisper/new_ui/shell/shell_wake.dart';
 import 'package:whisper/remote_input/remote_input_workspace_graph.dart';
 import 'package:whisper/socket/svrmanager.dart';
 import 'package:whisper/theme/whisper_device_art.dart';
@@ -745,6 +746,13 @@ class ShellInputController extends ChangeNotifier {
     _starting = true;
     _startFailure = null;
     notifyListeners();
+    // Screens of computers that are asleep: wake them, they join when back.
+    unawaited(
+      wakeDevices([
+        for (final device in _placedDevices)
+          if (!_backend.isConnected(device.uid)) device,
+      ]),
+    );
     try {
       await _start();
     } finally {

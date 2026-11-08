@@ -15,6 +15,7 @@ import 'package:whisper/remote_files/mount/remote_mounts.dart';
 import 'package:whisper/share_links/share_debug_hooks.dart';
 import 'package:whisper/share_links/share_link_store.dart';
 import 'package:whisper/helper/device_form_factor.dart';
+import 'package:whisper/helper/wake_on_lan.dart';
 import 'package:whisper/helper/orientation_policy.dart';
 import 'package:whisper/helper/connection_request_notifications.dart';
 import 'package:whisper/helper/desktop_screenshot.dart';
@@ -140,6 +141,7 @@ Future<void> main(List<String> arguments) async {
   GpuCacheTrimmer.start();
   // Which devices are tablets, for their icons from the first frame.
   unawaited(DeviceFormFactors.shared.load());
+  unawaited(WakeTargets.shared.load());
   final sodium = await SodiumInit.init();
   WhisperAead.installNativeAcceleration(sodium);
   AuthSessionKeys.installNativeAcceleration(sodium);

@@ -16,7 +16,6 @@ import 'package:whisper/audio/audio_protocol.dart';
 import 'package:whisper/audio/audio_share_manager.dart';
 import 'package:whisper/helper/clipboard_sync.dart';
 import 'package:whisper/helper/connection_request_notifications.dart';
-import 'package:whisper/helper/device_form_factor.dart';
 import 'package:whisper/helper/folder_transfer_store.dart';
 import 'package:whisper/helper/helper.dart';
 import 'package:whisper/helper/local.dart';
@@ -69,6 +68,7 @@ import 'package:whisper/state/connection_attempt.dart';
 import 'package:whisper/state/pairing_request.dart';
 import 'package:whisper/state/peer_reconnect_controller.dart';
 import 'package:whisper/state/peer_profile.dart';
+import 'package:whisper/state/peer_traits.dart';
 
 import '../helper/notification.dart';
 import 'package:whisper/socket/direct_peer_http_client.dart';
@@ -2435,6 +2435,7 @@ class WsSvrManager {
     // With this device's own id, 本机: everything it ever sent also has that
     // id as its sender, and only the notes are to go.
     await _database.clearDevices(<String>[peerId], localPeerId: sender);
+    forgetPeerTraits(peerId);
     _deletedPeerDiscoverySuppressions.add(peerId);
     // 删除抑制只保护删除事务本身。数据库清理完成后，新拨入应作为
     // 新设备重新配对；解除时推进策略版本，同时淘汰删除期间抢入的会话。
@@ -5466,14 +5467,10 @@ class WsSvrManager {
         remoteFilesV1: true,
       ),
       displayTopology: topology,
-      formFactor: await _localFormFactor(),
+      formFactor: await localFormFactor(),
+      wake: await localWakeTargetsForProfile(),
     );
     return profile;
-  }
-
-  Future<String> _localFormFactor() async {
-    await DeviceFormFactors.shared.load();
-    return DeviceFormFactors.shared.local;
   }
 
   Future<PeerProfile?> requestRemoteProfileRefresh({
@@ -5524,11 +5521,7 @@ class WsSvrManager {
         if (_manageSharedCoordinators) {
           AudioGroupCoordinator.shared.peerConnected(peerId);
         }
-        if (profile.formFactor.isNotEmpty) {
-          unawaited(
-            DeviceFormFactors.shared.record(peerId, profile.formFactor),
-          );
-        }
+        rememberPeerTraits(peerId, profile);
         WindowStreamViewer.shared.peerConnected(
           WindowStreamPeer(
             peerId: peerId,

@@ -1083,6 +1083,15 @@
   "shellCardBrowse": "Explorar mis archivos",
   "shellCardChange": "Modificar mis archivos",
   "shellCardDiagnostics": "Diagnóstico de conexión",
+  "shellCardWake": "Despertar",
+  "wakeSent": "Se envió una señal para despertar a {device}. Se volverá a conectar al despertar.",
+  "@wakeSent": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
   "shellCardDisconnect": "Desconectar",
   "shellCardRemove": "Eliminar dispositivo",
   "shellCardSound": "Sonido",

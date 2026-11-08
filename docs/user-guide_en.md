@@ -31,6 +31,22 @@ The QR code carries both the LAN address and the device identity, so there is no
 
 On Linux, discovery depends on Avahi. On networks that block mDNS / Bonjour, connecting by IP is more reliable.
 
+### Wake a sleeping computer
+
+Once a computer has connected, Whisper remembers its network cards. After it goes to sleep and drops off, select "Wake" on its device card. Starting keyboard and mouse sharing also wakes computers in the layout that are asleep, and they reconnect once awake.
+
+The computer being woken needs:
+
+- A new version of Whisper on both devices. Older versions don't share their network cards.
+- Preferably a cable. Most computers on Wi-Fi don't hear the wake signal while asleep.
+- To be asleep, not shut down or hibernated, and on the same subnet as the device waking it.
+- Wake-on-LAN turned on:
+  - **Windows**: in Device Manager, open the network adapter's properties and, under Power Management, tick "Allow this device to wake the computer" and "Only allow a magic packet to wake the computer". Some PCs also need Wake on LAN turned on in the BIOS.
+  - **macOS**: in System Settings, turn on "Wake for network access" under Energy (Battery → Options on a laptop).
+  - **Linux**: run `sudo ethtool -s <card> wol g`, or set the connection's `802-3-ethernet.wake-on-lan` to `magic` in NetworkManager so it lasts across restarts.
+
+Windows wakes to its lock screen; with the system service from [Windows lock screen and UAC](#windows-lock-screen-and-uac), you can type the password from the other computer.
+
 ## Send text and files
 
 Open the conversation with a connected device and type, or use `+` in the message box to pick files. Images open full screen, audio plays inline, and video and other files open in a system app. On desktop, received files can be revealed in the file manager or dragged out of a message.

@@ -7,6 +7,7 @@ import 'package:whisper/helper/toast.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/new_ui/shell/shell_parts.dart';
+import 'package:whisper/new_ui/shell/shell_wake.dart';
 import 'package:whisper/page/remote_files/files_copy_island.dart';
 import 'package:whisper/page/remote_files/files_icons.dart';
 import 'package:whisper/remote_files/fs_host.dart';
@@ -377,6 +378,13 @@ class _ShellDeviceCardState extends State<ShellDeviceCard> {
                   const SizedBox(height: 20),
                   ShellGroup(
                     children: [
+                      if (canWake(device))
+                        ShellRow(
+                          touch: touch,
+                          label: l10n.shellCardWake,
+                          color: c.accent,
+                          onTap: () => unawaited(wakeDevices([device])),
+                        ),
                       ShellRow(
                         touch: touch,
                         label: l10n.shellCardDiagnostics,
