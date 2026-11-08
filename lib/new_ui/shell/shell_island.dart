@@ -300,7 +300,12 @@ class ShellIsland extends StatefulWidget {
     required this.titleRight,
     required this.buttonsLeft,
     required this.buttonsBottom,
+    this.onDrawn,
   });
+
+  /// How big it is drawn now, after each frame it changes in: for a window
+  /// of its own that has to hold it ([Size.zero] once it has gone).
+  final ValueChanged<Size>? onDrawn;
 
   final IslandCenter center;
   final double windowWidth,
@@ -325,6 +330,22 @@ class _ShellIslandState extends State<ShellIsland> implements IslandControls {
 
   /// What it last said, for going away with it.
   IslandActivity? _last;
+
+  Size? _drawn;
+  bool _telling = false;
+
+  void _tellDrawn(Size size) {
+    final tell = widget.onDrawn;
+    if (tell == null || size == _drawn) return;
+    _drawn = size;
+    if (_telling) return;
+    _telling = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _telling = false;
+      final drawn = _drawn;
+      if (mounted && drawn != null) tell(drawn);
+    });
+  }
 
   SpringDescription get _spring =>
       _growing ? WhisperSprings.expressive : WhisperSprings.snappy;
@@ -413,7 +434,17 @@ class _ShellIslandState extends State<ShellIsland> implements IslandControls {
                 from: 0,
                 spring: spring,
                 builder: (context, appear, _) {
-                  if (appear <= .01 && !shown) return const SizedBox.shrink();
+                  if (appear <= .01 && !shown) {
+                    _tellDrawn(Size.zero);
+                    return const SizedBox.shrink();
+                  }
+                  final scale = .6 + .4 * math.max(appear, 0);
+                  _tellDrawn(
+                    Size(
+                      math.max(w, _compactHeight) * scale,
+                      math.max(h, _compactHeight) * scale,
+                    ),
+                  );
                   // The shape first, then what it says; going away, the
                   // other way round.
                   final shape = (appear / WhisperIslandMotion.shapeBy).clamp(
@@ -433,7 +464,7 @@ class _ShellIslandState extends State<ShellIsland> implements IslandControls {
                       opacity: shape,
                       child: Transform.scale(
                         // From 0.6, and past 1 for a moment coming in.
-                        scale: .6 + .4 * math.max(appear, 0),
+                        scale: scale,
                         child: _capsule(
                           context,
                           featured,

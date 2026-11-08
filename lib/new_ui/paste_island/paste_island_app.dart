@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:io';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
@@ -56,7 +57,9 @@ class _PasteIslandAppState extends State<PasteIslandApp> {
   final Set<int> _seen = {};
   final Map<int, DateTime> _since = {};
   final Map<int, Timer> _settles = {};
-  Timer? _resize;
+  Timer? _fallback;
+  Size? _placed;
+  Size _drawn = Size.zero;
   bool _visible = false;
   IslandStage _stage = IslandStage.hidden;
 
@@ -135,7 +138,7 @@ class _PasteIslandAppState extends State<PasteIslandApp> {
       _put(paste);
     }
     // More rows in the open card: a taller window.
-    if (_stage == IslandStage.expanded) unawaited(_place(_openSize));
+    _fitWindow();
   }
 
   void _put(RemoteClipboardPasteState paste) {
@@ -213,36 +216,78 @@ class _PasteIslandAppState extends State<PasteIslandApp> {
     );
   }
 
-  /// The window follows the island: as big as the card the moment it opens,
-  /// back to the capsule once it has gone small, away once it has left.
+  /// The window follows the island: bigger the moment it needs to be,
+  /// smaller only once what the island draws fits in less, and away once it
+  /// has left. Not by the clock: a busy moment slows the island down, and a
+  /// window that went small on time would cut it off.
   void _onStage() {
     final stage = _center.stage;
     if (stage == _stage) return;
     _stage = stage;
-    _resize?.cancel();
-    switch (stage) {
-      case IslandStage.expanded:
-        unawaited(_place(_openSize));
-      case IslandStage.compact:
-        _resize = Timer(const Duration(milliseconds: 450), () {
-          unawaited(_place(_compactSize));
-        });
-      case IslandStage.hidden:
-        _resize = Timer(const Duration(milliseconds: 500), () {
-          _visible = false;
-          for (final activity in _source.activities) {
-            _source.remove(activity.id);
-          }
-          unawaited(_theme.invokeMethod<bool>('hideIsland'));
-        });
+    _fitWindow();
+    // If no frame says so (none drawn at all), the window follows anyway.
+    _fallback?.cancel();
+    _fallback = Timer(
+      const Duration(milliseconds: 1500),
+      () => _fitWindow(force: true),
+    );
+  }
+
+  /// How big the island is drawn now: the capsule or card, scaled as it
+  /// comes or goes; nothing once it has gone.
+  void _onDrawn(Size size) {
+    _drawn = size;
+    _fitWindow();
+  }
+
+  void _fitWindow({bool force = false}) {
+    if (!_visible) return;
+    final (wanted, side, below) = switch (_stage) {
+      IslandStage.expanded => (_openSize, _openMargin, _openBelow),
+      IslandStage.compact => (_compactSize, _compactMargin, _compactMargin),
+      IslandStage.hidden => (Size.zero, 0.0, 0.0),
+    };
+    if (_stage == IslandStage.hidden) {
+      if (force || _drawn == Size.zero) _hide();
+      return;
     }
+    final fits =
+        _drawn.width <= wanted.width - 2 * side + 1 &&
+        _drawn.height <= wanted.height - _top - below + 1;
+    final placed = _placed ?? wanted;
+    unawaited(
+      _place(
+        fits || force
+            ? wanted
+            : Size(
+                math.max(wanted.width, placed.width),
+                math.max(wanted.height, placed.height),
+              ),
+      ),
+    );
+  }
+
+  void _hide() {
+    _visible = false;
+    _fallback?.cancel();
+    for (final activity in _source.activities) {
+      _source.remove(activity.id);
+    }
+    unawaited(_theme.invokeMethod<bool>('hideIsland'));
   }
 
   Future<void> _place(Size size, {bool rescreen = false}) async {
+    // Progress comes four times a second: the window only moves for a change.
+    if (!rescreen && size == _placed) return;
+    _placed = size;
     try {
       await _theme.invokeMethod<bool>('placeIsland', {
         'width': size.width,
         'height': size.height,
+        // Where the runner can, the island's view keeps this size and only
+        // the window around it changes.
+        'areaWidth': _area.width,
+        'areaHeight': _area.height,
         'rescreen': rescreen,
       });
     } on Object {
@@ -264,7 +309,7 @@ class _PasteIslandAppState extends State<PasteIslandApp> {
     for (final timer in _settles.values) {
       timer.cancel();
     }
-    _resize?.cancel();
+    _fallback?.cancel();
     _center.removeListener(_onStage);
     super.dispose();
   }
@@ -292,6 +337,7 @@ class _PasteIslandAppState extends State<PasteIslandApp> {
               children: [
                 ShellIsland(
                   center: _center,
+                  onDrawn: _onDrawn,
                   windowWidth: _area.width,
                   controlsLeft: _area.width,
                   titleRight: 0,

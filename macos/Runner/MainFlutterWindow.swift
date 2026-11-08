@@ -203,6 +203,17 @@ func foregroundFolder(_ done: @escaping ([String: String]?) -> Void) {
   }
 }
 
+/// What holds the floating island's Flutter view, so the window can change
+/// size around it.
+final class IslandFrameView: NSView {}
+
+final class IslandFrameController: NSViewController {
+  override func loadView() {
+    view = IslandFrameView(frame: .zero)
+    view.wantsLayer = true
+  }
+}
+
 final class TrayPanelWindow: NSPanel {
   override var canBecomeKey: Bool { true }
   override var canBecomeMain: Bool { false }
@@ -276,6 +287,21 @@ enum PanelMaterial {
           panel.styleMask.insert(.nonactivatingPanel)
           panel.becomesKeyOnlyIfNeeded = true
         }
+        // Flutter's view goes in a view of its own, which the window resizes
+        // instead: placeIsland gives it one size and only moves it. Resizing
+        // Flutter's view waits for a frame of the new size, and here that
+        // frame does not come for a second, so the island stops mid-motion.
+        if !(window.contentViewController is IslandFrameController) {
+          // The holder keeps Flutter's controller (the window let go of it).
+          let holder = IslandFrameController()
+          holder.view.frame = NSRect(origin: .zero, size: window.contentLayoutRect.size)
+          holder.addChild(controller)
+          window.contentViewController = holder
+          let view = controller.view
+          view.autoresizingMask = []
+          view.frame = holder.view.bounds
+          holder.view.addSubview(view)
+        }
         result(true)
       case "placeIsland":
         // Its top middle at the top middle of the screen with the pointer,
@@ -301,10 +327,26 @@ enum PanelMaterial {
           window.ignoresMouseEvents = true
           window.orderFrontRegardless()
         }
+        let areaWidth = (arguments["areaWidth"] as? Double) ?? width
+        let areaHeight = (arguments["areaHeight"] as? Double) ?? height
+        let view = controller.view
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
         window.setFrame(
           NSRect(x: (anchor.x - width / 2).rounded(), y: anchor.y - height,
                  width: width, height: height),
           display: true)
+        if view.superview is IslandFrameView {
+          // As big as the island gets, top middle on the window's top middle:
+          // the window shows the part the island is in.
+          let size = NSSize(width: areaWidth, height: areaHeight)
+          if view.frame.size != size {
+            view.setFrameSize(size)
+          }
+          view.setFrameOrigin(NSPoint(x: ((width - areaWidth) / 2).rounded(),
+                                      y: height - areaHeight))
+        }
+        CATransaction.commit()
         result(true)
       case "showIsland":
         window.alphaValue = 1
