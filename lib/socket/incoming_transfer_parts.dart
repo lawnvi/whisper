@@ -59,6 +59,9 @@ final class IncomingAckClock {
   /// Receivers on this protocol version or later answer this way.
   static const sinceProtocolVersion = 13;
 
+  /// A pause in what comes this long means the sender is waiting.
+  static const idle = Duration(milliseconds: 20);
+
   /// The first answer comes once this much is in, without waiting a
   /// second: it tells the sender how fast the link is before it sends more.
   static const firstAfter = 128 * 1024;
@@ -88,14 +91,13 @@ final class IncomingAckClock {
 
   final Map<String, Timer> _reminders = <String, Timer>{};
 
-  /// Calls [answer] once [every] has passed since the last answer, unless
-  /// one goes first: a sender holding back until it hears must not wait for
-  /// a frame that will not come.
+  /// Calls [answer] once no frame has come for [idle], unless one goes
+  /// first. The sender stops and waits for an answer whenever it has as much
+  /// on its way as it allows itself; answering then, rather than a second
+  /// later, is what lets it open up quickly on a fast link.
   void remind(String transferId, void Function() answer) {
-    if (_reminders.containsKey(transferId)) return;
-    final since = _since[transferId] ?? _now();
-    final wait = every - _now().difference(since);
-    _reminders[transferId] = Timer(wait.isNegative ? Duration.zero : wait, () {
+    _reminders.remove(transferId)?.cancel();
+    _reminders[transferId] = Timer(idle, () {
       _reminders.remove(transferId);
       answer();
     });

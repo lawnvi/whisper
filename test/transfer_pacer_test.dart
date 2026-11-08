@@ -72,20 +72,44 @@ void main() {
     expect(pacer.rate, lessThan(before));
   });
 
-  test('only a receiver that answers every second is held to two seconds', () {
+  test('an old receiver is never held back', () {
     const window = 64 << 20;
-    expect(pacer.inFlight('t', window, timely: false), window);
-    expect(pacer.inFlight('t', window, timely: true), 128 << 10);
-    // An old receiver answers only once a whole interval is in.
     pacer.acknowledged('t', 0, interval: 32 << 20, size: 100 << 20);
     now = now.add(const Duration(seconds: 1));
     pacer.acknowledged('t', 32 << 20, interval: 32 << 20, size: 100 << 20);
     expect(pacer.inFlight('t', window, timely: false), window);
-    // This one answered a second later with less than an interval: 100 KiB/s.
-    pacer.acknowledged('u', 0, interval: 32 << 20, size: 100 << 20);
-    now = now.add(const Duration(seconds: 1));
-    pacer.acknowledged('u', 100 << 10, interval: 32 << 20, size: 100 << 20);
-    expect(pacer.inFlight('u', window, timely: false), lessThan(1 << 20));
+  });
+
+  test('a fast link opens within a few answers', () {
+    const window = 64 << 20;
+    expect(pacer.inFlight('t', window, timely: true), 128 << 10);
+    var sent = 0;
+    for (var answer = 0; answer < 6; answer++) {
+      sent += pacer.inFlight('t', window, timely: true);
+      pacer.sent('t', sent);
+      now = now.add(const Duration(milliseconds: 5));
+      pacer.acknowledged('t', sent, interval: 32 << 20, size: 1 << 30);
+    }
+    expect(pacer.inFlight('t', window, timely: true), window);
+  });
+
+  test('once answers queue it is held to two seconds of the link', () {
+    const window = 64 << 20;
+    var offset = 0;
+    void frame(Duration took) {
+      offset += 64 << 10;
+      pacer.sent('t', offset);
+      now = now.add(took);
+      pacer.acknowledged('t', offset, interval: 32 << 20, size: 1 << 30);
+    }
+
+    frame(const Duration(milliseconds: 20)); // nothing queued
+    for (var i = 0; i < 8; i++) {
+      frame(const Duration(milliseconds: 600)); // 64 KiB waits behind a queue
+    }
+    expect(pacer.queueDelay, greaterThan(const Duration(milliseconds: 80)));
+    // About 107 KiB/s confirmed: two seconds of it.
+    expect(pacer.inFlight('t', window, timely: true), lessThan(512 << 10));
     expect(pacer.queueDelay, greaterThanOrEqualTo(Duration.zero));
   });
 

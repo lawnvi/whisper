@@ -2677,12 +2677,12 @@ class FileTransferEngine {
         !_isFolderTransfer(transfer) &&
         (_remoteProfileFor(transfer.peerUid)?.protocolVersion ?? 0) >=
             IncomingAckClock.sinceProtocolVersion;
-    final windowEnd = math.min(
-      transfer.size,
-      durableOffset +
-          (pacer?.inFlight(transfer.transferId, flow.windowSize, timely: timely) ??
-              flow.windowSize),
-    );
+    final windowEnd = math.min(transfer.size, durableOffset + flow.windowSize);
+    // Past what may be unanswered sending pauses; what went is not resent.
+    final allowed =
+        pacer?.inFlight(transfer.transferId, flow.windowSize, timely: timely) ??
+        flow.windowSize;
+    final pacedEnd = math.min(windowEnd, durableOffset + allowed);
     var sequence = _outgoingTransferSequences[transfer.transferId] ?? 0;
     var cursor =
         _outgoingWindowEndOffsets[transfer.transferId] ?? durableOffset;
@@ -2696,7 +2696,7 @@ class FileTransferEngine {
             requiredOffset: cursor,
           )
         : null;
-    while (cursor < windowEnd) {
+    while (cursor < pacedEnd) {
       if (_transferRuntime.activeOutgoingFor(transfer.peerUid) !=
           transfer.transferId) {
         return null;
@@ -2710,7 +2710,7 @@ class FileTransferEngine {
       final length = math.min(
         pacer?.frameBytes(flow.chunkSize, transfer.transferId) ??
             flow.chunkSize,
-        windowEnd - cursor,
+        pacedEnd - cursor,
       );
       if (pacer != null) {
         await pacer.take(length);

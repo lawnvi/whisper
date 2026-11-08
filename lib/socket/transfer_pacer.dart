@@ -59,8 +59,18 @@ class TransferPacer {
   /// The last answer of each transfer: where it was and when it came.
   final Map<String, (int, DateTime)> _answered = {};
 
-  /// Bytes per second each transfer's receiver confirmed, smoothed.
+  /// Bytes per second each transfer's receiver confirmed, smoothed, and
+  /// where it was measured from: answers can come every few milliseconds, so
+  /// the speed is taken over a fifth of a second at least.
   final Map<String, double> _rateOf = {};
+  final Map<String, (int, DateTime)> _measuredFrom = {};
+
+  /// How much of each transfer may be unconfirmed: it starts small and
+  /// grows fourfold with every answer that came back without queueing (the
+  /// receiver answers as soon as data stops coming), so a fast link is open
+  /// within a few round trips; once answers queue it is two seconds of what
+  /// the link carries.
+  final Map<String, int> _capOf = {};
 
   /// Transfers whose receiver was seen answering before a whole interval
   /// came in: it answers every second (`IncomingAckClock`).
@@ -81,6 +91,8 @@ class TransferPacer {
   static const _troubleMemory = Duration(minutes: 1);
   static const _quickestMemory = Duration(seconds: 30);
   static const _minFrame = 16 * 1024;
+  static const _firstCap = 128 * 1024;
+  static const _largestCap = 1 << 30;
 
   /// Bytes per second now.
   double get rate => _rate;
@@ -103,11 +115,10 @@ class TransferPacer {
   /// doing so) can be held to less: another would never answer at all.
   int inFlight(String transferId, int window, {required bool timely}) {
     if (!timely && !_timely.contains(transferId)) return window;
-    final confirmed = _rateOf[transferId];
     // Until the first answer says how fast the link is, little: on a slow
     // link even a few megabytes queue for minutes.
-    final limit = confirmed == null ? 128 << 10 : (confirmed * 2).round();
-    return math.max(4 * _minFrame, math.min(window, limit));
+    final cap = _capOf[transferId] ?? _firstCap;
+    return math.max(4 * _minFrame, math.min(window, cap));
   }
 
   /// How big the next frame of [transferId] may be, at most [chunk].
@@ -198,11 +209,21 @@ class TransferPacer {
         durableOffset - previous < interval) {
       _timely.add(transferId);
     }
-    if (last == null) return;
-    final elapsed = now.difference(last.$2);
+    _measure(transferId, durableOffset, now);
+    _resize(transferId);
+  }
+
+  void _measure(String transferId, int durableOffset, DateTime now) {
+    final from = _measuredFrom[transferId];
+    if (from == null) {
+      _measuredFrom[transferId] = (durableOffset, now);
+      return;
+    }
+    final elapsed = now.difference(from.$2);
     if (elapsed < const Duration(milliseconds: 200)) return;
+    _measuredFrom[transferId] = (durableOffset, now);
     final sample =
-        (durableOffset - last.$1) /
+        (durableOffset - from.$1) /
         elapsed.inMicroseconds *
         Duration.microsecondsPerSecond;
     final before = _confirmed;
@@ -211,11 +232,30 @@ class TransferPacer {
     _rateOf[transferId] = own == null ? sample : own * 0.7 + sample * 0.3;
   }
 
+  /// After an answer for [transferId]: open the cap while nothing queues,
+  /// hold it to two seconds of the link once something does.
+  void _resize(String transferId) {
+    final cap = _capOf[transferId] ?? _firstCap;
+    final delay = queueDelay;
+    final rate = _rateOf[transferId];
+    // An answer always waits a little: the receiver's pause before it
+    // answers, its write to disk. Only well past that is anything queued.
+    if (delay <= const Duration(milliseconds: 60)) {
+      _capOf[transferId] = math.min(_largestCap, cap * 4);
+    } else if (delay > _queueLimit && rate != null) {
+      _capOf[transferId] = math.max(4 * _minFrame, (rate * 2).round());
+    } else {
+      _capOf[transferId] = math.min(_largestCap, cap + cap ~/ 2);
+    }
+  }
+
   /// [transferId] is over.
   void forget(String transferId) {
     _sent.remove(transferId);
     _answered.remove(transferId);
     _rateOf.remove(transferId);
+    _measuredFrom.remove(transferId);
+    _capOf.remove(transferId);
     _timely.remove(transferId);
   }
 
