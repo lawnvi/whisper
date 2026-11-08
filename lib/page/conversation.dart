@@ -53,6 +53,7 @@ import 'package:whisper/state/peer_endpoint.dart';
 import 'package:whisper/theme/whisper_ui.dart';
 import 'package:whisper/new_ui/shell/shell_device_drop.dart';
 import 'package:whisper/new_ui/shell/shell_device_card.dart';
+import 'package:whisper/new_ui/shell/shell_drop_frame.dart';
 import 'package:whisper/new_ui/shell/shell_parts.dart';
 import 'package:whisper/new_ui/shell/shell_phone_device.dart';
 import 'package:whisper/remote_input/mobile_control_route.dart';
@@ -191,7 +192,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
   bool get embedded => widget.embedded;
 
   /// Files are being dragged over the conversation.
-  bool _dropHover = false;
+  /// How many things are dragged over the conversation; null when none.
+  int? _dropItems;
   bool _resumeReconnectPending = false;
   bool _pickerReconnectPending = false;
   bool _composerSendInFlight = false;
@@ -865,10 +867,14 @@ class _SendMessageScreen extends State<SendMessageScreen>
       formats: const [Formats.fileUri],
       hitTestBehavior: HitTestBehavior.opaque,
       onDropEnter: (event) {
-        setState(() => _dropHover = !isChatMessageDrag(event.session));
+        setState(
+          () => _dropItems = isChatMessageDrag(event.session)
+              ? null
+              : event.session.items.length,
+        );
       },
       onDropLeave: (_) {
-        setState(() => _dropHover = false);
+        setState(() => _dropItems = null);
       },
       onDropOver: (event) {
         // A message dragged and let go in the conversation is a change of mind.
@@ -886,7 +892,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
             : DropOperation.none;
       },
       onPerformDrop: (event) async {
-        if (mounted) setState(() => _dropHover = false);
+        if (mounted) setState(() => _dropItems = null);
         final paths = await Future.wait(
           event.session.items.map(readDroppedFilePath),
         );
@@ -900,7 +906,15 @@ class _SendMessageScreen extends State<SendMessageScreen>
       },
       child: Stack(
         fit: StackFit.expand,
-        children: [base, if (_dropHover) _buildDropFrame()],
+        children: [
+          base,
+          if (_dropItems case final count?)
+            ShellDropFrame(
+              device: device,
+              canSend: _canSendCurrentDevice,
+              count: count,
+            ),
+        ],
       ),
     );
   }
@@ -939,45 +953,6 @@ class _SendMessageScreen extends State<SendMessageScreen>
         showAppToast(l10n.fileDropRejected, tone: AppToastTone.error);
       }
     }
-  }
-
-  /// surfaces.md「拖放发送」: a frame inset from the content, a capsule saying where
-  /// it goes, or why it cannot.
-  Widget _buildDropFrame() {
-    final c = context.wc;
-    const type = WhisperType(touch: false);
-    return IgnorePointer(
-      child: Padding(
-        padding: const EdgeInsets.all(8),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            border: Border.all(color: c.accent, width: 3),
-            borderRadius: BorderRadius.circular(WhisperRadius.m),
-          ),
-          child: Center(
-            child: Container(
-              height: 36,
-              padding: const EdgeInsets.symmetric(horizontal: 18),
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: c.accent,
-                borderRadius: BorderRadius.circular(WhisperRadius.capsule),
-              ),
-              child: Text(
-                _canSendCurrentDevice
-                    ? l10n.shellComposerHint(device.name)
-                    : l10n.shellComposerOffline(device.name),
-                style: TextStyle(
-                  fontSize: type.body,
-                  fontWeight: FontWeight.w500,
-                  color: c.onAccent,
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
   }
 
   /// Sends a folder as one transfer. Scanning a large tree takes a moment,

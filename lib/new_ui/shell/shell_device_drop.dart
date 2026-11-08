@@ -154,6 +154,8 @@ Future<bool> showShellDropSend(
 }) async =>
     await showShellSheet<bool>(
       context,
+      // ShellSheetBody keeps its own margins and its buttons in reach.
+      scrolls: false,
       builder: (_) => ShellDropSendSheet(
         name: device.name,
         paths: paths,
@@ -254,6 +256,8 @@ class ShellDropSendSheet extends StatelessWidget {
                 style: TextStyle(fontSize: type.note, color: c.ink2),
               ),
             ],
+            // The answers stand apart from the list: 24 above them.
+            const SizedBox(height: 10),
           ],
         ),
         actions: Row(
@@ -286,40 +290,24 @@ class _DroppedFile extends StatelessWidget {
 
   final String path;
 
-  Widget _picture(BuildContext context, bool folder) {
-    final c = context.wc;
+  /// As in a file message: a picture shows itself, a folder is a folder,
+  /// everything else a sheet of paper.
+  Widget _picture(bool folder) {
+    if (folder) return const WhisperFolderArt(size: 32);
     final kind = mediaFileKindFor(name: p.basename(path), path: path);
-    if (!folder && kind == MediaFileKind.image) {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(WhisperRadius.xs),
-        child: Image(
-          image: ResizeImage(
-            MemoryBoundedFileImage(File(path)),
-            width: 96,
-            policy: ResizeImagePolicy.fit,
-          ),
-          width: 36,
-          height: 36,
-          fit: BoxFit.cover,
-          errorBuilder: (_, _, _) => const WhisperDocArt(size: 32),
+    if (kind != MediaFileKind.image) return const WhisperDocArt(size: 32);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(WhisperRadius.xs),
+      child: Image(
+        image: ResizeImage(
+          MemoryBoundedFileImage(File(path)),
+          width: 96,
+          policy: ResizeImagePolicy.fit,
         ),
-      );
-    }
-    if (!folder && kind != MediaFileKind.video) {
-      return const WhisperDocArt(size: 32);
-    }
-    return Container(
-      width: 36,
-      height: 36,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: c.fill,
-        borderRadius: BorderRadius.circular(WhisperRadius.xs),
-      ),
-      child: WhisperIcon(
-        folder ? WhisperGlyph.folder : WhisperGlyph.play,
-        size: 16,
-        color: c.ink2,
+        width: 36,
+        height: 36,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => const WhisperDocArt(size: 32),
       ),
     );
   }
@@ -336,7 +324,7 @@ class _DroppedFile extends StatelessWidget {
         children: [
           SizedBox.square(
             dimension: 36,
-            child: Center(child: _picture(context, folder)),
+            child: Center(child: _picture(folder)),
           ),
           const SizedBox(width: 12),
           Expanded(
