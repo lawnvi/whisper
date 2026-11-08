@@ -23,10 +23,10 @@
 2173 lib/remote_input/remote_input_coordinator.dart
 1823 lib/remote_input/remote_input_workspace_coordinator.dart
 1302 lib/share_links/share_server.dart
-4969 lib/socket/file_transfer_engine.dart
+4918 lib/socket/file_transfer_engine.dart
 1282 lib/socket/folder_transfer_sink.dart
 1112 lib/socket/peer_socket_session.dart
-6954 lib/socket/svrmanager.dart
+6950 lib/socket/svrmanager.dart
 1303 lib/state/desktop_quick_send_inbox.dart
 2295 lib/theme/whisper_ui.dart
 1989 lib/widget/media_message_preview.dart

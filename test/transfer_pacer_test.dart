@@ -46,6 +46,40 @@ void main() {
     expect(pacer.rate, lessThanOrEqualTo(troubleAt * 0.85 + 1));
   });
 
+  test('frames are a quarter second of what the receiver confirms', () {
+    expect(pacer.frameBytes(4 << 20), 512 << 10, reason: 'nothing known yet');
+    pacer.sent('t', 1 << 20);
+    pacer.acknowledged('t', 0);
+    now = now.add(const Duration(seconds: 1));
+    pacer.acknowledged('t', 200 << 10); // a slow link: 200 KiB/s
+    expect(pacer.frameBytes(4 << 20), 64 << 10);
+  });
+
+  test('answers coming back later than the link takes empty slow it down', () {
+    pacer.sent('t', 1 << 20);
+    now = now.add(const Duration(milliseconds: 20));
+    pacer.acknowledged('t', 1 << 20); // the link with nothing queued
+    pacer.take(1);
+    for (var i = 2; i < 6; i++) {
+      pacer.sent('t', i << 20);
+      now = now.add(const Duration(milliseconds: 400));
+      pacer.acknowledged('t', i << 20); // each now waits behind a queue
+    }
+    final before = pacer.rate;
+    now = now.add(TransferPacer.tick);
+    pacer.evaluate();
+    expect(pacer.queueDelay, greaterThan(const Duration(milliseconds: 80)));
+    expect(pacer.rate, lessThan(before));
+  });
+
+  test('with nothing live it holds nothing back', () async {
+    final free = TransferPacer(audioStrained: () => true, active: () => false);
+    addTearDown(free.dispose);
+    for (var i = 0; i < 100; i++) {
+      await free.take(64 << 20).timeout(const Duration(milliseconds: 50));
+    }
+  });
+
   test('it never runs far ahead of what actually goes', () async {
     for (var i = 0; i < 20; i++) {
       await tick(sent: 10e6);

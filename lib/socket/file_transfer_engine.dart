@@ -28,6 +28,7 @@ import 'package:whisper/socket/folder_transfer_sink.dart';
 import 'package:whisper/socket/folder_write_pool.dart';
 import 'package:whisper/socket/folder_transfer_source.dart';
 import 'package:whisper/socket/incoming_transfer_parts.dart';
+import 'package:whisper/socket/transfer_checksum_prefix.dart';
 import 'package:whisper/socket/outgoing_progress_estimator.dart';
 import 'package:whisper/socket/peer_transfer_runtime.dart';
 import 'package:whisper/socket/transfer_ack_watchdog.dart';
@@ -139,65 +140,6 @@ enum FileTransferDiagnosticKind {
 
 Future<void> _setFileLastModified(File file, int timestamp) {
   return file.setLastModified(DateTime.fromMillisecondsSinceEpoch(timestamp));
-}
-
-/// How far a transfer may run ahead of its checksum worker. On a desktop
-/// that is eight frames: hashing then keeps pace on its own thread instead
-/// of holding up every other frame (a slow CPU's SHA-256 is the slowest step
-/// a transfer has). Phones send 1 MiB frames and keep less in memory.
-final int _checksumLeadBytes = Platform.isAndroid || Platform.isIOS
-    ? 8 * 1024 * 1024
-    : 32 * 1024 * 1024;
-
-Future<ParallelStreamingChecksum> _parallelChecksumForFilePrefix(
-  File file, {
-  required String algorithm,
-  required int end,
-}) async {
-  final checksum = await ParallelStreamingChecksum.start(
-    algorithm: algorithm,
-    maxPendingBytes: _checksumLeadBytes,
-  );
-  try {
-    if (end > 0) {
-      await for (final chunk in file.openRead(0, end)) {
-        await checksum.add(chunk);
-      }
-    }
-    return checksum;
-  } catch (_) {
-    await checksum.dispose();
-    rethrow;
-  }
-}
-
-Future<ParallelStreamingChecksum> _parallelChecksumForSourcePrefix(
-  FileTransferSource source, {
-  required String algorithm,
-  required int end,
-}) async {
-  final checksum = await ParallelStreamingChecksum.start(
-    algorithm: algorithm,
-    maxPendingBytes: _checksumLeadBytes,
-  );
-  try {
-    var offset = 0;
-    while (offset < end) {
-      final length = math.min(1024 * 1024, end - offset);
-      final bytes = await source.readRange(offset, length);
-      if (bytes.length != length) {
-        throw const FileSystemException(
-          'Unexpected EOF while hashing transfer source prefix',
-        );
-      }
-      await checksum.add(bytes);
-      offset += bytes.length;
-    }
-    return checksum;
-  } catch (_) {
-    await checksum.dispose();
-    rethrow;
-  }
 }
 
 /// V3 文件传输引擎:从 WsSvrManager 机械抽离的发送/接收/断点恢复栈。
@@ -2420,7 +2362,7 @@ class FileTransferEngine {
       await tempFile.writeAsBytes(const <int>[], flush: true);
     }
     tempFile = await _validatedIncomingTempFile(transfer);
-    final checksum = await _parallelChecksumForFilePrefix(
+    final checksum = await parallelChecksumForFilePrefix(
       tempFile,
       algorithm: transfer.checksumAlgorithm,
       end: durableOffset,
@@ -2823,8 +2765,11 @@ class FileTransferEngine {
       final expectedWindow = armWatchdog
           ? _ackWatchdog.currentWindow(transfer.transferId)
           : null;
-      final length = math.min(flow.chunkSize, windowEnd - cursor);
       final pacer = _outgoingPacerFor?.call(transfer.transferId);
+      final length = math.min(
+        pacer?.frameBytes(flow.chunkSize) ?? flow.chunkSize,
+        windowEnd - cursor,
+      );
       if (pacer != null) {
         await pacer.take(length);
         if (_transferRuntime.activeOutgoingFor(transfer.peerUid) !=
@@ -2898,6 +2843,7 @@ class FileTransferEngine {
         throw StateError('generation-bound transfer send failed');
       }
       cursor += payload.length;
+      pacer?.sent(transfer.transferId, cursor);
       sequence++;
       _outgoingWindowEndOffsets[transfer.transferId] = cursor;
       _outgoingTransferSequences[transfer.transferId] = sequence;
@@ -2948,7 +2894,7 @@ class FileTransferEngine {
       return existing;
     }
     await existing?.dispose();
-    final checksum = await _parallelChecksumForSourcePrefix(
+    final checksum = await parallelChecksumForSourcePrefix(
       source,
       algorithm: transfer.checksumAlgorithm,
       end: requiredOffset,
@@ -3158,7 +3104,7 @@ class FileTransferEngine {
     var checksum = _receivingChecksums[transfer.transferId];
     if (checksum == null) {
       tempFile = await _validatedIncomingTempFile(transfer);
-      checksum = await _parallelChecksumForFilePrefix(
+      checksum = await parallelChecksumForFilePrefix(
         tempFile,
         algorithm: transfer.checksumAlgorithm,
         end: frame.offset,
@@ -3342,7 +3288,7 @@ class FileTransferEngine {
   }) async {
     await _closeReceivingTransferFile(transfer.transferId, flush: true);
     checksum ??= _receivingChecksums.remove(transfer.transferId);
-    checksum ??= await _parallelChecksumForFilePrefix(
+    checksum ??= await parallelChecksumForFilePrefix(
       tempFile,
       algorithm: transfer.checksumAlgorithm,
       end: transfer.size,
@@ -3474,7 +3420,10 @@ class FileTransferEngine {
       durableOffset,
       _now().millisecondsSinceEpoch,
     );
+    final pacer = _outgoingPacerFor?.call(transfer.transferId);
+    pacer?.acknowledged(transfer.transferId, durableOffset);
     if (durableOffset >= transfer.size) {
+      pacer?.forget(transfer.transferId);
       _untrackOutgoingProgress(transfer.transferId);
     }
     final updated = await _updateTransfer(
@@ -3865,7 +3814,7 @@ class FileTransferEngine {
       if (snapshot == null) {
         tempFile = await _validatedIncomingTempFile(transfer);
         var checksum = _receivingChecksums.remove(transfer.transferId);
-        checksum ??= await _parallelChecksumForFilePrefix(
+        checksum ??= await parallelChecksumForFilePrefix(
           tempFile,
           algorithm: transfer.checksumAlgorithm,
           end: transfer.size,

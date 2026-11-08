@@ -1,28 +1,39 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:math' as math;
 
-/// Keeps a transfer from crowding out what is live on the same devices and
+/// Keeps transfers from crowding out what is live on the same devices and
 /// link: sound and keyboard and mouse, which need little bandwidth but must
-/// not wait. The rate grows while they are fine and drops as soon as
-/// anything says otherwise: the sound running low or late, or this device's
-/// own event loop falling behind. It remembers how fast it was going when
-/// trouble began and stays below that for a while, so it does not keep
-/// running into it. With nothing live it soon stops holding the transfer
-/// back.
+/// not wait behind a queue of file data. While something live is going
+/// ([active]) the rate grows while all is well and drops as soon as anything
+/// says otherwise: the sound running low or late, this device's own event
+/// loop falling behind, or the receiver's answers coming back later than the
+/// link takes empty, which is file data piling up in a queue somewhere. It
+/// remembers how fast it was going when the sound began to suffer and stays
+/// below that for a while. With nothing live it holds nothing back.
+///
+/// Whatever is going, frames are kept to a quarter second of what the link
+/// has been seen to carry, so on a slow link no one frame holds up the
+/// messages behind it for long.
 class TransferPacer {
   TransferPacer({
     required bool Function() audioStrained,
-    this.floor = 4e6,
+    bool Function()? active,
+    this.floor = 64e3,
     this.start = 24e6,
     this.ceiling = 2e9,
     DateTime Function()? now,
   }) : _audioStrained = audioStrained,
+       _active = active ?? _always,
        _now = now ?? DateTime.now,
        _rate = start;
+
+  static bool _always() => true;
 
   /// Bytes per second.
   final double floor, start, ceiling;
   final bool Function() _audioStrained;
+  final bool Function() _active;
   final DateTime Function() _now;
 
   double _rate;
@@ -36,16 +47,55 @@ class TransferPacer {
   /// rate is kept close to (a rate far above it says nothing).
   int _bytesSinceTick = 0;
 
-  /// The rate trouble began at last, forgotten after a while.
+  /// The rate the sound began to suffer at last, forgotten after a while.
   double? _troubleAt;
   DateTime? _troubleWhen;
 
+  /// When each frame of each transfer went: its end offset and the time.
+  final Map<String, Queue<(int, DateTime)>> _sent = {};
+
+  /// The last answer of each transfer: where it was and when it came.
+  final Map<String, (int, DateTime)> _answered = {};
+
+  /// Bytes per second the receivers confirmed, smoothed.
+  double? _confirmed;
+
+  /// How long a byte takes to be confirmed: the least seen lately (the link
+  /// with nothing queued), and now (smoothed).
+  Duration? _quickest;
+  DateTime? _quickestSeen;
+  Duration? _answerTime;
+
   static const tick = Duration(milliseconds: 250);
   static const _lagLimit = Duration(milliseconds: 40);
+  static const _queueLimit = Duration(milliseconds: 80);
   static const _troubleMemory = Duration(minutes: 1);
+  static const _quickestMemory = Duration(seconds: 30);
+  static const _minFrame = 64 * 1024;
 
   /// Bytes per second now.
   double get rate => _rate;
+
+  /// What the receivers have confirmed lately, in bytes per second.
+  double? get confirmedRate => _confirmed;
+
+  /// How much longer an answer takes than with nothing queued.
+  Duration get queueDelay {
+    final now = _answerTime;
+    final quickest = _quickest;
+    if (now == null || quickest == null) return Duration.zero;
+    return now - quickest;
+  }
+
+  /// How big the next frame may be, at most [chunk].
+  int frameBytes(int chunk) {
+    final confirmed = _confirmed;
+    // Not known yet: start no bigger than the frames of old versions.
+    final wanted = confirmed == null
+        ? 512 * 1024
+        : (confirmed / 4).floor() ~/ _minFrame * _minFrame;
+    return math.max(_minFrame, math.min(chunk, wanted));
+  }
 
   /// Waits until [bytes] more may go.
   Future<void> take(int bytes) async {
@@ -53,6 +103,11 @@ class TransferPacer {
     _lastUse = now;
     _timer ??= Timer.periodic(tick, (_) => evaluate());
     _lastTick ??= now;
+    _bytesSinceTick += bytes;
+    if (!_active()) {
+      _nextSend = null;
+      return;
+    }
     final next = _nextSend;
     // Idle time is not saved up: no burst after a pause.
     final at = next == null || next.isBefore(now) ? now : next;
@@ -61,9 +116,61 @@ class TransferPacer {
         microseconds: (bytes / _rate * Duration.microsecondsPerSecond).round(),
       ),
     );
-    _bytesSinceTick += bytes;
     final wait = at.difference(now);
     if (wait > Duration.zero) await Future<void>.delayed(wait);
+  }
+
+  /// A frame of [transferId] ending at [endOffset] has gone.
+  void sent(String transferId, int endOffset) {
+    final frames = _sent.putIfAbsent(transferId, Queue.new);
+    frames.addLast((endOffset, _now()));
+    // Only the recent past matters; a stuck transfer must not hold much.
+    while (frames.length > 512) {
+      frames.removeFirst();
+    }
+  }
+
+  /// The receiver of [transferId] has everything before [durableOffset].
+  void acknowledged(String transferId, int durableOffset) {
+    final now = _now();
+    final frames = _sent[transferId];
+    DateTime? sentAt;
+    while (frames != null &&
+        frames.isNotEmpty &&
+        frames.first.$1 <= durableOffset) {
+      sentAt = frames.removeFirst().$2;
+    }
+    if (sentAt != null) {
+      final took = now.difference(sentAt);
+      final quickest = _quickest;
+      final seen = _quickestSeen;
+      if (quickest == null ||
+          took < quickest ||
+          seen == null ||
+          now.difference(seen) > _quickestMemory) {
+        _quickest = took;
+        _quickestSeen = now;
+      }
+      final before = _answerTime;
+      _answerTime = before == null ? took : (before * 3 + took) ~/ 4;
+    }
+    final last = _answered[transferId];
+    _answered[transferId] = (durableOffset, now);
+    if (last == null) return;
+    final elapsed = now.difference(last.$2);
+    if (elapsed < const Duration(milliseconds: 200)) return;
+    final sample =
+        (durableOffset - last.$1) /
+        elapsed.inMicroseconds *
+        Duration.microsecondsPerSecond;
+    final before = _confirmed;
+    _confirmed = before == null ? sample : before * 0.7 + sample * 0.3;
+  }
+
+  /// [transferId] is over.
+  void forget(String transferId) {
+    _sent.remove(transferId);
+    _answered.remove(transferId);
   }
 
   /// Looks at how things are and sets the rate. Runs by itself while the
@@ -89,29 +196,38 @@ class TransferPacer {
     final actual = elapsed > Duration.zero
         ? sent / elapsed.inMicroseconds * Duration.microsecondsPerSecond
         : 0.0;
+    final confirmed = _confirmed;
+    if (!_active()) {
+      // Free to go as fast as it can; ready to give way at about the speed
+      // the link carries once something live starts.
+      if (confirmed != null) _rate = math.max(floor, confirmed);
+      return;
+    }
     final hold = _holdUntil;
     final waiting = hold != null && now.isBefore(hold);
     final audio = _audioStrained();
-    if (audio || lag > _lagLimit) {
+    final queued = queueDelay > _queueLimit;
+    if (audio || queued || lag > _lagLimit) {
       // Once per bout: what is already on its way takes a moment to clear,
       // and cutting again meanwhile would go far too low.
       if (waiting) return;
-      final reached = math.min(_rate, math.max(actual, floor));
+      final reached = math.min(_rate, math.max(confirmed ?? actual, floor));
       // Only the sound says how fast is too fast; a busy moment here does
       // not.
       if (audio) {
         _troubleAt = reached;
         _troubleWhen = now;
       }
-      _rate = math.max(floor, reached * 0.6);
+      _rate = math.max(floor, reached * (audio ? 0.6 : 0.8));
       _holdUntil = now.add(const Duration(seconds: 1));
       return;
     }
     if (waiting) return;
     // The link or the window holds it back, not the pacer: stay close to
     // what it reaches.
-    if (actual < _rate * 0.8) {
-      _rate = math.max(floor, math.min(_rate, actual * 1.3 + 2e6));
+    final reached = math.max(actual, confirmed ?? 0);
+    if (reached < _rate * 0.8) {
+      _rate = math.max(floor, math.min(_rate, reached * 1.3 + floor));
       return;
     }
     final trouble = _troubleAt;
@@ -123,9 +239,10 @@ class TransferPacer {
         ? math.max(start / 2, trouble * 0.85)
         : ceiling;
     final careful = trouble != null && _rate >= trouble * 0.85;
+    // In proportion: a slow link grows as gently as a fast one.
     final step = careful
-        ? math.max(0.5e6, _rate * 0.02)
-        : math.max(2e6, _rate * 0.15);
+        ? math.max(floor / 2, _rate * 0.02)
+        : math.max(floor, _rate * 0.15);
     _rate = math.max(floor, math.min(limit, _rate + step));
   }
 
