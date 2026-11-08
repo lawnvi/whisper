@@ -18,6 +18,7 @@ import 'package:whisper/socket/folder_transfer_manifest.dart';
 import 'package:whisper/socket/folder_transfer_scan.dart';
 import 'package:whisper/socket/transfer_ack_watchdog.dart';
 import 'package:whisper/socket/whisper_frame_v3.dart';
+import 'package:whisper/helper/privacy_log.dart';
 import 'package:whisper/socket/wire_input_policy.dart';
 import 'package:whisper/socket/wire_message_replay.dart';
 import 'package:whisper/state/peer_profile.dart';
@@ -63,6 +64,9 @@ final class _Device {
   final List<MessageData> messages = <MessageData>[];
   final List<WhisperFrameV3> sent = <WhisperFrameV3>[];
   final List<Object> rejections = <Object>[];
+
+  /// What the engine logged, so a failure in CI says why.
+  final List<String> log = <String>[];
 
   late final _Device other;
   late final FolderTransferStore store = FolderTransferStore(
@@ -175,6 +179,7 @@ final class _Device {
       ackIntervalSize: ackIntervalSize,
       windowSize: 4096 * _kib,
     ),
+    privacyLogger: PrivacyLog(sink: log.add),
     folderStore: store,
     scanFolder: scanFolder,
     folderCheckpointInterval: checkpointInterval,
@@ -213,7 +218,10 @@ final class _Device {
     fail(
       '$uid: transfer $transferId is ${latest?.state} '
       '(${latest?.lastError}, skipped ${latest?.skippedEntries}), '
-      'expected $state',
+      'expected $state; peer given up on $unresponsiveVerdicts times\n'
+      'log of $uid:\n${log.reversed.take(12).toList().reversed.join('\n')}\n'
+      'log of ${other.uid}:\n'
+      '${other.log.reversed.take(12).toList().reversed.join('\n')}',
     );
   }
 
@@ -277,6 +285,20 @@ Map<String, String> _snapshot(Directory root) {
 
 String _onlyTransferId(_Device device) => device.messages.single.uuid;
 
+/// A folder worker can still be removing its own staging files for a moment
+/// after the engine closed; deleting the tree under it then fails on Linux.
+Future<void> _deleteTree(Directory root) async {
+  for (var attempt = 0; ; attempt++) {
+    try {
+      if (root.existsSync()) root.deleteSync(recursive: true);
+      return;
+    } on FileSystemException {
+      if (attempt >= 20) rethrow;
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+  }
+}
+
 void main() {
   late Directory temp;
   late Directory source;
@@ -319,7 +341,7 @@ void main() {
   setUp(() {
     temp = Directory.systemTemp.createTempSync('whisper-folder-engine-');
     source = Directory(p.join(temp.path, 'Project Files'))..createSync();
-    addTearDown(() => temp.deleteSync(recursive: true));
+    addTearDown(() => _deleteTree(temp));
   });
 
   Map<String, List<int>> sampleTree() => <String, List<int>>{
