@@ -156,10 +156,12 @@ Future<bool> showShellDropSend(
       context,
       // ShellSheetBody keeps its own margins and its buttons in reach.
       scrolls: false,
+      // Narrower than a sheet: at 380 one file and two buttons lie flat.
+      width: 320,
       builder: (_) => ShellDropSendSheet(
         name: device.name,
         paths: paths,
-        art: deviceArtFor(device, size: 48),
+        art: deviceArtFor(device, size: 64),
       ),
     ) ==
     true;
@@ -217,9 +219,12 @@ class ShellDropSendSheet extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // An alert stands taller than a sheet: room above the art and
+            // between the parts.
             if (art case final art?) ...[
+              const SizedBox(height: 8),
               Center(child: art),
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
             ],
             Text(
               l10n.shellDropSendTitle(name),
@@ -240,7 +245,7 @@ class ShellDropSendSheet extends StatelessWidget {
                 style: TextStyle(fontSize: type.note, color: c.ink2),
               ),
             ],
-            const SizedBox(height: 16),
+            const SizedBox(height: 18),
             ShellGroup(
               flat: true,
               inset: 60,
