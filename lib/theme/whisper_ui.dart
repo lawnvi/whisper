@@ -595,6 +595,29 @@ abstract final class WhisperSprings {
   static final liquidTrail = whisperSpring(.44, .9);
 }
 
+/// DESIGN.md `island-motion`: how what is inside the island changes while its
+/// shape does. Fractions are of the spring's way from start to rest.
+abstract final class WhisperIslandMotion {
+  /// Content going or coming is this blurred at its farthest.
+  static const blur = 6.0;
+
+  /// It comes from this scale, or goes to it, the way the island goes.
+  static const near = .94;
+
+  /// A glyph that says something happened (the tick) pops from this.
+  static const pop = .5;
+
+  /// The old content is gone by here; the new one starts here.
+  static const outBy = .35, inFrom = .15;
+
+  /// Coming out: the shape is all there by [shapeBy], what it says starts at
+  /// [contentFrom]. Going away it is the other way round.
+  static const shapeBy = .35, contentFrom = .4;
+
+  /// A digit that changes rolls this far (of a line) and this blurred.
+  static const figureRise = .55, figureBlur = 2.0;
+}
+
 /// Animates a double toward [value] with a spring. Changing [value] mid-flight
 /// keeps the current velocity, which a Curve-based animation cannot do. This
 /// replaces AnimatedContainer, AnimatedPositioned and friends.

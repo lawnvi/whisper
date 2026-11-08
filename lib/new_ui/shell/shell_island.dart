@@ -1,3 +1,5 @@
+import 'dart:ui' show lerpDouble;
+
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -6,6 +8,7 @@ import 'package:whisper/theme/whisper_icons.dart';
 import 'package:whisper/theme/whisper_ui.dart';
 import 'package:whisper/widget/island/island_activity.dart';
 import 'package:whisper/widget/island/island_center.dart';
+import 'package:whisper/widget/island/island_motion.dart';
 import 'package:whisper/widget/island/island_views.dart';
 
 /// Where the island goes on a desktop window (the prototype's `placeIsland`).
@@ -76,11 +79,14 @@ mixin MomentViews on IslandPresenter implements MomentPresenter {
   Widget compact(BuildContext context) {
     final m = moment(context);
     return IslandCompactLine(
-      leading: m.leading,
+      leading: IslandGlyph(child: m.leading),
       title: m.title,
       trailing: m.value == null
           ? null
-          : Text(m.value!, style: IslandText.compactFigure(IslandColors.dim)),
+          : IslandFigures(
+              m.value!,
+              style: IslandText.compactFigure(IslandColors.dim),
+            ),
     );
   }
 
@@ -120,7 +126,7 @@ mixin MomentViews on IslandPresenter implements MomentPresenter {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         children: [
-          m.leading,
+          IslandGlyph(child: m.leading),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
@@ -132,7 +138,10 @@ mixin MomentViews on IslandPresenter implements MomentPresenter {
           ),
           if (m.value case final value?) ...[
             const SizedBox(width: 8),
-            Text(value, style: IslandText.compactFigure(IslandColors.dim)),
+            IslandFigures(
+              value,
+              style: IslandText.compactFigure(IslandColors.dim),
+            ),
           ],
         ],
       ),
@@ -309,6 +318,17 @@ class _ShellIslandState extends State<ShellIsland> implements IslandControls {
 
   Size _measured = const Size(120, _compactHeight);
 
+  /// Which way the island last went: growing (coming, opening, a row more)
+  /// it is lively; going small or away it has nothing left to say.
+  bool _growing = true;
+  bool _wasShown = false, _wasExpanded = false;
+
+  /// What it last said, for going away with it.
+  IslandActivity? _last;
+
+  SpringDescription get _spring =>
+      _growing ? WhisperSprings.expressive : WhisperSprings.snappy;
+
   @override
   void initState() {
     super.initState();
@@ -351,9 +371,12 @@ class _ShellIslandState extends State<ShellIsland> implements IslandControls {
   Widget build(BuildContext context) {
     final center = widget.center;
     final stage = center.stage;
-    final featured = center.featured;
+    final live = center.featured;
+    if (live != null) _last = live;
+    // Once the last thing is over, the island still says it while it goes.
+    final featured = live ?? _last;
     final expanded = stage == IslandStage.expanded;
-    final shown = stage != IslandStage.hidden && featured != null;
+    final shown = stage != IslandStage.hidden && live != null;
     final width = _measured.width;
     final origin = shellIslandOrigin(
       width: width,
@@ -364,8 +387,12 @@ class _ShellIslandState extends State<ShellIsland> implements IslandControls {
       buttonsLeft: widget.buttonsLeft,
       buttonsBottom: widget.buttonsBottom,
     );
-    // Lively on the way in; going small or away it has nothing left to say.
-    final spring = expanded ? WhisperSprings.expressive : WhisperSprings.snappy;
+    if (shown != _wasShown || expanded != _wasExpanded) {
+      _growing = shown && (!_wasShown || (expanded && !_wasExpanded));
+      _wasShown = shown;
+      _wasExpanded = expanded;
+    }
+    final spring = _spring;
     return SpringBuilder(
       value: origin.dx,
       spring: spring,
@@ -379,25 +406,46 @@ class _ShellIslandState extends State<ShellIsland> implements IslandControls {
             value: _measured.height,
             spring: spring,
             builder: (context, h, _) => SpringBuilder(
-              value: shown ? 1 : 0,
-              from: 0,
+              value: expanded ? 1 : 0,
               spring: spring,
-              builder: (context, appear, _) {
-                if (appear <= .01 && !shown) return const SizedBox.shrink();
-                return Positioned(
-                  left: left,
-                  top: top,
-                  width: math.max(w, _compactHeight),
-                  height: math.max(h, _compactHeight),
-                  child: Opacity(
-                    opacity: appear.clamp(0, 1),
-                    child: Transform.scale(
-                      scale: .6 + .4 * appear.clamp(0, 1),
-                      child: _capsule(context, featured, expanded),
+              builder: (context, open, _) => SpringBuilder(
+                value: shown ? 1 : 0,
+                from: 0,
+                spring: spring,
+                builder: (context, appear, _) {
+                  if (appear <= .01 && !shown) return const SizedBox.shrink();
+                  // The shape first, then what it says; going away, the
+                  // other way round.
+                  final shape = (appear / WhisperIslandMotion.shapeBy).clamp(
+                    0.0,
+                    1.0,
+                  );
+                  final says =
+                      ((appear - WhisperIslandMotion.contentFrom) /
+                              (1 - WhisperIslandMotion.contentFrom))
+                          .clamp(0.0, 1.0);
+                  return Positioned(
+                    left: left,
+                    top: top,
+                    width: math.max(w, _compactHeight),
+                    height: math.max(h, _compactHeight),
+                    child: Opacity(
+                      opacity: shape,
+                      child: Transform.scale(
+                        // From 0.6, and past 1 for a moment coming in.
+                        scale: .6 + .4 * math.max(appear, 0),
+                        child: _capsule(
+                          context,
+                          featured,
+                          expanded,
+                          open: open.clamp(0.0, 1.0),
+                          says: says,
+                        ),
+                      ),
                     ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
           ),
         ),
@@ -405,12 +453,19 @@ class _ShellIslandState extends State<ShellIsland> implements IslandControls {
     );
   }
 
+  /// [open] is how far it has opened, for the corners and the shadow, which
+  /// change with the shape instead of at once; [says] how much of what is
+  /// inside shows yet.
   Widget _capsule(
     BuildContext context,
     IslandActivity? featured,
-    bool expanded,
-  ) {
+    bool expanded, {
+    required double open,
+    required double says,
+  }) {
     if (featured == null) return const SizedBox.shrink();
+    final radius = BorderRadius.circular(lerpDouble(17, 26, open)!);
+    final growing = _growing;
     return Material(
       type: MaterialType.transparency,
       child: Semantics(
@@ -419,29 +474,51 @@ class _ShellIslandState extends State<ShellIsland> implements IslandControls {
         child: DecoratedBox(
           decoration: BoxDecoration(
             color: Colors.black,
-            borderRadius: BorderRadius.circular(expanded ? 26 : 17),
-            boxShadow: expanded
-                ? WhisperShadow.islandOpen
-                : WhisperShadow.islandClosed,
+            borderRadius: radius,
+            boxShadow: BoxShadow.lerpList(
+              WhisperShadow.islandClosed,
+              WhisperShadow.islandOpen,
+              open,
+            ),
           ),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(expanded ? 26 : 17),
+            borderRadius: radius,
+            // Centred, so what is inside stays where it is on screen while
+            // the shape grows or shrinks around it.
             child: OverflowBox(
-              alignment: Alignment.topLeft,
+              alignment: Alignment.topCenter,
               minWidth: 0,
               maxWidth: expanded ? _openWidth : _compactMax,
               minHeight: 0,
               maxHeight: double.infinity,
-              child: _Measured(
+              child: IslandSizeReport(
                 onSize: (size) {
+                  if (!mounted) return;
                   if ((size.width - _measured.width).abs() > .5 ||
                       (size.height - _measured.height).abs() > .5) {
-                    setState(() => _measured = size);
+                    setState(() {
+                      if (_wasShown && _wasExpanded == expanded) {
+                        _growing = size.height >= _measured.height;
+                      }
+                      _measured = size;
+                    });
                   }
                 },
-                child: expanded
-                    ? _open(context, featured)
-                    : _compact(context, featured),
+                child: islandVeil(
+                  IslandMorph(
+                    identity: expanded ? 'open' : 'small ${featured.id}',
+                    spring: _spring,
+                    from: growing
+                        ? WhisperIslandMotion.near
+                        : 1 / WhisperIslandMotion.near,
+                    child: expanded
+                        ? _open(context, featured)
+                        : _compact(context, featured),
+                  ),
+                  shown: says,
+                  scale: 1,
+                  blur: (1 - says) * WhisperIslandMotion.blur,
+                ),
               ),
             ),
           ),
@@ -461,7 +538,10 @@ class _ShellIslandState extends State<ShellIsland> implements IslandControls {
       body = Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          SizedBox.square(dimension: 20, child: Center(child: m.leading)),
+          SizedBox.square(
+            dimension: 20,
+            child: Center(child: IslandGlyph(child: m.leading)),
+          ),
           const SizedBox(width: 7),
           Flexible(
             child: Text(
@@ -477,7 +557,7 @@ class _ShellIslandState extends State<ShellIsland> implements IslandControls {
           ),
           if (m.value != null) ...[
             const SizedBox(width: 7),
-            Text(
+            IslandFigures(
               m.value!,
               style: TextStyle(
                 fontSize: type.note,
@@ -539,21 +619,20 @@ class _ShellIslandState extends State<ShellIsland> implements IslandControls {
         width: _openWidth,
         child: Padding(
           padding: const EdgeInsets.all(10),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+          child: IslandRows(
             children: [
               for (final activity in activities)
-                if (activity.presenter is MomentPresenter)
-                  _Moment(
-                    moment: (activity.presenter as MomentPresenter).moment(
-                      context,
-                    ),
-                  )
-                else
-                  activity == featured
+                KeyedSubtree(
+                  key: ValueKey(activity.id),
+                  child: activity.presenter is MomentPresenter
+                      ? _Moment(
+                          moment: (activity.presenter as MomentPresenter)
+                              .moment(context),
+                        )
+                      : activity == featured
                       ? activity.presenter.featured(context, this)
                       : activity.presenter.row(context, this),
+                ),
             ],
           ),
         ),
@@ -585,7 +664,7 @@ class _Moment extends StatelessWidget {
                 width: 32,
                 height: 32,
                 decoration: BoxDecoration(color: faint, shape: BoxShape.circle),
-                child: Center(child: m.leading),
+                child: Center(child: IslandGlyph(child: m.leading)),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -605,7 +684,7 @@ class _Moment extends StatelessWidget {
                       ),
                     ),
                     if (m.detail.isNotEmpty)
-                      Text(
+                      IslandFigures(
                         m.detail,
                         style: TextStyle(
                           fontSize: type.tiny,
@@ -617,57 +696,45 @@ class _Moment extends StatelessWidget {
                   ],
                 ),
               ),
-              if (m.onStop != null) ...[
-                const SizedBox(width: 10),
-                Pressable(
-                  onTap: m.onStop,
-                  radius: WhisperRadius.capsule,
-                  label: m.stopLabel,
-                  child: Container(
-                    width: 28,
-                    height: 28,
-                    decoration: BoxDecoration(
-                      color: faint,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Center(
-                      child: WhisperIcon(
-                        WhisperGlyph.x,
-                        size: 13,
-                        weight: 2,
-                        color: Colors.white,
+              // Done, the button shrinks away where it was.
+              IslandMorph(
+                identity: m.onStop != null,
+                spring: WhisperSprings.snappy,
+                from: WhisperIslandMotion.pop,
+                to: WhisperIslandMotion.pop,
+                blur: WhisperIslandMotion.figureBlur,
+                alignment: Alignment.centerRight,
+                child: m.onStop == null
+                    ? const SizedBox(height: 28)
+                    : Padding(
+                        padding: const EdgeInsets.only(left: 10),
+                        child: Pressable(
+                          onTap: m.onStop,
+                          radius: WhisperRadius.capsule,
+                          label: m.stopLabel,
+                          child: Container(
+                            width: 28,
+                            height: 28,
+                            decoration: BoxDecoration(
+                              color: faint,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Center(
+                              child: WhisperIcon(
+                                WhisperGlyph.x,
+                                size: 13,
+                                weight: 2,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-                ),
-              ],
+              ),
             ],
           ),
         ),
       ],
     );
-  }
-}
-
-class _Measured extends StatefulWidget {
-  const _Measured({required this.onSize, required this.child});
-
-  final ValueChanged<Size> onSize;
-  final Widget child;
-
-  @override
-  State<_Measured> createState() => _MeasuredState();
-}
-
-class _MeasuredState extends State<_Measured> {
-  @override
-  Widget build(BuildContext context) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final box = context.findRenderObject();
-      if (mounted && box is RenderBox && box.hasSize) {
-        widget.onSize(box.size);
-      }
-    });
-    return widget.child;
   }
 }

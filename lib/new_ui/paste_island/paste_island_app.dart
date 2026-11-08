@@ -329,20 +329,26 @@ class PasteIslandPresenter extends IslandPresenter with MomentViews {
   }
 
   Widget get _leading => switch (paste.stage) {
-    RemoteClipboardPasteStage.receiving => SizedBox.square(
-      dimension: 20,
-      child: CustomPaint(painter: IslandRingPainter(paste.progress ?? 0)),
+    RemoteClipboardPasteStage.receiving => IslandProgressRing(
+      paste.progress ?? 0,
+      key: const ValueKey('ring'),
     ),
     RemoteClipboardPasteStage.pasted ||
     RemoteClipboardPasteStage.placed ||
     RemoteClipboardPasteStage.ready => const WhisperIcon(
       WhisperGlyph.check,
+      key: ValueKey('tick'),
       size: 16,
       weight: 2.4,
       color: Colors.white,
     ),
-    RemoteClipboardPasteStage.failed || RemoteClipboardPasteStage.canceled =>
-      const WhisperIcon(WhisperGlyph.warn, size: 16, color: Radix.amber9),
+    RemoteClipboardPasteStage.failed ||
+    RemoteClipboardPasteStage.canceled => const WhisperIcon(
+      WhisperGlyph.warn,
+      key: ValueKey('warn'),
+      size: 16,
+      color: Radix.amber9,
+    ),
   };
 
   String _detail(AppLocalizations l10n) {

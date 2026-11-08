@@ -294,6 +294,18 @@ class _SpringBuilderState extends State<SpringBuilder>
 }
 ```
 
+## 灵动岛变形
+
+`DESIGN.md` 文件头的 `island-motion` 是 `WhisperIslandMotion`（`lib/theme/whisper_ui.dart`），部件在 `lib/widget/island/island_motion.dart`，桌面的岛 `ShellIsland` 和屏幕顶部的浮岛用的都是它们：
+
+- `IslandMorph`：`identity` 变了，旧内容画在新内容上面、按原来的大小对齐，模糊着缩放淡出；新内容从模糊里浮现。布局只看新内容。里面包着的部件永远是同一层结构（`islandVeil`：`Opacity`、`Transform.scale`、`ImageFiltered(enabled:)`），模糊散了状态也不丢。
+- `IslandSizeReport`：每次布局大小变了都在帧后报告。岛的外形跟着它走弹簧，所以里面一行自己动的时候外形也跟着，不用等岛重建。
+- `IslandFigures`：一行字里的数字一位一位滚，从右往左对齐，多出来的一位也滚进来；数字之外的字变了就整行换。用在小岛的数值和卡片的说明上。
+- `IslandGlyph`：行首的图标按 `key` 区分（`ring`、`tick`、`warn`），换的时候旧的缩小、新的弹出来。`IslandProgressRing` 用 `smooth` 跟着进度走。
+- `IslandRows`：卡片的行按 `key` 进出。新行加在最下面；走的行先淡出，再用 `Align(heightFactor:)` 收起高度，高度快没了才从列表里拿掉。
+
+外形本身在 `ShellIsland` 里：宽、高、位置、展开程度（圆角 17 到 26、`WhisperShadow.islandClosed` 到 `islandOpen` 用 `BoxShadow.lerpList`）、出现程度各一个 `SpringBuilder`，变大用 `expressive`、变小和离开用 `snappy`。内容放在居中的 `OverflowBox` 里由 `ClipRRect` 裁出来。
+
 ## 按压反馈
 
 ```dart

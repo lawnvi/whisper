@@ -10,6 +10,7 @@ import 'package:whisper/new_ui/paste_island/paste_island_app.dart';
 import 'package:whisper/remote_files/fs_copies.dart';
 import 'package:whisper/socket/svrmanager.dart';
 import 'package:whisper/theme/whisper_icons.dart';
+import 'package:whisper/theme/whisper_ui.dart';
 import 'package:whisper/widget/island/island_activity.dart';
 import 'package:whisper/widget/island/island_center.dart';
 import 'package:whisper/widget/island/island_home.dart';
@@ -118,16 +119,19 @@ class _TransferPresenter extends IslandPresenter with MomentViews {
   Widget get _leading => status == IslandStatus.done
       ? const WhisperIcon(
           WhisperGlyph.check,
+          key: ValueKey('tick'),
           size: 16,
           weight: 2.4,
           color: Colors.white,
         )
       : status == IslandStatus.failed
-      ? const WhisperIcon(WhisperGlyph.warn, size: 16, color: Radix.amber9)
-      : SizedBox.square(
-          dimension: 20,
-          child: CustomPaint(painter: IslandRingPainter(progress ?? 0)),
-        );
+      ? const WhisperIcon(
+          WhisperGlyph.warn,
+          key: ValueKey('warn'),
+          size: 16,
+          color: Radix.amber9,
+        )
+      : IslandProgressRing(progress ?? 0, key: const ValueKey('ring'));
 
   @override
   IslandMoment moment(BuildContext context) {
@@ -150,6 +154,25 @@ class _TransferPresenter extends IslandPresenter with MomentViews {
 
   @override
   String describe(BuildContext context) => '$name $_percent';
+}
+
+/// The ring of something on its way, 20 across. It follows the bytes with a
+/// spring instead of stepping each time they are counted.
+class IslandProgressRing extends StatelessWidget {
+  const IslandProgressRing(this.value, {super.key});
+
+  final double value;
+
+  @override
+  Widget build(BuildContext context) => SizedBox.square(
+    dimension: 20,
+    child: SpringBuilder(
+      value: value.clamp(0.0, 1.0),
+      spring: WhisperSprings.smooth,
+      builder: (context, shown, _) =>
+          CustomPaint(painter: IslandRingPainter(shown)),
+    ),
+  );
 }
 
 /// `ring()`: 20 across, 2.5 thick, white on a faint track.
