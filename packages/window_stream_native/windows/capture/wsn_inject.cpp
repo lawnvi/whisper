@@ -22,6 +22,26 @@ namespace wsn {
 
 namespace {
 
+// whisper.exe can deliver input to an administrator's window too (through
+// its input service, when the user allowed that), where this library's own
+// SendInput would be dropped without a word, and says which windows those
+// are. Anywhere else (the tools), plain SendInput.
+using SendAnywhereFn = UINT (*)(UINT, INPUT*);
+using WindowAboveFn = BOOL (*)(HWND);
+
+UINT Send(UINT count, INPUT* inputs) {
+  static const auto anywhere = reinterpret_cast<SendAnywhereFn>(
+      GetProcAddress(GetModuleHandleW(nullptr), "WhisperSendInputAnywhere"));
+  return anywhere != nullptr ? anywhere(count, inputs)
+                             : SendInput(count, inputs, sizeof(INPUT));
+}
+
+bool AboveUs(HWND window) {
+  static const auto above = reinterpret_cast<WindowAboveFn>(
+      GetProcAddress(GetModuleHandleW(nullptr), "WhisperWindowIsAbove"));
+  return above != nullptr && above(window) != FALSE;
+}
+
 // A small positional fallback (macOS key code -> VK, set-1 scan, extended)
 // for when the generated wsn_keymap.h (from agent E) is not present yet.
 struct FallbackKey {
@@ -188,6 +208,20 @@ bool BringToForeground(HWND top, std::string* how) {
       return true;
     }
   }
+  // An administrator's window in front, or the window is one: whisper.exe's
+  // input service may let this process take the front.
+  {
+    using AllowFn = BOOL (*)();
+    static const auto allow = reinterpret_cast<AllowFn>(
+        GetProcAddress(GetModuleHandleW(nullptr), "WhisperAllowForeground"));
+    if (allow != nullptr && allow() != FALSE) {
+      SetForegroundWindow(root);
+      if (BecameForeground(root)) {
+        if (how) *how = "service";
+        return true;
+      }
+    }
+  }
   // The foreground lock is lifted for the process that typed last: an
   // injected key of no meaning (vk 0xFF, nothing maps to it) makes that us.
   {
@@ -195,7 +229,7 @@ bool BringToForeground(HWND top, std::string* how) {
     nothing[0].type = nothing[1].type = INPUT_KEYBOARD;
     nothing[0].ki.wVk = nothing[1].ki.wVk = 0xFF;
     nothing[1].ki.dwFlags = KEYEVENTF_KEYUP;
-    SendInput(2, nothing, sizeof(INPUT));
+    Send(2, nothing);
     SetForegroundWindow(root);
     if (BecameForeground(root)) {
       if (how) *how = "after input";
@@ -208,10 +242,10 @@ bool BringToForeground(HWND top, std::string* how) {
     INPUT alt[1] = {};
     alt[0].type = INPUT_KEYBOARD;
     alt[0].ki.wVk = VK_MENU;
-    SendInput(1, alt, sizeof(INPUT));
+    Send(1, alt);
     SetForegroundWindow(root);
     alt[0].ki.dwFlags = KEYEVENTF_KEYUP;
-    SendInput(1, alt, sizeof(INPUT));
+    Send(1, alt);
     bool ok = BecameForeground(root);
     if (ok) {
       Sleep(30);
@@ -221,7 +255,7 @@ bool BringToForeground(HWND top, std::string* how) {
         esc[0].type = esc[1].type = INPUT_KEYBOARD;
         esc[0].ki.wVk = esc[1].ki.wVk = VK_ESCAPE;
         esc[1].ki.dwFlags = KEYEVENTF_KEYUP;
-        SendInput(2, esc, sizeof(INPUT));
+        Send(2, esc);
       }
     }
     if (how) *how = ok ? "alt" : "failed";
@@ -282,7 +316,7 @@ void AddKey(std::vector<INPUT>* inputs, WORD vk, WORD scan, bool extended, bool 
 
 }  // namespace
 
-Injector::Injector(HWND top) : top_(top) {}
+Injector::Injector(HWND top) : top_(top), above_(AboveUs(top)) {}
 Injector::~Injector() { ReleaseAll(); }
 
 bool Injector::EnsureForeground() {
@@ -335,7 +369,7 @@ void TypeChord(const KeyCode& key, bool ctrl, bool shift, bool alt) {
   if (alt) AddKey(&inputs, VK_LMENU, 0x38, false, false);
   if (shift) AddKey(&inputs, VK_LSHIFT, 0x2A, false, false);
   if (ctrl) AddKey(&inputs, VK_LCONTROL, 0x1D, false, false);
-  SendInput(static_cast<UINT>(inputs.size()), inputs.data(), sizeof(INPUT));
+  Send(static_cast<UINT>(inputs.size()), inputs.data());
 }
 
 void Injector::AddPopup(HWND popup) {
@@ -499,6 +533,16 @@ void Injector::Key(bool down, int mac, int modifiers, const std::wstring& text) 
   if (!down && chord_keys_.erase(mac) != 0) return;
   if (down) last_input_tick_ = GetTickCount64();
 
+  // An administrator's window takes no messages from this process: real
+  // keys, with the window in front.
+  if (above_) {
+    if (down && EnsureForeground()) {
+      TypeChord(key, ctrl, shift, alt);
+      chord_keys_.insert(mac);
+    }
+    return;
+  }
+
   // A UWP text box: real keys, with the window in front while typing.
   if (uwp_text_ && down && RealKeysBegin()) {
     TypeChord(key, ctrl, shift, alt);
@@ -579,7 +623,7 @@ void Injector::Key(bool down, int mac, int modifiers, const std::wstring& text) 
 
 void Injector::Text(const std::wstring& text, bool /*paste*/) {
   if (text.empty()) return;
-  if (uwp_text_ && RealKeysBegin()) {
+  if ((above_ && EnsureForeground()) || (uwp_text_ && RealKeysBegin())) {
     // Unicode keystrokes (no layout, no IME), the window in front.
     std::vector<INPUT> inputs;
     for (wchar_t c : text) {
@@ -597,7 +641,7 @@ void Injector::Text(const std::wstring& text, bool /*paste*/) {
         inputs.push_back(input);
       }
     }
-    if (!inputs.empty()) SendInput(static_cast<UINT>(inputs.size()), inputs.data(), sizeof(INPUT));
+    if (!inputs.empty()) Send(static_cast<UINT>(inputs.size()), inputs.data());
     return;
   }
   // Always deliver text as WM_CHAR to the keyboard target (post-IME, so the
@@ -790,7 +834,7 @@ void Injector::InPlacePointer(int kind, int button, POINT screen) {
   } else if (kind == 3 || kind == 8) {
     input.mi.dwFlags |= up_flag;
   }
-  SendInput(1, &input, sizeof(input));
+  Send(1, &input);
   if (kind == 3 || kind == 8) RestoreCursorSoon();
 }
 
@@ -808,6 +852,24 @@ void Injector::Pointer(int kind, int button, double fx, double fy, int modifiers
   if (button < 0 || button > 2) button = 0;
   POINT screen = FrameFractionToScreen(top_, fx, fy);
   last_point_ = screen;
+  // An administrator's window takes no posted messages from this process:
+  // the real pointer, with the window in front.
+  if (above_) {
+    if (kind == 1) {
+      pressed_button_ = button;
+      last_press_screen_ = screen;
+      last_input_tick_ = GetTickCount64();
+      clicks_++;
+    }
+    if (kind == 3 || kind == 8) pressed_button_ = -1;
+    if (kind == 2 && pressed_button_ < 0) {
+      double now = NowMs();
+      if (now - last_hover_ms_ < 8) return;
+      last_hover_ms_ = now;
+    }
+    if (EnsureForeground()) InPlacePointer(kind, button, screen);
+    return;
+  }
   // Staged or in place alike: posted messages to the real child under the
   // point. They reach the window whatever covers it on screen, and the
   // user's own cursor is never moved. (InPlacePointer, the real-cursor
@@ -843,6 +905,27 @@ void Injector::Scroll(double fx, double fy, double dx, double dy, bool precise) 
   int delta_x = static_cast<int>(wheel_rest_x_);
   wheel_rest_y_ -= delta_y;
   wheel_rest_x_ -= delta_x;
+  if (above_) {
+    // The real wheel, over the point, the window in front.
+    if (!EnsureForeground()) return;
+    InPlacePointer(2, 0, screen);
+    INPUT wheel[2] = {};
+    UINT count = 0;
+    if (delta_y != 0) {
+      wheel[count].type = INPUT_MOUSE;
+      wheel[count].mi.dwFlags = MOUSEEVENTF_WHEEL;
+      wheel[count].mi.mouseData = static_cast<DWORD>(-delta_y);
+      ++count;
+    }
+    if (delta_x != 0) {
+      wheel[count].type = INPUT_MOUSE;
+      wheel[count].mi.dwFlags = MOUSEEVENTF_HWHEEL;
+      wheel[count].mi.mouseData = static_cast<DWORD>(delta_x);
+      ++count;
+    }
+    if (count > 0) Send(count, wheel);
+    return;
+  }
   HWND target = ChildAt(TopAt(screen), screen);
   LPARAM at = MAKELPARAM(screen.x, screen.y);  // wheel messages carry screen coords
   if (delta_y != 0) PostMessageW(target, WM_MOUSEWHEEL, MAKEWPARAM(0, -delta_y), at);

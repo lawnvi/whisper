@@ -858,10 +858,31 @@ class WindowStreamHost {
       return null;
     }
 
-    final existing = find(await _catalogWindows());
+    final before = await _catalogWindows();
+    final existing = find(before);
     if (existing != null) {
       return existing;
     }
+    // A desktop app's window may not say which listed app it belongs to
+    // (Windows: a shortcut's id against the program's path). Failing that,
+    // the window that came, or that came to the front, after the launch.
+    final known = {for (final window in before ?? const []) window.id};
+    final wasActive = {
+      for (final window in before ?? const [])
+        if (window.active) window.id,
+    };
+    RemoteWindowInfo? arrived(List<RemoteWindowInfo>? windows) {
+      final all = windows ?? const <RemoteWindowInfo>[];
+      final fresh = all.where((window) => !known.contains(window.id));
+      return fresh.where((window) => window.active).firstOrNull ??
+          fresh.firstOrNull ??
+          all
+              .where(
+                (window) => window.active && !wasActive.contains(window.id),
+              )
+              .firstOrNull;
+    }
+
     if (_backend.opensApps) {
       // The phone starts the app on the stream's own display once the
       // viewer dials; nothing to wait for here.
@@ -871,10 +892,17 @@ class WindowStreamHost {
     if (!launched.ok) {
       return null;
     }
-    final deadline = DateTime.now().add(const Duration(seconds: 8));
+    final started = DateTime.now();
+    final deadline = started.add(const Duration(seconds: 8));
     while (DateTime.now().isBefore(deadline)) {
       await Future<void>.delayed(const Duration(milliseconds: 400));
-      final window = find(await _catalogWindows());
+      final windows = await _catalogWindows();
+      // The app's own window first; another only once it had a moment.
+      final window =
+          find(windows) ??
+          (DateTime.now().difference(started) > const Duration(seconds: 1)
+              ? arrived(windows)
+              : null);
       if (window != null) {
         return window;
       }

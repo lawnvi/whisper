@@ -178,7 +178,13 @@ bool CanInjectIntoProcess(DWORD pid) {
   if (pid == GetCurrentProcessId()) return false;
   int target = ProcessIntegrityLevel(pid);
   if (target < 0) return false;  // cannot read it: assume protected
-  return target <= SelfIntegrityLevel();
+  if (target <= SelfIntegrityLevel()) return true;
+  // An administrator's window: only whisper.exe's input service reaches
+  // it, when the user allowed that.
+  using ReachableFn = BOOL (*)();
+  static const auto reachable = reinterpret_cast<ReachableFn>(
+      GetProcAddress(GetModuleHandleW(nullptr), "WhisperElevatedReachable"));
+  return reachable != nullptr && reachable() != FALSE;
 }
 
 bool SelfElevated() {

@@ -43,7 +43,31 @@ std::string JsonArrayJoin(const std::vector<std::string>& items) {
 struct AppInfo {
   std::string id;    // AUMID or exe path (the bundleId)
   std::string name;  // display name
+  // The program it starts, lower case, when the id names one (a desktop
+  // app's "{known folder}\\path\\app.exe"): how its windows are told apart,
+  // which have no AUMID of their own.
+  std::wstring exe;
 };
+
+// "{6D809377-...}\\Notepad++\\notepad++.exe" or "C:\\...\\app.exe", lower case;
+// empty for an AUMID.
+std::wstring AppExecutable(const std::wstring& id) {
+  std::wstring path;
+  if (id.size() > 38 && id[0] == L'{' && id[37] == L'}' && id[38] == L'\\') {
+    GUID folder{};
+    PWSTR base = nullptr;
+    if (SUCCEEDED(CLSIDFromString(id.substr(0, 38).c_str(), &folder)) &&
+        SUCCEEDED(SHGetKnownFolderPath(folder, KF_FLAG_DEFAULT, nullptr, &base)) && base) {
+      path = std::wstring(base) + id.substr(38);
+    }
+    CoTaskMemFree(base);
+  } else if (id.size() > 2 && id[1] == L':') {
+    path = id;
+  }
+  if (path.size() < 4 || _wcsicmp(path.c_str() + path.size() - 4, L".exe") != 0) return std::wstring();
+  for (auto& c : path) c = static_cast<wchar_t>(towlower(c));
+  return path;
+}
 
 std::mutex g_apps_mutex;
 std::vector<AppInfo> g_apps;
@@ -76,6 +100,15 @@ std::vector<AppInfo> ReadAppsFolder() {
       AppInfo app;
       app.id = WideToUtf8(aumid);
       app.name = display ? WideToUtf8(display) : WideToUtf8(aumid);
+      // A shortcut says what it starts; otherwise the id may be the path.
+      winrt::com_ptr<IShellItem2> item2;
+      PWSTR target = nullptr;
+      if (SUCCEEDED(item->QueryInterface(IID_PPV_ARGS(item2.put()))) &&
+          SUCCEEDED(item2->GetString(PKEY_Link_TargetParsingPath, &target)) && target) {
+        app.exe = AppExecutable(target);
+      }
+      CoTaskMemFree(target);
+      if (app.exe.empty()) app.exe = AppExecutable(aumid);
       if (!app.id.empty() && !app.name.empty()) apps.push_back(std::move(app));
     }
     CoTaskMemFree(parsing);
@@ -264,6 +297,14 @@ std::string WindowAppId(HWND window) {
   if (!aumid.empty()) return WideToUtf8(aumid);
   std::wstring exe = ProcessImagePath(pid);
   for (auto& c : exe) c = static_cast<wchar_t>(towlower(c));
+  // A desktop app listed by its program: the same id as in the list, so
+  // that opening it finds its window.
+  {
+    std::lock_guard<std::mutex> lock(g_apps_mutex);
+    for (const auto& app : g_apps) {
+      if (!app.exe.empty() && app.exe == exe) return app.id;
+    }
+  }
   return WideToUtf8(exe);
 }
 

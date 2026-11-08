@@ -132,6 +132,9 @@ class Injector {
   void RestoreCursorSoon();
 
   HWND top_;
+  // An administrator's window: only real input reaches it (by whisper.exe's
+  // input service), with it in front.
+  bool above_ = false;
   bool in_place_ = false;
   // Pointer state.
   int pressed_button_ = -1;
