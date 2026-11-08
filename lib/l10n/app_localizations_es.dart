@@ -3790,4 +3790,8 @@ class AppLocalizationsEs extends AppLocalizations {
   String shellDropSendItems(int count) {
     return '$count elementos';
   }
+
+  @override
+  String get inputElevatedHint =>
+      'Hay una ventana de administrador delante: haz clic y luego pasa';
 }

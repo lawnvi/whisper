@@ -6,6 +6,7 @@
 #include <aclapi.h>
 #include <shellapi.h>
 
+#include <mutex>
 #include <string>
 
 #include "input_service_protocol.h"
@@ -32,6 +33,17 @@ class RemoteInputServiceClient {
     for (UINT i = 0; i < count; ++i) {
       request.inputs[i] = inputs[i];
     }
+    whisper_input_service::Response response = {};
+    return Transact(&request, &response) &&
+           response.status == whisper_input_service::kStatusOk;
+  }
+
+  // Lets this process take the front from an administrator's window, and
+  // puts its own [window] there. Fails with an agent older than version 3.
+  bool AllowForeground(HWND window) {
+    whisper_input_service::Request request = {};
+    request.command = whisper_input_service::kCommandAllowForeground;
+    request.count = static_cast<DWORD>(reinterpret_cast<ULONG_PTR>(window));
     whisper_input_service::Response response = {};
     return Transact(&request, &response) &&
            response.status == whisper_input_service::kStatusOk;
@@ -126,7 +138,15 @@ class RemoteInputServiceClient {
 
   bool Transact(whisper_input_service::Request* request,
                 whisper_input_service::Response* response) {
-    request->version = whisper_input_service::kVersion;
+    // Remote input and window flow share this one connection (the agent
+    // takes a single client), from their own threads.
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    // Only what is new in this version says so: an agent a version behind
+    // still serves the rest (a user may not have updated it yet).
+    request->version =
+        request->command == whisper_input_service::kCommandAllowForeground
+            ? whisper_input_service::kVersion
+            : whisper_input_service::kOldestClientVersion;
     // The agent is replaced whenever the console session changes, so one
     // reconnect covers a pipe that went stale since the last call.
     for (int attempt = 0; attempt < 2; ++attempt) {
@@ -181,6 +201,7 @@ class RemoteInputServiceClient {
   }
 
   void Disconnect() {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     if (pipe_ != INVALID_HANDLE_VALUE) {
       CloseHandle(pipe_);
       pipe_ = INVALID_HANDLE_VALUE;
@@ -204,8 +225,15 @@ class RemoteInputServiceClient {
     return local_system;
   }
 
+  std::recursive_mutex mutex_;
   HANDLE pipe_ = INVALID_HANDLE_VALUE;
   ULONGLONG retry_tick_ = 0;
 };
+
+// The one connection this process keeps to the agent.
+inline RemoteInputServiceClient& SharedRemoteInputService() {
+  static RemoteInputServiceClient client;
+  return client;
+}
 
 #endif  // WHISPER_REMOTE_INPUT_SERVICE_CLIENT_H_

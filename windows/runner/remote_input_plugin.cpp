@@ -7,6 +7,7 @@
 #include <flutter/plugin_registrar.h>
 #include <flutter/plugin_registrar_windows.h>
 #include <flutter/standard_method_codec.h>
+#include <flutter_windows.h>
 
 #include <dwmapi.h>
 #include <wtsapi32.h>
@@ -524,6 +525,100 @@ bool HasSegment(const EdgeSegment& segment) {
   return segment.end > segment.start;
 }
 
+// A process's integrity level (SECURITY_MANDATORY_*_RID), 0 when it cannot
+// be read.
+DWORD ProcessIntegrity(HANDLE process) {
+  HANDLE token = nullptr;
+  if (!OpenProcessToken(process, TOKEN_QUERY, &token)) {
+    return 0;
+  }
+  DWORD size = 0;
+  GetTokenInformation(token, TokenIntegrityLevel, nullptr, 0, &size);
+  std::vector<BYTE> buffer(size);
+  DWORD level = 0;
+  if (size > 0 && GetTokenInformation(token, TokenIntegrityLevel,
+                                      buffer.data(), size, &size)) {
+    const auto* label =
+        reinterpret_cast<const TOKEN_MANDATORY_LABEL*>(buffer.data());
+    const UCHAR count = *GetSidSubAuthorityCount(label->Label.Sid);
+    if (count > 0) {
+      level = *GetSidSubAuthority(label->Label.Sid, count - 1);
+    }
+  }
+  CloseHandle(token);
+  return level;
+}
+
+DWORD ProcessIntegrity(DWORD process_id) {
+  HANDLE process =
+      OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, process_id);
+  if (process == nullptr) {
+    return 0;
+  }
+  const DWORD level = ProcessIntegrity(process);
+  CloseHandle(process);
+  return level;
+}
+
+// Whether [window] belongs to a process above this one: an administrator's,
+// like Task Manager. Unreadable is taken as not above (another user's
+// process, say), so what works today keeps working.
+bool WindowIsAbove(HWND window) {
+  static const DWORD own = ProcessIntegrity(GetCurrentProcess());
+  if (window == nullptr || own == 0) {
+    return false;
+  }
+  DWORD process_id = 0;
+  GetWindowThreadProcessId(window, &process_id);
+  if (process_id == 0 || process_id == GetCurrentProcessId()) {
+    return false;
+  }
+  return ProcessIntegrity(process_id) > own;
+}
+
+// The window in front, read again only when another one comes to the front.
+bool ForegroundIsAbove() {
+  static std::mutex mutex;
+  static HWND window = nullptr;
+  static bool above = false;
+  HWND foreground = GetForegroundWindow();
+  std::lock_guard<std::mutex> lock(mutex);
+  if (foreground != window) {
+    window = foreground;
+    above = WindowIsAbove(foreground);
+  }
+  return above;
+}
+
+bool ServiceSendInput(UINT count, const INPUT* inputs) {
+  auto& service = SharedRemoteInputService();
+  for (UINT done = 0; done < count;) {
+    const UINT batch =
+        std::min<UINT>(count - done, whisper_input_service::kMaxInputs);
+    if (!service.SendInput(inputs + done, batch)) {
+      return false;
+    }
+    done += batch;
+  }
+  return true;
+}
+
+// Input for whatever is in front. With an administrator's window there,
+// Windows drops what SendInput sends without a word and the pointer would be
+// stuck: the service delivers it when the user allowed administrator windows,
+// and otherwise nothing is sent (the caller hands the pointer back). The lock
+// screen's desktop rejects SendInput outright, and the service goes there.
+UINT SendInputAnywhere(UINT count, INPUT* inputs) {
+  if (ForegroundIsAbove()) {
+    return ServiceSendInput(count, inputs) ? count : 0;
+  }
+  const UINT sent = SendInput(count, inputs, sizeof(INPUT));
+  if (sent != 0) {
+    return sent;
+  }
+  return ServiceSendInput(count, inputs) ? count : 0;
+}
+
 ScreenArea VirtualScreenArea() {
   const int left = GetSystemMetrics(SM_XVIRTUALSCREEN);
   const int top = GetSystemMetrics(SM_YVIRTUALSCREEN);
@@ -932,6 +1027,12 @@ class RemoteInputPlugin : public flutter::Plugin {
   ~RemoteInputPlugin() override {
     StopInjection();
     StopCapture();
+    if (front_sink_ != nullptr) {
+      DestroyWindow(front_sink_);
+    }
+    for (HWND strip : edge_strips_) DestroyWindow(strip);
+    if (front_hint_ != nullptr) DestroyWindow(front_hint_);
+    if (front_hint_font_ != nullptr) DeleteObject(front_hint_font_);
     if (session_notifications_registered_) {
       WTSUnRegisterSessionNotification(window_);
     }
@@ -1125,6 +1226,19 @@ class RemoteInputPlugin : public flutter::Plugin {
       const auto routes =
           args == nullptr ? std::vector<CaptureRoute>{}
                           : GetMapCaptureRoutes(*args, "segments");
+      const auto* hint =
+          args == nullptr ? nullptr : GetMapValue<std::string>(*args, "elevatedHint");
+      front_hint_text_.clear();
+      if (hint != nullptr && !hint->empty()) {
+        const int length = MultiByteToWideChar(
+            CP_UTF8, 0, hint->data(), static_cast<int>(hint->size()), nullptr, 0);
+        if (length > 0) {
+          front_hint_text_.resize(length);
+          MultiByteToWideChar(CP_UTF8, 0, hint->data(),
+                              static_cast<int>(hint->size()),
+                              front_hint_text_.data(), length);
+        }
+      }
       const auto error = StartCapture(
           *session_id, edge == nullptr ? "right" : *edge,
           display_id == nullptr ? "" : *display_id, segment, segments, routes,
@@ -1389,10 +1503,20 @@ class RemoteInputPlugin : public flutter::Plugin {
       StopCapture();
       return error;
     }
+    if (front_watch_ == 0) {
+      front_watch_ = SetTimer(nullptr, 0, 16, &FrontWatchProc);
+    }
     return std::nullopt;
   }
 
   void StopCapture() {
+    if (front_watch_ != 0) {
+      KillTimer(nullptr, front_watch_);
+      front_watch_ = 0;
+    }
+    if (front_taken_from_ != nullptr) GiveFrontBack();
+    if (edge_strips_shown_) HideEdgeStrips();
+    HideFrontHint();
     hook_can_activate_keyboard_.store(false);
     hook_suppress_keyboard_.store(false);
     if (!capture_session_id_.empty()) {
@@ -1451,6 +1575,9 @@ class RemoteInputPlugin : public flutter::Plugin {
       event_diagnostic_count_ = 0;
       inactive_event_diagnostic_count_ = 0;
       MoveCaptureCursorToLocalEdge(release_edge_unit);
+      // Back on this screen: the administrator's window it was taken from
+      // gets the front again.
+      if (front_taken_from_ != nullptr) GiveFrontBack();
     }
   }
 
@@ -2119,6 +2246,335 @@ class RemoteInputPlugin : public flutter::Plugin {
     return candidates.front().route;
   }
 
+  static void CALLBACK FrontWatchProc(HWND, UINT, UINT_PTR, DWORD) {
+    if (g_plugin != nullptr) g_plugin->WatchElevatedFront();
+  }
+
+  // With an administrator's window in front, Windows tells neither the hooks
+  // nor raw input about the mouse, so the pointer could never leave this
+  // screen, and this process may not take the front from that window either.
+  // The window under the pointer still gets the mouse, though: thin strips of
+  // this process lie along the shared edges meanwhile, and moved into, they
+  // let it take the front (the process that received the last input may).
+  // With this process in front the hooks hear the mouse again.
+  void WatchElevatedFront() {
+    const bool idle = !capture_session_id_.empty() && !capture_active_;
+    const ULONGLONG now = GetTickCount64();
+    if (capture_active_ && front_taken_from_ != nullptr &&
+        GetForegroundWindow() != front_sink_ && ForegroundIsAbove() &&
+        now >= next_front_claim_) {
+      // Over there, and the administrator's window took the front back:
+      // the hooks would go deaf and the pointer could never come back.
+      next_front_claim_ = now + 300;
+      input_service_.AllowForeground(front_sink_);
+      SetForegroundWindow(front_sink_);
+      return;
+    }
+    POINT point = {};
+    const bool has_cursor = GetCursorPos(&point) == TRUE;
+    if (front_taken_from_ != nullptr && idle && now > front_kept_until_ &&
+        (!has_cursor || !IsCursorAtCaptureEdge(point))) {
+      GiveFrontBack();
+    }
+    const bool above = idle && ForegroundIsAbove();
+    if (above && capture_requires_interior_rearm_.load() && has_cursor &&
+        CaptureCursorEnteredInterior(point)) {
+      // What the hook would do once the cursor is back inside.
+      capture_requires_interior_rearm_ = false;
+      hook_can_activate_keyboard_.store(true);
+    }
+    const bool want = above && !capture_requires_interior_rearm_.load();
+    if (!want || now > front_hint_until_) HideFrontHint();
+    if (want != edge_strips_shown_) {
+      if (want) {
+        ShowEdgeStrips();
+      } else {
+        HideEdgeStrips();
+      }
+    }
+  }
+
+  static LRESULT CALLBACK EdgeStripProc(HWND window, UINT message,
+                                        WPARAM wparam, LPARAM lparam) {
+    switch (message) {
+      case WM_MOUSEMOVE:
+        if (g_plugin != nullptr) g_plugin->OnEdgeStripTouched();
+        return 0;
+      case WM_LBUTTONDOWN:
+      case WM_RBUTTONDOWN:
+      case WM_MBUTTONDOWN:
+        if (g_plugin != nullptr) g_plugin->OnEdgeStripClicked();
+        return 0;
+      case WM_LBUTTONUP:
+      case WM_RBUTTONUP:
+      case WM_MBUTTONUP:
+        return 0;
+      case WM_MOUSEACTIVATE:
+        return MA_NOACTIVATE;
+    }
+    return DefWindowProcW(window, message, wparam, lparam);
+  }
+
+  void ShowEdgeStrips() {
+    edge_strips_shown_ = true;
+    constexpr int kStrip = 2;
+    static const wchar_t kClass[] = L"WhisperRemoteInputEdge";
+    static bool registered = false;
+    if (!registered) {
+      WNDCLASSW window_class = {};
+      window_class.lpfnWndProc = &EdgeStripProc;
+      window_class.hInstance = GetModuleHandle(nullptr);
+      window_class.hCursor = LoadCursor(nullptr, IDC_ARROW);
+      window_class.lpszClassName = kClass;
+      registered = RegisterClassW(&window_class) != 0;
+    }
+    size_t used = 0;
+    for (const auto& route : CaptureRoutesForMatching()) {
+      const ScreenArea area = CaptureAreaForDisplay(route.source_display_id);
+      const bool vertical =
+          route.source_edge == "left" || route.source_edge == "right";
+      int from = vertical ? area.top : area.left;
+      int to = vertical ? area.bottom + 1 : area.right + 1;
+      if (HasSegment(route.source_segment)) {
+        from = static_cast<int>(std::floor(route.source_segment.start));
+        to = static_cast<int>(std::ceil(route.source_segment.end)) + 1;
+      }
+      RECT rect = {};
+      if (route.source_edge == "right") {
+        rect = {area.right + 1 - kStrip, from, area.right + 1, to};
+      } else if (route.source_edge == "left") {
+        rect = {area.left, from, area.left + kStrip, to};
+      } else if (route.source_edge == "top") {
+        rect = {from, area.top, to, area.top + kStrip};
+      } else if (route.source_edge == "bottom") {
+        rect = {from, area.bottom + 1 - kStrip, to, area.bottom + 1};
+      } else {
+        continue;
+      }
+      if (used == edge_strips_.size()) {
+        HWND strip = CreateWindowExW(
+            WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_LAYERED |
+                WS_EX_NOACTIVATE,
+            kClass, L"", WS_POPUP, 0, 0, 1, 1, nullptr, nullptr,
+            GetModuleHandle(nullptr), nullptr);
+        if (strip == nullptr) break;
+        // Not quite transparent: a fully transparent window lets the mouse
+        // through.
+        SetLayeredWindowAttributes(strip, 0, 1, LWA_ALPHA);
+        edge_strips_.push_back(strip);
+      }
+      SetWindowPos(edge_strips_[used++], HWND_TOPMOST, rect.left, rect.top,
+                   rect.right - rect.left, rect.bottom - rect.top,
+                   SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    }
+    for (; used < edge_strips_.size(); ++used) {
+      ShowWindow(edge_strips_[used], SW_HIDE);
+    }
+  }
+
+  void HideEdgeStrips() {
+    edge_strips_shown_ = false;
+    for (HWND strip : edge_strips_) ShowWindow(strip, SW_HIDE);
+  }
+
+  // Pushed into: the front may not be taken on a move alone, so say what
+  // to do, unless it can be.
+  void OnEdgeStripTouched() {
+    if (capture_session_id_.empty() || capture_active_) return;
+    const ULONGLONG now = GetTickCount64();
+    if (now < next_front_claim_) return;
+    next_front_claim_ = now + 400;
+    POINT point = {};
+    GetCursorPos(&point);
+    if (TakeFront(point)) return;
+    // The service may let it (version 3, administrator windows allowed).
+    if (EnsureFrontSink(point)) {
+      ShowWindow(front_sink_, SW_SHOWNA);
+      if (input_service_.AllowForeground(front_sink_) &&
+          TakeFront(point)) {
+        return;
+      }
+    }
+    ShowFrontHint(point);
+  }
+
+  // Clicked: having received that click, this process may take the front.
+  void OnEdgeStripClicked() {
+    if (capture_session_id_.empty() || capture_active_) return;
+    POINT point = {};
+    GetCursorPos(&point);
+    TakeFront(point);
+  }
+
+  bool TakeFront(POINT point) {
+    HWND previous = GetForegroundWindow();
+    if (!EnsureFrontSink(point)) return false;
+    ShowWindow(front_sink_, SW_SHOWNA);
+    SetForegroundWindow(front_sink_);
+    if (GetForegroundWindow() != front_sink_) {
+      ShowWindow(front_sink_, SW_HIDE);
+      return false;
+    }
+    front_taken_from_ = previous;
+    front_kept_until_ = GetTickCount64() + 3000;
+    HideEdgeStrips();
+    HideFrontHint();
+    return true;
+  }
+
+  // Beside the pointer at the edge, the island's black capsule says why the
+  // pointer stops there and what to do: click, then move across.
+  void ShowFrontHint(POINT point) {
+    if (front_hint_text_.empty()) return;
+    static const wchar_t kClass[] = L"WhisperRemoteInputHint";
+    if (front_hint_ == nullptr) {
+      WNDCLASSW window_class = {};
+      window_class.lpfnWndProc = &FrontHintProc;
+      window_class.hInstance = GetModuleHandle(nullptr);
+      window_class.lpszClassName = kClass;
+      RegisterClassW(&window_class);
+      front_hint_ = CreateWindowExW(
+          WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE |
+              WS_EX_TRANSPARENT,
+          kClass, L"", WS_POPUP, 0, 0, 1, 1, nullptr, nullptr,
+          GetModuleHandle(nullptr), nullptr);
+      if (front_hint_ == nullptr) return;
+    }
+    HMONITOR monitor = MonitorFromPoint(point, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO info = {};
+    info.cbSize = sizeof(info);
+    GetMonitorInfo(monitor, &info);
+    const UINT dpi = FlutterDesktopGetDpiForMonitor(monitor);
+    const double scale = (dpi == 0 ? 96 : dpi) / 96.0;
+    if (front_hint_font_ == nullptr || front_hint_scale_ != scale) {
+      if (front_hint_font_ != nullptr) DeleteObject(front_hint_font_);
+      front_hint_scale_ = scale;
+      front_hint_font_ = CreateFontW(
+          -static_cast<int>(std::lround(13 * scale)), 0, 0, 0, FW_MEDIUM,
+          FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
+          CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH,
+          L"Segoe UI");
+    }
+    HDC dc = GetDC(front_hint_);
+    HGDIOBJ old = SelectObject(dc, front_hint_font_);
+    RECT text = {0, 0, 0, 0};
+    DrawTextW(dc, front_hint_text_.c_str(), -1, &text,
+              DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX);
+    SelectObject(dc, old);
+    ReleaseDC(front_hint_, dc);
+    const int height = static_cast<int>(std::lround(34 * scale));
+    const int width =
+        text.right + static_cast<int>(std::lround(2 * 14 * scale));
+    const int gap = static_cast<int>(std::lround(12 * scale));
+    int x = point.x + gap;
+    int y = point.y - height / 2;
+    const RECT work = info.rcWork;
+    if (x + width > work.right) x = point.x - gap - width;
+    if (point.y - work.top < gap * 2) y = point.y + gap;
+    if (work.bottom - point.y < gap * 2) y = point.y - gap - height;
+    x = std::clamp<int>(x, work.left, std::max<int>(work.left, work.right - width));
+    y = std::clamp<int>(y, work.top, std::max<int>(work.top, work.bottom - height));
+    SetWindowRgn(front_hint_,
+                 CreateRoundRectRgn(0, 0, width + 1, height + 1, height, height),
+                 TRUE);
+    SetWindowPos(front_hint_, HWND_TOPMOST, x, y, width, height,
+                 SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    InvalidateRect(front_hint_, nullptr, TRUE);
+    front_hint_until_ = GetTickCount64() + 3000;
+  }
+
+  void HideFrontHint() {
+    if (front_hint_ != nullptr && IsWindowVisible(front_hint_)) {
+      ShowWindow(front_hint_, SW_HIDE);
+    }
+  }
+
+  static LRESULT CALLBACK FrontHintProc(HWND window, UINT message,
+                                        WPARAM wparam, LPARAM lparam) {
+    if (message == WM_NCHITTEST) return HTTRANSPARENT;
+    if (message == WM_ERASEBKGND) return 1;
+    if (message == WM_PAINT && g_plugin != nullptr) {
+      PAINTSTRUCT paint;
+      HDC dc = BeginPaint(window, &paint);
+      RECT rect;
+      GetClientRect(window, &rect);
+      FillRect(dc, &rect, static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH)));
+      SetBkMode(dc, TRANSPARENT);
+      SetTextColor(dc, RGB(255, 255, 255));
+      HGDIOBJ old = SelectObject(dc, g_plugin->front_hint_font_);
+      DrawTextW(dc, g_plugin->front_hint_text_.c_str(), -1, &rect,
+                DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+      SelectObject(dc, old);
+      EndPaint(window, &paint);
+      return 0;
+    }
+    return DefWindowProcW(window, message, wparam, lparam);
+  }
+
+  void GiveFrontBack() {
+    HWND previous = front_taken_from_;
+    front_taken_from_ = nullptr;
+    if (previous != nullptr && IsWindow(previous) &&
+        GetForegroundWindow() == front_sink_) {
+      SetForegroundWindow(previous);
+    }
+    if (front_sink_ != nullptr) {
+      ShowWindow(front_sink_, SW_HIDE);
+    }
+  }
+
+  // While the pointer is over there, the window holding the front lies over
+  // this screen too: a click that slips through lands on it, not on the
+  // administrator's window under the pointer, which would take the front
+  // back. Nearly transparent, which still takes clicks.
+  void CoverWithFrontSink() {
+    if (front_sink_ == nullptr) return;
+    POINT point = {};
+    GetCursorPos(&point);
+    MONITORINFO info = {};
+    info.cbSize = sizeof(info);
+    GetMonitorInfo(MonitorFromPoint(point, MONITOR_DEFAULTTONEAREST), &info);
+    SetWindowLongPtr(front_sink_, GWL_EXSTYLE,
+                     GetWindowLongPtr(front_sink_, GWL_EXSTYLE) &
+                         ~static_cast<LONG_PTR>(WS_EX_TRANSPARENT));
+    SetLayeredWindowAttributes(front_sink_, 0, 1, LWA_ALPHA);
+    const RECT& r = info.rcMonitor;
+    SetWindowPos(front_sink_, HWND_TOPMOST, r.left, r.top, r.right - r.left,
+                 r.bottom - r.top, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+  }
+
+  // An invisible window of this process to hold the front: one pixel, fully
+  // transparent, so it neither shows nor takes a click.
+  bool EnsureFrontSink(POINT point) {
+    if (front_sink_ != nullptr) {
+      // Back to one invisible pixel that takes no click.
+      SetWindowLongPtr(front_sink_, GWL_EXSTYLE,
+                       GetWindowLongPtr(front_sink_, GWL_EXSTYLE) |
+                           WS_EX_TRANSPARENT);
+      SetLayeredWindowAttributes(front_sink_, 0, 0, LWA_ALPHA);
+    }
+    if (front_sink_ == nullptr) {
+      static const wchar_t kClass[] = L"WhisperRemoteInputFront";
+      WNDCLASSW window_class = {};
+      window_class.lpfnWndProc = DefWindowProcW;
+      window_class.hInstance = GetModuleHandle(nullptr);
+      window_class.hCursor = LoadCursor(nullptr, IDC_ARROW);
+      window_class.lpszClassName = kClass;
+      RegisterClassW(&window_class);
+      front_sink_ = CreateWindowExW(
+          WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_TRANSPARENT,
+          kClass, L"", WS_POPUP, point.x, point.y, 1, 1, nullptr, nullptr,
+          GetModuleHandle(nullptr), nullptr);
+      if (front_sink_ == nullptr) {
+        return false;
+      }
+      SetLayeredWindowAttributes(front_sink_, 0, 0, LWA_ALPHA);
+    }
+    SetWindowPos(front_sink_, HWND_TOPMOST, point.x, point.y, 1, 1,
+                 SWP_NOACTIVATE);
+    return true;
+  }
+
   bool IsCursorAtCaptureEdge(POINT point) {
     const auto route = ResolveCaptureCursorRoute(point);
     if (!route.has_value()) {
@@ -2189,6 +2645,7 @@ class RemoteInputPlugin : public flutter::Plugin {
       return;
     }
     capture_active_ = true;
+    if (front_taken_from_ != nullptr) CoverWithFrontSink();
     hook_suppress_keyboard_.store(true);
     pending_active_start_ = true;
     capture_activation_sequence_ = sequence_ + 1;
@@ -2484,15 +2941,8 @@ class RemoteInputPlugin : public flutter::Plugin {
     return point;
   }
 
-  // The lock screen's desktop rejects this process, so the optional input
-  // service delivers there instead. Anywhere else it refuses, and the caller
-  // falls back to handing the pointer back.
   UINT InjectInput(UINT count, INPUT* inputs) {
-    const UINT sent = SendInput(count, inputs, sizeof(INPUT));
-    if (sent != 0) {
-      return sent;
-    }
-    return input_service_.SendInput(inputs, count) ? count : 0;
+    return SendInputAnywhere(count, inputs);
   }
 
   bool InjectionCursorPos(POINT* point) const {
@@ -3285,6 +3735,19 @@ class RemoteInputPlugin : public flutter::Plugin {
   HWND held_caption_window_ = nullptr;
   bool injected_cursor_entered_interior_ = false;
   bool injection_blocked_ = false;
+  // Taking the front from an administrator's window (WatchElevatedFront).
+  UINT_PTR front_watch_ = 0;
+  HWND front_sink_ = nullptr;
+  HWND front_taken_from_ = nullptr;
+  ULONGLONG front_kept_until_ = 0;
+  ULONGLONG next_front_claim_ = 0;
+  bool edge_strips_shown_ = false;
+  std::wstring front_hint_text_;
+  HWND front_hint_ = nullptr;
+  HFONT front_hint_font_ = nullptr;
+  double front_hint_scale_ = 0;
+  ULONGLONG front_hint_until_ = 0;
+  std::vector<HWND> edge_strips_;
   bool session_notifications_registered_ = false;
   std::optional<POINT> last_injected_point_;
   double injected_scroll_remainder_x_ = 0;
@@ -3295,7 +3758,7 @@ class RemoteInputPlugin : public flutter::Plugin {
   uint64_t sequence_ = 0;
   uint64_t capture_activation_sequence_ = 0;
   RemoteInputCursor remote_cursor_;
-  mutable RemoteInputServiceClient input_service_;
+  RemoteInputServiceClient& input_service_ = SharedRemoteInputService();
   HHOOK mouse_hook_ = nullptr;
   HHOOK keyboard_hook_ = nullptr;
   std::thread hook_thread_;
@@ -3331,4 +3794,39 @@ bool RemoteInputPluginHandleWindowMessage(HWND window,
     return false;
   }
   return g_plugin->HandleWindowMessage(window, message, wparam, lparam);
+}
+
+// For the window flow library in this process (window_stream_native), which
+// cannot reach the input service itself: the service takes one client.
+extern "C" __declspec(dllexport) UINT WhisperSendInputAnywhere(UINT count,
+                                                              INPUT* inputs) {
+  return SendInputAnywhere(count, inputs);
+}
+
+extern "C" __declspec(dllexport) BOOL WhisperWindowIsAbove(HWND window) {
+  return WindowIsAbove(window) ? TRUE : FALSE;
+}
+
+// Whether input can reach administrator windows at all: the user allowed
+// them and the service runs. Read at most every two seconds.
+extern "C" __declspec(dllexport) BOOL WhisperElevatedReachable() {
+  static std::mutex mutex;
+  static ULONGLONG checked = 0;
+  static bool reachable = false;
+  std::lock_guard<std::mutex> lock(mutex);
+  const ULONGLONG now = GetTickCount64();
+  if (checked == 0 || now - checked > 2000) {
+    checked = now;
+    const auto state = SharedRemoteInputService().QueryState();
+    reachable = whisper_input_service::ElevatedInputAllowed() &&
+                (state == RemoteInputServiceClient::State::kRunning ||
+                 state == RemoteInputServiceClient::State::kOutdated);
+  }
+  return reachable ? TRUE : FALSE;
+}
+
+// Lets this process take the front from an administrator's window (by the
+// service, version 3, when allowed).
+extern "C" __declspec(dllexport) BOOL WhisperAllowForeground() {
+  return SharedRemoteInputService().AllowForeground(nullptr) ? TRUE : FALSE;
 }

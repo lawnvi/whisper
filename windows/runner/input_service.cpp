@@ -135,7 +135,8 @@ class Agent {
   void Serve(HANDLE pipe) {
     ULONG client_session = 0;
     if (!GetNamedPipeClientSessionId(pipe, &client_session) ||
-        client_session != session_id_) {
+        client_session != session_id_ ||
+        !GetNamedPipeClientProcessId(pipe, &client_process_)) {
       return;
     }
     for (;;) {
@@ -160,7 +161,8 @@ class Agent {
     if (request.command == whisper_input_service::kCommandHello) {
       return whisper_input_service::kStatusOk;
     }
-    if (request.version != whisper_input_service::kVersion) {
+    if (request.version < whisper_input_service::kOldestClientVersion ||
+        request.version > whisper_input_service::kVersion) {
       return whisper_input_service::kStatusBadRequest;
     }
     std::wstring desktop;
@@ -169,6 +171,9 @@ class Agent {
     }
     if (!MayInject(desktop)) {
       return whisper_input_service::kStatusRefused;
+    }
+    if (request.command == whisper_input_service::kCommandAllowForeground) {
+      return AllowForeground(request.count);
     }
     if (request.command == whisper_input_service::kCommandCursorPos) {
       return GetCursorPos(&response->cursor)
@@ -222,6 +227,33 @@ class Agent {
     return locked;
   }
 
+  // Windows lets the process that sent the last input set the foreground
+  // and let another do it. An administrator's window in front drops what the
+  // app sends, so the app may not; this agent's input goes through. A key of
+  // no meaning (vk 0xFF, nothing maps to it) makes the agent that process;
+  // then the client may take the front, and its own [window] is put there.
+  DWORD AllowForeground(DWORD window_handle) {
+    INPUT nothing[2] = {};
+    nothing[0].type = nothing[1].type = INPUT_KEYBOARD;
+    nothing[0].ki.wVk = nothing[1].ki.wVk = 0xFF;
+    nothing[1].ki.dwFlags = KEYEVENTF_KEYUP;
+    SendInput(2, nothing, sizeof(INPUT));
+    const bool allowed = AllowSetForegroundWindow(client_process_) != FALSE;
+    HWND window =
+        reinterpret_cast<HWND>(static_cast<ULONG_PTR>(window_handle));
+    DWORD owner = 0;
+    if (window != nullptr && IsWindow(window) &&
+        GetWindowThreadProcessId(window, &owner) != 0 &&
+        owner == client_process_) {
+      SetForegroundWindow(window);
+      if (GetForegroundWindow() == window) {
+        return whisper_input_service::kStatusOk;
+      }
+    }
+    return allowed ? whisper_input_service::kStatusOk
+                   : whisper_input_service::kStatusFailed;
+  }
+
   // Only plain keyboard and mouse events are forwarded, without the caller's
   // timestamps or extra info.
   static bool CopyInput(const INPUT& source, INPUT* target) {
@@ -243,6 +275,7 @@ class Agent {
   }
 
   DWORD session_id_;
+  ULONG client_process_ = 0;
   InputDesktop desktop_;
   ULONGLONG last_refusal_tick_ = 0;
 };

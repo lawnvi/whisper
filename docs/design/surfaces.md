@@ -339,6 +339,7 @@
 - **但未互信或对方不能被控制时，`startControllerWorkspace` 和 `updateControllerWorkspaceRoutes` 整体失败**。所以开启前先用 `RemoteInputWorkspaceTargetRequest` 的 `isMutuallyTrusted`、`remoteCanInject` 过滤，把这些设备标成「没有连上」，其他的照常开始。重试就是带上它再调一次 `updateControllerWorkspaceRoutes`。
 - 指针在别的设备上时，这台的界面点不到，所以**没有「回到这台」按钮**，只有快捷键和推回来。
 - 退出快捷键 `Ctrl+Alt+Esc`（macOS `Control+Option+Esc`），对方断开时指针自动回来。
+- **Windows 上的管理员窗口**（任务管理器等提权程序）：Windows 不让普通程序给它送键鼠，也不让普通程序听见它在前台时的鼠标。装了键鼠服务并打开「锁屏与 UAC 时接收键鼠」里允许 UAC 的开关时，两个方向都照常：被控时由服务送键鼠；当控制端时，推到共享的那条边，服务放行，Whisper 拿到前台再过去，过去期间盖一层几乎透明的窗口防止点击漏到管理员窗口上，回来时把前台还给它。服务是旧版（需更新）时，推到边上旁边出一个黑色胶囊「前面是管理员窗口：单击一下，再移过去」（`inputElevatedHint`），单击一下就能过。开关关着时被控端把指针交还，不会卡住。窗口流转操作管理员窗口时把它提到前台，用真实的键鼠。
 - 手机不能当被控端。
 
 **页面**（电脑），侧栏顶部进入，像系统设置的显示器排列。工具栏右边是总开关。内边距 0 / 20 / 14，分块间距 14。

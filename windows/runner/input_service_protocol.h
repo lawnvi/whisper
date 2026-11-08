@@ -11,8 +11,10 @@
 namespace whisper_input_service {
 
 // Bump whenever the service's behaviour changes; the app reports any other
-// installed version as outdated.
-constexpr DWORD kVersion = 2;
+// installed version as outdated. The agent still serves apps as old as
+// kOldestClientVersion: what they ask for has not changed.
+constexpr DWORD kVersion = 3;
+constexpr DWORD kOldestClientVersion = 2;
 constexpr wchar_t kServiceName[] = L"WhisperInputService";
 // What the copy under Program Files is called, so that it can be told apart
 // from the app in a process list.
@@ -42,6 +44,10 @@ enum Command : DWORD {
   kCommandHello = 1,
   kCommandSendInput = 2,
   kCommandCursorPos = 3,
+  // Version 3. Lets the client take the front from an administrator's
+  // window, which it may not on its own; `count` carries one of the
+  // client's own windows to bring there (window handles fit in 32 bits).
+  kCommandAllowForeground = 4,
 };
 
 enum Status : DWORD {

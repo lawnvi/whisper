@@ -88,6 +88,11 @@ class RemoteInputPlatform {
 
   static const String channelName = 'com.vireen.whisper/remote_input';
 
+  /// Windows: what the screen says beside the pointer at a shared edge when
+  /// an administrator's window keeps it from going across, in the app's
+  /// language. Set by the window, which knows it.
+  static String elevatedHint = '';
+
   final MethodChannel _channel;
   final RemoteInputTextShortcutHandler _textShortcutHandler;
   RemoteInputLocalPasteHandler? _localPasteHandler;
@@ -123,6 +128,7 @@ class RemoteInputPlatform {
       'sessionId': sessionId,
       'edge': edge.name,
       'releaseHotkey': releaseHotkey,
+      if (elevatedHint.isNotEmpty) 'elevatedHint': elevatedHint,
       if (displayId.isNotEmpty) 'displayId': displayId,
       'segmentStart': segmentStart,
       'segmentEnd': segmentEnd,

@@ -2795,5 +2795,9 @@
         "type": "int"
       }
     }
+  },
+  "inputElevatedHint": "前面是管理员窗口：单击一下，再移过去",
+  "@inputElevatedHint": {
+    "description": "Windows, sharing keyboard and mouse from this computer: shown beside the pointer at the edge leading to another device when an administrator's window (Task Manager, say) is in front and the pointer cannot go across by moving alone. A click there lets it."
   }
 }

@@ -3542,4 +3542,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String shellDropSendItems(int count) {
     return '$count 项';
   }
+
+  @override
+  String get inputElevatedHint => '前面是管理员窗口：单击一下，再移过去';
 }

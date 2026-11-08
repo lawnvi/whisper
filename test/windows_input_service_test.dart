@@ -201,15 +201,27 @@ void main() {
       expect(client, isNot(contains('HKEY_LOCAL_MACHINE')));
     });
 
-    test('the plugin falls back to the service only when SendInput fails', () {
-      final injectInput = RegExp(
-        r'UINT InjectInput\(UINT count, INPUT\* inputs\)[\s\S]*?\n  }',
+    test('the plugin uses the service only where SendInput cannot reach', () {
+      final anywhere = RegExp(
+        r'UINT SendInputAnywhere\(UINT count, INPUT\* inputs\)[\s\S]*?\n}',
       ).firstMatch(plugin)!.group(0)!;
+      // An administrator's window in front, where Windows drops SendInput
+      // without a word: the service, which refuses unless allowed.
+      final above = anywhere.indexOf('if (ForegroundIsAbove()) {');
+      final send = anywhere.indexOf('SendInput(count, inputs, sizeof(INPUT))');
+      expect(above, isNonNegative);
+      expect(above, lessThan(send));
+      expect(plugin, contains('return ProcessIntegrity(process_id) > own;'));
+      // Anywhere else only when SendInput itself fails.
+      expect(send, lessThan(anywhere.lastIndexOf('ServiceSendInput(')));
+      expect(anywhere, contains('if (sent != 0) {'));
       expect(
-        injectInput.indexOf('SendInput(count, inputs, sizeof(INPUT))'),
-        lessThan(injectInput.indexOf('input_service_.SendInput(')),
+        plugin,
+        contains(
+          'UINT InjectInput(UINT count, INPUT* inputs) {\n'
+          '    return SendInputAnywhere(count, inputs);',
+        ),
       );
-      expect(injectInput, contains('if (sent != 0) {'));
       // Every other injection goes through InjectInput.
       expect(RegExp(r'(?<![.\w])SendInput\(').allMatches(plugin), hasLength(1));
       expect(

@@ -3749,4 +3749,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String shellDropSendItems(int count) {
     return '$count items';
   }
+
+  @override
+  String get inputElevatedHint =>
+      'An administrator window is in front: click, then move across';
 }

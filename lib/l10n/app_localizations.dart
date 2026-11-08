@@ -6278,6 +6278,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'{count} 项'**
   String shellDropSendItems(int count);
+
+  /// Windows, sharing keyboard and mouse from this computer: shown beside the pointer at the edge leading to another device when an administrator's window (Task Manager, say) is in front and the pointer cannot go across by moving alone. A click there lets it.
+  ///
+  /// In zh, this message translates to:
+  /// **'前面是管理员窗口：单击一下，再移过去'**
+  String get inputElevatedHint;
 }
 
 class _AppLocalizationsDelegate

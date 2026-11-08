@@ -77,6 +77,7 @@ import 'package:whisper/model/file_transfer.dart';
 import 'package:whisper/remote_input/remote_clipboard_transfer.dart';
 import 'package:whisper/remote_input/remote_input_coordinator.dart';
 import 'package:whisper/remote_input/remote_input_peer_activity.dart';
+import 'package:whisper/remote_input/remote_input_platform.dart';
 import 'package:whisper/remote_input/remote_input_workspace_coordinator.dart';
 import 'package:whisper/state/app_health.dart';
 import 'package:whisper/new_ui/shell/shell_diagnostics.dart';
@@ -625,9 +626,8 @@ class _DeviceListScreen extends State<DeviceListScreen>
       _pasteIsland ??= PasteIslandHost(
         watch: socketManager.remoteClipboardPasteWatch,
         deviceName: _deviceName,
-        locale: () => mounted
-            ? Localizations.localeOf(context).languageCode
-            : 'zh',
+        locale: () =>
+            mounted ? Localizations.localeOf(context).languageCode : 'zh',
       );
     }
     if (trayPanelSupported) {
@@ -1858,6 +1858,10 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
   @override
   Widget build(BuildContext context) {
+    // The hint the Windows runner shows by itself, in the app's language.
+    RemoteInputPlatform.elevatedHint = AppLocalizations.of(
+      context,
+    )!.inputElevatedHint;
     return ListenableBuilder(
       listenable: _shellInputs,
       builder: (context, _) {
