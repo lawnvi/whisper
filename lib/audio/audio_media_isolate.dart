@@ -14,6 +14,7 @@ import 'package:whisper/audio/audio_capture_source.dart';
 import 'package:whisper/audio/audio_codec.dart';
 import 'package:whisper/audio/audio_failure_reason.dart';
 import 'package:whisper/audio/audio_fanout_transport.dart';
+import 'package:whisper/audio/audio_group_lane.dart';
 import 'package:whisper/audio/audio_group_media.dart';
 import 'package:whisper/audio/audio_group_playback_scheduler.dart';
 import 'package:whisper/audio/audio_platform.dart';
@@ -23,10 +24,13 @@ import 'package:whisper/audio/audio_share_manager.dart';
 import 'package:whisper/helper/privacy_log.dart';
 import 'package:whisper/socket/aead_engine.dart';
 import 'package:whisper/socket/bounded_binary_websocket_session.dart';
+import 'package:whisper/socket/datagram_endpoint.dart';
 import 'package:whisper/socket/media_upgrade_proof.dart';
 import 'package:whisper/socket/no_delay_socket.dart';
 import 'package:whisper/socket/packet_byte_transport.dart';
 import 'package:whisper/socket/session_upgrade_token_registry.dart';
+
+part 'audio_media_isolate_messages.dart';
 
 /// The sound's data on its own isolate, so it keeps going while the main
 /// thread is stopped (on macOS, for half a second whenever a window is
@@ -554,238 +558,6 @@ extension on _PendingClaim {
 
 // ---- Messages ----
 
-class _IsolateStart {
-  const _IsolateStart(this.main, this.entry);
-
-  final SendPort main;
-  final AudioNativeEntryPoints entry;
-}
-
-class _ConnectSink {
-  const _ConnectSink(
-    this.id, {
-    required this.sourcePeerId,
-    required this.sessionId,
-    required this.uri,
-    required this.mediaUri,
-    required this.transportToken,
-    required this.mediaSendKey,
-  });
-
-  final int id;
-  final String sourcePeerId;
-  final String sessionId;
-  final Uri uri;
-  final Uri? mediaUri;
-  final String transportToken;
-  final Uint8List? mediaSendKey;
-}
-
-class _AttachSink {
-  const _AttachSink(this.sinkPeerId, this.linkId);
-
-  final String sinkPeerId;
-  final int linkId;
-}
-
-class _CloseLink {
-  const _CloseLink(this.id, this.linkId);
-
-  final int id;
-  final int linkId;
-}
-
-class _DisconnectSink {
-  const _DisconnectSink(this.id, this.sinkPeerId);
-
-  final int id;
-  final String sinkPeerId;
-}
-
-class _DisconnectAll {
-  const _DisconnectAll(this.id);
-
-  final int id;
-}
-
-class _PrepareCapture {
-  const _PrepareCapture(this.id, this.captureId, this.spec);
-
-  final int id;
-  final int captureId;
-  final AudioGroupCaptureSpec spec;
-}
-
-class _StopCapture {
-  const _StopCapture(this.id, this.captureId);
-
-  final int id;
-  final int captureId;
-}
-
-class _StartPlayback {
-  const _StartPlayback(this.id, this.playbackId, this.spec, this.handle);
-
-  final int id;
-  final int playbackId;
-  final AudioGroupPlaybackSpec spec;
-  final int handle;
-}
-
-class _DeliverPacket {
-  const _DeliverPacket(this.playbackId, this.bytes);
-
-  final int playbackId;
-  final Uint8List bytes;
-}
-
-class _PlaybackClock {
-  const _PlaybackClock(this.playbackId, this.clockOffsetMicros);
-
-  final int playbackId;
-  final int clockOffsetMicros;
-}
-
-class _PlaybackRole {
-  const _PlaybackRole(this.playbackId, this.channelRole);
-
-  final int playbackId;
-  final AudioChannelRole channelRole;
-}
-
-class _PlaybackGain {
-  const _PlaybackGain(this.playbackId, this.gain);
-
-  final int playbackId;
-  final double gain;
-}
-
-class _StopPlayback {
-  const _StopPlayback(this.id, this.playbackId);
-
-  final int id;
-  final int playbackId;
-}
-
-class _CloseChannels {
-  const _CloseChannels(
-    this.id, {
-    this.sessionId,
-    this.peerId,
-    this.namespace,
-    this.keepMediaMacKey,
-    required this.expected,
-  });
-
-  final int id;
-  final String? sessionId;
-  final String? peerId;
-  final String? namespace;
-  final Uint8List? keepMediaMacKey;
-  final bool expected;
-}
-
-class _ClaimData {
-  const _ClaimData({
-    required this.namespace,
-    required this.sessionId,
-    required this.peerId,
-    required this.connectionGeneration,
-    required this.mediaMacKey,
-    required this.channelBinding,
-  });
-
-  final String namespace;
-  final String sessionId;
-  final String peerId;
-  final int connectionGeneration;
-  final Uint8List mediaMacKey;
-  final Uint8List channelBinding;
-}
-
-class _ClaimAnswer {
-  const _ClaimAnswer(this.requestId, this.claim);
-
-  final int requestId;
-  final _ClaimData? claim;
-}
-
-class _ConsumeAnswer {
-  const _ConsumeAnswer(this.requestId, this.consumed);
-
-  final int requestId;
-  final bool consumed;
-}
-
-class _Reply {
-  const _Reply(this.id, {this.value, this.failure});
-
-  final int id;
-  final Object? value;
-  final AudioFailureReason? failure;
-}
-
-class _SinkFailed {
-  const _SinkFailed(this.sinkPeerId, this.reason);
-
-  final String sinkPeerId;
-  final AudioFailureReason reason;
-}
-
-/// A capture is sending: at most every [_IsolateCapture.sentReportMicros].
-class _CaptureSent {
-  const _CaptureSent(this.captureId, this.sentAtMicros);
-
-  final int captureId;
-  final int sentAtMicros;
-}
-
-class _PlaybackReported {
-  const _PlaybackReported(this.playbackId, this.report);
-
-  final int playbackId;
-  final AudioGroupPlaybackReport report;
-}
-
-class _PlaybackFailed {
-  const _PlaybackFailed(this.playbackId, this.reason);
-
-  final int playbackId;
-  final AudioFailureReason reason;
-}
-
-class _ClaimLookup {
-  const _ClaimLookup(
-    this.requestId,
-    this.sessionId,
-    this.token,
-    this.remoteAddress,
-  );
-
-  final int requestId;
-  final String sessionId;
-  final String token;
-  final String remoteAddress;
-}
-
-class _ClaimConsume {
-  const _ClaimConsume(this.requestId);
-
-  final int requestId;
-}
-
-class _ClaimRelease {
-  const _ClaimRelease(this.requestId);
-
-  final int requestId;
-}
-
-class _Log {
-  const _Log(this.line);
-
-  final String line;
-}
-
 // ---- The audio isolate ----
 
 Future<void> _audioIsolateMain(_IsolateStart start) async {
@@ -1005,11 +777,12 @@ class _AudioRuntime {
         if (command.transportToken.isEmpty || mediaSendKey == null) {
           throw StateError('authenticated audio group context missing');
         }
-        return AudioGroupWebSocketPacketTransport.connect(
+        return AudioGroupDatagrams.connect(
           uri,
           mediaMacKey: mediaSendKey,
           sessionId: command.sessionId,
           peerId: command.sourcePeerId,
+          mediaPort: identical(uri, command.mediaUri),
         );
       },
     );
@@ -1066,6 +839,7 @@ class _AudioRuntime {
         _native.write(command.handle, pcm);
       },
       onReport: (report) => _main.send(_PlaybackReported(playbackId, report)),
+      onClosed: _diagnostics.playbackClosed,
       onFailure: (error) => playback.fail(
         audioFailureReasonFor(error, context: AudioFailureContext.playback),
       ),
@@ -1380,6 +1154,7 @@ class _MediaChannel {
   final _IsolatePlayback playback;
   BoundedBinaryWebSocketSession? session;
   AuthenticatedMediaPacketDecoder? decoder;
+  DatagramLane? lane;
   bool active = false;
   bool _expectedClose = false;
 
@@ -1388,8 +1163,16 @@ class _MediaChannel {
     await session?.close();
   }
 
-  void handleBytes(Uint8List bytes, AudioShareDiagnostics diagnostics) {
-    final packet = AudioGroupPacketFrame.decode(decoder!.decode(bytes));
+  void handleBytes(Uint8List bytes, AudioShareDiagnostics diagnostics) =>
+      handlePacket(
+        AudioGroupPacketFrame.decode(decoder!.decode(bytes)),
+        diagnostics,
+      );
+
+  void handlePacket(
+    AudioGroupPacketFrame packet,
+    AudioShareDiagnostics diagnostics,
+  ) {
     final spec = playback.pipeline.spec;
     // Fanned out as is to every sink: sessionId is the shared streamId.
     if (packet.sourcePeerId != claim.peerId ||
@@ -1411,6 +1194,8 @@ class _MediaChannel {
   }
 
   void closed() {
+    lane?.close();
+    lane = null;
     decoder?.destroy();
     decoder = null;
     playback.channels.remove(this);
@@ -1433,6 +1218,8 @@ class _MediaServer {
 
   static Future<_MediaServer> bind(_AudioRuntime runtime) async {
     final listening = await ServerSocket.bind('0.0.0.0', 0);
+    // Sound by UDP comes to the same port number (`audio_group_lane.dart`).
+    await AudioGroupDatagrams.listenAt(listening.port);
     final server = HttpServer.listenOn(NoDelayServerSocket(listening));
     server.idleTimeout = const Duration(seconds: 10);
     final media = _MediaServer._(runtime, listening, server);
@@ -1561,6 +1348,18 @@ class _MediaServer {
     );
     media.playback.channels.add(media);
     final diagnostics = _runtime.diagnostics..audioChannelAttached();
+    media.lane = AudioGroupDatagrams.answer(
+      mediaKey: media.claim.mediaMacKey,
+      channelBinding: media.claim.channelBinding,
+      sessionId: media.claim.sessionId,
+      onPacket: (packet) {
+        try {
+          media.handlePacket(packet, diagnostics);
+        } on FormatException {
+          // Not this session's: the WebSocket would close; UDP just drops.
+        }
+      },
+    );
     media.session = BoundedBinaryWebSocketSession(
       channel: authenticated,
       maxMessageBytes: AudioShareManager.maxChannelMessageBytes,

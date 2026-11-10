@@ -280,7 +280,11 @@ class AudioGroupPlaybackScheduler {
     });
   }
 
+  /// Every packet that came too late to play, since the start.
+  int lateTotal = 0;
+
   void _recordLatePacket(int now) {
+    lateTotal += 1;
     _latePacketTimestamps.add(now);
     _pruneLatePacketTimestamps(now);
   }

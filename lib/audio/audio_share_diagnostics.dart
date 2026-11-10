@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:whisper/audio/audio_failure_reason.dart';
+import 'package:whisper/audio/audio_packet_gaps.dart';
 import 'package:whisper/helper/privacy_log.dart';
 
 typedef AudioShareDiagnosticsSink = PrivacyLogSink;
@@ -21,6 +22,7 @@ enum AudioDiagnosticKind {
   packetDropped,
   groupPacketDelivered,
   decodeFailed,
+  playbackClosed,
 }
 
 enum AudioDiagnosticState {
@@ -287,6 +289,18 @@ class AudioShareDiagnostics {
 
   bool _shouldEmitSample(int count) =>
       _enabled && (count <= 3 || count % 100 == 0);
+
+  /// Once per playback, whatever the build: how the packets came.
+  void playbackClosed(AudioPacketGaps gaps, int late) {
+    _log.event(PrivacyEvent.audioDiagnostic, {
+      PrivacyField.kind: AudioDiagnosticKind.playbackClosed,
+      PrivacyField.count: gaps.played,
+      PrivacyField.filled: gaps.filled,
+      PrivacyField.repeats: gaps.repeats,
+      PrivacyField.silent: gaps.silent,
+      PrivacyField.late: late,
+    });
+  }
 
   void _emit(Map<PrivacyField, Object> fields) {
     if (!_enabled) {

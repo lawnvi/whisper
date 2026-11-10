@@ -272,5 +272,8 @@ class _RecordingAudioCodec implements AudioCodec {
   }
 
   @override
+  Int16List conceal() => throw UnimplementedError();
+
+  @override
   void dispose() {}
 }

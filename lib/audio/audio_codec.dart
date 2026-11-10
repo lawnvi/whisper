@@ -49,6 +49,9 @@ abstract class AudioCodec {
 
   Int16List decode(Uint8List packet);
 
+  /// One frame's worth for a packet that never came, in its place.
+  Int16List conceal();
+
   void dispose();
 }
 
@@ -67,6 +70,9 @@ class PcmPassthroughAudioCodec implements AudioCodec {
     }
     return bytes;
   }
+
+  @override
+  Int16List conceal() => Int16List(config.frameSize * config.channels);
 
   @override
   Int16List decode(Uint8List packet) {
@@ -162,6 +168,11 @@ class OpusAudioCodec implements AudioCodec {
   Int16List decode(Uint8List packet) {
     return _decoder.decode(input: packet);
   }
+
+  /// libopus guesses the missing frame from the ones before it, which is
+  /// far less noticeable than silence.
+  @override
+  Int16List conceal() => _decoder.decode();
 
   @override
   void dispose() {

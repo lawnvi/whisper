@@ -5,6 +5,7 @@ import 'package:whisper/audio/audio_capture_source.dart';
 import 'package:whisper/audio/audio_codec.dart';
 import 'package:whisper/audio/audio_fanout_transport.dart';
 import 'package:whisper/audio/audio_group_playback_scheduler.dart';
+import 'package:whisper/audio/audio_packet_gaps.dart';
 import 'package:whisper/audio/audio_platform.dart';
 import 'package:whisper/audio/audio_protocol.dart';
 
@@ -236,7 +237,9 @@ class AudioGroupPlaybackPipeline {
     required AudioGroupPcmWriter writePcm,
     required AudioGroupPlaybackReportSink onReport,
     required void Function(Object error) onFailure,
+    void Function(AudioPacketGaps gaps, int late)? onClosed,
   }) : _spec = spec,
+       _onClosed = onClosed,
        _codec = codec,
        _clockMicros = clockMicros,
        _onReport = onReport,
@@ -277,11 +280,39 @@ class AudioGroupPlaybackPipeline {
 
   bool get isClosed => _closed;
 
+  final AudioPacketGaps _gaps = AudioPacketGaps();
+  final void Function(AudioPacketGaps gaps, int late)? _onClosed;
+
+  /// Where [missing] would have played, taking [after]'s place in time.
+  static AudioGroupPacketFrame _filling(
+    AudioGroupPacketFrame after,
+    int missing,
+  ) {
+    final earlier = (after.sequence - missing) * after.durationMicros;
+    return AudioGroupPacketFrame(
+      groupId: after.groupId,
+      streamId: after.streamId,
+      sessionId: after.sessionId,
+      sourcePeerId: after.sourcePeerId,
+      sequence: missing,
+      captureTimeMicros: after.captureTimeMicros - earlier,
+      targetPlaybackTimeMicros: after.targetPlaybackTimeMicros - earlier,
+      durationMicros: after.durationMicros,
+      channelMask: after.channelMask,
+      payload: Uint8List(0),
+    );
+  }
+
   void deliver(AudioGroupPacketFrame packet) {
     if (_closed ||
         packet.groupId != _spec.groupId ||
         packet.streamId != _spec.streamId) {
       return;
+    }
+    final (:play, :fill) = _gaps.take(packet.sequence);
+    if (!play) return;
+    for (final missing in fill) {
+      _scheduler.enqueue(_filling(packet, missing), _codec.conceal());
     }
     _scheduler.enqueue(packet, _codec.decode(packet.payload));
     _requestPump();
@@ -306,6 +337,7 @@ class AudioGroupPlaybackPipeline {
       return;
     }
     _closed = true;
+    _onClosed?.call(_gaps, _scheduler.lateTotal);
     _pumpTimer?.cancel();
     _pumpTimer = null;
     _pumpRequested = false;

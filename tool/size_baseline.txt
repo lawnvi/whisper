@@ -1,7 +1,7 @@
 # Files already over the size limit (Dart 1000, native 1500 lines).
 # They may only shrink: run `dart run tool/check_sizes.dart --update` after a split.
 1849 lib/audio/audio_group_coordinator.dart
-1597 lib/audio/audio_media_isolate.dart
+1396 lib/audio/audio_media_isolate.dart
 1527 lib/debug/automation_hooks.dart
 2266 lib/model/LocalDatabase.dart
 1769 lib/new_ui/files/phone_files.dart
