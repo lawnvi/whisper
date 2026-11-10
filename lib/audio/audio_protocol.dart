@@ -44,7 +44,16 @@ enum AudioGroupControlAction {
   clockReport,
   latencyReport,
   sinkJoinRequest,
-  error,
+  error;
+
+  /// Whether this can come after its session ended here: a stop, refusal or
+  /// error, or a clock or latency report that crossed the stop on the way.
+  /// Taking one for a session this device no longer knows changes nothing.
+  bool get mayOutliveSession => switch (this) {
+    groupReject || groupStop || error => true,
+    clockProbe || clockReport || latencyReport => true,
+    groupOffer || groupAccept || groupUpdate || sinkJoinRequest => false,
+  };
 }
 
 class AudioStreamFormat {
