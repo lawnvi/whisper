@@ -781,8 +781,7 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
         transport = await RemoteInputWebSocketPacketTransport.connect(
           uri,
           mediaMacKey: mediaSendKey,
-          sessionId: accept.sessionId,
-          peerId: accept.sourcePeerId,
+          accept: accept,
         );
       }
     } catch (error) {

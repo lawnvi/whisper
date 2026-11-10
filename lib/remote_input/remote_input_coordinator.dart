@@ -1713,8 +1713,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
       transport = await RemoteInputWebSocketPacketTransport.connect(
         uri,
         mediaMacKey: mediaSendKey,
-        sessionId: message.sessionId,
-        peerId: message.sourcePeerId,
+        accept: message,
         preserveMouseMoves: isManual,
       );
     }

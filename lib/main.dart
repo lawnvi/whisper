@@ -8,6 +8,7 @@ import 'dart:io';
 import 'package:whisper/audio/audio_group_coordinator.dart';
 import 'package:whisper/audio/audio_media_session.dart';
 import 'package:whisper/audio/audio_platform.dart';
+import 'package:whisper/remote_input/remote_input_datagrams.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:sodium/sodium.dart';
 import 'package:whisper/debug/automation_hooks.dart';
@@ -208,6 +209,8 @@ Future<void> main(List<String> arguments) async {
   );
   if (isDesktop()) {
     unawaited(CastReceiverManager.shared.initialize());
+    // Keyboard and mouse beside their WebSocket, on weak Wi-Fi.
+    unawaited(RemoteInputDatagrams.open());
     // Windows sent here from another device open in windows of their own.
     DesktopOfferOpener.shared.start();
     // Streamed windows' sound is decoded in the stream isolate, which opens

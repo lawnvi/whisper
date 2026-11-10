@@ -20,8 +20,8 @@
 1393 lib/remote_files/mount/mount_tree.dart
 1475 lib/remote_input/mobile_control_screen.dart
 1733 lib/remote_input/remote_clipboard_transfer.dart
-2173 lib/remote_input/remote_input_coordinator.dart
-1823 lib/remote_input/remote_input_workspace_coordinator.dart
+2172 lib/remote_input/remote_input_coordinator.dart
+1822 lib/remote_input/remote_input_workspace_coordinator.dart
 1302 lib/share_links/share_server.dart
 4897 lib/socket/file_transfer_engine.dart
 1282 lib/socket/folder_transfer_sink.dart

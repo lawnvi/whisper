@@ -5,6 +5,9 @@ import 'package:shelf/shelf.dart' as shelf;
 import 'package:shelf_web_socket/shelf_web_socket.dart' as shelf_ws;
 import 'package:uuid/uuid.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:whisper/helper/privacy_log.dart';
+import 'package:whisper/remote_input/remote_input_datagrams.dart';
+import 'package:whisper/remote_input/remote_input_lane.dart';
 import 'package:whisper/remote_input/remote_input_lifecycle.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
 import 'package:whisper/socket/bounded_binary_websocket_session.dart';
@@ -72,6 +75,9 @@ class RemoteInputManager {
   final Uuid _uuid;
   final Map<String, RemoteInputSession> _sessions =
       <String, RemoteInputSession>{};
+
+  /// Sessions this side accepted with a UDP lane.
+  final Set<String> _datagramSessions = <String>{};
   final Map<BoundedBinaryWebSocketSession, SessionUpgradeClaim> _channels =
       <BoundedBinaryWebSocketSession, SessionUpgradeClaim>{};
   final Map<BoundedBinaryWebSocketSession, Future<void>> _channelCloses =
@@ -144,6 +150,9 @@ class RemoteInputManager {
       sinkSegmentEnd: sinkSegmentEnd,
       edgeMappings: edgeMappings,
       remoteClipboardV1: remoteClipboardV1,
+      datagrams:
+          mode == RemoteInputMode.edgeTraversal &&
+          RemoteInputDatagrams.canOffer,
     );
   }
 
@@ -173,8 +182,11 @@ class RemoteInputManager {
       state: RemoteInputSessionState.connected,
       remoteClipboardV1: offer.remoteClipboardV1 && remoteClipboardV1,
     );
+    final datagramPort = RemoteInputDatagrams.portForAccept(offer);
+    if (datagramPort > 0) _datagramSessions.add(offer.sessionId);
     return RemoteInputControlMessage(
       action: RemoteInputControlAction.accept,
+      datagramPort: datagramPort,
       sessionId: offer.sessionId,
       sourcePeerId: offer.sourcePeerId,
       sinkPeerId: offer.sinkPeerId,
@@ -261,6 +273,7 @@ class RemoteInputManager {
       );
     }
     final peerId = _sessionPeerIds.remove(sessionId);
+    _datagramSessions.remove(sessionId);
     final cleaner = _sessionCleaner;
     final completer = Completer<void>();
     final closing = completer.future;
@@ -337,6 +350,10 @@ class RemoteInputManager {
     if (expectedSessionId != null && packet.sessionId != expectedSessionId) {
       throw const FormatException('remote input packet session mismatch');
     }
+    return _deliver(packet);
+  }
+
+  FutureOr<void> _deliver(RemoteInputPacketFrame packet) {
     final activeSession = _sessions[packet.sessionId];
     if (activeSession?.state != RemoteInputSessionState.connected) {
       return Future<void>.value();
@@ -388,15 +405,50 @@ class RemoteInputManager {
         maxPayloadBytes: maxPacketPayloadBytes,
       ),
     );
+    // Packets from both ways go through one merger and then one at a time
+    // into the session, as the WebSocket alone always did.
+    Future<void> tail = Future<void>.value();
+    final merger = RemoteInputLaneMerger(
+      (packet) => tail = tail.then((_) => _deliver(packet)),
+    );
+    RemoteInputPacketFrame framed(Uint8List bytes) {
+      final packet = RemoteInputPacketFrame.decode(bytes);
+      if (packet.sessionId != claim.sessionId) {
+        throw const FormatException('remote input packet session mismatch');
+      }
+      return packet;
+    }
+
+    final lane = _datagramSessions.contains(claim.sessionId)
+        ? claim.withMediaPacketContext(
+            (mediaMacKey, channelBinding) => RemoteInputDatagrams.answer(
+              mediaKey: mediaMacKey,
+              channelBinding: channelBinding,
+              sessionId: claim.sessionId,
+              onData: (bytes) {
+                final RemoteInputPacketFrame packet;
+                try {
+                  packet = framed(bytes);
+                } on FormatException {
+                  return;
+                }
+                merger.accept(packet, viaLane: true);
+                // A failure is the WebSocket's to report, at its next
+                // message; it must not go unhandled meanwhile.
+                unawaited(tail.catchError((Object _) {}));
+              },
+            ),
+          )
+        : null;
     try {
       late final BoundedBinaryWebSocketSession binding;
       binding = BoundedBinaryWebSocketSession(
         channel: channel,
         maxMessageBytes: maxChannelMessageBytes,
-        onMessage: (bytes) => handlePacketBytes(
-          packetDecoder.decode(bytes),
-          expectedSessionId: claim.sessionId,
-        ),
+        onMessage: (bytes) {
+          merger.accept(framed(packetDecoder.decode(bytes)));
+          return tail;
+        },
         onClosing: () {
           if (_sessions[claim.sessionId]?.state ==
               RemoteInputSessionState.connected) {
@@ -405,6 +457,8 @@ class RemoteInputManager {
           }
         },
         onClosed: () {
+          _logLane(merger, withLane: lane != null);
+          lane?.close();
           packetDecoder.destroy();
           _channels.remove(binding)?.destroy();
         },
@@ -415,9 +469,28 @@ class RemoteInputManager {
       }
       return true;
     } catch (_) {
+      lane?.close();
       packetDecoder.destroy();
       rethrow;
     }
+  }
+
+  static void _logLane(RemoteInputLaneMerger merger, {required bool withLane}) {
+    privacyLog.event(PrivacyEvent.remoteInputLane, {
+      PrivacyField.role: RemoteInputLaneSide.receiver,
+      PrivacyField.enabled: withLane,
+      PrivacyField.waitP50Ms: merger.moveWaitMs(0.5),
+      PrivacyField.waitP95Ms: merger.moveWaitMs(0.95),
+      PrivacyField.waitP99Ms: merger.moveWaitMs(0.99),
+      PrivacyField.waitMaxMs: merger.moveWaitMs(1),
+      PrivacyField.viaLane: merger.viaLane,
+      PrivacyField.viaSocket: merger.viaSocket,
+      PrivacyField.laneFirst: merger.laneFirst,
+      PrivacyField.socketFirst: merger.socketFirst,
+      PrivacyField.lateP50Ms: merger.socketLateMs(0.5),
+      PrivacyField.lateP95Ms: merger.socketLateMs(0.95),
+      PrivacyField.lateMaxMs: merger.socketLateMs(1),
+    });
   }
 
   Future<void> _trackChannelClose(BoundedBinaryWebSocketSession channel) {

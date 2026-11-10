@@ -642,8 +642,12 @@ void main() {
       final transport = await RemoteInputWebSocketPacketTransport.connect(
         uri,
         mediaMacKey: _mediaKey,
-        sessionId: _inputSessionId,
-        peerId: _sourcePeerId,
+        accept: const RemoteInputControlMessage(
+          action: RemoteInputControlAction.accept,
+          sessionId: _inputSessionId,
+          sourcePeerId: _sourcePeerId,
+          sinkPeerId: _sinkPeerId,
+        ),
       );
       transport.send(
         RemoteInputPacketFrame(

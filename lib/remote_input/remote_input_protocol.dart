@@ -155,6 +155,8 @@ class RemoteInputControlMessage {
     this.sinkPlatform = '',
     this.remoteClipboardV1 = false,
     this.workspaceRevision = 0,
+    this.datagrams = false,
+    this.datagramPort = 0,
   });
 
   final RemoteInputControlAction action;
@@ -192,6 +194,12 @@ class RemoteInputControlMessage {
   final bool remoteClipboardV1;
   final int workspaceRevision;
 
+  /// An offer: the source can send by UDP beside the WebSocket
+  /// (`remote_input_lane.dart`). An accept: [datagramPort] is where to.
+  /// Older peers ignore both and keep to the WebSocket.
+  final bool datagrams;
+  final int datagramPort;
+
   RemoteInputControlMessage withTransportToken(String token, {int? port}) {
     return RemoteInputControlMessage(
       action: action,
@@ -226,6 +234,8 @@ class RemoteInputControlMessage {
       sinkPlatform: sinkPlatform,
       remoteClipboardV1: remoteClipboardV1,
       workspaceRevision: workspaceRevision,
+      datagrams: datagrams,
+      datagramPort: datagramPort,
     );
   }
 
@@ -270,6 +280,9 @@ class RemoteInputControlMessage {
     if (sinkPlatform.isNotEmpty) 'sinkPlatform': sinkPlatform,
     if (remoteClipboardV1) 'remoteClipboardV1': true,
     if (workspaceRevision > 0) 'workspaceRevision': workspaceRevision,
+    if (datagrams && action == RemoteInputControlAction.offer) 'datagrams': 1,
+    if (datagramPort > 0 && action == RemoteInputControlAction.accept)
+      'datagramPort': datagramPort,
   };
 
   factory RemoteInputControlMessage.fromJson(Map<String, dynamic> json) {
@@ -356,8 +369,22 @@ class RemoteInputControlMessage {
       sinkPlatform: json['sinkPlatform'] as String? ?? '',
       remoteClipboardV1: json['remoteClipboardV1'] as bool? ?? false,
       workspaceRevision: intJson(json['workspaceRevision']),
+      datagrams: json['datagrams'] == 1,
+      datagramPort: _datagramPortFromJson(json),
     );
   }
+}
+
+int _datagramPortFromJson(Map<String, dynamic> json) {
+  final port = json['datagramPort'];
+  if (port == null) return 0;
+  if (json['action'] != RemoteInputControlAction.accept.name ||
+      port is! int ||
+      port < 1 ||
+      port > 65535) {
+    throw const FormatException('invalid remote input datagram port');
+  }
+  return port;
 }
 
 String _transportTokenFromJson(
@@ -385,6 +412,8 @@ class RemoteInputPacketFrame {
     required this.timestampMicros,
     required this.eventType,
     required this.payload,
+    this.travel,
+    this.fence,
   });
 
   static const String magic = 'WRI1';
@@ -395,6 +424,24 @@ class RemoteInputPacketFrame {
   final RemoteInputEventType eventType;
   final Uint8List payload;
 
+  /// Set by a sender with the UDP lane (`remote_input_lane.dart`): how far
+  /// the pointer has gone in all this session, and the sequence of the last
+  /// event before this one that must not be skipped. Older peers ignore
+  /// both and never get the lane.
+  final (double, double)? travel;
+  final int? fence;
+
+  RemoteInputPacketFrame stamped((double, double) travel, int fence) =>
+      RemoteInputPacketFrame(
+        sessionId: sessionId,
+        sequence: sequence,
+        timestampMicros: timestampMicros,
+        eventType: eventType,
+        payload: payload,
+        travel: travel,
+        fence: fence,
+      );
+
   Uint8List encode() {
     return encodeFramedPacket(
       magic: magic,
@@ -404,6 +451,8 @@ class RemoteInputPacketFrame {
         'timestampMicros': timestampMicros,
         'eventType': eventType.name,
         'payloadLength': payload.length,
+        if (travel case (final x, final y)) ...{'travelX': x, 'travelY': y},
+        if (fence case final fence?) 'fence': fence,
       },
       payload: payload,
     );
@@ -416,6 +465,15 @@ class RemoteInputPacketFrame {
       bytes: bytes,
     );
     final header = decoded.header;
+    final travelX = header['travelX'], travelY = header['travelY'];
+    final fence = header['fence'];
+    final stamped =
+        travelX is num &&
+        travelY is num &&
+        travelX.isFinite &&
+        travelY.isFinite &&
+        fence is int &&
+        fence >= 0;
     return RemoteInputPacketFrame(
       sessionId: header['sessionId'] as String? ?? '',
       sequence: header['sequence'] as int? ?? 0,
@@ -426,6 +484,8 @@ class RemoteInputPacketFrame {
         RemoteInputEventType.release,
       ),
       payload: decoded.payload,
+      travel: stamped ? (travelX.toDouble(), travelY.toDouble()) : null,
+      fence: stamped ? fence : null,
     );
   }
 }

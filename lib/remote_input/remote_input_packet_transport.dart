@@ -3,6 +3,8 @@ import 'dart:typed_data';
 
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:whisper/remote_input/remote_input_datagrams.dart';
+import 'package:whisper/remote_input/remote_input_lane.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
 import 'package:whisper/socket/bounded_outbound_queue.dart';
 import 'package:whisper/socket/media_upgrade_proof.dart';
@@ -136,7 +138,32 @@ class RemoteInputWebSocketPacketTransport extends RemoteInputPacketByteTransport
   /// and hands the keyboard and mouse back.
   static const controllerPingInterval = Duration(seconds: 5);
 
-  static Future<RemoteInputWebSocketPacketTransport> connect(
+  /// Connects for the session [accept] answers, with the UDP lane beside
+  /// it when the accept named a port (`remote_input_lane.dart`).
+  static Future<RemoteInputObservablePacketTransport> connect(
+    Uri uri, {
+    required Uint8List mediaMacKey,
+    required RemoteInputControlMessage accept,
+    bool preserveMouseMoves = false,
+  }) async {
+    final transport = await _connectSocket(
+      uri,
+      mediaMacKey: mediaMacKey,
+      sessionId: accept.sessionId,
+      peerId: accept.sourcePeerId,
+      preserveMouseMoves: preserveMouseMoves,
+    );
+    final lane = preserveMouseMoves
+        ? null
+        : RemoteInputDatagrams.dial(
+            uri: uri,
+            mediaKey: mediaMacKey,
+            accept: accept,
+          );
+    return lane == null ? transport : RemoteInputLaneTransport(transport, lane);
+  }
+
+  static Future<RemoteInputWebSocketPacketTransport> _connectSocket(
     Uri uri, {
     required Uint8List mediaMacKey,
     required String sessionId,
