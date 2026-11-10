@@ -687,6 +687,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get fileTransferCanceled => 'Cancelada';
 
   @override
+  String get fileMissingHere => 'Ya no está en este dispositivo';
+
+  @override
   String get audioShareCaptureConnecting =>
       'Captura: conectando al altavoz remoto';
 

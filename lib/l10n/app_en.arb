@@ -287,6 +287,10 @@
   "fileTransferWaitingPeerVerification": "Waiting for the other device to verify",
   "fileTransferFailedNotice": "File transfer failed",
   "fileTransferCanceled": "Canceled",
+  "fileMissingHere": "No longer on this device",
+  "@fileMissingHere": {
+    "description": "File card: a received file that has since been deleted or moved from this device."
+  },
   "audioShareCaptureConnecting": "Capture side: connecting to remote speaker",
   "audioSharePlaybackPreparing": "Playback side: preparing shared audio",
   "audioShareCaptureActiveStop": "Capture side: sharing this device's audio, click to stop",

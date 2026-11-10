@@ -85,6 +85,19 @@ class FileMessageCard extends StatelessWidget {
       fontFeatures: const [FontFeature.tabularFigures()],
     );
     final skippedLabel = this.skippedLabel;
+    // A warning colours only its small icon: amber words look dirty.
+    Widget warned(String text, {bool warn = true}) => Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (warn) ...[
+          WhisperIcon(WhisperGlyph.warn, size: 12, color: c.warn),
+          const SizedBox(width: 4),
+        ],
+        Flexible(
+          child: Text(text, overflow: TextOverflow.ellipsis, style: second),
+        ),
+      ],
+    );
     Widget iconAction(WhisperGlyph glyph, String label, VoidCallback onTap) =>
         Pressable(
           onTap: onTap,
@@ -134,12 +147,7 @@ class FileMessageCard extends StatelessWidget {
                           (context, value) =>
                               Text(statusText(value), style: second),
                         )
-                      : Text(
-                          statusText(null),
-                          style: failed
-                              ? second.copyWith(color: c.warn)
-                              : second,
-                        ),
+                      : warned(statusText(null), warn: failed),
                 ),
                 if (active) ...[
                   const SizedBox(height: 6),
@@ -154,11 +162,7 @@ class FileMessageCard extends StatelessWidget {
                     radius: WhisperRadius.xs,
                     child: Padding(
                       padding: const EdgeInsets.only(top: 3),
-                      child: Text(
-                        skippedLabel,
-                        overflow: TextOverflow.ellipsis,
-                        style: second.copyWith(color: c.warn),
-                      ),
+                      child: warned(skippedLabel),
                     ),
                   ),
               ],

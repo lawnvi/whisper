@@ -2652,11 +2652,9 @@ class _SendMessageScreen extends State<SendMessageScreen>
         progress: transfer?.progress ?? 0,
         statusKey: (failed, transfer?.state),
         statusText: (progress) {
-          final status = _fileStatusText(
-            message,
-            transfer,
-            progressOverride: progress,
-          );
+          final status = missingLocalFile
+              ? '${_messageSizeLabel(message)} · ${l10n.fileMissingHere}'
+              : _fileStatusText(message, transfer, progressOverride: progress);
           final speed = _speed.trim();
           return isActiveTransfer &&
                   transfer.transferId == _activeTransferId &&
