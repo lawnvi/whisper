@@ -459,7 +459,7 @@ class _ChatMessageListState extends State<ChatMessageList> {
         icon: Icons.checklist_rounded,
         onSelected: () => _startSelection(message),
       ),
-      if (isFile && (isOpponent || isDesktop()))
+      if (isFile && (isOpponent || isDesktop()) && _onThisDevice(message.path))
         ContextMenuActionItem(
           label: localizations?.open ?? '打开',
           icon: Icons.open_in_new_rounded,
