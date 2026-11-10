@@ -34,7 +34,7 @@
 
 ## 手机手动控制
 
-Android 手动控制复用 `RemoteInputCoordinator`、同一个 manager 和 `/input` 通道，与桌面工作区共享输入归属。`manual` 会话不启动桌面输入捕获，不依赖屏幕拓扑，也不启用会话级文件剪贴板联动。接收端支持 macOS、Windows 和 Linux；协议和平台行为详见[桌面接收端说明](superpowers/specs/2026-10-06-mobile-controller-desktop-receivers.md)。
+Android 手动控制复用 `RemoteInputCoordinator`、同一个 manager 和 `/input` 通道，与桌面工作区共享输入归属。`manual` 会话不启动桌面输入捕获，不依赖屏幕拓扑，也不启用会话级文件剪贴板联动。接收端支持 macOS、Windows 和 Linux；协议和平台行为详见[桌面接收端说明](../superpowers/specs/2026-10-06-mobile-controller-desktop-receivers.md)。
 
 手机界面和输入逻辑的职责如下，文件均在 `lib/remote_input/`：
 
@@ -52,11 +52,11 @@ Android 手动控制复用 `RemoteInputCoordinator`、同一个 manager 和 `/in
 
 一次只控制一台电脑。切换目标先释放旧会话，新目标需手动开始；后台、停止、断连或离开页面走统一清理。文字提交与按键共用有序队列，等待回复期间禁用其他输入，失败或超时保留草稿。心跳和接收超时由 coordinator 管理，不依赖组件是否显示。
 
-[手机界面回归测试](../test/mobile_control_screen_test.dart)覆盖布局、设置、方向过渡、目标切换、校准状态及断连/切页停止重复按键；[控制器测试](../test/mobile_input_controller_test.dart)和[手动会话测试](../test/manual_remote_input_test.dart)覆盖事件顺序、体感映射、修饰键释放、文字回复与失联清理。
+[控制器测试](../../test/mobile_input_controller_test.dart)和[手动会话测试](../../test/manual_remote_input_test.dart)覆盖事件顺序、体感映射、修饰键释放、文字回复与失联清理。
 
 ## 验证与边界
 
-[生命周期回归测试](../test/remote_input_lifecycle_test.dart)覆盖同时启动、控制与被控互斥、清理期间交接、迟到原生启动回滚、旧边缘回调、重连计划取消、剪贴板清理和停止通知失败；现有测试继续覆盖输入顺序、队列上限和多屏路由。
+[生命周期回归测试](../../test/remote_input_lifecycle_test.dart)覆盖同时启动、控制与被控互斥、清理期间交接、迟到原生启动回滚、旧边缘回调、重连计划取消、剪贴板清理和停止通知失败；现有测试继续覆盖输入顺序、队列上限和多屏路由。
 
 这次调整不改变线上协议或平台原生接口，已发布客户端仍使用原有的握手与输入包；自动化测试与构建检查不替代双向截图、粘贴、跨屏和休眠唤醒的实机验收。
 

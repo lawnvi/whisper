@@ -78,6 +78,11 @@ xattr -dr com.apple.quarantine /Applications/Whisper.app
 - If this computer is being controlled, the pointer returns to the controlling computer.
 - If this computer is in control, the pointer can't move to other devices, and a hint asks you to click once first.
 
+**The pointer stutters or the sound breaks up on Wi-Fi**:
+- Update both computers to 0.0.60 or later. The keyboard, mouse and sound then go over UDP and no longer stop on every lost packet.
+- Windows Firewall has to allow Whisper. The prompt the first time it opens allows both TCP and UDP; if only TCP is allowed, everything works but stutters again on a weak network.
+- Check "Network" on the device card: with much loss or jitter, move to 5 GHz Wi-Fi, closer to the router, or to a cable. While a large file is being sent, Whisper slows the transfer to make room for the keyboard, mouse and sound.
+
 **Lock screen**: Windows needs the system service; see the same section. After a restart, before anyone signs in, Whisper isn't running and can't be controlled.
 
 **Linux**: for what works under Wayland and what it asks for, see [Permissions and platform limits](user-guide_en.md#permissions-and-platform-limits) in the user guide.

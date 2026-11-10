@@ -216,6 +216,8 @@ On desktop, select the keyboard at the top of the sidebar, drag the other device
 
 Turn on clipboard sync first if you want to paste across devices.
 
+When both computers run 0.0.60 or later, pointer movement goes over a separate encrypted UDP channel, so a packet lost now and then on Wi-Fi no longer makes the pointer stop and jump. Keys and clicks still all arrive, in order. With an older version on the other side, or UDP blocked by a firewall, the original connection is used and everything still works.
+
 ### Leaving and stopping
 
 - Either the controlling or the controlled device can stop sharing.
@@ -263,6 +265,8 @@ On desktop, select the speaker at the top of the sidebar, check one or more conn
 
 When another device plays its sound here, this page shows that device instead, with gain, pause, and disconnect.
 
+Between computers, sound goes over UDP like the keyboard and mouse (0.0.60 or later on both). A short piece lost now and then is filled in instead of cutting out. Sound played on an Android phone still uses the original connection.
+
 ## Screenshots
 
 Use the screenshot button in the message box on desktop, or the shortcut set in Settings. Click to select a window or drag to select a region; when you let go, the toolbar is right beside the selection, with box, circle, arrow, pen, text, and mosaic. Hold Shift for a square, a circle, or an arrow in one of eight directions. Double-click the selection or press Enter to copy it, or save it as a file; `Esc` or a right click cancels. The capture is not sent automatically: paste it into the Whisper message box to preview and send it, and select the thumbnail to mark it up further.
@@ -277,7 +281,7 @@ After granting the notification access permission on Android, choose which apps 
 
 ## TV casting
 
-With "TV casting" turned on in desktop Settings, video apps on the same network can cast to this computer without Whisper pairing. The feature is experimental and off by default; see the [TV casting notes (Chinese)](cast_receiver.md).
+With "TV casting" turned on in desktop Settings, video apps on the same network can cast to this computer without Whisper pairing. The feature is experimental and off by default; see the [TV casting notes (Chinese)](internals/cast-receiver.md).
 
 ## Diagnostics
 

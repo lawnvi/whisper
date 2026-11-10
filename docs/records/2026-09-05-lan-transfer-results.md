@@ -51,4 +51,4 @@ Windows 原生构建通过（`flutter build windows --debug --no-pub`，约 245 
 
 测试副本为 `D:\dev\whisper-lan-test-20260906`，Windows 构建产物为该目录下的 `build\windows\x64\runner\Debug\whisper.exe`，运行时需保留同目录依赖文件。七个核心传输源文件已逐一比较 SHA-256，与本机一致；原来的 `D:\dev\whisper` 工作区仍干净。Windows 构建已通过，但未通过远程 GUI 验证该可执行文件的界面启动。
 
-复现入口、命令和尚需进行的界面验收见 [两台设备的手工验收](manual-reliability-check.md)。
+复现入口、命令和尚需进行的界面验收见 [两台设备的手工验收](../internals/manual-reliability-check.md)。

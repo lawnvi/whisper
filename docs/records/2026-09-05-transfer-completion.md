@@ -34,7 +34,7 @@ macOS 使用 `renamex_np(RENAME_EXCL)`，Linux/Android 尝试 `renameat2(RENAME_
 
 移动路径只用于完整接收后得到流式摘要的快照；需要重新读取内容验证的旧接口继续使用原发布逻辑。
 
-随后增加了 macOS / Windows 双机实传验证：Windows 接收 2 GiB 后的收尾从约 34.11 秒降至 0.700 秒，完整 SHA-256 一致；也验证了强制结束接收进程后的续传和同名文件保护。环境、边界和构建检查见 [验证记录](lan-transfer-results.md)，Android、Linux、iOS 仍需按手工验收文档确认。
+随后增加了 macOS / Windows 双机实传验证：Windows 接收 2 GiB 后的收尾从约 34.11 秒降至 0.700 秒，完整 SHA-256 一致；也验证了强制结束接收进程后的续传和同名文件保护。环境、边界和构建检查见 [验证记录](2026-09-05-lan-transfer-results.md)，Android、Linux、iOS 仍需按手工验收文档确认。
 
 ## 代码位置
 

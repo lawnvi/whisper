@@ -117,6 +117,7 @@ Linux 的自动发现依赖 Avahi。视频预览和电视投屏需要系统装�
 | Android 复制的内容没同步 | Android 10 起后台应用读不到剪贴板，回到 Whisper 后会自动补发 |
 | 指针留在另一台设备上 | 在主控端按 `Ctrl+Alt+Esc`（macOS 为 `Control+Option+Esc`） |
 | Windows 上指针或传输卡顿 | 把「设置 → 系统 → 投影到此电脑」设为「始终关闭」 |
+| Wi-Fi 下指针或声音一卡一卡 | 两台电脑都更新到 0.0.60 或更新的版本，键鼠和声音会走 UDP；Windows 防火墙要放行 Whisper |
 | macOS 上键鼠共享没有反应 | 按提示在系统设置里授予辅助功能权限，然后重新打开 Whisper |
 | 提示 Whisper 没有正常运行 | 点提示上的「查看」或在设置里打开「诊断信息」，可以拷贝或反馈 |
 | Windows 锁屏或 UAC 时无法操作 | 需要安装包附带的系统服务，见[使用指南](docs/user-guide.md#windows-锁屏与-uac) |
@@ -140,7 +141,7 @@ flutter run
 flutter analyze && flutter test
 ```
 
-macOS 上请用 `./script/build_and_run.sh`，它会构建、签名并启动应用。Linux 还需要 Avahi、PulseAudio 或 PipeWire Pulse、GStreamer、libsecret、keybinder、jsoncpp、libmpv、libepoxy 和 libpipewire-0.3 的开发包。代码约定见 [AGENTS.md](AGENTS.md)。
+macOS 上请用 `./script/build_and_run.sh`，它会构建、签名并启动应用。Linux 还需要 Avahi、PulseAudio 或 PipeWire Pulse、GStreamer、libsecret、keybinder、jsoncpp、libmpv、libepoxy 和 libpipewire-0.3 的开发包。代码约定见 [AGENTS.md](AGENTS.md)，文档放在哪里见 [docs/README.md](docs/README.md)。
 
 ## License
 

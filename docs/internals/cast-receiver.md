@@ -16,7 +16,7 @@
 
 ## 接收范围与结构
 
-DLNA 接收的是手机 App 提供的媒体地址，电脑直接读取并播放，不额外转码。视频平台提供什么清晰度、是否允许投屏以及内容是否受保护，仍取决于发送端和平台。当前不接收系统屏幕镜像；之前的路线与实际效果见 [AirPlay / Wi-Fi Direct 实验记录](2026-09-17_cast-experiments-report.md)。
+DLNA 接收的是手机 App 提供的媒体地址，电脑直接读取并播放，不额外转码。视频平台提供什么清晰度、是否允许投屏以及内容是否受保护，仍取决于发送端和平台。当前不接收系统屏幕镜像；之前的路线与实际效果见 [AirPlay / Wi-Fi Direct 实验记录](../records/2026-09-17-cast-experiments.md)。
 
 Dart 实现 SSDP 发现、设备描述、控制请求与事件订阅；`CastPlayer` 串行执行手机和本机指令，`MediaKitCastEngine` 负责实际播放并回传进度、时长和状态，`CastPlaybackHost` 在 Whisper 窗口显示画面。SOAP 控制等待播放器操作返回后再确认成功，避免只有状态字段改变、画面或音量却不变。
 

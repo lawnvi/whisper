@@ -79,7 +79,7 @@
 
 ### R5. 用最终候选安装包补一次跨平台冒烟验收（验证缺口）
 
-- 现有证据：`docs/lan-transfer-results.md` 是此前 Mac/Windows 引擎测试；10 月 6 日手机控制记录确认过 Android→Windows/Ubuntu 的输入。它们不能代表当前候选版本的完整安装与异常退出流程。
+- 现有证据：`docs/records/2026-09-05-lan-transfer-results.md` 是此前 Mac/Windows 引擎测试；10 月 6 日手机控制记录确认过 Android→Windows/Ubuntu 的输入。它们不能代表当前候选版本的完整安装与异常退出流程。
 - Ubuntu 既有测试使用了 `/tmp` 依赖路径和本机构建警告选项；发行工作流另有准备依赖和打包 libei 的路径。需要证明发行包在普通启动环境可用，而不只是在开发终端中运行。
 - 建议最小矩阵：Android→macOS/Windows/Ubuntu，旧桌面→桌面；每条覆盖重连、按住左键/修饰键时停止或断网、后台/锁屏、中文和 emoji、文件传输完成与失败重试。Ubuntu 分别记录 X11 / GNOME Wayland 与 portal 授权结果，不外推所有桌面环境。
 - 使用正式候选包验证 macOS 签名和权限延续、Windows 安装升级、Linux 动态库加载、Android 覆盖安装和原数据保留。`./script/build_and_run.sh --verify` 本轮未执行，留在发布验收中。

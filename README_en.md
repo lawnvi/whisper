@@ -115,6 +115,7 @@ On Wayland, keyboard and mouse sharing supports GNOME and KDE Plasma. GNOME asks
 | Android copy didn't sync | Android 10+ blocks this in the background; reopen Whisper to send it |
 | Pointer stuck on another device | Press `Ctrl+Alt+Esc` (`Control+Option+Esc` on macOS) |
 | Stutter on Windows | Set Settings → System → Projecting to this PC to "Always Off" |
+| Pointer or sound stutters on Wi-Fi | Update both computers to 0.0.60 or later, so the keyboard, mouse and sound go over UDP; Windows Firewall has to allow Whisper |
 | No keyboard/mouse on macOS | Grant Accessibility in System Settings, then reopen Whisper |
 | Whisper says it is not running properly | Select "View" on the notice or open "Diagnostics" in Settings to copy or report it |
 | Windows lock screen or UAC | Needs the system service from the installer; see the [user guide](docs/user-guide_en.md#windows-lock-screen-and-uac) |
@@ -138,7 +139,7 @@ flutter run
 flutter analyze && flutter test
 ```
 
-On macOS, use `./script/build_and_run.sh`, which builds, signs, and launches the app. Linux also needs the development packages for Avahi, PulseAudio or PipeWire Pulse, GStreamer, libsecret, keybinder, jsoncpp, libmpv, libepoxy, and libpipewire-0.3. See [AGENTS.md](AGENTS.md) for project conventions.
+On macOS, use `./script/build_and_run.sh`, which builds, signs, and launches the app. Linux also needs the development packages for Avahi, PulseAudio or PipeWire Pulse, GStreamer, libsecret, keybinder, jsoncpp, libmpv, libepoxy, and libpipewire-0.3. See [AGENTS.md](AGENTS.md) for project conventions and [docs/README.md](docs/README.md) for where each document goes.
 
 ## License
 

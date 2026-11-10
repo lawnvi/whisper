@@ -55,8 +55,10 @@ CI runs `flutter pub get`, `flutter analyze`, the size check, a check that gener
 - `test/`: Flutter tests of behavior: protocols, transfers, state machines and the logic behind the UI. Don't add tests that assert layout or the text of source files; a few source checks stay for what nothing can run here (release workflows, manifests, native log privacy, FFI entry points). `test/manual/` holds scripts that render screens and aren't part of `flutter test`.
 - `script/`: local build, run, signing, packaging, and focused test helpers.
 - `.github/workflows/`: CI and multi-platform release packaging.
+- `docs/`: user guide and troubleshooting (Chinese and English), plus `docs/README.md`, which says where every kind of document goes.
 - `docs/design/`: companions to `DESIGN.md`, starting at `README.md`: per-screen specs, Flutter recipes, migration steps, decisions, the local prototype, reference screenshots and check tools.
-- `docs/superpowers/`: existing design specs and implementation plans. Their UI sections are history; `DESIGN.md` wins.
+- `docs/internals/`: how a subsystem works now, for developers. `docs/records/`: dated test results, reviews and research, never updated.
+- `docs/superpowers/`: earlier design specs and implementation plans, read-only history. Their UI sections are history; `DESIGN.md` wins.
 - `whisper-web/`: Next.js 15 product introduction site.
 
 ## Generated And Large Files
@@ -88,6 +90,15 @@ The code base grew by adding to whatever file was nearest. These rules stop that
 - **UI reaches the network through `WsSvrManager` and `ISocketEvent`.** Don't import other `lib/socket/` internals from `lib/page/`, `lib/new_ui/` or `lib/widget/`; a few still do and are moved when touched.
 - **No copies of production code.** A probe or tool uses the real sources or is deleted after use; it never keeps a copy that drifts.
 - **Third-party source** lives in its own directory (`android_agent/upstream/`, `third_party/`) with a note on the upstream version, license, any patches and when to drop it. It doesn't count towards sizes and is never edited in place without that note.
+
+## Documentation
+
+`docs/README.md` holds the rules and the index. In short:
+
+- A change users can see updates `docs/user-guide.md` and `docs/user-guide_en.md` in the same commit, and `README.md` with `README_en.md` when it changes what the app does or where it runs. The two languages say the same thing.
+- A new subsystem or a new way of doing something gets a page in `docs/internals/`, changed with the code and deleted when the approach goes. Measurements and comparisons made along the way go in `docs/records/YYYY-MM-DD-<topic>.md` and are not edited afterwards.
+- Write paths and class names, not line numbers. Say what was not tested.
+- User docs use the names on screen, never class names, protocol fields or test files.
 
 ## Changing A Protocol Or The Database
 

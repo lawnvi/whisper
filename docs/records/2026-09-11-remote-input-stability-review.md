@@ -2,7 +2,7 @@
 
 审查日期：2026-09-11；基线：`dev` 分支 `2e82e77` 加本轮工作区修复。
 
-后续调整：单设备与工作区已接入统一的会话生命周期和资源清理，具体职责与交接规则见[会话归属与退出](remote-input-lifecycle.md)；以下保留首次稳定性审查的验证记录。
+后续调整：单设备与工作区已接入统一的会话生命周期和资源清理，具体职责与交接规则见[会话归属与退出](../internals/remote-input-lifecycle.md)；以下保留首次稳定性审查的验证记录。
 
 结论：局域网内由控制端统一路由输入、剪贴板先通知再传输、平台层负责键鼠注入的方案可以保留，当前主要缺陷在异步取消、会话所有权和缓存生命周期；这些已确认的问题已修复，但当前构建仍是验收候选版，尚未发布。
 
@@ -24,12 +24,12 @@
 
 | 证据 | 发现与状态 | 调用路径及修复位置 |
 | --- | --- | --- |
-| E1：[图片下载队列回归](../test/remote_clipboard_transfer_test.dart) | F1：截图预下载等待同一接收队列中的数据，会拖住后续控制；已修复并通过回归 | P1：收到 offer → 后台准备图片 → 独立处理 data/complete；[传输引擎](../lib/remote_input/remote_clipboard_transfer.dart) |
+| E1：[图片下载队列回归](../../test/remote_clipboard_transfer_test.dart) | F1：截图预下载等待同一接收队列中的数据，会拖住后续控制；已修复并通过回归 | P1：收到 offer → 后台准备图片 → 独立处理 data/complete；[传输引擎](../../lib/remote_input/remote_clipboard_transfer.dart) |
 | E2：`a failed old request cannot remove its replacement`，修复前超时，修复后通过 | F2：旧请求发送失败会移除新请求；已复现、已修复 | P2：旧请求等待发送 → 新 offer 替换 → 旧发送失败；同一传输引擎按对象身份清理，并在等待文件操作前分离旧状态 |
-| E3：`stopping during native injection startup cannot reactivate the session`，修复前变回 active，修复后保持 idle | F3：停止后，迟到的原生启动回调仍会启用注入；已复现、已修复 | P3：开始注入 → 停止 → 启动返回；[单设备协调器](../lib/remote_input/remote_input_coordinator.dart) 使用任务代次取消旧流程 |
-| E4：`stopping while transport connects cannot restart capture`，修复前变回 armed，修复后保持 idle 并关闭迟到连接 | F4：连接中的工作区停止后仍可能重新启动；已复现、已修复 | P4：连接输入通道 → 停止工作区 → 连接完成；[工作区协调器](../lib/remote_input/remote_input_workspace_coordinator.dart) 检查代次、目标身份和在线状态 |
-| E5：[输入通道独立断开回归](../test/bounded_binary_websocket_session_test.dart) | F5：仅输入通道断开时，被控端缺少主动结束通知；已修复，用例验证通知发生在慢速关闭完成之前 | P5：通道关闭 → `onClosing` → `onSessionClosed` → 停止注入、取消粘贴；[通道](../lib/socket/bounded_binary_websocket_session.dart)、[输入管理器](../lib/remote_input/remote_input_manager.dart) |
-| E6：[输入框原生粘贴回归](../test/chat_composer_test.dart)、[草稿保留回归](../test/desktop_clipboard_image_test.dart) | F6：远端粘贴绕过图片处理，且草稿可能随着共享缓存一起被删除；已修复，原生粘贴入口此前已有失败复现 | P6：原生粘贴意图 → [输入框](../lib/widget/chat_composer.dart) → [保留草稿文件](../lib/helper/desktop_clipboard_image.dart) |
+| E3：`stopping during native injection startup cannot reactivate the session`，修复前变回 active，修复后保持 idle | F3：停止后，迟到的原生启动回调仍会启用注入；已复现、已修复 | P3：开始注入 → 停止 → 启动返回；[单设备协调器](../../lib/remote_input/remote_input_coordinator.dart) 使用任务代次取消旧流程 |
+| E4：`stopping while transport connects cannot restart capture`，修复前变回 armed，修复后保持 idle 并关闭迟到连接 | F4：连接中的工作区停止后仍可能重新启动；已复现、已修复 | P4：连接输入通道 → 停止工作区 → 连接完成；[工作区协调器](../../lib/remote_input/remote_input_workspace_coordinator.dart) 检查代次、目标身份和在线状态 |
+| E5：[输入通道独立断开回归](../../test/bounded_binary_websocket_session_test.dart) | F5：仅输入通道断开时，被控端缺少主动结束通知；已修复，用例验证通知发生在慢速关闭完成之前 | P5：通道关闭 → `onClosing` → `onSessionClosed` → 停止注入、取消粘贴；[通道](../../lib/socket/bounded_binary_websocket_session.dart)、[输入管理器](../../lib/remote_input/remote_input_manager.dart) |
+| E6：[输入框原生粘贴回归](../../test/chat_composer_test.dart)、[草稿保留回归](../../test/desktop_clipboard_image_test.dart) | F6：远端粘贴绕过图片处理，且草稿可能随着共享缓存一起被删除；已修复，原生粘贴入口此前已有失败复现 | P6：原生粘贴意图 → [输入框](../../lib/widget/chat_composer.dart) → [保留草稿文件](../../lib/helper/desktop_clipboard_image.dart) |
 
 其他收紧：连接失败退出工作区目标状态、被控端拒绝恢复旧控制计划、原生输入报错通知对端停止；已有回归同时覆盖按键顺序、移动合并、队列上限、注入超时及边缘释放。
 
