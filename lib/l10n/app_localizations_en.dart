@@ -678,7 +678,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get fileTransferCanceled => 'Canceled';
 
   @override
-  String get fileMissingHere => 'No longer on this device';
+  String get fileMissingHere => 'Deleted';
+
+  @override
+  String get fileSendFailed => 'Not sent';
+
+  @override
+  String get fileReceiveFailed => 'Not received';
 
   @override
   String get audioShareCaptureConnecting =>

@@ -1288,11 +1288,23 @@ abstract class AppLocalizations {
   /// **'已取消'**
   String get fileTransferCanceled;
 
-  /// File card: a received file that has since been deleted or moved from this device.
+  /// File card, a short warning word: a received file that has since been deleted or moved from this device.
   ///
   /// In zh, this message translates to:
-  /// **'已不在这台设备上'**
+  /// **'已删除'**
   String get fileMissingHere;
+
+  /// File card, a short warning word before the reason: this device's file did not get to the other device.
+  ///
+  /// In zh, this message translates to:
+  /// **'发送失败'**
+  String get fileSendFailed;
+
+  /// File card, a short warning word before the reason: a file from the other device did not arrive.
+  ///
+  /// In zh, this message translates to:
+  /// **'接收失败'**
+  String get fileReceiveFailed;
 
   /// No description provided for @audioShareCaptureConnecting.
   ///

@@ -5,6 +5,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:whisper/helper/android_document_picker.dart';
 import 'package:whisper/helper/helper.dart';
 import 'package:whisper/helper/toast.dart';
 import 'package:whisper/l10n/app_localizations.dart';
@@ -49,7 +50,6 @@ class ChatMessageList extends StatefulWidget {
   final Future<void> Function(MessageData message)? onCopyFile;
 
   /// On to another app through the system's share sheet: WeChat, mail.
-  final Future<void> Function(MessageData message)? onShareFile;
   final Future<void> Function(MessageData message, {bool deleteFile})
   onDeleteMessage;
   final Future<void> Function(List<MessageData> messages, {bool deleteFiles})
@@ -72,7 +72,6 @@ class ChatMessageList extends StatefulWidget {
     required this.onOpenFile,
     required this.onCopyText,
     this.onCopyFile,
-    this.onShareFile,
     required this.onDeleteMessage,
     required this.onDeleteMessages,
     this.onSelectionModeChanged,
@@ -466,7 +465,8 @@ class _ChatMessageListState extends State<ChatMessageList> {
           icon: Icons.open_in_new_rounded,
           onSelected: () => widget.onOpenFile(message),
         ),
-      if (isFile && (isOpponent || isDesktop()))
+      // A phone has no one file manager to show it in.
+      if (isFile && isDesktop())
         ContextMenuActionItem(
           label:
               (Platform.isMacOS
@@ -477,12 +477,13 @@ class _ChatMessageListState extends State<ChatMessageList> {
           onSelected: () => widget.onOpenContainingFolder(message.path),
         ),
       if (isFile &&
-          widget.onShareFile != null &&
-          folderOfferOf(message) == null)
+          Platform.isAndroid &&
+          folderOfferOf(message) == null &&
+          _onThisDevice(message.path))
         ContextMenuActionItem(
           label: localizations?.shareFile ?? '分享',
           icon: Icons.share_rounded,
-          onSelected: () => unawaited(widget.onShareFile!(message)),
+          onSelected: () => unawaited(_shareFile(message)),
         ),
       ContextMenuActionItem(
         label: localizations?.delete ?? '删除',
@@ -491,6 +492,30 @@ class _ChatMessageListState extends State<ChatMessageList> {
         onSelected: () => unawaited(_confirmDeletion([message])),
       ),
     ];
+  }
+
+  /// A received file is at its final path once it is complete; one sent from
+  /// the gallery is a content URI, there as long as the gallery has it.
+  static bool _onThisDevice(String path) =>
+      path.startsWith('content://') ||
+      (path.isNotEmpty &&
+          FileSystemEntity.typeSync(path) != FileSystemEntityType.notFound);
+
+  /// The system's share sheet, to send the file on through another app.
+  Future<void> _shareFile(MessageData message) async {
+    final path = message.path;
+    var shared = false;
+    try {
+      shared = path.startsWith('content://')
+          ? await AndroidDocumentPicker.shared.shareDocument(path)
+          : await AndroidDocumentPicker.shared.shareFile(path);
+    } on PlatformException {
+      shared = false;
+    }
+    if (!shared && mounted) {
+      final l10n = AppLocalizations.of(context);
+      showAppToast(l10n?.shareFileFailed ?? '分享失败', tone: AppToastTone.error);
+    }
   }
 
   /// Where the composer was, in the same glass: what to do with the selection.

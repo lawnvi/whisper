@@ -649,7 +649,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get fileTransferCanceled => '已取消';
 
   @override
-  String get fileMissingHere => '已不在这台设备上';
+  String get fileMissingHere => '已删除';
+
+  @override
+  String get fileSendFailed => '发送失败';
+
+  @override
+  String get fileReceiveFailed => '接收失败';
 
   @override
   String get audioShareCaptureConnecting => '采集端：正在连接远端扬声器';

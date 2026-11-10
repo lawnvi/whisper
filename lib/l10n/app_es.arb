@@ -285,9 +285,17 @@
   "fileTransferWaitingPeerVerification": "Esperando verificacion del otro dispositivo",
   "fileTransferFailedNotice": "No se pudo transferir el archivo",
   "fileTransferCanceled": "Cancelada",
-  "fileMissingHere": "Ya no está en este dispositivo",
+  "fileMissingHere": "Eliminado",
   "@fileMissingHere": {
-    "description": "File card: a received file that has since been deleted or moved from this device."
+    "description": "File card, a short warning word: a received file that has since been deleted or moved from this device."
+  },
+  "fileSendFailed": "No enviado",
+  "@fileSendFailed": {
+    "description": "File card, a short warning word before the reason: this device's file did not get to the other device."
+  },
+  "fileReceiveFailed": "No recibido",
+  "@fileReceiveFailed": {
+    "description": "File card, a short warning word before the reason: a file from the other device did not arrive."
   },
   "audioShareCaptureConnecting": "Captura: conectando al altavoz remoto",
   "audioSharePlaybackPreparing": "Reproduccion: preparando audio compartido",

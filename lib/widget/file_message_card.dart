@@ -12,7 +12,7 @@ class FileMessageCard extends StatelessWidget {
     super.key,
     required this.name,
     required this.isFolder,
-    required this.failed,
+    required this.problem,
     required this.active,
     required this.verifying,
     required this.progress,
@@ -33,7 +33,9 @@ class FileMessageCard extends StatelessWidget {
 
   final String name;
   final bool isFolder;
-  final bool failed;
+
+  /// What went wrong, in a word or two ("发送失败"), or null.
+  final String? problem;
 
   /// A transfer is under way, so progress stands in for the icon.
   final bool active;
@@ -85,8 +87,9 @@ class FileMessageCard extends StatelessWidget {
       fontFeatures: const [FontFeature.tabularFigures()],
     );
     final skippedLabel = this.skippedLabel;
-    // A warning colours only its small icon: amber words look dirty.
-    Widget warned(String text, {bool warn = true}) => Row(
+    // A small icon and a word or two in the warning colour; the rest of the
+    // line stays secondary, as a whole line in amber looks dirty.
+    Widget warned(String text, {bool warn = false, String? problem}) => Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         if (warn) ...[
@@ -94,7 +97,25 @@ class FileMessageCard extends StatelessWidget {
           const SizedBox(width: 4),
         ],
         Flexible(
-          child: Text(text, overflow: TextOverflow.ellipsis, style: second),
+          child: Text.rich(
+            TextSpan(
+              children: [
+                if (problem != null) ...[
+                  TextSpan(
+                    text: problem,
+                    style: TextStyle(
+                      color: c.warn,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const TextSpan(text: ' · '),
+                ],
+                TextSpan(text: text),
+              ],
+            ),
+            overflow: TextOverflow.ellipsis,
+            style: second,
+          ),
         ),
       ],
     );
@@ -147,7 +168,11 @@ class FileMessageCard extends StatelessWidget {
                           (context, value) =>
                               Text(statusText(value), style: second),
                         )
-                      : warned(statusText(null), warn: failed),
+                      : warned(
+                          statusText(null),
+                          warn: problem != null,
+                          problem: problem,
+                        ),
                 ),
                 if (active) ...[
                   const SizedBox(height: 6),
@@ -162,7 +187,7 @@ class FileMessageCard extends StatelessWidget {
                     radius: WhisperRadius.xs,
                     child: Padding(
                       padding: const EdgeInsets.only(top: 3),
-                      child: warned(skippedLabel),
+                      child: warned(skippedLabel, warn: true),
                     ),
                   ),
               ],

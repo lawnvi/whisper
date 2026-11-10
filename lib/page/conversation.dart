@@ -667,26 +667,6 @@ class _SendMessageScreen extends State<SendMessageScreen>
     );
   }
 
-  /// The system's share sheet, to send the file on through another app.
-  Future<void> _shareMessageFile(MessageData message) async {
-    final transfer = _transferForMessage(message);
-    final path = _effectiveMessagePath(message, transfer);
-    var shared = false;
-    if (path.isNotEmpty &&
-        (transfer == null || transfer.state == FileTransferState.completed)) {
-      try {
-        shared = path.startsWith('content://')
-            ? await AndroidDocumentPicker.shared.shareDocument(path)
-            : await AndroidDocumentPicker.shared.shareFile(path);
-      } on PlatformException {
-        shared = false;
-      }
-    }
-    if (!shared && mounted) {
-      showAppToast(l10n.shareFileFailed, tone: AppToastTone.error);
-    }
-  }
-
   Future<void> _cancelTransfer(String transferId) async {
     await socketManager.cancelTransfer(transferId);
   }
@@ -801,7 +781,6 @@ class _SendMessageScreen extends State<SendMessageScreen>
               onOpenFile: _openMessageFile,
               onCopyText: copyToClipboard,
               onCopyFile: _copyMessageFile,
-              onShareFile: Platform.isAndroid ? _shareMessageFile : null,
               onDeleteMessage: (message, {deleteFile = false}) =>
                   _deleteMessages([message], deleteFiles: deleteFile),
               onDeleteMessages: _deleteMessages,
@@ -2645,16 +2624,19 @@ class _SendMessageScreen extends State<SendMessageScreen>
       child: FileMessageCard(
         name: message.name,
         isFolder: isFolder,
-        // Cancelled on purpose: it says so, without the warning colour.
-        failed: failed && !(transfer?.state == FileTransferState.canceled),
+        // Cancelled on purpose: it says so, without the warning.
+        problem: missingLocalFile
+            ? l10n.fileMissingHere
+            : failed && transfer?.state != FileTransferState.canceled
+            ? (isOpponent ? l10n.fileReceiveFailed : l10n.fileSendFailed)
+            : null,
         active: isActiveTransfer,
         verifying: transfer?.state == FileTransferState.verifying,
         progress: transfer?.progress ?? 0,
         statusKey: (failed, transfer?.state),
         statusText: (progress) {
-          final status = missingLocalFile
-              ? '${_messageSizeLabel(message)} · ${l10n.fileMissingHere}'
-              : _fileStatusText(message, transfer, progressOverride: progress);
+          final status =
+              _fileStatusText(message, transfer, progressOverride: progress);
           final speed = _speed.trim();
           return isActiveTransfer &&
                   transfer.transferId == _activeTransferId &&
