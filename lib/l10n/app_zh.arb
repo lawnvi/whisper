@@ -2840,5 +2840,18 @@
   "remoteFilesAsk": "请求访问",
   "@remoteFilesAsk": {
     "description": "File browser: the button under a device that has not allowed browsing yet in this window; only it sends the request, so opening the window or picking a device never asks the other device by itself."
+  },
+  "mediaPileExpand": "展开 {count}",
+  "@mediaPileExpand": {
+    "description": "Conversation: pictures sent together are shown as one pile; this small button beside it shows all of them.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "mediaPileCollapse": "收起",
+  "@mediaPileCollapse": {
+    "description": "Conversation: gathers pictures sent together back into one pile."
   }
 }

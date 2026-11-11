@@ -3867,4 +3867,12 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get remoteFilesAsk => 'Pedir acceso';
+
+  @override
+  String mediaPileExpand(int count) {
+    return 'Ver $count';
+  }
+
+  @override
+  String get mediaPileCollapse => 'Contraer';
 }

@@ -6416,6 +6416,18 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'请求访问'**
   String get remoteFilesAsk;
+
+  /// Conversation: pictures sent together are shown as one pile; this small button beside it shows all of them.
+  ///
+  /// In zh, this message translates to:
+  /// **'展开 {count}'**
+  String mediaPileExpand(int count);
+
+  /// Conversation: gathers pictures sent together back into one pile.
+  ///
+  /// In zh, this message translates to:
+  /// **'收起'**
+  String get mediaPileCollapse;
 }
 
 class _AppLocalizationsDelegate

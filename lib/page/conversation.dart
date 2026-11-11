@@ -785,12 +785,12 @@ class _SendMessageScreen extends State<SendMessageScreen>
                   _deleteMessages([message], deleteFiles: deleteFile),
               onDeleteMessages: _deleteMessages,
               onSelectionModeChanged: (active) {
-                if (_messageSelectionActive == active) {
-                  return;
+                if (_messageSelectionActive != active) {
+                  setState(() => _messageSelectionActive = active);
                 }
-                setState(() => _messageSelectionActive = active);
               },
               selfUid: self?.uid,
+              isMediaSettled: _isMediaSettled,
             ),
           ),
         ),
@@ -2696,24 +2696,23 @@ class _SendMessageScreen extends State<SendMessageScreen>
       path: path,
       name: message.name,
       enabled: _canDragFileMessage(message, transfer),
-      child: Container(
-        // No bubble behind a picture: it stands on its own.
-        decoration: BoxDecoration(
-          color: null,
-          borderRadius: BorderRadius.circular(WhisperRadius.m),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(WhisperRadius.m),
-          child: showProgress && transfer.state != FileTransferState.verifying
-              ? _buildAnimatedTransferProgress(
-                  value: transfer.progress,
-                  builder: (context, value) => buildPreview(value),
-                )
-              : buildPreview(null),
-        ),
+      // No bubble behind a picture: it stands on its own.
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(WhisperRadius.m),
+        child: showProgress && transfer.state != FileTransferState.verifying
+            ? _buildAnimatedTransferProgress(
+                value: transfer.progress,
+                builder: (context, value) => buildPreview(value),
+              )
+            : buildPreview(null),
       ),
     );
   }
+
+  /// See [ChatMessageList.isMediaSettled].
+  bool _isMediaSettled(MessageData message) =>
+      (_transferForMessage(message)?.state ?? FileTransferState.completed) ==
+      FileTransferState.completed;
 
   void _openMessageFile(MessageData message) {
     _knownOnDisk.clear();

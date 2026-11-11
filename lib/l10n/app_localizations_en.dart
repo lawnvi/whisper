@@ -3826,4 +3826,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get remoteFilesAsk => 'Ask to Browse';
+
+  @override
+  String mediaPileExpand(int count) {
+    return 'Show $count';
+  }
+
+  @override
+  String get mediaPileCollapse => 'Collapse';
 }

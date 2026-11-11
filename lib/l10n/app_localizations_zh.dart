@@ -3614,4 +3614,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get remoteFilesAsk => '请求访问';
+
+  @override
+  String mediaPileExpand(int count) {
+    return '展开 $count';
+  }
+
+  @override
+  String get mediaPileCollapse => '收起';
 }

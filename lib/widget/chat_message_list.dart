@@ -17,6 +17,7 @@ import 'package:whisper/state/folder_message.dart';
 import 'package:whisper/state/message_deletion.dart';
 import 'package:whisper/widget/message_deletion_dialog.dart';
 import 'package:whisper/widget/context_menu_region.dart';
+import 'package:whisper/widget/media_pile.dart';
 import 'package:whisper/widget/subtle_motion.dart';
 
 /// Room under the newest message: at least the usual, more when the composer is
@@ -57,6 +58,11 @@ class ChatMessageList extends StatefulWidget {
   final ValueChanged<bool>? onSelectionModeChanged;
   final String? selfUid;
 
+  /// Whether a picture or video is all there, with nothing left to transfer
+  /// and nothing wrong. A pile with one that is not starts open, so that
+  /// its progress or its failure is not hidden behind the first picture.
+  final bool Function(MessageData message)? isMediaSettled;
+
   /// How tall the floating composer is now, with what is under it: a long draft
   /// must not cover the newest messages. Null until it has been measured.
   final double? composerHeight;
@@ -76,6 +82,7 @@ class ChatMessageList extends StatefulWidget {
     required this.onDeleteMessages,
     this.onSelectionModeChanged,
     required this.selfUid,
+    this.isMediaSettled,
     this.composerHeight,
     this.hasComposer = true,
   });
@@ -89,6 +96,11 @@ class ChatMessageList extends StatefulWidget {
 
 class _ChatMessageListState extends State<ChatMessageList> {
   final Set<int> _selectedMessageIds = <int>{};
+
+  /// Piles by their first message: whether each is open. Decided when first
+  /// seen and changed only by hand after that, so nothing folds away while
+  /// it is being looked at.
+  final Map<Key, bool> _pileOpen = <Key, bool>{};
   Timer? _copyResetTimer;
   int? _copiedMessageId;
   bool _selectionMode = false;
@@ -294,6 +306,16 @@ class _ChatMessageListState extends State<ChatMessageList> {
     );
   }
 
+  bool _isPileOpen(List<MessageData> pile) => _pileOpen.putIfAbsent(
+    _keyOf(pile.first),
+    () =>
+        !pile.every((message) => widget.isMediaSettled?.call(message) ?? true),
+  );
+
+  void _setPileOpen(List<MessageData> pile, bool open) {
+    setState(() => _pileOpen[_keyOf(pile.first)] = open);
+  }
+
   Widget _buildMessage(
     BuildContext context,
     int index,
@@ -305,6 +327,17 @@ class _ChatMessageListState extends State<ChatMessageList> {
     final isSelected = _selectedMessageIds.contains(message.id);
     final colorScheme = Theme.of(context).colorScheme;
     final showTimestamp = shouldShowChatTimestamp(widget.messages, index);
+
+    // Pictures sent together are one pile under the first of them, until it
+    // is opened. Selecting shows every message by itself.
+    final pileIndexes = chatMediaPileAt(widget.messages, index);
+    final pile = [
+      if (pileIndexes != null)
+        for (final i in pileIndexes) widget.messages[i],
+    ];
+    final leadsPile = pile.isNotEmpty && pileIndexes!.first == index;
+    final pileOpen = pile.isEmpty || _selectionMode || _isPileOpen(pile);
+    final gathered = leadsPile && !pileOpen;
 
     final older = index + 1 < widget.messages.length
         ? widget.messages[index + 1]
@@ -321,113 +354,173 @@ class _ChatMessageListState extends State<ChatMessageList> {
         child: child,
       ),
     );
-    return rise(
-      Padding(
-        padding: EdgeInsets.only(top: sameSender ? 8 : 16),
-        child: Column(
-          children: [
-            if (showTimestamp)
-              Padding(
-                padding: const EdgeInsets.only(top: 14, bottom: 8),
-                child: Text(
-                  formatChatTimestamp(context, message.timestamp),
-                  key: ValueKey<String>('message-time-${message.id}'),
-                  style: TextStyle(
-                    color: context.wc.ink2,
-                    fontSize: WhisperType(touch: !isDesktop()).tiny,
-                  ),
-                ),
-              ),
-            DecoratedBox(
-              key: ValueKey('message-row-${message.id}'),
-              decoration: BoxDecoration(
-                color: _selectionMode && isSelected ? context.wc.tint : null,
-                borderRadius: BorderRadius.circular(WhisperRadius.m),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  WhisperAnimatedReveal(
-                    axis: Axis.horizontal,
-                    visible: _selectionMode,
-                    child: _selectionMode
-                        ? SizedBox(
-                            width: 42,
-                            height: 42,
-                            child: Center(
-                              child: Checkbox(
-                                key: ValueKey(
-                                  'message-selection-${message.id}',
-                                ),
-                                value: isSelected,
-                                shape: const CircleBorder(),
-                                side: BorderSide(color: colorScheme.outline),
-                                onChanged: _deleting
-                                    ? null
-                                    : (_) => _toggleSelection(message),
-                              ),
-                            ),
-                          )
-                        : null,
-                  ),
-                  Expanded(
-                    child: Container(
-                      alignment: isOpponent
-                          ? Alignment.centerLeft
-                          : Alignment.centerRight,
-                      child: ContextMenuRegion(
-                        items: _selectionMode
-                            ? const <ContextMenuActionItem>[]
-                            : _buildMessageActions(
-                                context,
-                                message,
-                                isOpponent: isOpponent,
-                                isFile: isFile,
-                              ),
-                        child: LayoutBuilder(
-                          builder: (context, constraints) => ConstrainedBox(
-                            key: ValueKey('message-bubble-${message.id}'),
-                            constraints: BoxConstraints(
-                              maxWidth: newBubbleMaxWidth(
-                                available: constraints.maxWidth,
-                                isFile: isFile,
-                                compact:
-                                    !isDesktop() &&
-                                    WhisperLayout.of(context).compact,
-                                body: WhisperType(touch: !isDesktop()).body,
-                              ),
-                            ),
-                            child: GestureDetector(
-                              behavior: HitTestBehavior.opaque,
-                              onTap: () {
-                                if (_deleting) return;
-                                if (_selectionMode) {
-                                  _toggleSelection(message);
-                                } else if (isFile) {
-                                  widget.onOpenFile(message);
-                                }
-                              },
-                              child: isFile
-                                  ? widget.buildFileMessage(message, isOpponent)
-                                  : widget.buildTextMessage(
-                                      message,
-                                      isOpponent,
-                                      // Copying is in the message's menu.
-                                      null,
-                                    ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+    final content = isFile
+        ? widget.buildFileMessage(message, isOpponent)
+        : widget.buildTextMessage(
+            message,
+            isOpponent,
+            // Copying is in the message's menu.
+            null,
+          );
+    Widget bubble = LayoutBuilder(
+      builder: (context, constraints) => ConstrainedBox(
+        key: ValueKey('message-bubble-${message.id}'),
+        constraints: BoxConstraints(
+          maxWidth: newBubbleMaxWidth(
+            available: constraints.maxWidth,
+            isFile: isFile,
+            compact: !isDesktop() && WhisperLayout.of(context).compact,
+            body: WhisperType(touch: !isDesktop()).body,
+          ),
+        ),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () {
+            if (_deleting) return;
+            if (_selectionMode) {
+              _toggleSelection(message);
+            } else if (gathered) {
+              _setPileOpen(pile, true);
+            } else if (isFile) {
+              widget.onOpenFile(message);
+            }
+          },
+          // A tap on a pile opens the pile, not the picture in front.
+          child: AbsorbPointer(absorbing: gathered, child: content),
         ),
       ),
     );
+    if (leadsPile) {
+      final l10n = AppLocalizations.of(context);
+      final count = pile.length;
+      bubble = ChatMediaPile(
+        front: bubble,
+        behind: pile.skip(1),
+        gathered: gathered,
+        fromOther: isOpponent,
+        // Selecting has no use for it.
+        button: _selectionMode
+            ? null
+            : MediaPileButton(
+                key: ValueKey('media-pile-toggle-${message.id}'),
+                label: pileOpen
+                    ? l10n?.mediaPileCollapse ?? '收起'
+                    : l10n?.mediaPileExpand(count) ?? '展开 $count',
+                onTap: () => _setPileOpen(pile, !pileOpen),
+              ),
+      );
+    }
+    final row = Padding(
+      padding: EdgeInsets.only(top: sameSender ? 8 : 16),
+      child: Column(
+        children: [
+          if (showTimestamp)
+            Padding(
+              padding: const EdgeInsets.only(top: 14, bottom: 8),
+              child: Text(
+                formatChatTimestamp(context, message.timestamp),
+                key: ValueKey<String>('message-time-${message.id}'),
+                style: TextStyle(
+                  color: context.wc.ink2,
+                  fontSize: WhisperType(touch: !isDesktop()).tiny,
+                ),
+              ),
+            ),
+          DecoratedBox(
+            key: ValueKey('message-row-${message.id}'),
+            decoration: BoxDecoration(
+              color: _selectionMode && isSelected ? context.wc.tint : null,
+              borderRadius: BorderRadius.circular(WhisperRadius.m),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                WhisperAnimatedReveal(
+                  axis: Axis.horizontal,
+                  visible: _selectionMode,
+                  child: _selectionMode
+                      ? SizedBox(
+                          width: 42,
+                          height: 42,
+                          child: Center(
+                            child: Checkbox(
+                              key: ValueKey('message-selection-${message.id}'),
+                              value: isSelected,
+                              shape: const CircleBorder(),
+                              side: BorderSide(color: colorScheme.outline),
+                              onChanged: _deleting
+                                  ? null
+                                  : (_) => _toggleSelection(message),
+                            ),
+                          ),
+                        )
+                      : null,
+                ),
+                Expanded(
+                  child: Container(
+                    alignment: isOpponent
+                        ? Alignment.centerLeft
+                        : Alignment.centerRight,
+                    child: ContextMenuRegion(
+                      items: _selectionMode
+                          ? const <ContextMenuActionItem>[]
+                          : gathered
+                          ? _buildPileActions(context, pile)
+                          : _buildMessageActions(
+                              context,
+                              message,
+                              isOpponent: isOpponent,
+                              isFile: isFile,
+                            ),
+                      child: bubble,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+    // The rest of a pile is under its first picture until it is opened.
+    if (pile.isNotEmpty && !leadsPile) {
+      return rise(
+        WhisperAnimatedReveal(visible: pileOpen, child: pileOpen ? row : null),
+      );
+    }
+    return rise(row);
+  }
+
+  /// What can be done with a pile as a whole.
+  List<ContextMenuActionItem> _buildPileActions(
+    BuildContext context,
+    List<MessageData> pile,
+  ) {
+    final l10n = AppLocalizations.of(context);
+    return [
+      ContextMenuActionItem(
+        label: l10n?.mediaPileExpand(pile.length) ?? '展开 ${pile.length}',
+        icon: Icons.unfold_more_rounded,
+        onSelected: () => _setPileOpen(pile, true),
+      ),
+      ContextMenuActionItem(
+        label: l10n?.selectMessages ?? '多选',
+        icon: Icons.checklist_rounded,
+        onSelected: () {
+          setState(() {
+            _selectedMessageIds.addAll(pile.map((message) => message.id));
+          });
+          _setSelectionMode(true);
+          _selectionFocus.requestFocus();
+        },
+      ),
+      ContextMenuActionItem(
+        label: l10n?.delete ?? '删除',
+        icon: Icons.delete_outline_rounded,
+        destructive: true,
+        onSelected: () => unawaited(_confirmDeletion(pile, selection: true)),
+      ),
+    ];
   }
 
   List<ContextMenuActionItem> _buildMessageActions(

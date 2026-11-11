@@ -2582,5 +2582,14 @@
   "shellDropSendFiles": "{count} files, {size}",
   "shellDropSendItems": "{count} items",
   "inputElevatedHint": "An administrator window is in front: click, then move across",
-  "remoteFilesAsk": "Ask to Browse"
+  "remoteFilesAsk": "Ask to Browse",
+  "mediaPileExpand": "Show {count}",
+  "@mediaPileExpand": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "mediaPileCollapse": "Collapse"
 }

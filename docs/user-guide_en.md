@@ -51,7 +51,7 @@ Windows wakes to its lock screen; with the system service from [Windows lock scr
 
 ## Send text and files
 
-Open the conversation with a connected device and type, or use `+` in the message box to pick files. Images open full screen, audio plays inline, and video and other files open in a system app. On desktop, received files can be revealed in the file manager or dragged out of a message.
+Open the conversation with a connected device and type, or use `+` in the message box to pick files. Images open full screen, audio plays inline, and video and other files open in a system app. On desktop, received files can be revealed in the file manager or dragged out of a message. Several pictures and videos sent together are shown as one pile: select "Show" beside it to see each of them, and "Collapse" to gather them again.
 
 To send without opening a conversation first:
 
