@@ -33,7 +33,7 @@ Map<String, Object?> _release({
 }
 
 void main() {
-  group('Debian update installation', () {
+  group('installing a downloaded update', () {
     late Directory directory;
     late AppUpdateDownload download;
 
@@ -86,6 +86,30 @@ void main() {
       );
       expect(invoked, isTrue);
       expect(await download.file.exists(), isTrue);
+    });
+
+    // Windows used to open the installer for the user to click through.
+    test('on Windows the installer is started to update by itself, '
+        'and only the package that was checked', () async {
+      final started = <(String, List<String>)>[];
+      final service = AppUpdateService(
+        platform: AppUpdatePlatform.windows,
+        installerStarter: (executable, arguments) async =>
+            started.add((executable, arguments)),
+      );
+      expect(
+        await service.openInstaller(download),
+        AppUpdateInstallDisposition.exitApplication,
+      );
+      expect(started.single.$1, download.file.path);
+      expect(started.single.$2, ['/UPDATE']);
+
+      await download.file.writeAsString('something else');
+      await expectLater(
+        service.openInstaller(download),
+        throwsA(isA<AppUpdateException>()),
+      );
+      expect(started, hasLength(1));
     });
 
     test(

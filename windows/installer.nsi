@@ -1,5 +1,6 @@
 !include "MUI2.nsh"
 !include "FileFunc.nsh"
+!include "LogicLib.nsh"
 
 !ifndef APP_NAME
   !define APP_NAME "Whisper"
@@ -54,9 +55,17 @@ VIAddVersionKey "FileDescription" "${APP_NAME} installer"
 !define MUI_ICON "runner\resources\app_icon.ico"
 !define MUI_UNICON "runner\resources\app_icon.ico"
 
+; Whisper updates itself by running this installer with /UPDATE. There is
+; nothing to ask then: it goes where Whisper already is, shows only its
+; progress, and starts Whisper again when it is done.
+Var Updating
+
+!define MUI_PAGE_CUSTOMFUNCTION_PRE SkipWhenUpdating
 !insertmacro MUI_PAGE_WELCOME
+!define MUI_PAGE_CUSTOMFUNCTION_PRE SkipWhenUpdating
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
+!define MUI_PAGE_CUSTOMFUNCTION_PRE SkipWhenUpdating
 !insertmacro MUI_PAGE_FINISH
 !insertmacro MUI_UNPAGE_CONFIRM
 !insertmacro MUI_UNPAGE_INSTFILES
@@ -64,7 +73,46 @@ VIAddVersionKey "FileDescription" "${APP_NAME} installer"
 !insertmacro MUI_LANGUAGE "SimpChinese"
 !insertmacro MUI_LANGUAGE "English"
 
+Function .onInit
+  StrCpy $Updating "0"
+  ${GetParameters} $R0
+  ClearErrors
+  ${GetOptions} $R0 "/UPDATE" $R1
+  ${IfNot} ${Errors}
+    StrCpy $Updating "1"
+  ${EndIf}
+FunctionEnd
+
+Function SkipWhenUpdating
+  ${If} $Updating == "1"
+    Abort
+  ${EndIf}
+FunctionEnd
+
+Function .onInstSuccess
+  ${If} $Updating == "1"
+    Exec '"$INSTDIR\${APP_EXE}"'
+  ${EndIf}
+FunctionEnd
+
 Section "Install"
+  ${If} $Updating == "1"
+    SetAutoClose true
+    ; Whisper is closing by itself: give it about five seconds (a look takes
+    ; a moment too), so that it is not killed in the middle of saving what it
+    ; was doing.
+    StrCpy $1 0
+    ${Do}
+      nsExec::Exec 'cmd /c tasklist /FI "IMAGENAME eq ${APP_EXE}" /NH | find /I "${APP_EXE}"'
+      Pop $0
+      ${If} $0 != 0
+        ${ExitDo}
+      ${EndIf}
+      Sleep 250
+      IntOp $1 $1 + 1
+    ${LoopUntil} $1 >= 10
+  ${EndIf}
+
   ; Updating from inside Whisper leaves the running executable locked on Windows.
   ; The user has already confirmed installation before this section begins.
   nsExec::ExecToLog 'taskkill /IM "${APP_EXE}" /F'
@@ -105,6 +153,12 @@ Section "Install"
   ; the app's settings is not asked again.
   ReadRegDWORD $0 HKCU "Software\${APP_NAME}" "${INPUT_SERVICE_OPT_OUT}"
   StrCmp $0 "1" input_service_installed
+  ; An update only brings a service that is there up to date; whoever never
+  ; let it be installed is not asked again every time.
+  ${If} $Updating == "1"
+    ReadRegStr $0 HKLM "SYSTEM\CurrentControlSet\Services\${INPUT_SERVICE_NAME}" "ImagePath"
+    StrCmp $0 "" input_service_installed
+  ${EndIf}
   DetailPrint "Installing the lock screen input service (administrator approval required)..."
   ExecShellWait "runas" "$INSTDIR\${APP_EXE}" "--install-input-service" SW_HIDE
   input_service_installed:

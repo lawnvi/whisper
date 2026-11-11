@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:whisper/helper/app_update.dart';
 
 void main() {
   test('release builds embed their stable or preview update channel', () {
@@ -32,6 +33,10 @@ void main() {
       installer.indexOf('taskkill /IM'),
       lessThan(installer.indexOf(r'File /r "${BUILD_DIR}\*.*"')),
     );
+    // Started by Whisper to update itself, it asks nothing and starts
+    // Whisper again. Both ends must mean the same flag.
+    expect(installer, contains('"$windowsUpdateInstallerArgument"'));
+    expect(installer, contains(r"""Exec '"$INSTDIR\${APP_EXE}"'"""));
     expect(
       androidManifest,
       contains('android.permission.REQUEST_INSTALL_PACKAGES'),

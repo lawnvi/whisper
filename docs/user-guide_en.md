@@ -236,6 +236,7 @@ When both computers run 0.0.60 or later, pointer movement goes over a separate e
 Once Windows is locked, ordinary programs cannot type on the lock screen. The Whisper installer also installs a system service (one administrator prompt on install and on each upgrade) that lets trusted devices type the password there.
 
 - Settings → System behavior → "Keyboard and mouse on the lock screen and UAC" shows the service state; select the row to uninstall or repair it. Once uninstalled there, later upgrades do not bring it back.
+- Updating from inside Whisper shows no setup wizard: the new version goes where Whisper already is and reopens when it is done. If this service is installed, the update still takes one administrator prompt; if it never was, the update does not ask.
 - By default the service only acts while the screen is locked, so UAC prompts that appear after unlocking cannot be answered. Turn on the switch at the end of the same row if you need that (off by default; turning it on or off needs administrator approval).
 - While the switch is on, any program running as you on this PC can use Whisper to get past UAC's confirmation. Only enable it if you understand that risk. Uninstalling the service turns it off as well.
 - The sign-in screen after a restart cannot be controlled, because Whisper is not running before you log in.

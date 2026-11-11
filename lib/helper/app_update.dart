@@ -38,6 +38,11 @@ enum AppUpdateStatus { upToDate, updateAvailable }
 
 enum AppUpdateInstallDisposition { keepRunning, exitApplication, installed }
 
+/// What the Windows installer is started with for an update: it then asks
+/// nothing, installs where Whisper already is and starts it again
+/// (`windows/installer.nsi`).
+const windowsUpdateInstallerArgument = '/UPDATE';
+
 class AppUpdateException implements Exception {
   const AppUpdateException(this.message);
 
@@ -124,6 +129,7 @@ class AppUpdateService implements AppUpdateManager {
     HttpClient Function()? httpClientFactory,
     Future<Directory> Function()? temporaryDirectoryProvider,
     Future<ProcessResult> Function(String, List<String>)? processRunner,
+    Future<void> Function(String, List<String>)? installerStarter,
     Duration headStart = _defaultHeadStart,
     Duration slowDownloadWindow = _defaultSlowWindow,
     int minBytesInSlowWindow = _defaultMinWindowBytes,
@@ -139,6 +145,7 @@ class AppUpdateService implements AppUpdateManager {
        _processRunner =
            processRunner ??
            ((executable, arguments) => Process.run(executable, arguments)),
+       _installerStarter = installerStarter ?? _startDetached,
        _headStart = headStart,
        _slowDownloadWindow = slowDownloadWindow,
        _minBytesInSlowWindow = minBytesInSlowWindow;
@@ -151,6 +158,7 @@ class AppUpdateService implements AppUpdateManager {
   final HttpClient Function() _httpClientFactory;
   final Future<Directory> Function() _temporaryDirectoryProvider;
   final Future<ProcessResult> Function(String, List<String>) _processRunner;
+  final Future<void> Function(String, List<String>) _installerStarter;
   final Duration _headStart;
   final Duration _slowDownloadWindow;
   final int _minBytesInSlowWindow;
@@ -480,12 +488,31 @@ class AppUpdateService implements AppUpdateManager {
       }
     }
 
+    if (platform == AppUpdatePlatform.windows) {
+      // Nothing opens to click through: the installer runs by itself, and
+      // Whisper only has to get out of its way. What it runs was checked
+      // when it was downloaded; checked once more, as nobody sees it now.
+      final asset = download.release.asset;
+      if (asset == null ||
+          !await _isDownloadedAssetValid(download.file, asset)) {
+        throw const AppUpdateException('Downloaded update checksum mismatch');
+      }
+      await _installerStarter(download.file.path, const <String>[
+        windowsUpdateInstallerArgument,
+      ]);
+      return AppUpdateInstallDisposition.exitApplication;
+    }
+
     final result = await OpenFilex.open(download.file.path);
     if (result.type != ResultType.done) {
       throw AppUpdateException(result.message);
     }
     return installDispositionForPlatform(platform);
   }
+}
+
+Future<void> _startDetached(String executable, List<String> arguments) async {
+  await Process.start(executable, arguments, mode: ProcessStartMode.detached);
 }
 
 Future<Directory> _updateDownloadDirectory(AppUpdatePlatform platform) async {
