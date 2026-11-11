@@ -12,7 +12,7 @@ LAN file transfer, software KVM, clipboard sync, audio and window streaming betw
 ![Platform](https://img.shields.io/badge/platform-Android%20%7C%20macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)
 [![License](https://img.shields.io/badge/license-MIT-green)](./LICENSE)
 
-[官网](https://whisper.127014.xyz/zh) · [下载](https://github.com/lawnvi/whisper/releases) · [使用指南](docs/user-guide.md) · [排障指南](docs/troubleshooting.md) · [English](./README_en.md)
+[官网](https://whisper-lan.github.io/zh) · [国内镜像](https://whisper.127014.xyz/zh) · [下载](https://github.com/lawnvi/whisper/releases) · [使用指南](docs/user-guide.md) · [排障指南](docs/troubleshooting.md) · [English](./README_en.md)
 
 </div>
 

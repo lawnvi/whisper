@@ -211,4 +211,118 @@ void main() {
     expect(compareAppVersions('1.0.0', '0.99.99'), greaterThan(0));
     expect(compareAppVersions('v2.4.0+12', '2.4.0'), 0);
   });
+
+  test('hedged check, zero-wait website routing, and slow-GitHub fallback', () async {
+    final tempDir = await Directory.systemTemp.createTemp('whisper-mirror-');
+    addTearDown(() => tempDir.delete(recursive: true));
+    final payload = List<int>.generate(1024, (i) => i & 0xff);
+    final digest = sha256.convert(payload).toString();
+    final body = jsonEncode([
+      _release(
+        tag: 'dev-v0.0.60',
+        assets: [
+          {
+            'name': 'whisper-0.0.60-macos-arm64.dmg',
+            'size': payload.length,
+            'digest': 'sha256:$digest',
+            'browser_download_url':
+                'https://github.com/lawnvi/whisper/releases/download/dev-v0.0.60/whisper-0.0.60-macos-arm64.dmg',
+          },
+        ],
+      ),
+    ]);
+
+    var slowGithubApi = false;
+    var throttleGithubDownload = false;
+    final hits = <String>[];
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(server.close);
+    server.listen((req) async {
+      final host = req.headers.value('x-host')!;
+      hits.add('$host${req.uri.path}');
+      if (host == 'api.github.com' && slowGithubApi) {
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+      }
+      if (req.uri.path.endsWith('/releases')) {
+        req.response.write(body);
+      } else if (host == 'github.com' && throttleGithubDownload) {
+        req.response.bufferOutput = false;
+        req.response.add(payload.sublist(0, 64));
+        await req.response.flush();
+        await Future<void>.delayed(const Duration(milliseconds: 120));
+        req.response.add(payload.sublist(64));
+      } else {
+        req.response.add(payload);
+      }
+      await req.response.close();
+    });
+
+    AppUpdateService buildService(String sub) => AppUpdateService(
+      platform: AppUpdatePlatform.macos,
+      architecture: 'macos_arm64',
+      channel: AppUpdateChannel.preview,
+      headStart: const Duration(milliseconds: 40),
+      slowDownloadWindow: const Duration(milliseconds: 50),
+      minBytesInSlowWindow: 512,
+      httpClientFactory: () => _LocalRewriteClient(server.port),
+      temporaryDirectoryProvider: () async => Directory('${tempDir.path}/$sub'),
+    );
+
+    // 1) Fast GitHub (VPN / overseas): mirror is never contacted; Chinese site opens github.io.
+    final vpn = buildService('vpn');
+    final checkVpn = await vpn.checkForUpdate(currentVersion: '0.0.59');
+    expect(vpn.websiteUri('zh').toString(), 'https://whisper-lan.github.io/zh');
+    expect(vpn.websiteUri('es').toString(), 'https://whisper-lan.github.io/en');
+    await vpn.downloadUpdate(checkVpn.release!);
+    expect(hits.any((h) => h.contains('127014.xyz')), isFalse);
+
+    // 2) Slow GitHub API (no VPN): mirror wins after head-start, download goes straight to mirror without waiting.
+    hits.clear();
+    slowGithubApi = true;
+    final cn = buildService('cn');
+    final checkCn = await cn.checkForUpdate(currentVersion: '0.0.59');
+    expect(cn.websiteUri('zh').toString(), 'https://whisper.127014.xyz/zh');
+    final cnFile = (await cn.downloadUpdate(checkCn.release!)).file;
+    expect(await cnFile.readAsBytes(), payload);
+    expect(
+      hits.last,
+      'whisper.127014.xyz/download/dev-v0.0.60/whisper-0.0.60-macos-arm64.dmg',
+    );
+    expect(hits.where((h) => h.startsWith('github.com/')), isEmpty);
+
+    // 3) GitHub API fast, but GitHub asset download crawls -> switches to mirror automatically.
+    hits.clear();
+    slowGithubApi = false;
+    throttleGithubDownload = true;
+    final throttled = buildService('throttled');
+    final checkThrottled = await throttled.checkForUpdate(
+      currentVersion: '0.0.59',
+    );
+    final throttledFile = (await throttled.downloadUpdate(
+      checkThrottled.release!,
+    )).file;
+    expect(await throttledFile.readAsBytes(), payload);
+    expect(hits.sublist(hits.length - 2), [
+      'github.com/lawnvi/whisper/releases/download/dev-v0.0.60/whisper-0.0.60-macos-arm64.dmg',
+      'whisper.127014.xyz/download/dev-v0.0.60/whisper-0.0.60-macos-arm64.dmg',
+    ]);
+  });
+}
+
+class _LocalRewriteClient implements HttpClient {
+  _LocalRewriteClient(this._port);
+  final int _port;
+  final HttpClient _inner = HttpClient();
+  @override
+  Duration? connectionTimeout;
+  @override
+  Duration idleTimeout = const Duration(seconds: 30);
+  @override
+  Future<HttpClientRequest> getUrl(Uri url) async => (await _inner.getUrl(
+    url.replace(scheme: 'http', host: '127.0.0.1', port: _port),
+  ))..headers.set('x-host', url.host);
+  @override
+  void close({bool force = false}) => _inner.close(force: force);
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

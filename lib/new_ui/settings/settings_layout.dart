@@ -1029,12 +1029,7 @@ extension _RedesignedSettings on _SettingsScreenState {
                 (
                   l10n.officialWebsite,
                   () => unawaited(
-                    _launchInBrowser(
-                      Uri.https(
-                        'whisper.127014.xyz',
-                        '/${locale.languageCode}',
-                      ),
-                    ),
+                    _launchInBrowser(officialWebsiteUri(locale.languageCode)),
                   ),
                 ),
                 (

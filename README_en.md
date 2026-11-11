@@ -10,7 +10,7 @@ Move text, files, clipboard, audio, keyboard/mouse input, and app windows direct
 ![Platform](https://img.shields.io/badge/platform-Android%20%7C%20macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)
 [![License](https://img.shields.io/badge/license-MIT-green)](./LICENSE)
 
-[Website](https://whisper.127014.xyz/en) · [Download](https://github.com/lawnvi/whisper/releases) · [User guide](docs/user-guide_en.md) · [Troubleshooting](docs/troubleshooting_en.md) · [中文](./README.md)
+[Website](https://whisper-lan.github.io/en) · [China mirror](https://whisper.127014.xyz/zh) · [Download](https://github.com/lawnvi/whisper/releases) · [User guide](docs/user-guide_en.md) · [Troubleshooting](docs/troubleshooting_en.md) · [中文](./README.md)
 
 </div>
 

@@ -16,9 +16,19 @@ const whisperUpdateChannel = String.fromEnvironment(
 
 const _githubApiHost = 'api.github.com';
 const _githubDownloadHost = 'github.com';
+const _mirrorHost = 'whisper.127014.xyz';
+const _internationalSiteHost = 'whisper-lan.github.io';
 const _releasesApiPath = '/repos/lawnvi/whisper/releases';
+const _githubDownloadPrefix = '/lawnvi/whisper/releases/download/';
 const _cacheLifetime = Duration(minutes: 15);
+const _defaultHeadStart = Duration(milliseconds: 800);
+const _primaryTimeout = Duration(seconds: 3);
+const _defaultSlowWindow = Duration(seconds: 5);
+const _defaultMinWindowBytes = 256 * 1024;
 const _requestTimeout = Duration(seconds: 12);
+
+Uri officialWebsiteUri(String languageCode) =>
+    AppUpdateService.shared.websiteUri(languageCode);
 
 enum AppUpdateChannel { stable, preview }
 
@@ -114,6 +124,9 @@ class AppUpdateService implements AppUpdateManager {
     HttpClient Function()? httpClientFactory,
     Future<Directory> Function()? temporaryDirectoryProvider,
     Future<ProcessResult> Function(String, List<String>)? processRunner,
+    Duration headStart = _defaultHeadStart,
+    Duration slowDownloadWindow = _defaultSlowWindow,
+    int minBytesInSlowWindow = _defaultMinWindowBytes,
   }) : platform = platform ?? currentAppUpdatePlatform(),
        architecture = architecture ?? Abi.current().toString().toLowerCase(),
        channel = channel ?? configuredAppUpdateChannel(),
@@ -125,7 +138,10 @@ class AppUpdateService implements AppUpdateManager {
            )),
        _processRunner =
            processRunner ??
-           ((executable, arguments) => Process.run(executable, arguments));
+           ((executable, arguments) => Process.run(executable, arguments)),
+       _headStart = headStart,
+       _slowDownloadWindow = slowDownloadWindow,
+       _minBytesInSlowWindow = minBytesInSlowWindow;
 
   static final AppUpdateService shared = AppUpdateService();
 
@@ -135,8 +151,23 @@ class AppUpdateService implements AppUpdateManager {
   final HttpClient Function() _httpClientFactory;
   final Future<Directory> Function() _temporaryDirectoryProvider;
   final Future<ProcessResult> Function(String, List<String>) _processRunner;
+  final Duration _headStart;
+  final Duration _slowDownloadWindow;
+  final int _minBytesInSlowWindow;
 
+  bool? _githubReachable;
   AppUpdateCheckResult? _cachedResult;
+
+  Uri websiteUri(String languageCode) {
+    if (!languageCode.toLowerCase().startsWith('zh')) {
+      return Uri.https(_internationalSiteHost, '/en');
+    }
+    return Uri.https(
+      _githubReachable == true ? _internationalSiteHost : _mirrorHost,
+      '/zh',
+    );
+  }
+
   DateTime? _cachedAt;
   String? _cachedCurrentVersion;
   Future<AppUpdateCheckResult>? _inFlight;
@@ -173,39 +204,90 @@ class AppUpdateService implements AppUpdateManager {
   }
 
   Future<AppUpdateCheckResult> _fetchUpdate(String currentVersion) async {
-    final uri = Uri.https(_githubApiHost, _releasesApiPath, {
-      'per_page': '100',
-      'page': '1',
-    });
-    final client = _httpClientFactory()
-      ..connectionTimeout = _requestTimeout
-      ..idleTimeout = const Duration(seconds: 30);
-    try {
-      final request = await client.getUrl(uri).timeout(_requestTimeout);
-      request.headers
-        ..set(HttpHeaders.acceptHeader, 'application/vnd.github+json')
-        ..set(HttpHeaders.userAgentHeader, 'Whisper/$currentVersion')
-        ..set('X-GitHub-Api-Version', '2022-11-28');
-      final response = await request.close().timeout(_requestTimeout);
-      final body = await utf8.decoder.bind(response).join();
-      if (response.statusCode != HttpStatus.ok) {
-        throw AppUpdateException(
-          'GitHub release request failed (${response.statusCode})',
+    const query = {'per_page': '100', 'page': '1'};
+    final githubUri = Uri.https(_githubApiHost, _releasesApiPath, query);
+    final mirrorUri = Uri.https(_mirrorHost, '/api/releases', query);
+    final completer = Completer<AppUpdateCheckResult>();
+    final clients = <HttpClient>[];
+    Object? lastError;
+    var pending = 1;
+    var mirrorStarted = false;
+    Timer? headStartTimer;
+
+    void finishError(Object error) {
+      lastError = error;
+      pending -= 1;
+      if (pending == 0 && !completer.isCompleted) {
+        completer.completeError(
+          lastError is AppUpdateException
+              ? lastError!
+              : AppUpdateException('Unable to check for updates: $lastError'),
         );
       }
-      return parseGitHubReleases(
-        body,
-        currentVersion: currentVersion,
-        channel: channel,
-        platform: platform,
-        architecture: architecture,
-      );
-    } on AppUpdateException {
-      rethrow;
-    } catch (error) {
-      throw AppUpdateException('Unable to check for updates: $error');
+    }
+
+    void runOne(Uri uri, {required bool isGithub}) {
+      final client = _httpClientFactory()
+        ..connectionTimeout = _requestTimeout
+        ..idleTimeout = const Duration(seconds: 30);
+      clients.add(client);
+      () async {
+            final request = await client.getUrl(uri).timeout(_requestTimeout);
+            request.headers
+              ..set(HttpHeaders.acceptHeader, 'application/vnd.github+json')
+              ..set(HttpHeaders.userAgentHeader, 'Whisper/$currentVersion')
+              ..set('X-GitHub-Api-Version', '2022-11-28');
+            final response = await request.close().timeout(_requestTimeout);
+            final body = await utf8.decoder.bind(response).join();
+            if (response.statusCode != HttpStatus.ok) {
+              throw AppUpdateException(
+                'GitHub release request failed (${response.statusCode})',
+              );
+            }
+            return parseGitHubReleases(
+              body,
+              currentVersion: currentVersion,
+              channel: channel,
+              platform: platform,
+              architecture: architecture,
+            );
+          }()
+          .then(
+            (result) {
+              if (!completer.isCompleted) {
+                _githubReachable = isGithub;
+                completer.complete(result);
+              }
+            },
+            onError: (Object error) {
+              if (isGithub && !mirrorStarted && !completer.isCompleted) {
+                mirrorStarted = true;
+                headStartTimer?.cancel();
+                pending += 1;
+                runOne(mirrorUri, isGithub: false);
+              }
+              finishError(error);
+            },
+          )
+          .whenComplete(() => client.close(force: true));
+    }
+
+    runOne(githubUri, isGithub: true);
+    headStartTimer = Timer(_headStart, () {
+      if (!mirrorStarted && !completer.isCompleted) {
+        mirrorStarted = true;
+        pending += 1;
+        runOne(mirrorUri, isGithub: false);
+      }
+    });
+
+    try {
+      return await completer.future;
     } finally {
-      client.close(force: true);
+      headStartTimer.cancel();
+      for (final client in clients) {
+        client.close(force: true);
+      }
     }
   }
 
@@ -242,65 +324,91 @@ class AppUpdateService implements AppUpdateManager {
       return AppUpdateDownload(release: release, file: destination);
     }
 
-    final client = _httpClientFactory()
-      ..connectionTimeout = _requestTimeout
-      ..idleTimeout = const Duration(seconds: 30);
-    try {
-      final request = await client.getUrl(asset.downloadUrl);
-      request.headers
-        ..set(HttpHeaders.acceptHeader, 'application/octet-stream')
-        ..set(HttpHeaders.userAgentHeader, 'Whisper updater');
-      final response = await request.close();
-      if (response.statusCode != HttpStatus.ok) {
-        throw AppUpdateException(
-          'Update download failed (${response.statusCode})',
-        );
-      }
-
-      final sink = partial.openWrite();
-      var received = 0;
-      var lastReported = -1.0;
+    final primary = asset.downloadUrl;
+    final mirror =
+        primary.host.toLowerCase() == _githubDownloadHost &&
+            primary.path.startsWith(_githubDownloadPrefix)
+        ? Uri.https(
+            _mirrorHost,
+            '/download/${primary.path.substring(_githubDownloadPrefix.length)}',
+          )
+        : null;
+    final preferMirror = _githubReachable == false && mirror != null;
+    final urls = preferMirror
+        ? [mirror, primary]
+        : [primary, if (mirror != null) mirror];
+    Object? lastError;
+    for (var i = 0; i < urls.length; i += 1) {
+      if (i > 0) onProgress?.call(0);
+      final url = urls[i];
+      final guardGithub = i == 0 && !preferMirror && mirror != null;
+      final timeout = guardGithub ? _primaryTimeout : _requestTimeout;
+      final client = _httpClientFactory()
+        ..connectionTimeout = timeout
+        ..idleTimeout = const Duration(seconds: 30);
       try {
-        await for (final chunk in response) {
-          sink.add(chunk);
-          received += chunk.length;
-          if (asset.size > 0) {
-            final progress = (received / asset.size).clamp(0.0, 1.0);
-            if (progress - lastReported >= 0.01 || progress == 1) {
-              lastReported = progress;
-              onProgress?.call(progress);
+        final request = await client.getUrl(url).timeout(timeout);
+        request.headers
+          ..set(HttpHeaders.acceptHeader, 'application/octet-stream')
+          ..set(HttpHeaders.userAgentHeader, 'Whisper updater');
+        final response = await request.close().timeout(timeout);
+        if (response.statusCode != HttpStatus.ok) {
+          throw AppUpdateException(
+            'Update download failed (${response.statusCode})',
+          );
+        }
+        final sink = partial.openWrite();
+        var received = 0;
+        var lastReported = -1.0;
+        var abortedSlow = false;
+        final slowTimer = guardGithub && asset.size > _minBytesInSlowWindow
+            ? Timer(_slowDownloadWindow, () {
+                if (received < _minBytesInSlowWindow) {
+                  abortedSlow = true;
+                  client.close(force: true);
+                }
+              })
+            : null;
+        try {
+          await for (final chunk in response.timeout(timeout)) {
+            sink.add(chunk);
+            received += chunk.length;
+            if (asset.size > 0) {
+              final progress = (received / asset.size).clamp(0.0, 1.0);
+              if (progress - lastReported >= 0.01 || progress == 1) {
+                lastReported = progress;
+                onProgress?.call(progress);
+              }
             }
           }
+        } finally {
+          slowTimer?.cancel();
+          await sink.close();
         }
+        if (abortedSlow) {
+          throw const AppUpdateException('GitHub download too slow');
+        }
+        if (asset.size > 0 && received != asset.size) {
+          throw const AppUpdateException('Downloaded update size mismatch');
+        }
+        if (!await _isDownloadedAssetValid(partial, asset)) {
+          throw const AppUpdateException('Downloaded update checksum mismatch');
+        }
+        if (url == primary) _githubReachable = true;
+        if (await destination.exists()) await destination.delete();
+        await partial.rename(destination.path);
+        onProgress?.call(1);
+        return AppUpdateDownload(release: release, file: destination);
+      } catch (error) {
+        if (url == primary) _githubReachable = false;
+        lastError = error;
+        if (await partial.exists()) await partial.delete();
       } finally {
-        await sink.close();
+        client.close(force: true);
       }
-
-      if (asset.size > 0 && received != asset.size) {
-        throw const AppUpdateException('Downloaded update size mismatch');
-      }
-      if (!await _isDownloadedAssetValid(partial, asset)) {
-        throw const AppUpdateException('Downloaded update checksum mismatch');
-      }
-      if (await destination.exists()) {
-        await destination.delete();
-      }
-      await partial.rename(destination.path);
-      onProgress?.call(1);
-      return AppUpdateDownload(release: release, file: destination);
-    } on AppUpdateException {
-      if (await partial.exists()) {
-        await partial.delete();
-      }
-      rethrow;
-    } catch (error) {
-      if (await partial.exists()) {
-        await partial.delete();
-      }
-      throw AppUpdateException('Unable to download update: $error');
-    } finally {
-      client.close(force: true);
     }
+    if (lastError is AppUpdateException) throw lastError;
+    throw AppUpdateException('Unable to download update: $lastError');
   }
 
   Future<bool> _isDownloadedAssetValid(File file, AppUpdateAsset asset) async {
