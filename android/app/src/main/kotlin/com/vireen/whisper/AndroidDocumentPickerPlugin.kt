@@ -8,6 +8,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
 import android.provider.DocumentsContract
+import android.provider.MediaStore
 import android.provider.OpenableColumns
 import android.os.Handler
 import android.os.Looper
@@ -386,37 +387,59 @@ class AndroidDocumentPickerPlugin :
         var name = uri.lastPathSegment ?: "document"
         var size: Long? = null
         var lastModified = 0L
-        try {
-            context.contentResolver.query(
-                uri,
-                arrayOf(
-                    OpenableColumns.DISPLAY_NAME,
-                    OpenableColumns.SIZE,
-                    DocumentsContract.Document.COLUMN_LAST_MODIFIED
-                ),
-                null,
-                null,
-                null
-            )?.use { cursor ->
-                if (cursor.moveToFirst()) {
-                    val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                    val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
-                    val modifiedIndex =
-                        cursor.getColumnIndex(DocumentsContract.Document.COLUMN_LAST_MODIFIED)
-                    if (nameIndex >= 0 && !cursor.isNull(nameIndex)) {
-                        name = cursor.getString(nameIndex)
-                    }
-                    if (sizeIndex >= 0 && !cursor.isNull(sizeIndex)) {
-                        size = cursor.getLong(sizeIndex)
-                    }
-                    if (modifiedIndex >= 0 && !cursor.isNull(modifiedIndex)) {
-                        lastModified = cursor.getLong(modifiedIndex)
+        // A provider refuses the whole query for one column it does not have:
+        // the media store has no last_modified, and without a size nothing
+        // can be sent. So ask again for less. The second number turns each
+        // provider's time into milliseconds.
+        val modifiedColumns = listOf(
+            DocumentsContract.Document.COLUMN_LAST_MODIFIED to 1L,
+            MediaStore.MediaColumns.DATE_MODIFIED to 1000L,
+            null to 1L
+        )
+        for ((modifiedColumn, toMillis) in modifiedColumns) {
+            try {
+                context.contentResolver.query(
+                    uri,
+                    listOfNotNull(
+                        OpenableColumns.DISPLAY_NAME,
+                        OpenableColumns.SIZE,
+                        modifiedColumn
+                    ).toTypedArray(),
+                    null,
+                    null,
+                    null
+                )?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                        val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
+                        val modifiedIndex =
+                            modifiedColumn?.let(cursor::getColumnIndex) ?: -1
+                        if (nameIndex >= 0 && !cursor.isNull(nameIndex)) {
+                            name = cursor.getString(nameIndex)
+                        }
+                        if (sizeIndex >= 0 && !cursor.isNull(sizeIndex)) {
+                            size = cursor.getLong(sizeIndex)
+                        }
+                        if (modifiedIndex >= 0 && !cursor.isNull(modifiedIndex)) {
+                            lastModified = cursor.getLong(modifiedIndex) * toMillis
+                        }
                     }
                 }
+                break
+            } catch (_: Exception) {
+                // Not every provider has every column; the uri's last segment
+                // stands in for a name when none answers.
             }
-        } catch (_: Exception) {
-            // Fall back to the URI segment; not every document provider exposes
-            // all OpenableColumns.
+        }
+        if (size == null) {
+            // Some providers give no size column at all; the open file does.
+            size = try {
+                context.contentResolver.openFileDescriptor(uri, "r")?.use { descriptor ->
+                    descriptor.statSize.takeIf { it >= 0 }
+                }
+            } catch (_: Exception) {
+                null
+            }
         }
         val mimeType = try {
             context.contentResolver.getType(uri) ?: ""
