@@ -9,6 +9,9 @@ import 'package:whisper/new_ui/shell/shell_parts.dart';
 import 'package:whisper/theme/whisper_device_art.dart';
 import 'package:whisper/theme/whisper_icons.dart';
 import 'package:whisper/theme/whisper_ui.dart';
+import 'package:whisper/widget/media_message_preview.dart' show MediaFileKind;
+import 'package:whisper/widget/media_pile.dart';
+import 'package:whisper/widget/media_thumbnail.dart';
 import 'package:whisper/widget/quick_send_chooser.dart';
 
 /// surfaces.md「设备选取器」with what is about to be sent above it: from another
@@ -86,9 +89,7 @@ class _QuickSendPickerState extends State<QuickSendPicker> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (touch)
-              DevicePickerTitle(_title())
-            else ...[
+            if (!touch) ...[
               Text(
                 l10n.quickSendTitle,
                 style: TextStyle(
@@ -99,9 +100,13 @@ class _QuickSendPickerState extends State<QuickSendPicker> {
               ),
               const SizedBox(height: 14),
             ],
+            // What is going, in the middle; then where to.
             _QuickSendPreview(items: widget.items, touch: touch),
             const SizedBox(height: 14),
-            if (!touch) ShellGroupLabel(_title()),
+            if (touch)
+              DevicePickerTitle(_title(), centered: true)
+            else
+              ShellGroupLabel(_title()),
             if (targets.isEmpty)
               _NoTargets(touch: touch)
             else
@@ -155,13 +160,16 @@ class _NoTargets extends StatelessWidget {
   }
 }
 
-/// The text, the pictures and the files waiting to go. The pictures are the same
-/// strip as ever: what a phone has to show is its gallery's thumbnails.
+/// The text, the pictures and the files waiting to go, in the middle of the
+/// sheet: one picture large, several as the pile a conversation shows them
+/// in, a single file as its icon. Several files are a short list.
 class _QuickSendPreview extends StatelessWidget {
   const _QuickSendPreview({required this.items, required this.touch});
 
   final List<QuickSendItem> items;
   final bool touch;
+
+  static const _maxFileRows = 3;
 
   @override
   Widget build(BuildContext context) {
@@ -180,7 +188,10 @@ class _QuickSendPreview extends StatelessWidget {
     final others = files
         .where((item) => !item.isVisualMedia)
         .toList(growable: false);
-    final hidden = others.length - QuickSendContentPreview.maxFileRows;
+    // A file by itself needs no row: its name is in the title under it.
+    final lone = media.isEmpty && others.length == 1 ? others.single : null;
+    final hidden = others.length - _maxFileRows;
+    final side = touch ? 128.0 : 104.0;
     final children = <Widget>[
       if (text.isNotEmpty)
         Container(
@@ -198,14 +209,41 @@ class _QuickSendPreview extends StatelessWidget {
             style: TextStyle(fontSize: type.note, height: 1.4, color: c.ink),
           ),
         ),
-      if (media.isNotEmpty) QuickSendMediaStrip(items: media),
-      for (final item in others.take(QuickSendContentPreview.maxFileRows))
-        _FileRow(item: item, touch: touch),
-      if (hidden > 0)
-        Text(
-          l10n.quickSendMoreFiles(hidden),
-          style: TextStyle(fontSize: type.tiny, color: c.ink2),
+      if (media.isNotEmpty)
+        Center(
+          key: const ValueKey('quick-send-media'),
+          child: Padding(
+            // The pile leans out to the right; the front one stays centred.
+            padding: EdgeInsets.only(
+              left: media.length > 1 ? MediaPile.lean : 0,
+            ),
+            child: MediaPile(
+              behind: [
+                for (final item in media.skip(1))
+                  MediaThumbnail(
+                    source: item.source,
+                    kind: item.kind,
+                    icon: false,
+                  ),
+              ],
+              front: SizedBox.square(
+                dimension: side,
+                child: _MediaCard(item: media.first),
+              ),
+            ),
+          ),
         ),
+      if (lone != null)
+        _LoneFile(item: lone, touch: touch)
+      else ...[
+        for (final item in others.take(_maxFileRows))
+          _FileRow(item: item, touch: touch),
+        if (hidden > 0)
+          Text(
+            l10n.quickSendMoreFiles(hidden),
+            style: TextStyle(fontSize: type.tiny, color: c.ink2),
+          ),
+      ],
     ];
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -215,6 +253,76 @@ class _QuickSendPreview extends StatelessWidget {
           if (i > 0) const SizedBox(height: 8),
           child,
         ],
+      ],
+    );
+  }
+}
+
+/// A picture or a video about to go, with the mark of a video on it.
+class _MediaCard extends StatelessWidget {
+  const _MediaCard({required this.item});
+
+  final QuickSendItem item;
+
+  @override
+  Widget build(BuildContext context) => ClipRRect(
+    borderRadius: BorderRadius.circular(WhisperRadius.m),
+    child: Stack(
+      fit: StackFit.expand,
+      children: [
+        MediaThumbnail(source: item.source, kind: item.kind, name: item.name),
+        if (item.kind == MediaFileKind.video)
+          Positioned(
+            left: 8,
+            bottom: 8,
+            child: Container(
+              width: 24,
+              height: 24,
+              decoration: BoxDecoration(
+                color: Radix.blackA6,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.play_arrow_rounded,
+                size: 17,
+                color: Colors.white,
+              ),
+            ),
+          ),
+      ],
+    ),
+  );
+}
+
+/// The only file about to go: its icon, and how big it is.
+class _LoneFile extends StatelessWidget {
+  const _LoneFile({required this.item, required this.touch});
+
+  final QuickSendItem item;
+  final bool touch;
+
+  @override
+  Widget build(BuildContext context) {
+    final type = WhisperType(touch: touch);
+    return Column(
+      key: const ValueKey('quick-send-file'),
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        WhisperDocArt(size: touch ? 52 : 44),
+        FutureBuilder<String?>(
+          future: quickSendFileSizeText(item),
+          builder: (context, snapshot) {
+            final value = snapshot.data;
+            if (value == null) return const SizedBox(height: 4);
+            return Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                value,
+                style: TextStyle(fontSize: type.note, color: context.wc.ink2),
+              ),
+            );
+          },
+        ),
       ],
     );
   }

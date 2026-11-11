@@ -127,9 +127,12 @@ class DevicePickerSheet extends StatelessWidget {
 
 /// `h5`: what is about to happen, in `tiny`.
 class DevicePickerTitle extends StatelessWidget {
-  const DevicePickerTitle(this.text, {super.key});
+  const DevicePickerTitle(this.text, {super.key, this.centered = false});
 
   final String text;
+
+  /// Under something centred above it: what is about to be sent.
+  final bool centered;
 
   @override
   Widget build(BuildContext context) {
@@ -140,6 +143,7 @@ class DevicePickerTitle extends StatelessWidget {
         text,
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
+        textAlign: centered ? TextAlign.center : null,
         style: TextStyle(
           fontSize: type.tiny,
           fontWeight: FontWeight.w500,
