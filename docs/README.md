@@ -50,5 +50,6 @@
 - [2026-10-09 iOS 与 iPad 验证](records/2026-10-09-ios-validation.md)
 - [2026-11-08 手机摄像头、麦克风和电话的方案调研](records/2026-11-08-camera-mic-calls-research.md)
 - [2026-11-10 弱 Wi-Fi 上的 UDP 键鼠和声音](records/2026-11-10-udp-weak-wifi.md)
+- [2026-11-11 共享声音或键鼠时传输越来越慢](records/2026-11-11-transfer-pacing-live.md)
 
 各子系统的设计稿和计划在 [superpowers/specs](superpowers/specs) 和 [superpowers/plans](superpowers/plans)，按日期命名。它们记录的是当时的打算，代码和上面的开发文档以现在为准。

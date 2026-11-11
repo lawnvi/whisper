@@ -12,6 +12,15 @@ import 'dart:math' as math;
 /// remembers how fast it was going when the sound began to suffer and stays
 /// below that for a while. With nothing live it holds nothing back.
 ///
+/// Slowing down only helps against what the transfer itself causes, and the
+/// signs are not always its doing: an answer to a large frame takes as long
+/// as the frame, a phone saving power answers later the less it is sent, a
+/// link may just be bad. So slowing down is tried and checked. Answers as
+/// late afterwards as before are how long answers take now, and the rate
+/// goes back; nothing slows it more than [_mostCuts] times running; and it
+/// never goes below a quarter of what the link has just been carrying,
+/// which leaves the rest of the link to what is live.
+///
 /// Whatever is going, frames are kept to a quarter second of what the link
 /// has been seen to carry, and, with a receiver that answers every second,
 /// what is unconfirmed to two seconds of it: on a slow link a whole file
@@ -53,6 +62,23 @@ class TransferPacer {
   double? _troubleAt;
   DateTime? _troubleWhen;
 
+  /// Slowing down in a row with nothing better in between: how often. And
+  /// when one of them was for late answers: the rate before it, what the
+  /// receivers confirmed then, and whether a queue was seen to drain since.
+  int _cuts = 0;
+  double? _rateBeforeQueue;
+  double? _confirmedAtQueue;
+  bool _drained = false;
+
+  /// About what the link carries: what the receivers confirmed when a queue
+  /// built up that then drained, and when that was.
+  double? _carried;
+  DateTime? _carriedWhen;
+
+  /// The most the receivers confirmed in a second lately, and when.
+  double? _peak;
+  DateTime? _peakWhen;
+
   /// When each frame of each transfer went: its end offset and the time.
   final Map<String, Queue<(int, DateTime)>> _sent = {};
 
@@ -85,11 +111,34 @@ class TransferPacer {
   DateTime? _quickestSeen;
   Duration? _answerTime;
 
+  /// How long the last answer took, unsmoothed, and how many answers there
+  /// were: whether a queue drains shows there soon after slowing down, in
+  /// [_answerTime] much later.
+  Duration? _lastAnswerTime;
+  int _answers = 0;
+  int _answersAtCut = 0;
+
+  /// The longest an answer took since slowing down. Answers go on getting
+  /// later for a moment after it, as they tell of frames that went before:
+  /// a queue drains if they are quicker now than at that worst.
+  Duration? _worstSinceCut;
+  DateTime? _worstWhen;
+
+  /// How late answers stayed when slowing down did not help, and until
+  /// when that much counts as usual. The cap on what is unconfirmed does
+  /// not use it: that still goes by [queueDelay].
+  Duration? _usualLate;
+  DateTime? _usualLateUntil;
+
   static const tick = Duration(milliseconds: 250);
   static const _lagLimit = Duration(milliseconds: 40);
   static const _queueLimit = Duration(milliseconds: 80);
   static const _troubleMemory = Duration(minutes: 1);
   static const _quickestMemory = Duration(seconds: 30);
+  static const _usualLateMemory = Duration(seconds: 30);
+  static const _peakMemory = Duration(seconds: 20);
+  static const _mostCuts = 3;
+  static const _relief = Duration(milliseconds: 100);
   static const _minFrame = 16 * 1024;
   static const _firstCap = 128 * 1024;
   static const _largestCap = 1 << 30;
@@ -198,6 +247,13 @@ class TransferPacer {
       }
       final before = _answerTime;
       _answerTime = before == null ? took : (before * 3 + took) ~/ 4;
+      _lastAnswerTime = took;
+      _answers++;
+      final worst = _worstSinceCut;
+      if (worst == null || took > worst) {
+        _worstSinceCut = took;
+        _worstWhen = now;
+      }
     }
     final last = _answered[transferId];
     _answered[transferId] = (durableOffset, now);
@@ -227,7 +283,17 @@ class TransferPacer {
         elapsed.inMicroseconds *
         Duration.microsecondsPerSecond;
     final before = _confirmed;
-    _confirmed = before == null ? sample : before * 0.7 + sample * 0.3;
+    final confirmed = before == null ? sample : before * 0.7 + sample * 0.3;
+    _confirmed = confirmed;
+    final peak = _peak;
+    final peakWhen = _peakWhen;
+    if (peak == null ||
+        peakWhen == null ||
+        confirmed >= peak ||
+        now.difference(peakWhen) > _peakMemory) {
+      _peak = confirmed;
+      _peakWhen = now;
+    }
     final own = _rateOf[transferId];
     _rateOf[transferId] = own == null ? sample : own * 0.7 + sample * 0.3;
   }
@@ -289,31 +355,50 @@ class TransferPacer {
       if (confirmed != null) _rate = math.max(floor, confirmed);
       return;
     }
+    final peak = _peak;
+    final peakWhen = _peakWhen;
+    final least =
+        peak != null &&
+            peakWhen != null &&
+            now.difference(peakWhen) <= _peakMemory
+        ? math.max(floor, peak / 4)
+        : floor;
     final hold = _holdUntil;
     final waiting = hold != null && now.isBefore(hold);
     final audio = _audioStrained();
-    final queued = queueDelay > _queueLimit;
+    final late = _lateness(now);
+    final queued = late > _queueLimit;
     if (audio || queued || lag > _lagLimit) {
       // Once per bout: what is already on its way takes a moment to clear,
       // and cutting again meanwhile would go far too low.
-      if (waiting) return;
+      if (waiting || _rate <= least) return;
+      if (_slowingIsNoUse(audio: audio, late: late, now: now)) return;
+      _cuts++;
       final reached = math.min(_rate, math.max(confirmed ?? actual, floor));
+      if (!audio && queued) {
+        _rateBeforeQueue = _rate;
+        _confirmedAtQueue = reached;
+        _answersAtCut = _answers;
+        _worstSinceCut = _lastAnswerTime;
+        _worstWhen = now;
+      }
       // Only the sound says how fast is too fast; a busy moment here does
       // not.
       if (audio) {
         _troubleAt = reached;
         _troubleWhen = now;
       }
-      _rate = math.max(floor, reached * (audio ? 0.6 : 0.8));
-      _holdUntil = now.add(const Duration(seconds: 1));
+      _rate = math.max(least, reached * (audio ? 0.6 : 0.8));
+      _holdUntil = now.add(_settle(queued));
       return;
     }
     if (waiting) return;
+    _calm();
     // The link or the window holds it back, not the pacer: stay close to
     // what it reaches.
     final reached = math.max(actual, confirmed ?? 0);
     if (reached < _rate * 0.8) {
-      _rate = math.max(floor, math.min(_rate, reached * 1.3 + floor));
+      _rate = math.max(least, math.min(_rate, reached * 1.3 + floor));
       return;
     }
     final trouble = _troubleAt;
@@ -324,12 +409,103 @@ class TransferPacer {
     final limit = trouble != null && recent
         ? math.max(start / 2, trouble * 0.85)
         : ceiling;
-    final careful = trouble != null && _rate >= trouble * 0.85;
+    // The same near where a queue was seen to build and drain: that is
+    // about what the link carries, and coming up to it slowly a queue is
+    // small when it shows.
+    final carried = _carried;
+    final carriedWhen = _carriedWhen;
+    final careful =
+        (trouble != null && _rate >= trouble * 0.85) ||
+        (carried != null &&
+            carriedWhen != null &&
+            now.difference(carriedWhen) < _troubleMemory &&
+            _rate >= carried * 0.85);
     // In proportion: a slow link grows as gently as a fast one.
     final step = careful
         ? math.max(floor / 2, _rate * 0.02)
         : math.max(floor, _rate * 0.15);
-    _rate = math.max(floor, math.min(limit, _rate + step));
+    _rate = math.max(least, math.min(limit, _rate + step));
+  }
+
+  /// How long to wait after slowing down before looking again. An answer
+  /// is as old as it took: after a queue ([queued]) the next ones still
+  /// tell of frames that went before, so wait that much longer.
+  Duration _settle(bool queued) {
+    const atLeast = Duration(seconds: 1);
+    final last = _lastAnswerTime;
+    if (!queued || last == null) return atLeast;
+    final wait = atLeast + last;
+    return wait > const Duration(seconds: 4)
+        ? const Duration(seconds: 4)
+        : wait;
+  }
+
+  /// How much later answers come than is usual, see [_usualLate].
+  Duration _lateness(DateTime now) {
+    final delay = queueDelay;
+    final usual = _usualLate;
+    final until = _usualLateUntil;
+    if (usual == null || until == null || !now.isBefore(until)) return delay;
+    return delay > usual ? delay - usual : Duration.zero;
+  }
+
+  /// Whether slowing down again would be for nothing, after it has just
+  /// been tried.
+  ///
+  /// The sound still suffering or this device still behind: [_mostCuts]
+  /// times running are enough. Answers still late: a queue of this
+  /// transfer's making drains once it is slower, so while they get quicker
+  /// there is only to wait. Answers that stay as late were not late because
+  /// of it: that is how long they take now, and if slowing down never
+  /// helped the rate goes back to where it was.
+  bool _slowingIsNoUse({
+    required bool audio,
+    required Duration late,
+    required DateTime now,
+  }) {
+    if (_cuts == 0) return false;
+    final before = _rateBeforeQueue;
+    if (audio || late <= _queueLimit || before == null) {
+      return _cuts >= _mostCuts;
+    }
+    // No answer since, or the worst only just now: nothing to go by yet.
+    final worstWhen = _worstWhen;
+    if (_answers == _answersAtCut ||
+        (worstWhen != null &&
+            now.difference(worstWhen) < const Duration(seconds: 1))) {
+      return true;
+    }
+    final worst = _worstSinceCut;
+    final last = _lastAnswerTime;
+    if (worst != null && last != null && worst - last >= _relief) {
+      _drained = true;
+      _carried = _confirmedAtQueue;
+      _carriedWhen = now;
+      _answersAtCut = _answers;
+      _worstSinceCut = last;
+      _worstWhen = now;
+      _holdUntil = now.add(_settle(true));
+      return true;
+    }
+    // As late as the worst since: slower, they were a little less late.
+    final quickest = _quickest;
+    final usual = queueDelay;
+    final atWorst = worst != null && quickest != null && worst > quickest
+        ? worst - quickest
+        : usual;
+    _usualLate = atWorst > usual ? atWorst : usual;
+    _usualLateUntil = now.add(_usualLateMemory);
+    if (!_drained) _rate = math.max(_rate, before);
+    _calm();
+    return true;
+  }
+
+  /// The bout of slowing down is over.
+  void _calm() {
+    _cuts = 0;
+    _rateBeforeQueue = null;
+    _confirmedAtQueue = null;
+    _drained = false;
   }
 
   void dispose() {
