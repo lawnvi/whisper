@@ -34,6 +34,7 @@ Whisper is a LAN collaboration app. Paired devices connect to each other directl
 | **Quick send** | Send from the Android share sheet, a context menu, or a global hotkey |
 | **Clipboard sync** | Copy on one device, paste on another (off by default) |
 | **Keyboard and mouse sharing** | A software KVM: one keyboard and mouse across several computers |
+| **Wake-on-LAN** | Wake a sleeping computer; starting keyboard and mouse sharing wakes the ones in the layout and reconnects them |
 | **Phone controller** | Turn an Android phone into an air mouse, touchpad, and keyboard |
 | **System audio sharing** | Play a computer's sound on one or more other devices |
 | **Notification forwarding** | Show chosen Android apps' notifications, like codes, on your computer |
@@ -79,6 +80,7 @@ iOS / iPadOS: the project has no paid Apple Developer account, so the app is not
 | Play sound on other devices | Select the speaker at the top of the sidebar, check the devices, then press play on the device picture |
 | Start keyboard/mouse sharing | Select the keyboard at the top of the sidebar, place the other screen beside yours, then turn on the switch at the top right |
 | Leave keyboard/mouse sharing | Press `Ctrl+Alt+Esc` (`Control+Option+Esc` on macOS) |
+| Wake a sleeping computer | Select "Wake" on its device card; it is best on a cable, with Wake-on-LAN turned on, see the [user guide](docs/user-guide_en.md#wake-a-sleeping-computer) |
 | Control a computer from a phone | On Android, open that computer's device page (top right of the conversation), select "Control computer", then start |
 | Take a screenshot | Use the screenshot button in the message box or your shortcut on desktop, then mark it up beside the selection; `Esc` cancels |
 
@@ -97,6 +99,7 @@ The [user guide](docs/user-guide_en.md) covers every feature in full.
 | Window flow: share | Android 12+ starts it itself; Android 10 and 11 need a computer with adb | ✅ | ✅ | GNOME 45+ or KDE Plasma 6 |
 | Clipboard sync | Text, foreground only | ✅ | ✅ | ✅ |
 | Keyboard & mouse | — | ✅ | ✅ | X11, GNOME or KDE Plasma |
+| Wake-on-LAN | — | ✅ | ✅ | ✅ |
 | Phone controller | Controls | Controlled | Controlled | Controlled, as above |
 | System audio | Playback only | ✅ | ✅ | ✅ |
 | Notifications | Sends | Receives | Receives | Receives |
