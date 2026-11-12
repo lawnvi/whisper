@@ -7,8 +7,15 @@ import 'package:whisper/socket/transfer_pacer.dart';
 
 /// What a transfer over a simulated link came to: bytes a second carried
 /// over the second half, the longest a frame waited behind others after the
-/// first ten seconds, and the longest nothing arrived for.
-typedef _Carried = ({double rate, Duration worstWait, Duration stillest});
+/// first ten seconds, the longest nothing arrived for, and how long
+/// something small and live, sent at any moment of the second half, waits
+/// for the link to be free of file data (19 times in 20 no longer).
+typedef _Carried = ({
+  double rate,
+  Duration worstWait,
+  Duration stillest,
+  Duration liveWait,
+});
 
 /// Sends through a pacer for [seconds], as the engine does, over a link
 /// that carries [capacity] bytes a second ([capacityAt] when that changes on
@@ -134,7 +141,14 @@ Future<_Carried> _transfer(
 
   await tester.pump(Duration(seconds: seconds ~/ 2));
   final half = received;
+  final liveWaits = <Duration>[];
+  final sampling = Timer.periodic(const Duration(milliseconds: 1), (_) {
+    final busy = linkFreeAt - elapsed();
+    liveWaits.add(busy > Duration.zero ? busy : Duration.zero);
+  });
   await tester.pump(Duration(seconds: seconds - seconds ~/ 2));
+  sampling.cancel();
+  liveWaits.sort();
   final rate = (received - half) / (seconds - seconds ~/ 2);
   stopped = true;
   final waiting = wake;
@@ -143,7 +157,12 @@ Future<_Carried> _transfer(
   pacer.dispose();
   // What is still on its way arrives; nothing follows.
   await tester.pump(const Duration(seconds: 30));
-  return (rate: rate, worstWait: worstWait, stillest: stillest);
+  return (
+    rate: rate,
+    worstWait: worstWait,
+    stillest: stillest,
+    liveWait: liveWaits[liveWaits.length * 19 ~/ 20],
+  );
 }
 
 void main() {
@@ -231,6 +250,15 @@ void main() {
         expect(
           carried.stillest,
           lessThan(const Duration(seconds: 2)),
+          reason: '$capacity',
+        );
+        // The pointer lagged behind file data although a sixth of the
+        // link was left over: frames of megabytes kept the link full for
+        // most of every quarter second, and what was live waited 80 to
+        // 200 ms behind each. In slices it is about 20.
+        expect(
+          carried.liveWait,
+          lessThan(const Duration(milliseconds: 40)),
           reason: '$capacity',
         );
       }

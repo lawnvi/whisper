@@ -26,6 +26,14 @@ import 'dart:math' as math;
 /// - While this device's own event loop falls behind, which is its
 ///   keyboard and mouse waiting, it gives way, down to half.
 ///
+/// Going a little under the link on the whole is not enough. A frame is
+/// handed to the connection at once and fills the link until it is through:
+/// megabytes at a time kept it full for most of every quarter second, with
+/// all that was left over in one gap at the end, and the pointer waited
+/// behind each of them. So while it holds a transfer back, frames are ten
+/// milliseconds of what may go ([_slice]), one after the other: the link is
+/// never busy for longer than that, and what is live goes in between.
+///
 /// Whatever is going, frames are kept to a quarter second of what the link
 /// has been seen to carry, and, with a receiver that answers every second,
 /// what is unconfirmed to two seconds of it: on a slow link a whole file
@@ -191,6 +199,13 @@ class TransferPacer {
   static const _unheldAtMost = Duration(minutes: 10);
   static const _mostCuts = 3;
   static const _longestWait = Duration(seconds: 1);
+
+  /// How much of what may go a frame is while transfers are held back, and
+  /// how far behind its times a sender may fall and still make it up: a
+  /// timer fires late, by up to 15 ms on Windows, and that must not come
+  /// off every frame.
+  static const _slice = Duration(milliseconds: 10);
+  static const _makeUp = Duration(milliseconds: 30);
   static const _minFrame = 16 * 1024;
   static const _firstCap = 128 * 1024;
   static const _largestCap = 1 << 30;
@@ -226,7 +241,12 @@ class TransferPacer {
       // Until the first answer says how fast the link is, little: on a slow
       // link even a few megabytes queue for minutes.
       final cap = _capOf[transferId] ?? _firstCap;
-      most = math.max(4 * _minFrame, math.min(window, cap));
+      // Held back, nothing queues and the cap opens all the way; let go
+      // again, to count what the link carries, all of that would go at
+      // once. So with something live, two seconds of the link at most.
+      final link = _link;
+      final held = link != null && _active() ? (link * 2).round() : window;
+      most = math.max(4 * _minFrame, math.min(held, math.min(window, cap)));
     }
     _mayBeOut[transferId] = most;
     return most;
@@ -236,10 +256,18 @@ class TransferPacer {
   int frameBytes(int chunk, [String? transferId]) {
     final confirmed = _rateOf[transferId] ?? _confirmed;
     // Not known yet: start no bigger than the frames of old versions.
-    final wanted = confirmed == null
-        ? 512 * 1024
-        : (confirmed / 4).floor() ~/ _minFrame * _minFrame;
-    return math.max(_minFrame, math.min(chunk, wanted));
+    var wanted = confirmed == null ? 512 * 1024 : (confirmed / 4).floor();
+    final rate = _rate;
+    if (rate.isFinite) {
+      // Held back: a slice of what may go, so the link is free again soon.
+      final slice =
+          rate * _slice.inMicroseconds ~/ Duration.microsecondsPerSecond;
+      wanted = math.min(wanted, slice);
+    }
+    return math.max(
+      _minFrame,
+      math.min(chunk, wanted ~/ _minFrame * _minFrame),
+    );
   }
 
   /// Waits until [bytes] more may go.
@@ -270,8 +298,10 @@ class TransferPacer {
       return;
     }
     final next = _nextSend;
-    // Idle time is not saved up: no burst after a pause.
-    final at = next == null || next.isBefore(now) ? now : next;
+    // Idle time is not saved up: no burst after a pause. A little lateness
+    // is made up.
+    final earliest = now.subtract(_makeUp);
+    final at = next == null ? now : (next.isBefore(earliest) ? earliest : next);
     // A frame is a quarter second of what the link carries. One that would
     // take far longer at this rate does not fit it, and a transfer must
     // not stand still for that.
