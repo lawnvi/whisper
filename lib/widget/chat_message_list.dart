@@ -10,6 +10,7 @@ import 'package:whisper/helper/helper.dart';
 import 'package:whisper/helper/toast.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/model/LocalDatabase.dart';
+import 'package:whisper/model/file_transfer.dart';
 import 'package:whisper/model/message.dart';
 import 'package:whisper/theme/whisper_icons.dart';
 import 'package:whisper/theme/whisper_ui.dart';
@@ -58,10 +59,10 @@ class ChatMessageList extends StatefulWidget {
   final ValueChanged<bool>? onSelectionModeChanged;
   final String? selfUid;
 
-  /// Whether a picture or video is all there, with nothing left to transfer
-  /// and nothing wrong. A pile with one that is not starts open, so that
-  /// its progress or its failure is not hidden behind the first picture.
-  final bool Function(MessageData message)? isMediaSettled;
+  /// How far the transfer of a file message is, if it is known, and where
+  /// the file is: what a pile of pictures needs to know of the ones behind.
+  final FileTransferState? Function(MessageData message)? transferStateOf;
+  final String Function(MessageData message)? mediaPathOf;
 
   /// How tall the floating composer is now, with what is under it: a long draft
   /// must not cover the newest messages. Null until it has been measured.
@@ -82,7 +83,8 @@ class ChatMessageList extends StatefulWidget {
     required this.onDeleteMessages,
     this.onSelectionModeChanged,
     required this.selfUid,
-    this.isMediaSettled,
+    this.transferStateOf,
+    this.mediaPathOf,
     this.composerHeight,
     this.hasComposer = true,
   });
@@ -306,11 +308,22 @@ class _ChatMessageListState extends State<ChatMessageList> {
     );
   }
 
-  bool _isPileOpen(List<MessageData> pile) => _pileOpen.putIfAbsent(
-    _keyOf(pile.first),
-    () =>
-        !pile.every((message) => widget.isMediaSettled?.call(message) ?? true),
-  );
+  /// As it was last set by hand; gathered until then.
+  bool _isPileOpen(List<MessageData> pile) =>
+      _pileOpen[_keyOf(pile.first)] ??
+      pile.any(
+        (message) => mediaPileStuck(widget.transferStateOf?.call(message)),
+      );
+
+  /// This device's own are there from the start; another's once it is in.
+  String? _pileSourceOf(MessageData message) {
+    final state = widget.transferStateOf?.call(message);
+    final coming =
+        state != null &&
+        state != FileTransferState.completed &&
+        message.receiver == widget.selfUid;
+    return coming ? null : widget.mediaPathOf?.call(message) ?? message.path;
+  }
 
   void _setPileOpen(List<MessageData> pile, bool open) {
     setState(() => _pileOpen[_keyOf(pile.first)] = open);
@@ -396,6 +409,7 @@ class _ChatMessageListState extends State<ChatMessageList> {
       bubble = ChatMediaPile(
         front: bubble,
         behind: pile.skip(1),
+        sourceOf: _pileSourceOf,
         gathered: gathered,
         fromOther: isOpponent,
         // Selecting has no use for it.

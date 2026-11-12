@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:whisper/helper/helper.dart';
 import 'package:whisper/model/LocalDatabase.dart';
+import 'package:whisper/model/file_transfer.dart';
 import 'package:whisper/model/message.dart';
 import 'package:whisper/state/folder_message.dart';
 import 'package:whisper/theme/whisper_ui.dart';
@@ -21,6 +22,14 @@ MediaFileKind? _pileKind(MessageData message) {
       ? kind
       : null;
 }
+
+/// Whether a transfer in [state] stopped short and waits for someone: paused,
+/// cut off or failed. A pile with one such is open until gathered by hand, so
+/// that what needs doing is not hidden behind the first picture.
+bool mediaPileStuck(FileTransferState? state) =>
+    state == FileTransferState.waitingReconnect ||
+    state == FileTransferState.paused ||
+    state == FileTransferState.failed;
 
 /// The pictures and videos the one at [index] was sent together with, as
 /// indexes into [messages] from the first sent to the last, or null when it
@@ -61,6 +70,7 @@ class ChatMediaPile extends StatelessWidget {
     super.key,
     required this.front,
     required this.behind,
+    required this.sourceOf,
     required this.gathered,
     required this.fromOther,
     required this.button,
@@ -70,6 +80,9 @@ class ChatMediaPile extends StatelessWidget {
 
   /// The messages behind the first, in the order they were sent.
   final Iterable<MessageData> behind;
+
+  /// Where each can be shown from; null leaves its place empty for now.
+  final String? Function(MessageData message) sourceOf;
   final bool gathered;
 
   /// Whether the other device sent them: they sit against the left edge.
@@ -85,7 +98,7 @@ class ChatMediaPile extends StatelessWidget {
         behind: [
           for (final other in behind.take(MediaPile.maxBehind))
             MediaThumbnail(
-              source: other.path,
+              source: sourceOf(other) ?? '',
               kind: _pileKind(other) ?? MediaFileKind.image,
               icon: false,
             ),

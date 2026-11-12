@@ -790,7 +790,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
                 }
               },
               selfUid: self?.uid,
-              isMediaSettled: _isMediaSettled,
+              transferStateOf: (message) => _transferForMessage(message)?.state,
+              mediaPathOf: _effectiveMessagePath,
             ),
           ),
         ),
@@ -2710,10 +2711,6 @@ class _SendMessageScreen extends State<SendMessageScreen>
   }
 
   /// See [ChatMessageList.isMediaSettled].
-  bool _isMediaSettled(MessageData message) =>
-      (_transferForMessage(message)?.state ?? FileTransferState.completed) ==
-      FileTransferState.completed;
-
   void _openMessageFile(MessageData message) {
     _knownOnDisk.clear();
     final transfer = _transferForMessage(message);
