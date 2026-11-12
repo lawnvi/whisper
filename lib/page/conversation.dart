@@ -31,7 +31,8 @@ import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/file_transfer.dart';
 import 'package:whisper/model/message.dart';
 import 'package:whisper/page/conversation_drafts.dart';
-import 'package:whisper/page/deviceList.dart';
+import 'package:whisper/page/conversation_peer.dart';
+import 'package:whisper/widget/app_dialogs.dart' as app_dialogs;
 import 'package:whisper/page/remote_files/remote_files_page.dart';
 import 'package:whisper/remote_files/fs_placement.dart';
 import 'package:whisper/page/settings.dart' as app_settings;
@@ -126,17 +127,6 @@ class SendMessageScreen extends StatefulWidget {
 
   @override
   _SendMessageScreen createState() => _SendMessageScreen(device);
-}
-
-DeviceData resolveConversationDeviceSnapshot({
-  required DeviceData localDevice,
-  required DeviceData selectedDevice,
-  required DeviceData? storedDevice,
-}) {
-  if (localDevice.uid == selectedDevice.uid) {
-    return localDevice;
-  }
-  return storedDevice ?? selectedDevice;
 }
 
 class _SendMessageScreen extends State<SendMessageScreen>
@@ -2006,20 +1996,22 @@ class _SendMessageScreen extends State<SendMessageScreen>
           ConnectionAttemptReason.peerRejected => l10n.pairingRejectedByPeer,
           _ => l10n.connectFailed,
         };
-        showLoadingDialog(
-          context,
-          title:
-              AppLocalizations.of(context)?.connectFailed ??
-              'Connection Failed',
-          // The title says it already when there is nothing more to say.
-          description: displayMessage == l10n.connectFailed
-              ? ''
-              : displayMessage,
-          isLoading: true,
-          icon: Icon(Icons.warning_rounded, color: context.wc.bad),
-          cancelButtonText: AppLocalizations.of(context)?.cancel ?? 'Cancel',
-          onCancel: () {},
-          task: (VoidCallback onCancel) async {},
+        unawaited(
+          app_dialogs.showLoadingDialog(
+            context,
+            title:
+                AppLocalizations.of(context)?.connectFailed ??
+                'Connection Failed',
+            // The title says it already when there is nothing more to say.
+            description: displayMessage == l10n.connectFailed
+                ? ''
+                : displayMessage,
+            isLoading: true,
+            icon: Icon(Icons.warning_rounded, color: context.wc.bad),
+            cancelButtonText: AppLocalizations.of(context)?.cancel ?? 'Cancel',
+            onCancel: () {},
+            task: (VoidCallback onCancel) async {},
+          ),
         );
       }
       return false;
@@ -2318,7 +2310,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
         }
         return;
       }
-      final layout = await _remoteInputLayoutForCurrentPeer();
+      final layout = await remoteInputLayoutFor(device);
       final topologyLayout = layout.savedLayout;
       RemoteInputResolvedLayout? resolvedTopologyLayout;
       if (topologyLayout != null &&
@@ -2418,32 +2410,6 @@ class _SendMessageScreen extends State<SendMessageScreen>
         );
       }
     }
-  }
-
-  Future<RemoteInputLayoutData> _remoteInputLayoutForCurrentPeer() async {
-    final saved = await LocalDatabase().fetchRemoteInputLayout(device.uid);
-    if (saved != null) {
-      return saved;
-    }
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final layout = RemoteInputLayoutData(
-      peerId: device.uid,
-      peerName: device.label,
-      x: 1000,
-      y: 0,
-      width: 900,
-      height: 600,
-      enabled: true,
-      autoActivate: false,
-      autoRole: RemoteInputAutoRole.source.name,
-      layoutVersion: 1,
-      layoutJson: '',
-      edgeThresholdPx: 6,
-      releaseHotkey: 'ctrl+alt+esc',
-      updatedAt: now,
-    );
-    await LocalDatabase().upsertRemoteInputLayout(layout);
-    return layout;
   }
 
   Future<bool> _sendText(String content, {isClipboard = false}) async {
@@ -2861,20 +2827,17 @@ class _SendMessageScreen extends State<SendMessageScreen>
       return;
     }
     _isAlert = true;
-    showConfirmationDialog(
-      context,
-      title: AppLocalizations.of(context)?.timeoutTitle ?? "是否释放连接",
-      description: l10n.connectFailed,
-      confirmButtonText: AppLocalizations.of(context)?.disconnect ?? "断开",
-      cancelButtonText: AppLocalizations.of(context)?.cancel ?? "取消",
-      onConfirm: () {
-        WsSvrManager().close();
-        _isAlert = false;
-      },
-      onCancel: () {
-        _isAlert = false;
-      },
-    );
+    unawaited(() async {
+      final confirmed = await app_dialogs.confirmAction(
+        context,
+        title: AppLocalizations.of(context)?.timeoutTitle ?? "是否释放连接",
+        description: l10n.connectFailed,
+        confirmButtonText: AppLocalizations.of(context)?.disconnect ?? "断开",
+        cancelButtonText: AppLocalizations.of(context)?.cancel ?? "取消",
+      );
+      if (confirmed) unawaited(WsSvrManager().close());
+      _isAlert = false;
+    }());
   }
 
   @override
