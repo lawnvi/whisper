@@ -161,6 +161,56 @@ void main() {
     expect(heard, hasLength(1));
   });
 
+  // macOS closed the socket when the Mac moved to another network, and UDP
+  // stayed gone until the app restarted: keyboard, mouse and sound all went
+  // by TCP, behind any file being sent, with nothing on screen to say so.
+  test('a socket closed under the endpoint is bound again on the same port, '
+      'and the lane on it comes back', () async {
+    final dialerEnd = await DatagramEndpoint.bind(
+      rebindDelay: const Duration(milliseconds: 20),
+    );
+    final answerEnd = await DatagramEndpoint.bind(
+      rebindDelay: const Duration(milliseconds: 20),
+    );
+    final heard = <List<int>>[];
+    final answering = DatagramLane(
+      endpoint: answerEnd,
+      keys: _keys(),
+      dialer: false,
+      onData: (payload) => heard.add(payload.toList()),
+      keepalive: const Duration(milliseconds: 20),
+    );
+    final dialing = DatagramLane(
+      endpoint: dialerEnd,
+      keys: _keys(),
+      dialer: true,
+      peer: InternetAddress.loopbackIPv4,
+      peerPort: answerEnd.port,
+      onData: (_) {},
+      keepalive: const Duration(milliseconds: 20),
+    );
+    addTearDown(() async {
+      dialing.close();
+      answering.close();
+      await dialerEnd.close();
+      await answerEnd.close();
+    });
+    final port = answerEnd.port;
+
+    answerEnd.loseSocket();
+    dialerEnd.loseSocket();
+    await Future<void>.delayed(Duration.zero);
+    expect(answerEnd.isClosed, isFalse);
+    expect(answerEnd.port, port);
+
+    final deadline = DateTime.now().add(const Duration(seconds: 3));
+    while (!dialing.send(_bytes([3])) || heard.isEmpty) {
+      if (DateTime.now().isAfter(deadline)) fail('the lane never came back');
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
+    expect(heard.last, [3]);
+  });
+
   // A laptop that only received sound by UDP let its Wi-Fi card doze, and
   // packets waited at the access point for up to 280 ms: late sound that TCP
   // never had, as its ACKs kept the card awake. The receiving end now

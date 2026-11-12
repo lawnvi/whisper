@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:whisper/socket/datagram_seal.dart';
 import 'package:whisper/socket/link_delay.dart';
 
@@ -10,22 +11,70 @@ import 'package:whisper/socket/link_delay.dart';
 /// their lane by the id in clear at their start ([DatagramFormat]); a lane
 /// then checks they are genuine. Anything else is dropped unread.
 final class DatagramEndpoint {
-  DatagramEndpoint._(this._socket) {
+  DatagramEndpoint._(this._socket, {this.rebindDelay = _rebindDelay})
+    : port = _socket.port {
+    _listen();
+  }
+
+  static const _rebindDelay = Duration(seconds: 1);
+
+  /// How long after losing its socket it binds again, and between tries.
+  final Duration rebindDelay;
+
+  void _listen() {
     _subscription = _socket.listen(
       _onEvent,
       // Windows reports an ICMP "port unreachable" from an earlier send as
       // an error on the socket; the socket itself keeps working.
       onError: (Object _) {},
-      onDone: () => _closed = true,
+      onDone: _lost,
       cancelOnError: false,
     );
   }
+
+  /// The socket was closed under it: macOS does that when the Mac moves to
+  /// another network. Without a socket UDP was gone until the app restarted
+  /// and everything went by TCP, behind any file being sent. The same port
+  /// again, so the other ends of the lanes on it still reach it.
+  void _lost() {
+    if (_closed || _rebinding) return;
+    _rebinding = true;
+    unawaited(_rebind());
+  }
+
+  Future<void> _rebind() async {
+    while (!_closed) {
+      await Future<void>.delayed(rebindDelay);
+      if (_closed) break;
+      final RawDatagramSocket socket;
+      try {
+        socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, port);
+      } on SocketException {
+        continue;
+      }
+      if (_closed) {
+        socket.close();
+        break;
+      }
+      _markInteractive(socket);
+      _socket = socket;
+      _rebinding = false;
+      _listen();
+      return;
+    }
+    _rebinding = false;
+  }
+
+  /// Closes the socket as the system would, for tests.
+  @visibleForTesting
+  void loseSocket() => _socket.close();
 
   /// Binds on all IPv4 addresses, on [port] when it is free, else on any,
   /// or not at all when [exact] (the other end expects that port).
   static Future<DatagramEndpoint> bind({
     int port = 0,
     bool exact = false,
+    @visibleForTesting Duration rebindDelay = _rebindDelay,
   }) async {
     RawDatagramSocket socket;
     try {
@@ -35,7 +84,7 @@ final class DatagramEndpoint {
       socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
     }
     _markInteractive(socket);
-    return DatagramEndpoint._(socket);
+    return DatagramEndpoint._(socket, rebindDelay: rebindDelay);
   }
 
   /// Asks the network to treat these datagrams as interactive voice: on
@@ -61,12 +110,16 @@ final class DatagramEndpoint {
     }
   }
 
-  final RawDatagramSocket _socket;
-  late final StreamSubscription<RawSocketEvent> _subscription;
+  RawDatagramSocket _socket;
+  StreamSubscription<RawSocketEvent>? _subscription;
   final Map<int, void Function(Datagram datagram)> _lanes = {};
-  bool _closed = false;
 
-  int get port => _socket.port;
+  /// Closed here; losing the socket is not closing, see [_lost].
+  bool _closed = false;
+  bool _rebinding = false;
+
+  /// Kept when the socket is bound again.
+  final int port;
   bool get isClosed => _closed;
 
   static int _key(Uint8List laneId) =>
@@ -80,7 +133,7 @@ final class DatagramEndpoint {
 
   /// False when the datagram could not go now (the socket is full or gone).
   bool send(Uint8List datagram, InternetAddress address, int port) {
-    if (_closed) return false;
+    if (_closed || _rebinding) return false;
     try {
       return _socket.send(datagram, address, port) == datagram.length;
     } on SocketException {
@@ -107,7 +160,7 @@ final class DatagramEndpoint {
   Future<void> close() async {
     _closed = true;
     _lanes.clear();
-    await _subscription.cancel();
+    await _subscription?.cancel();
     _socket.close();
   }
 }
