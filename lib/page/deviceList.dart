@@ -1926,9 +1926,10 @@ class _DeviceListScreen extends State<DeviceListScreen>
       return uid;
     }
 
-    final soundMembers = group?.isLive == true
+    final soundMembers =
+        group?.isLive == true && group!.sourcePeerId == device?.uid
         ? [
-            for (final sink in group!.sinks.values)
+            for (final sink in group.sinks.values)
               if (!sink.isTerminal) nameOf(sink.sinkPeerId),
           ]
         : const <String>[];
@@ -2364,9 +2365,11 @@ class _DeviceListScreen extends State<DeviceListScreen>
       );
     }
     final group = _audioGroupCoordinator.session;
-    final playingOn = group?.isLive == true
+    // Only at the source: where it plays, the audio island says whose it is.
+    final playingOn =
+        group?.isLive == true && group!.sourcePeerId == device?.uid
         ? [
-            for (final sink in group!.sinks.values)
+            for (final sink in group.sinks.values)
               if (!sink.isTerminal) nameOf(sink.sinkPeerId),
           ]
         : const <String>[];
@@ -2375,7 +2378,8 @@ class _DeviceListScreen extends State<DeviceListScreen>
         glyph: WhisperGlyph.speaker,
         title: l10n.shellIslandPlayingOn(playingOn.join('、')),
         stopLabel: l10n.cancel,
-        onStop: () => unawaited(_stopDesktopAudioShare()),
+        // Through the sound page's switch, so the page shows it stopped.
+        onStop: () => unawaited(ShellSoundController.shared.setOn(false)),
         home: IslandHomes.sound,
       );
     }
@@ -2965,12 +2969,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
       if (found.length >= 8) break;
     }
     return found;
-  }
-
-  Future<void> _stopDesktopAudioShare() async {
-    await _audioGroupCoordinator.stopGroup(
-      sendControl: socketManager.sendAudioGroupControlTo,
-    );
   }
 
   String _audioGroupRoleLabel(AudioChannelRole role) {

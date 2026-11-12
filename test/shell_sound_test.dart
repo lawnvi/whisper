@@ -197,27 +197,47 @@ void main() {
       );
     });
 
-    test('off stops the group and keeps who was checked', () async {
+    // Off kept them checked, so a device looked chosen with no sound going
+    // to it. They are kept for the switch only.
+    test(
+      'off stops the group: nothing is checked, the switch remembers',
+      () async {
+        await world.controller.toggle(imacDevice.uid);
+        await world.controller.toggle(xiaomiDevice.uid);
+        await world.controller.setOn(false);
+
+        expect(world.group.session, isNull);
+        expect(world.controller.on, isFalse);
+        expect(world.controller.selection, isEmpty);
+        for (final device in [imacDevice, xiaomiDevice]) {
+          expect(world.controller.isSelected(device.uid), isFalse);
+          final row = world.controller.rowFor(device);
+          expect((row.phase, row.checked), (SoundRowPhase.stopped, false));
+        }
+        expect(world.controller.hasMembers, isTrue);
+      },
+    );
+
+    test('off, checking one plays to it alone', () async {
+      await world.controller.toggle(imacDevice.uid);
+      await world.controller.toggle(xiaomiDevice.uid);
+      await world.controller.setOn(false);
+      world.sentGroup.clear();
+
+      await world.controller.toggle(xiaomiDevice.uid);
+
+      expect(world.group.session!.sinks.keys, [xiaomiDevice.uid]);
+      expect(world.controller.selection.keys, [xiaomiDevice.uid]);
+      expect(world.controller.rowFor(imacDevice).phase, SoundRowPhase.idle);
+    });
+
+    test('on again plays to the same devices on the same channels', () async {
       await world.controller.toggle(imacDevice.uid);
       await world.controller.toggle(xiaomiDevice.uid);
       await world.controller.setChannel(
         xiaomiDevice.uid,
         AudioChannelRole.mono,
       );
-      await world.controller.setOn(false);
-
-      expect(world.group.session, isNull);
-      expect(world.controller.on, isFalse);
-      expect(world.controller.selection, {
-        imacDevice.uid: AudioChannelRole.left,
-        xiaomiDevice.uid: AudioChannelRole.mono,
-      });
-      expect(world.controller.hasMembers, isTrue);
-    });
-
-    test('on again plays to the same devices on the same channels', () async {
-      await world.controller.toggle(imacDevice.uid);
-      await world.controller.toggle(xiaomiDevice.uid);
       await world.controller.setOn(false);
       world.sentGroup.clear();
 
@@ -227,7 +247,7 @@ void main() {
       expect(session.sinks[imacDevice.uid]!.channelRole, AudioChannelRole.left);
       expect(
         session.sinks[xiaomiDevice.uid]!.channelRole,
-        AudioChannelRole.right,
+        AudioChannelRole.mono,
       );
       expect(world.sentGroup.map((sent) => sent.$2.action).toSet(), {
         AudioGroupControlAction.groupOffer,
@@ -242,11 +262,13 @@ void main() {
       expect(world.controller.on, isFalse);
     });
 
-    test('stopped from somewhere else keeps who was checked', () async {
+    test('stopped from somewhere else shows nothing checked', () async {
       await world.controller.toggle(imacDevice.uid);
       await world.group.stopLocal();
       expect(world.controller.on, isFalse);
-      expect(world.controller.isSelected(imacDevice.uid), isTrue);
+      expect(world.controller.isSelected(imacDevice.uid), isFalse);
+      expect(world.controller.rowFor(imacDevice).phase, SoundRowPhase.stopped);
+      expect(world.controller.hasMembers, isTrue);
     });
 
     test('a group started elsewhere shows up here', () async {

@@ -268,7 +268,7 @@ The phone and computer must already be connected and trust each other, and the c
 
 On desktop, select the speaker at the top of the sidebar, check one or more connected devices, then press play on the device picture. Multi-device playback supports basic synchronization, and with two or more checked you can assign left and right channels.
 
-When another device plays its sound here, this page shows that device instead, with gain, pause, and disconnect. After pausing or disconnecting there, the source unchecks that device and says it stopped playing; resuming there checks it again, and so does checking it on the source.
+When another device plays its sound here, this page shows that device instead, with gain, pause, and disconnect. After pausing or disconnecting there, the source unchecks that device and says it stopped playing; resuming there checks it again, and so does checking it on the source. A check means sound is going there: once sharing stops nothing stays checked, the devices just played to say Stopped, and the play button plays to them again.
 
 Between computers, sound goes over UDP like the keyboard and mouse (0.0.60 or later on both). A short piece lost now and then is filled in instead of cutting out. Sound played on an Android phone still uses the original connection.
 

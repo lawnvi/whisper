@@ -87,7 +87,8 @@ enum SoundRowPhase {
 
   /// Nearby but not connected, dimmed.
 
-  /// Checked, while the master switch is off.
+  /// Played to last, with the switch off: unchecked, "已停止". Also checked
+  /// while waiting for the permission to start.
   stopped,
   connecting,
   calibrating,
@@ -225,12 +226,16 @@ class ShellSoundController extends ChangeNotifier {
 
   /// The devices checked and their channels.
   Map<String, AudioChannelRole> get selection => {
-    for (final entry in _members.roles.entries)
-      if (!_left.contains(entry.key)) entry.key: entry.value,
+    if (_on)
+      for (final entry in _members.roles.entries)
+        if (!_left.contains(entry.key)) entry.key: entry.value,
   };
 
+  /// Checked: the sound goes there or is on its way. With the switch off
+  /// nothing is, wherever it was stopped; who played last is kept for the
+  /// switch only (`rowFor` says so beside each).
   bool isSelected(String peerId) =>
-      _members.contains(peerId) && !_left.contains(peerId);
+      _on && _members.contains(peerId) && !_left.contains(peerId);
 
   /// Sound is going there, or on its way: checked is not enough, the other
   /// device may have stopped playing it.
@@ -310,7 +315,7 @@ class ShellSoundController extends ChangeNotifier {
       // again.
       await _remove(peerId);
       await _add(peerId);
-    } else if (_members.contains(peerId)) {
+    } else if (isSelected(peerId)) {
       await _remove(peerId);
     } else {
       await _add(peerId);
@@ -356,6 +361,9 @@ class ShellSoundController extends ChangeNotifier {
 
   Future<void> _add(String peerId) async {
     _failure = null;
+    // Off, nothing is shown checked: checking one plays to it alone. The
+    // switch is what plays to the last ones again.
+    if (!_on) _members.clear();
     if (!(_group.session?.isLive ?? false)) {
       // A new group starts: whoever stopped on their own device is not
       // played to again because another device was checked.
@@ -561,9 +569,10 @@ class ShellSoundController extends ChangeNotifier {
         _on = true;
       } else if (_wasLive &&
           (session == null || session.state == AudioGroupState.stopped)) {
-        // Stopped from somewhere else, or every device playing it stopped. Who
-        // was checked stays checked. The stopped group stays too: a device that
-        // only paused can still ask for the sound again.
+        // Stopped from somewhere else, or every device playing it stopped.
+        // Who was checked is kept for the switch, shown unchecked. The stopped
+        // group stays too: a device that only paused can still ask for the
+        // sound again.
         _on = false;
       }
       _wasLive = groupLive || _singleLive;
@@ -609,10 +618,12 @@ class ShellSoundController extends ChangeNotifier {
 
     // Unchecked because that device stopped it, not because of anything here.
     if (_left.contains(peer)) return row(SoundRowPhase.disconnected);
+    // Unchecked as nothing goes there; the switch plays to it again.
+    if (!_on && _members.contains(peer)) return row(SoundRowPhase.stopped);
     if (!checked) {
       return row(group ? SoundRowPhase.idle : SoundRowPhase.soloOnly);
     }
-    if (!_on || permissionNeeded) return row(SoundRowPhase.stopped);
+    if (permissionNeeded) return row(SoundRowPhase.stopped);
     if (peer == _soloPeer) {
       final state = _single.state;
       if (state.peerId != peer) return row(SoundRowPhase.connecting);
