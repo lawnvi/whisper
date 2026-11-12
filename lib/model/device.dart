@@ -54,6 +54,14 @@ final class DeviceData extends DataClass implements Insertable<DeviceData> {
   final int lastTime;
   final bool? around;
 
+  /// What to call this device here: a name given to it on this device
+  /// (`PeerAliases`), else its own [name], which its profile keeps
+  /// overwriting.
+  String get label => labelOf(uid, name);
+
+  /// Set by `PeerAliases` once it has read what was given.
+  static String Function(String uid, String name) labelOf = (_, name) => name;
+
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{

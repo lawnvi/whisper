@@ -38,6 +38,7 @@ import 'package:whisper/page/window_stream/phone_touch_alert.dart';
 import 'package:whisper/window_stream/linux/gnome_shell_helper.dart';
 import 'package:whisper/window_stream/window_stream_coordinator.dart';
 import 'package:whisper/state/desktop_quick_send_inbox.dart';
+import 'package:whisper/state/peer_aliases.dart';
 import 'package:whisper/cast_receiver/cast_receiver_manager.dart';
 import 'package:whisper/cast_receiver/cast_playback_window.dart';
 import 'package:whisper/widget/cast_playback_host.dart';
@@ -140,8 +141,10 @@ Future<void> main(List<String> arguments) async {
   _recordWhatGoesWrong();
   await applyImageMemoryBudget();
   GpuCacheTrimmer.start();
-  // Which devices are tablets, for their icons from the first frame.
+  // Which devices are tablets, for their icons from the first frame, and
+  // what they are called here.
   unawaited(DeviceFormFactors.shared.load());
+  unawaited(PeerAliases.shared.load());
   unawaited(WakeTargets.shared.load());
   final sodium = await SodiumInit.init();
   WhisperAead.installNativeAcceleration(sodium);

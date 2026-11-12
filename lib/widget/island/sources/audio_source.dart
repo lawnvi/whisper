@@ -56,7 +56,7 @@ class AudioIslandSource extends ChangeNotifier implements IslandSource {
   final IslandClock _clock;
 
   static String _liveDeviceName(String peerId) {
-    final name = WsSvrManager().remoteProfileFor(peerId)?.device.name.trim();
+    final name = WsSvrManager().remoteProfileFor(peerId)?.device.label.trim();
     return name == null || name.isEmpty ? '' : name;
   }
 

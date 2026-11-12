@@ -9,11 +9,20 @@ import 'package:whisper/theme/whisper_ui.dart';
 import 'package:whisper/theme/whisper_window.dart';
 import 'package:window_manager/window_manager.dart';
 
-/// What [device] looks like, tablets by what they said about themselves.
+/// What [device] looks like, by what it said about itself.
 DeviceKind deviceKindOf(DeviceData device) => deviceKindFor(
   device.platform,
   name: device.name,
   tablet: DeviceFormFactors.shared.isTablet(device.uid),
+  formFactor: DeviceFormFactors.shared.formFactorOf(device.uid),
+);
+
+/// What this device looks like.
+DeviceKind selfKindOf(DeviceData self) => deviceKindFor(
+  self.platform,
+  name: self.name,
+  tablet: DeviceFormFactors.shared.localIsTablet,
+  formFactor: DeviceFormFactors.shared.local,
 );
 
 /// A device's kind and wallpaper.

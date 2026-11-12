@@ -174,7 +174,7 @@ class _NetworkSheet extends StatelessWidget {
               ),
               const SizedBox(height: 3),
               Text(
-                '${device.name} · ${device.host}',
+                '${device.label} · ${device.host}',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(fontSize: type.note, color: c.ink2),

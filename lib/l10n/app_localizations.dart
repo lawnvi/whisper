@@ -5020,6 +5020,42 @@ abstract class AppLocalizations {
   /// **'唤醒'**
   String get shellCardWake;
 
+  /// No description provided for @shellCardAlias.
+  ///
+  /// In zh, this message translates to:
+  /// **'备注名'**
+  String get shellCardAlias;
+
+  /// No description provided for @shellCardAliasNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'只在这台设备上这样叫它，{name} 自己和别的设备看到的还是原来的名字。清空就恢复原名。'**
+  String shellCardAliasNote(String name);
+
+  /// No description provided for @shellCardVersion.
+  ///
+  /// In zh, this message translates to:
+  /// **'版本'**
+  String get shellCardVersion;
+
+  /// No description provided for @shellCardAddress.
+  ///
+  /// In zh, this message translates to:
+  /// **'地址'**
+  String get shellCardAddress;
+
+  /// No description provided for @shellCardOwnAddress.
+  ///
+  /// In zh, this message translates to:
+  /// **'本机地址'**
+  String get shellCardOwnAddress;
+
+  /// No description provided for @shellCardCopied.
+  ///
+  /// In zh, this message translates to:
+  /// **'已复制 {value}'**
+  String shellCardCopied(String value);
+
   /// No description provided for @shellCardNetwork.
   ///
   /// In zh, this message translates to:

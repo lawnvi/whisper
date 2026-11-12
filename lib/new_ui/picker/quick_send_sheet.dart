@@ -13,6 +13,7 @@ import 'package:whisper/widget/media_message_preview.dart' show MediaFileKind;
 import 'package:whisper/widget/media_pile.dart';
 import 'package:whisper/widget/media_thumbnail.dart';
 import 'package:whisper/widget/quick_send_chooser.dart';
+import 'package:whisper/state/peer_aliases.dart';
 
 /// surfaces.md「设备选取器」with what is about to be sent above it: from another
 /// app on a phone, as a sheet from the bottom; from a shortcut on a desktop, as a
@@ -60,6 +61,7 @@ class _QuickSendPickerState extends State<QuickSendPicker> {
     target.platform,
     name: target.name,
     tablet: DeviceFormFactors.shared.isTablet(target.id),
+    formFactor: DeviceFormFactors.shared.formFactorOf(target.id),
   );
 
   @override
@@ -78,7 +80,7 @@ class _QuickSendPickerState extends State<QuickSendPicker> {
               autofocus: !touch && target.id == marked,
               device: DevicePickerEntry(
                 id: target.id,
-                name: target.name,
+                name: PeerAliases.shared.labelOf(target.id, target.name),
                 kind: _kind(target),
                 checked: target.id == marked,
               ),

@@ -1,7 +1,10 @@
 import 'dart:async';
 
+import 'package:package_info_plus/package_info_plus.dart';
+
 import '../helper/device_form_factor.dart';
 import '../helper/wake_on_lan.dart';
+import 'peer_aliases.dart';
 import 'peer_profile.dart';
 
 /// What a peer said about itself that is kept after it leaves: whether it is
@@ -16,14 +19,32 @@ void rememberPeerTraits(String peerId, PeerProfile profile) {
   }
 }
 
-/// A removed device leaves nothing behind.
-void forgetPeerTraits(String peerId) =>
-    unawaited(WakeTargets.shared.forget(peerId));
+/// A removed device leaves nothing behind, the name given to it here too.
+void forgetPeerTraits(String peerId) {
+  unawaited(WakeTargets.shared.forget(peerId));
+  unawaited(PeerAliases.shared.forget(peerId));
+}
 
-/// This device as its profile describes it: a phone, a tablet or a computer.
+/// This device as its profile describes it: a phone, a tablet, a laptop or
+/// a desktop.
 Future<String> localFormFactor() async {
   await DeviceFormFactors.shared.load();
   return DeviceFormFactors.shared.local;
+}
+
+String? _appVersion;
+
+/// This app's version for its profile, or empty when it cannot be read.
+Future<String> localAppVersion() async {
+  final known = _appVersion;
+  if (known != null) return known;
+  var version = '';
+  try {
+    version = (await PackageInfo.fromPlatform()).version;
+  } catch (_) {
+    // Not said: the card shows no version.
+  }
+  return _appVersion = AppVersionField.valid(version) ? version : '';
 }
 
 List<WakeTarget>? _localWake;

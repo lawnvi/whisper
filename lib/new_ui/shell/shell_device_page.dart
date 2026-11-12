@@ -60,7 +60,7 @@ class ShellDevicePage extends StatelessWidget {
       return ShellDeviceState(
         touch: touch,
         art: deviceArtFor(device, size: 84, paired: false),
-        title: l10n.shellNearbyTitle(device.name),
+        title: l10n.shellNearbyTitle(device.label),
         action: ShellFilledButton(
           touch: touch,
           label: connecting ? l10n.shellConnecting : l10n.shellConnect,
@@ -77,7 +77,7 @@ class ShellDevicePage extends StatelessWidget {
             ? DeviceArtState.nearby
             : DeviceArtState.offline,
       ),
-      title: l10n.shellNotConnected(device.name),
+      title: l10n.shellNotConnected(device.label),
       action: ShellFilledButton(
         touch: touch,
         label: connecting ? l10n.shellConnecting : l10n.shellConnect,
@@ -151,7 +151,7 @@ class _ShellDevicePageBodyState extends State<_ShellDevicePageBody> {
       switch (page.tab) {
         1 => l10n.shellTabFiles,
         2 => l10n.shellTabApps,
-        _ => device.name,
+        _ => device.label,
       },
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
@@ -257,7 +257,7 @@ class _ShellDevicePageBodyState extends State<_ShellDevicePageBody> {
                     ),
                     child: Text(
                       key: page.titleKey,
-                      device.name,
+                      device.label,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -363,7 +363,7 @@ class _ShellDevicePageBodyState extends State<_ShellDevicePageBody> {
                                   ),
                                   child: Text(
                                     key: page.titleKey,
-                                    device.name,
+                                    device.label,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: TextStyle(

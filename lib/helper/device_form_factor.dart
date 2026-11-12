@@ -7,10 +7,12 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../state/peer_profile.dart';
+import 'computer_form_factor.dart';
 
-/// Phones and tablets share a platform name (`android`, `ios`), so each
-/// says which it is ([PeerProfile.formFactor]); this keeps what others said
-/// so a tablet keeps its picture while it is away.
+/// Phones and tablets share a platform name (`android`, `ios`), and so do
+/// laptops and desktops, so each says which it is ([PeerProfile.formFactor]);
+/// this keeps what others said so a device keeps its picture while it is
+/// away.
 class DeviceFormFactors extends ChangeNotifier {
   DeviceFormFactors({SharedPreferences? preferences})
     : _preferences = preferences;
@@ -24,13 +26,16 @@ class DeviceFormFactors extends ChangeNotifier {
   String _local = '';
   Future<void>? _loading;
 
-  /// This device: [DeviceFormFactor.tablet] or [DeviceFormFactor.phone];
-  /// empty on a computer.
+  /// This device: one of [DeviceFormFactor]'s, or empty when it cannot
+  /// tell (a computer without the system calls for it).
   String get local => _local;
 
   bool get localIsTablet => _local == DeviceFormFactor.tablet;
 
   bool isTablet(String peerId) => _known[peerId] == DeviceFormFactor.tablet;
+
+  /// What [peerId] said it is, or empty.
+  String formFactorOf(String peerId) => _known[peerId] ?? '';
 
   /// Reads what was kept and what this device is (once).
   Future<void> load() => _loading ??= _load();
@@ -74,16 +79,23 @@ class DeviceFormFactors extends ChangeNotifier {
   }
 
   static bool _valid(Object? value) =>
-      value == DeviceFormFactor.phone || value == DeviceFormFactor.tablet;
+      value == DeviceFormFactor.phone ||
+      value == DeviceFormFactor.tablet ||
+      value == DeviceFormFactor.laptop ||
+      value == DeviceFormFactor.desktop;
 }
 
 /// What this device is: an iPad by its model, an Android device by its
 /// screen (600 dp across or more, Android's own line for tablets). A foldable is
 /// a phone however it was held when this ran: one read open and one read closed
-/// would look like two devices to everything that draws it.
+/// would look like two devices to everything that draws it. A computer by
+/// its battery or chassis ([detectComputerFormFactor]).
 Future<String> detectLocalFormFactor() async {
   if (kIsWeb) {
     return '';
+  }
+  if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
+    return detectComputerFormFactor();
   }
   if (Platform.isIOS) {
     try {

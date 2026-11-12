@@ -681,7 +681,7 @@ class _Target extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.wc;
     const type = WhisperType(touch: false);
-    final kind = deviceKindFor(device.platform, name: device.name);
+    final kind = device.deviceKind;
     return Pressable(
       onTap: onTap,
       radius: WhisperRadius.m,

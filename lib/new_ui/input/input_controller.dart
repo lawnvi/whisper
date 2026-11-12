@@ -305,7 +305,7 @@ class ShellInputController extends ChangeNotifier {
     final snapshot = _workspace.snapshot;
     return InputScreen(
       peerId: peerId,
-      name: device.name,
+      name: device.label,
       isSelf: false,
       bounds: node.bounds,
       displays: [for (final d in node.placedDisplays) d.rect],
@@ -390,7 +390,7 @@ class ShellInputController extends ChangeNotifier {
           displays: [
             RemoteInputDisplay(
               displayId: '${device.uid}-screen',
-              name: device.name,
+              name: device.label,
               x: 0,
               y: 0,
               width: place.width,
@@ -915,7 +915,7 @@ class ShellInputController extends ChangeNotifier {
       members.add(
         InputMember(
           peerId: device.uid,
-          name: device.name,
+          name: device.label,
           host: device.host,
           port: device.port,
           releaseHotkey: layout.releaseHotkey,

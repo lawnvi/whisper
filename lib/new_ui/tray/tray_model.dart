@@ -1,3 +1,5 @@
+import 'package:whisper/theme/whisper_device_art.dart';
+
 /// Everything the tray panel shows. The panel has an engine of its own, whose
 /// singletons are not the app's, so its whole state crosses as plain maps.
 class TrayDevice {
@@ -6,6 +8,7 @@ class TrayDevice {
     required this.name,
     required this.platform,
     required this.order,
+    this.kind = '',
   });
 
   factory TrayDevice.fromMap(Map<dynamic, dynamic> m) => TrayDevice(
@@ -13,9 +16,17 @@ class TrayDevice {
     name: m['name'] as String,
     platform: m['platform'] as String,
     order: m['order'] as int,
+    kind: m['kind'] as String? ?? '',
   );
 
-  final String id, name, platform;
+  /// [name] is what it is called here, which may be a name given to it;
+  /// [kind] is a `DeviceKind`'s name, worked out by the app, which knows
+  /// what it said it is.
+  final String id, name, platform, kind;
+
+  /// What to draw: as [kind] says, else as the platform suggests.
+  DeviceKind get deviceKind =>
+      DeviceKind.values.asNameMap()[kind] ?? deviceKindFor(platform);
 
   /// Which wallpaper it gets.
   final int order;
@@ -25,6 +36,7 @@ class TrayDevice {
     'name': name,
     'platform': platform,
     'order': order,
+    'kind': kind,
   };
 }
 

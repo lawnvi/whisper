@@ -935,7 +935,7 @@ class _CandidateChipState extends State<_CandidateChip> {
         opacity: enabled ? 1 : .55,
         child: Pressable(
           radius: WhisperRadius.capsule,
-          label: l10n.inputAddLabel(device.name),
+          label: l10n.inputAddLabel(device.label),
           onTap: enabled ? widget.onAdd : null,
           child: GestureDetector(
             onPanStart: enabled
@@ -969,7 +969,7 @@ class _CandidateChipState extends State<_CandidateChip> {
                   const SizedBox(width: 8),
                   Flexible(
                     child: Text(
-                      device.name,
+                      device.label,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -1214,7 +1214,7 @@ class _Controlled extends StatelessWidget {
               deviceArtFor(source, size: 96),
             const SizedBox(height: 10),
             Text(
-              l10n.inputControlledTitle(source?.name ?? ''),
+              l10n.inputControlledTitle(source?.label ?? ''),
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: type.title,

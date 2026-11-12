@@ -2121,6 +2121,26 @@
   "shellCardChange": "修改我的文件",
   "shellCardDiagnostics": "连接诊断",
   "shellCardWake": "唤醒",
+  "shellCardAlias": "备注名",
+  "shellCardAliasNote": "只在这台设备上这样叫它，{name} 自己和别的设备看到的还是原来的名字。清空就恢复原名。",
+  "@shellCardAliasNote": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "shellCardVersion": "版本",
+  "shellCardAddress": "地址",
+  "shellCardOwnAddress": "本机地址",
+  "shellCardCopied": "已复制 {value}",
+  "@shellCardCopied": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
   "shellCardNetwork": "网络",
   "networkTitle": "网络状况",
   "networkGrade": "质量",

@@ -130,7 +130,7 @@ class _ConnectionCheckSheetState extends State<ConnectionCheckSheet> {
           ),
           const SizedBox(height: 3),
           Text(
-            '${device.name} · ${device.host}:${device.port}',
+            '${device.label} · ${device.host}:${device.port}',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(fontSize: type.note, color: c.ink2),

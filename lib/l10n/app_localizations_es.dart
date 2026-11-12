@@ -2990,6 +2990,28 @@ class AppLocalizationsEs extends AppLocalizations {
   String get shellCardWake => 'Despertar';
 
   @override
+  String get shellCardAlias => 'Nombre propio';
+
+  @override
+  String shellCardAliasNote(String name) {
+    return 'Solo este dispositivo lo llama así; $name y los demás dispositivos siguen viendo su propio nombre. Déjalo vacío para volver a él.';
+  }
+
+  @override
+  String get shellCardVersion => 'Versión';
+
+  @override
+  String get shellCardAddress => 'Dirección';
+
+  @override
+  String get shellCardOwnAddress => 'Dirección local';
+
+  @override
+  String shellCardCopied(String value) {
+    return 'Copiado $value';
+  }
+
+  @override
   String get shellCardNetwork => 'Red';
 
   @override

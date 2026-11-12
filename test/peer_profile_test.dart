@@ -71,10 +71,23 @@ void main() {
       expect(WirePeerProfile.fromJson(legacy.toJson()).formFactor, isEmpty);
     });
 
-    test('a computer, or an older version, says nothing', () {
+    test('an older version says nothing', () {
       const mac = WirePeerProfile(uid: 'mac', name: 'Mac', platform: 'macos');
       expect(mac.toJson(), isNot(contains('formFactor')));
       expect(WirePeerProfile.fromJson(mac.toJson()).formFactor, isEmpty);
+    });
+
+    // From 0.0.61. Versions 12 and 13 read any short string here and keep
+    // only a phone or a tablet, so it goes to them as well.
+    test('a computer says whether it is a laptop or a desktop', () {
+      const mac = WirePeerProfile(
+        uid: 'mac',
+        name: 'Mac',
+        platform: 'macos',
+        formFactor: DeviceFormFactor.laptop,
+      );
+      expect(WirePeerProfile.fromJson(mac.toJson()).formFactor, 'laptop');
+      expect(mac.forProtocolVersion(12).toJson()['formFactor'], 'laptop');
     });
 
     test('rejects a form factor that is not a short string', () {
@@ -116,10 +129,18 @@ void main() {
       for (final bad in <Object?>[
         'x',
         List<Object>.filled(5, desk.wake.first.toJson()),
-        <Object>[<String, Object>{'mac': '00:1A:2B:3C:4D:5E', 'wired': true}],
-        <Object>[<String, Object>{'mac': '01:00:5e:00:00:01', 'wired': true}],
-        <Object>[<String, Object>{'mac': '00:00:00:00:00:00', 'wired': true}],
-        <Object>[<String, Object>{'mac': '00:1a:2b:3c:4d:5e'}],
+        <Object>[
+          <String, Object>{'mac': '00:1A:2B:3C:4D:5E', 'wired': true},
+        ],
+        <Object>[
+          <String, Object>{'mac': '01:00:5e:00:00:01', 'wired': true},
+        ],
+        <Object>[
+          <String, Object>{'mac': '00:00:00:00:00:00', 'wired': true},
+        ],
+        <Object>[
+          <String, Object>{'mac': '00:1a:2b:3c:4d:5e'},
+        ],
       ]) {
         expect(
           () => WirePeerProfile.fromJson({...good, 'wake': bad}),
@@ -139,6 +160,51 @@ void main() {
       expect(WakeTarget.normalize('00:1a:2b:3c:4d:5e'), '00:1a:2b:3c:4d:5e');
       expect(WakeTarget.normalize('N/A'), isNull);
       expect(WakeTarget.normalize('00-00-00-00-00-00'), isNull);
+    });
+  });
+
+  group('app version', () {
+    const desk = WirePeerProfile(
+      uid: 'desk',
+      name: 'Desk',
+      platform: 'windows',
+      appVersion: '0.0.61',
+    );
+
+    test('goes to peers of this version, and back', () {
+      final decoded = WirePeerProfile.fromJson(desk.toJson());
+      expect(decoded.appVersion, '0.0.61');
+      expect(decoded.canonicalDigest(), desk.canonicalDigest());
+      expect(PeerProfile.fromWire(decoded).toWireProfile(), desk);
+    });
+
+    test('a peer on 13 (0.0.60) is never sent it', () {
+      final legacy = desk.forProtocolVersion(13);
+      expect(legacy.toJson(), isNot(contains('appVersion')));
+      expect(WirePeerProfile.fromJson(legacy.toJson()).appVersion, isEmpty);
+    });
+
+    test('rejects what is not a short version', () {
+      final good = desk.toJson();
+      for (final bad in <Object?>['', 42, '0.0.61 beta', 'v' * 33, '0.0.6\n']) {
+        expect(
+          () => WirePeerProfile.fromJson({...good, 'appVersion': bad}),
+          throwsFormatException,
+          reason: '$bad',
+        );
+      }
+      expect(
+        WirePeerProfile.fromJson({
+          ...good,
+          'appVersion': '1.2.3+45',
+        }).appVersion,
+        '1.2.3+45',
+      );
+      expect(
+        () => WirePeerProfile.fromJson({...good, 'protocolVersion': 13}),
+        throwsFormatException,
+        reason: 'a version that does not know the field cannot send it',
+      );
     });
   });
 

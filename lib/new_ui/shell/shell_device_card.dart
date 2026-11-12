@@ -7,7 +7,7 @@ import 'package:whisper/helper/toast.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/new_ui/shell/shell_parts.dart';
-import 'package:whisper/new_ui/shell/shell_network_quality.dart';
+import 'package:whisper/new_ui/shell/shell_device_about.dart';
 import 'package:whisper/new_ui/shell/shell_wake.dart';
 import 'package:whisper/page/remote_files/files_copy_island.dart';
 import 'package:whisper/page/remote_files/files_icons.dart';
@@ -171,14 +171,14 @@ class _ShellDeviceCardState extends State<ShellDeviceCard> {
     try {
       final mount = await RemoteMounts.shared.setWanted(
         _device.uid,
-        _device.name,
+        _device.label,
         wanted,
       );
       if (mount != null) await openDir(mount.path);
     } on MountFailed catch (failed) {
       if (failed.failure != MountFailure.offline) {
         showAppToast(
-          mountFailureText(l10n, failed.failure, _device.name, app),
+          mountFailureText(l10n, failed.failure, _device.label, app),
           tone: AppToastTone.error,
         );
       }
@@ -188,7 +188,7 @@ class _ShellDeviceCardState extends State<ShellDeviceCard> {
   Future<void> _confirmRemove(AppLocalizations l10n) async {
     final confirmed = await confirmAction(
       context,
-      title: l10n.deleteDeviceTitle(_device.name),
+      title: l10n.deleteDeviceTitle(_device.label),
       description: l10n.deleteDeviceDesc,
       confirmButtonText: l10n.confirm,
       cancelButtonText: l10n.cancel,
@@ -221,7 +221,7 @@ class _ShellDeviceCardState extends State<ShellDeviceCard> {
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  device.name,
+                  device.label,
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: type.title,
@@ -267,10 +267,10 @@ class _ShellDeviceCardState extends State<ShellDeviceCard> {
                       ShellRow(
                         touch: true,
                         dim: !on,
-                        label: l10n.shellPhoneSyncClipboard(device.name),
+                        label: l10n.shellPhoneSyncClipboard(device.label),
                         trailing: ShellSwitch(
                           touch: true,
-                          label: l10n.shellPhoneSyncClipboard(device.name),
+                          label: l10n.shellPhoneSyncClipboard(device.label),
                           value: device.clipboard,
                           onChanged: on
                               ? (_) => unawaited(_toggleClipboard())
@@ -337,7 +337,7 @@ class _ShellDeviceCardState extends State<ShellDeviceCard> {
                     ),
                   ),
                 const SizedBox(height: 20),
-                ShellGroupLabel(l10n.shellCardCan(device.name), touch: touch),
+                ShellGroupLabel(l10n.shellCardCan(device.label), touch: touch),
                 ShellGroup(
                   children: [
                     _permission(
@@ -362,12 +362,8 @@ class _ShellDeviceCardState extends State<ShellDeviceCard> {
                       ),
                   ],
                 ),
-                if (on) ...[
-                  const SizedBox(height: 20),
-                  ShellGroup(
-                    children: [ShellNetworkRow(device: device, touch: touch)],
-                  ),
-                ],
+                const SizedBox(height: 20),
+                ShellDeviceAbout(device: device, connected: on, touch: touch),
                 if (widget.onSearchHistory != null) ...[
                   const SizedBox(height: 20),
                   ShellGroup(

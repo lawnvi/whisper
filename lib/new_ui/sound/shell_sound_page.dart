@@ -552,7 +552,7 @@ class _MemberRow extends StatelessWidget {
               ),
             const SizedBox(width: 7),
             ShareCheck(
-              label: l10n.soundCheckLabel(device.name),
+              label: l10n.soundCheckLabel(device.label),
               value: row.checked,
               onChanged: (_) => unawaited(controller.toggle(device.uid)),
             ),
@@ -633,7 +633,7 @@ class _MemberText extends StatelessWidget {
           children: [
             Flexible(
               child: Text(
-                row.device.name,
+                row.device.label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: style(type.body, c.ink),
@@ -690,7 +690,7 @@ class _ChannelPopup extends StatelessWidget {
     final l10n = context.shellL10n;
     return SharePopupButton<AudioChannelRole>(
       text: _fullChannel(l10n, channel),
-      label: l10n.soundChannelLabel(device.name, _fullChannel(l10n, channel)),
+      label: l10n.soundChannelLabel(device.label, _fullChannel(l10n, channel)),
       items: [
         for (final role in _channelOrder)
           ShareMenuItem(
@@ -754,7 +754,7 @@ class _SinkView extends StatelessWidget {
               : null,
         ),
         const SizedBox(height: 12),
-        _Name(source?.name ?? ''),
+        _Name(source?.label ?? ''),
         _State(
           text: switch (view.phase) {
             SoundSinkPhase.playing => l10n.shellRowSoundHere,

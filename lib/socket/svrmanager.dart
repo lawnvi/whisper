@@ -1890,18 +1890,8 @@ class WsSvrManager {
         (currentProfile.device.host != target.host ||
             currentProfile.device.port != target.port)) {
       _setRemoteProfile(
-        PeerProfile(
-          device: currentProfile.device.copyWith(
-            host: target.host,
-            port: target.port,
-          ),
-          trustedPeerIds: currentProfile.trustedPeerIds,
-          autoApproveNewDevices: currentProfile.autoApproveNewDevices,
-          autoConnectEnabled: currentProfile.autoConnectEnabled,
-          protocolVersion: currentProfile.protocolVersion,
-          capabilities: currentProfile.capabilities,
-          displayTopology: currentProfile.displayTopology,
-          formFactor: currentProfile.formFactor,
+        currentProfile.withDevice(
+          currentProfile.device.copyWith(host: target.host, port: target.port),
         ),
         peerId: peerId,
       );
@@ -4247,16 +4237,10 @@ class WsSvrManager {
             _requireCurrentAuthenticationCommit(session, sink, generation);
           }
           storedDevice = device;
-          runtimeProfile = PeerProfile(
-            device: device,
-            trustedPeerIds: const <String>[],
-            autoApproveNewDevices: false,
-            autoConnectEnabled: true,
-            protocolVersion: session.remoteProfile!.protocolVersion,
-            capabilities: session.remoteProfile!.capabilities,
-            displayTopology: session.remoteProfile!.displayTopology,
-            formFactor: session.remoteProfile!.formFactor,
-          );
+          // As received: trusting nothing, asking for nothing.
+          runtimeProfile = PeerProfile.fromWire(
+            session.remoteProfile!,
+          ).withDevice(device);
           await _waitForAuthCommitBarrier(
             ConnectionAuthCommitStage.afterPersistence,
             session.remotePeerId,
@@ -5132,7 +5116,7 @@ class WsSvrManager {
                     .handle(
                       control,
                       remotePeerId: remotePeerId,
-                      deviceName: remoteDevice.name,
+                      deviceName: remoteDevice.label,
                     )
                     .catchError((Object error) {
                       logger.i('文件浏览请求失败: ${error.runtimeType}');
@@ -5463,6 +5447,7 @@ class WsSvrManager {
       displayTopology: topology,
       formFactor: await localFormFactor(),
       wake: await localWakeTargetsForProfile(),
+      appVersion: await localAppVersion(),
     );
     return profile;
   }
@@ -5519,7 +5504,7 @@ class WsSvrManager {
         WindowStreamViewer.shared.peerConnected(
           WindowStreamPeer(
             peerId: peerId,
-            name: profile.device.name,
+            name: profile.device.label,
             platform: windowStreamPlatformOf(profile.device.platform),
             takesWindows:
                 profile.protocolVersion >= 12 &&
@@ -5531,7 +5516,7 @@ class WsSvrManager {
             _manageSharedCoordinators) {
           // "挂载到本机" on for it: its files show in the file manager again.
           unawaited(
-            RemoteMounts.shared.peerConnected(peerId, profile.device.name),
+            RemoteMounts.shared.peerConnected(peerId, profile.device.label),
           );
         }
         if (profile.protocolVersion >= 12 &&
@@ -5539,7 +5524,7 @@ class WsSvrManager {
             supportsWindowStreamSink()) {
           WindowStreamViewer.shared.peerAvailable(
             peerId: peerId,
-            name: profile.device.name,
+            name: profile.device.label,
             platform: windowStreamPlatformOf(profile.device.platform),
             host: profile.device.host,
             port: profile.device.port,

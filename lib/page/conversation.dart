@@ -1051,7 +1051,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
                     child: Align(
                       alignment: Alignment.centerLeft,
                       child: Text(
-                        device.name,
+                        device.label,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -1108,7 +1108,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
             ? () => push(
                 (_) => RemoteFilesPage(
                   peerId: device.uid,
-                  deviceName: device.name,
+                  deviceName: device.label,
                 ),
               )
             : null,
@@ -1180,7 +1180,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          device.name,
+          device.label,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
@@ -1447,7 +1447,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
             context,
             MaterialPageRoute<void>(
               builder: (_) =>
-                  RemoteFilesPage(peerId: device.uid, deviceName: device.name),
+                  RemoteFilesPage(peerId: device.uid, deviceName: device.label),
             ),
           ),
         ),
@@ -1608,8 +1608,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
       onSendClipboardImages: _sendPendingClipboardImages,
       onRemoveClipboardImage: _removePendingClipboardImage,
       onEditClipboardImage: _markUpPendingClipboardImage,
-      composerHint: l10n.shellComposerHint(device.name),
-      disabledHint: l10n.shellComposerOffline(device.name),
+      composerHint: l10n.shellComposerHint(device.label),
+      disabledHint: l10n.shellComposerOffline(device.label),
     );
   }
 
@@ -2172,7 +2172,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
                                 selected[candidate.uid] = value ?? false;
                               });
                             },
-                            title: Text(candidate.name),
+                            title: Text(candidate.label),
                             subtitle: Text(candidate.platform),
                             secondary: WhisperGlassMenuButton<AudioChannelRole>(
                               value:
@@ -2428,7 +2428,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
     final now = DateTime.now().millisecondsSinceEpoch;
     final layout = RemoteInputLayoutData(
       peerId: device.uid,
-      peerName: device.name,
+      peerName: device.label,
       x: 1000,
       y: 0,
       width: 900,

@@ -38,14 +38,14 @@ MobileControlScreen mobileControlPage({
 
   return MobileControlScreen(
     peerId: device.uid,
-    peerName: device.name,
+    peerName: device.label,
     deviceArt: deviceArt,
     targets: () => [
       for (final peerId in socketManager.connectedPeerIds)
         if (socketManager.supportsManualInputFor(peerId))
           MobileControlTarget(
             peerId,
-            socketManager.remoteProfileFor(peerId)!.device.name,
+            socketManager.remoteProfileFor(peerId)!.device.label,
             platform: socketManager.remoteProfileFor(peerId)!.device.platform,
           ),
     ],

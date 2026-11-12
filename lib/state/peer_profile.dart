@@ -5,15 +5,33 @@ import 'package:crypto/crypto.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/remote_input/remote_input_layout.dart';
 
-/// What a phone-sized or tablet-sized device says it is, so others can draw
-/// it as one ([PeerProfile.formFactor]). Computers send nothing.
+/// What a device says it is, so others can draw it as one
+/// ([PeerProfile.formFactor]): a phone or a tablet, and from 0.0.61 a
+/// laptop or a desktop. Older versions keep only the first two and draw a
+/// computer by its name.
 abstract final class DeviceFormFactor {
   static const phone = 'phone';
   static const tablet = 'tablet';
+  static const laptop = 'laptop';
+  static const desktop = 'desktop';
 
   /// Sent from this protocol version on: an older peer rejects a profile
   /// field it does not know (and 0.0.57 speaks 11).
   static const sinceProtocolVersion = 12;
+}
+
+/// The app version a device runs ("0.0.61"), shown on its card. Sent from
+/// [sinceProtocolVersion] on: an older peer rejects a profile field it does
+/// not know.
+abstract final class AppVersionField {
+  static const sinceProtocolVersion = 14;
+  static const maxBytes = 32;
+  static final RegExp _pattern = RegExp(r'^[0-9A-Za-z.+\-]+$');
+
+  static bool valid(String value) =>
+      value.isNotEmpty &&
+      utf8.encode(value).length <= maxBytes &&
+      _pattern.hasMatch(value);
 }
 
 /// A network card that can wake a computer from sleep: its hardware address
@@ -76,11 +94,12 @@ class WirePeerProfile {
     required this.uid,
     required this.name,
     required this.platform,
-    this.protocolVersion = 13,
+    this.protocolVersion = 14,
     this.capabilities = const PeerCapabilities(),
     this.displayTopology,
     this.formFactor = '',
     this.wake = const <WakeTarget>[],
+    this.appVersion = '',
   });
 
   static const Set<String> _allowedKeys = <String>{
@@ -92,6 +111,7 @@ class WirePeerProfile {
     'displayTopology',
     'formFactor',
     'wake',
+    'appVersion',
   };
 
   final String uid;
@@ -108,6 +128,9 @@ class WirePeerProfile {
   /// This computer's network cards that can wake it; empty on phones.
   final List<WakeTarget> wake;
 
+  /// See [AppVersionField]; empty when not said.
+  final String appVersion;
+
   WirePeerProfile forProtocolVersion(int version) => WirePeerProfile(
     uid: uid,
     name: name,
@@ -117,6 +140,7 @@ class WirePeerProfile {
     displayTopology: displayTopology,
     formFactor: formFactor,
     wake: wake,
+    appVersion: appVersion,
   );
 
   Map<String, Object?> toJson() => <String, Object?>{
@@ -131,6 +155,9 @@ class WirePeerProfile {
       'formFactor': formFactor,
     if (wake.isNotEmpty && protocolVersion >= WakeTarget.sinceProtocolVersion)
       'wake': <Object>[for (final target in wake) target.toJson()],
+    if (appVersion.isNotEmpty &&
+        protocolVersion >= AppVersionField.sinceProtocolVersion)
+      'appVersion': appVersion,
   };
 
   String toJsonString() => jsonEncode(toJson());
@@ -190,6 +217,13 @@ class WirePeerProfile {
             wakeValue.length > WakeTarget.maxPerDevice)) {
       throw const FormatException('Invalid profile wake targets');
     }
+    final appVersion = json['appVersion'];
+    if (json.containsKey('appVersion') &&
+        (protocolVersion < AppVersionField.sinceProtocolVersion ||
+            appVersion is! String ||
+            !AppVersionField.valid(appVersion))) {
+      throw const FormatException('Invalid profile app version');
+    }
     return WirePeerProfile(
       uid: uid,
       name: name,
@@ -204,6 +238,7 @@ class WirePeerProfile {
       wake: wakeValue is List
           ? List<WakeTarget>.unmodifiable(wakeValue.map(WakeTarget.fromJson))
           : const <WakeTarget>[],
+      appVersion: appVersion is String ? appVersion : '',
     );
   }
 
@@ -219,7 +254,8 @@ class WirePeerProfile {
       _canonicalJson(other.displayTopology?.toJson()) ==
           _canonicalJson(displayTopology?.toJson()) &&
       other.formFactor == formFactor &&
-      _sameWake(other.wake, wake);
+      _sameWake(other.wake, wake) &&
+      other.appVersion == appVersion;
 
   @override
   int get hashCode => Object.hash(
@@ -231,6 +267,7 @@ class WirePeerProfile {
     _canonicalJson(displayTopology?.toJson()),
     formFactor,
     Object.hashAll(wake),
+    appVersion,
   );
 }
 
@@ -240,11 +277,12 @@ class PeerProfile {
     required this.trustedPeerIds,
     required this.autoApproveNewDevices,
     required this.autoConnectEnabled,
-    this.protocolVersion = 13,
+    this.protocolVersion = 14,
     this.capabilities = const PeerCapabilities(),
     this.displayTopology,
     this.formFactor = '',
     this.wake = const <WakeTarget>[],
+    this.appVersion = '',
   });
 
   final DeviceData device;
@@ -261,9 +299,26 @@ class PeerProfile {
   /// See [WirePeerProfile.wake].
   final List<WakeTarget> wake;
 
+  /// See [WirePeerProfile.appVersion].
+  final String appVersion;
+
   bool trustsPeer(String peerId) {
     return trustedPeerIds.contains(peerId);
   }
+
+  /// The same profile for [device]: where it was reached, or as stored here.
+  PeerProfile withDevice(DeviceData device) => PeerProfile(
+    device: device,
+    trustedPeerIds: trustedPeerIds,
+    autoApproveNewDevices: autoApproveNewDevices,
+    autoConnectEnabled: autoConnectEnabled,
+    protocolVersion: protocolVersion,
+    capabilities: capabilities,
+    displayTopology: displayTopology,
+    formFactor: formFactor,
+    wake: wake,
+    appVersion: appVersion,
+  );
 
   Map<String, dynamic> toJson() {
     return toWireProfile().toJson();
@@ -318,6 +373,7 @@ class PeerProfile {
       displayTopology: wire.displayTopology,
       formFactor: wire.formFactor,
       wake: wire.wake,
+      appVersion: wire.appVersion,
     );
   }
 
@@ -330,6 +386,7 @@ class PeerProfile {
     displayTopology: displayTopology,
     formFactor: formFactor,
     wake: wake,
+    appVersion: appVersion,
   );
 }
 

@@ -2954,6 +2954,28 @@ class AppLocalizationsEn extends AppLocalizations {
   String get shellCardWake => 'Wake';
 
   @override
+  String get shellCardAlias => 'Custom name';
+
+  @override
+  String shellCardAliasNote(String name) {
+    return 'Only this device calls it that; $name itself and other devices still see its own name. Leave it empty to go back to that.';
+  }
+
+  @override
+  String get shellCardVersion => 'Version';
+
+  @override
+  String get shellCardAddress => 'Address';
+
+  @override
+  String get shellCardOwnAddress => 'Local address';
+
+  @override
+  String shellCardCopied(String value) {
+    return 'Copied $value';
+  }
+
+  @override
   String get shellCardNetwork => 'Network';
 
   @override

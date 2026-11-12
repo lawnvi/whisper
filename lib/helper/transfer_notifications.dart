@@ -69,7 +69,7 @@ class TransferNotificationBridge implements ISocketEvent {
   ({String? kind, String? name}) Function(String peerId) peer = (peerId) {
     final device = WsSvrManager().remoteProfileFor(peerId)?.device;
     final platform = device?.platform ?? '';
-    final name = device?.name.trim() ?? '';
+    final name = device?.label.trim() ?? '';
     return (
       kind: platform.isEmpty
           ? null

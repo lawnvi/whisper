@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:whisper/state/peer_aliases.dart';
 import 'package:whisper/new_ui/phone/phone_parts.dart' show showPhoneSheet;
 import 'package:whisper/new_ui/picker/quick_send_sheet.dart';
 
@@ -70,7 +71,11 @@ List<QuickSendTarget> connectedQuickSendTargets({
     );
   }
   final targets = targetsById.values.toList()
-    ..sort((left, right) => left.name.compareTo(right.name));
+    ..sort(
+      (left, right) => PeerAliases.shared
+          .labelOf(left.id, left.name)
+          .compareTo(PeerAliases.shared.labelOf(right.id, right.name)),
+    );
   return List<QuickSendTarget>.unmodifiable(targets);
 }
 

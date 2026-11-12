@@ -158,7 +158,7 @@ class ShellSidebar extends StatelessWidget {
                           DeviceGlyph(
                             kind: self == null
                                 ? DeviceKind.laptop
-                                : deviceKindOf(self),
+                                : selfKindOf(self),
                             color: data.lanDown ? c.warn : second,
                             size: 18,
                           ),
@@ -401,7 +401,7 @@ class _DeviceRow extends StatelessWidget {
                       children: [
                         Expanded(
                           child: Text(
-                            device.name,
+                            device.label,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(

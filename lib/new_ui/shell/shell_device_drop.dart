@@ -159,7 +159,7 @@ Future<bool> showShellDropSend(
       // Narrower than a sheet: at 380 one file and two buttons lie flat.
       width: 320,
       builder: (_) => ShellDropSendSheet(
-        name: device.name,
+        name: device.label,
         paths: paths,
         art: deviceArtFor(device, size: 64),
       ),

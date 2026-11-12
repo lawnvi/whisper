@@ -131,11 +131,9 @@ class FilesPeers {
     return FilesPeers(
       connected: () => sockets.connectedPeerIds,
       canBrowse: sockets.canBrowseFilesOf,
-      describe: (peerId) {
-        final device = sockets.remoteProfileFor(peerId)?.device;
-        return device == null
-            ? null
-            : (name: device.name, platform: device.platform);
+      describe: (peerId) => switch (sockets.remoteProfileFor(peerId)?.device) {
+        final device? => (name: device.label, platform: device.platform),
+        null => null,
       },
     );
   }

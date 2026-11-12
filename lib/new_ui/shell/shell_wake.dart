@@ -17,7 +17,7 @@ Future<void> wakeDevices(Iterable<DeviceData> devices) async {
     final targets = WakeTargets.shared.of(device.uid);
     if (targets.isEmpty) continue;
     if (await sendWakePackets(targets, lastHost: device.host)) {
-      woken.add(device.name);
+      woken.add(device.label);
     }
   }
   final context = appNavigatorKey.currentContext;

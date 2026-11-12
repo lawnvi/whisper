@@ -46,6 +46,7 @@ class ChatSessionItem {
       return true;
     }
     final fields = <String>[
+      device.label,
       device.name,
       device.host,
       preview,
@@ -102,8 +103,8 @@ class ChatSessionListBuilder {
         if (timestampCompare != 0) {
           return timestampCompare;
         }
-        return a.device.name.toLowerCase().compareTo(
-          b.device.name.toLowerCase(),
+        return a.device.label.toLowerCase().compareTo(
+          b.device.label.toLowerCase(),
         );
       });
     return sorted;
@@ -143,7 +144,7 @@ class ChatSessionListBuilder {
       isConnected: isConnected,
       isNearby: isNearby,
       hasHistory: hasHistory,
-      avatarLabel: _avatarLabel(device.name),
+      avatarLabel: _avatarLabel(device.label),
       isSelf: isSelf,
     );
   }

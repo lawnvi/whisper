@@ -62,8 +62,8 @@ class ShellDropFrame extends StatelessWidget {
                   const SizedBox(height: 12),
                   Text(
                     canSend
-                        ? l10n.shellComposerHint(device.name)
-                        : l10n.shellComposerOffline(device.name),
+                        ? l10n.shellComposerHint(device.label)
+                        : l10n.shellComposerOffline(device.label),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.center,

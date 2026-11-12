@@ -2787,6 +2787,28 @@ class AppLocalizationsZh extends AppLocalizations {
   String get shellCardWake => '唤醒';
 
   @override
+  String get shellCardAlias => '备注名';
+
+  @override
+  String shellCardAliasNote(String name) {
+    return '只在这台设备上这样叫它，$name 自己和别的设备看到的还是原来的名字。清空就恢复原名。';
+  }
+
+  @override
+  String get shellCardVersion => '版本';
+
+  @override
+  String get shellCardAddress => '地址';
+
+  @override
+  String get shellCardOwnAddress => '本机地址';
+
+  @override
+  String shellCardCopied(String value) {
+    return '已复制 $value';
+  }
+
+  @override
   String get shellCardNetwork => '网络';
 
   @override

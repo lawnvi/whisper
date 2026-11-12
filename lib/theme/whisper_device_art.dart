@@ -90,17 +90,22 @@ class DeviceWallpaper {
 
 /// Same split as `platformIcon`, which knows these spellings. An Android tablet
 /// and an Android phone share a platform, so [tablet] is what it said about
-/// itself (`DeviceFormFactors`). A foldable draws as a phone. Nothing says
-/// whether a Windows or Linux machine is a laptop, so they draw as desktops.
+/// itself (`DeviceFormFactors`). A foldable draws as a phone. A computer from
+/// 0.0.61 says whether it is a laptop or a desktop ([formFactor]); for an
+/// older one the name is the best guess, and a Windows or Linux machine
+/// that says nothing draws as a desktop.
 DeviceKind deviceKindFor(
   String platform, {
   String name = '',
   bool tablet = false,
+  String formFactor = '',
 }) {
   // A platform says a Mac or a PC, not which: the name usually does.
   final lower = name.toLowerCase();
   final os = platform.trim().toLowerCase();
   if (os == 'macos' || os == 'windows' || os == 'linux') {
+    if (formFactor == 'laptop') return DeviceKind.laptop;
+    if (formFactor == 'desktop') return DeviceKind.desktop;
     if (RegExp(
       r'imac|mac ?mini|mac ?studio|mac ?pro|desktop',
     ).hasMatch(lower)) {

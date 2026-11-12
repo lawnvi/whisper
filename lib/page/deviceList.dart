@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 import 'dart:ui';
+import 'package:whisper/state/peer_aliases.dart';
 import 'package:bonsoir/bonsoir.dart';
 import 'package:clipboard_watcher/clipboard_watcher.dart';
 import 'package:dbus/dbus.dart';
@@ -1219,7 +1220,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
   String _androidSystemShareTargetName(String peerId) {
     for (final candidate in devices) {
       if (candidate.uid == peerId) {
-        return candidate.name;
+        return candidate.label;
       }
     }
     return peerId;
@@ -1867,7 +1868,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
   String _deviceName(String uid) {
     for (final session in _sessionItems) {
-      if (session.device.uid == uid) return session.device.name;
+      if (session.device.uid == uid) return session.device.label;
     }
     return '';
   }
@@ -1907,9 +1908,10 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
   TrayDevice _trayDevice(DeviceData peer) => TrayDevice(
     id: peer.uid,
-    name: peer.name,
+    name: peer.label,
     platform: peer.platform,
     order: peer.id,
+    kind: deviceKindOf(peer).name,
   );
 
   void _pushTrayState() {
@@ -1919,7 +1921,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     final group = _audioGroupCoordinator.session;
     String nameOf(String uid) {
       for (final session in _sessionItems) {
-        if (session.device.uid == uid) return session.device.name;
+        if (session.device.uid == uid) return session.device.label;
       }
       return uid;
     }
@@ -2063,7 +2065,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
         if (!session.state.isTerminal) session,
     ];
     final signature = jsonEncode([
-      connected.map((d) => '${d.uid}${d.name}').toList(),
+      connected.map((d) => '${d.uid}${d.label}').toList(),
       asks.map((a) => a.title).toList(),
       moving
           .map(
@@ -2085,7 +2087,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
         : '';
     String nameOf(String uid) {
       for (final session in _sessionItems) {
-        if (session.device.uid == uid) return session.device.name;
+        if (session.device.uid == uid) return session.device.label;
       }
       return uid;
     }
@@ -2127,7 +2129,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
                 items: [
                   for (final peer in connected)
                     MenuItem(
-                      label: peer.name,
+                      label: peer.label,
                       onClick: (_) => unawaited(_traySendClipboard(peer.uid)),
                     ),
                 ],
@@ -2139,7 +2141,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
                 items: [
                   for (final peer in connected)
                     MenuItem(
-                      label: peer.name,
+                      label: peer.label,
                       onClick: (_) => unawaited(pickAndSend(peer.uid)),
                     ),
                 ],
@@ -2164,7 +2166,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
                 items: [
                   for (final peer in connected)
                     MenuItem.checkbox(
-                      label: peer.name,
+                      label: peer.label,
                       checked: sound.isSelected(peer.uid),
                       onClick: (_) => unawaited(sound.toggle(peer.uid)),
                     ),
@@ -2336,7 +2338,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     final l10n = AppLocalizations.of(context)!;
     String nameOf(String uid) {
       for (final session in _sessionItems) {
-        if (session.device.uid == uid) return session.device.name;
+        if (session.device.uid == uid) return session.device.label;
       }
       return uid;
     }
@@ -2407,6 +2409,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     ShellSoundController.shared,
     ShellInputController.shared,
     DeviceFormFactors.shared,
+    PeerAliases.shared,
   ]);
 
   ShellData _shellData() {
@@ -2527,7 +2530,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
   void _noteSoundMemberStopped(String peerId) {
     if (!mounted) return;
-    final name = socketManager.remoteProfileFor(peerId)?.device.name ?? peerId;
+    final name = socketManager.remoteProfileFor(peerId)?.device.label ?? peerId;
     NoteIslandSource.shared.note(
       AppLocalizations.of(context)!.soundMemberStoppedNotice(name),
     );
@@ -2695,7 +2698,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     buildFiles: (context, target) => RemoteFilesPage(
       key: ValueKey('shell-files-${target.uid}'),
       peerId: target.uid,
-      deviceName: target.name,
+      deviceName: target.label,
     ),
     buildApps: (context, target) => FlowSpacePage(
       key: ValueKey('shell-apps-${target.uid}'),
@@ -2867,7 +2870,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
       for (final session in _sessionItems)
         PaletteItem(
           glyph: WhisperGlyph.info,
-          name: session.device.name,
+          name: session.device.label,
           category: l10n.shellPaletteDevice,
           onRun: () => actions.select(session.device.uid),
           keywords: [session.device.host],
@@ -2876,7 +2879,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
         if (session.isConnected) ...[
           PaletteItem(
             glyph: WhisperGlyph.speaker,
-            name: l10n.shellPalettePlayOn(session.device.name),
+            name: l10n.shellPalettePlayOn(session.device.label),
             category: l10n.shellPaletteAction,
             onRun: () {
               actions.openSound();
@@ -2890,7 +2893,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
           if (!deviceKindOf(session.device).handheld)
             PaletteItem(
               glyph: WhisperGlyph.keyboard,
-              name: l10n.shellPaletteControl(session.device.name),
+              name: l10n.shellPaletteControl(session.device.label),
               category: l10n.shellPaletteAction,
               onRun: () {
                 actions.openInput();
@@ -2943,9 +2946,9 @@ class _DeviceListScreen extends State<DeviceListScreen>
           PaletteItem(
             glyph: WhisperGlyph.chat,
             name: result.message.content ?? '',
-            category: session.device.name.isEmpty
+            category: session.device.label.isEmpty
                 ? l10n.shellPaletteMessage
-                : session.device.name,
+                : session.device.label,
             onRun: () {
               _shellActions.select(session.device.uid);
               unawaited(
@@ -3192,7 +3195,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     final l10n = AppLocalizations.of(context);
     final confirmed = await app_dialogs.confirmAction(
       context,
-      title: l10n?.deleteDeviceTitle(target.name) ?? '删除 ${target.name}',
+      title: l10n?.deleteDeviceTitle(target.label) ?? '删除 ${target.label}',
       description: l10n?.deleteDeviceDesc ?? '删除与此设备的所有消息，不可恢复',
       confirmButtonText: l10n?.confirm ?? '确定',
       cancelButtonText: l10n?.cancel ?? '取消',
