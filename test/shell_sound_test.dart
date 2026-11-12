@@ -303,14 +303,16 @@ void main() {
 
       await stopsThere(imacDevice.uid);
 
+      // Unchecked, and saying why: it showed as checked while nothing went
+      // there, on the page and in the tray.
       expect(world.controller.on, isFalse);
       expect(world.controller.isSending(imacDevice.uid), isFalse);
-      expect(world.controller.isSelected(imacDevice.uid), isTrue);
+      expect(world.controller.isSelected(imacDevice.uid), isFalse);
+      expect(world.controller.hasMembers, isFalse);
       expect(stopped, [imacDevice.uid]);
-      expect(
-        world.controller.rowFor(imacDevice).phase,
-        SoundRowPhase.disconnected,
-      );
+      final row = world.controller.rowFor(imacDevice);
+      expect(row.phase, SoundRowPhase.disconnected);
+      expect(row.checked, isFalse);
     });
 
     test('one of two stopping leaves the other playing', () async {
@@ -324,19 +326,52 @@ void main() {
       expect(world.controller.on, isTrue);
       expect(world.controller.isSending(imacDevice.uid), isTrue);
       expect(world.controller.isSending(xiaomiDevice.uid), isFalse);
+      expect(world.controller.selection.keys, [imacDevice.uid]);
       expect(stopped, [xiaomiDevice.uid]);
+
+      // It asks for the sound again from its side: checked again.
+      final session = world.group.session!;
+      await world.group.handleControlMessage(
+        AudioGroupControlMessage(
+          action: AudioGroupControlAction.sinkJoinRequest,
+          groupId: session.groupId,
+          streamId: session.streamId,
+          sessionId: session.sinks[xiaomiDevice.uid]!.sessionId,
+          sourcePeerId: selfMac.uid,
+          sinkPeerId: xiaomiDevice.uid,
+        ),
+        localPeerId: selfMac.uid,
+        remoteHost: '',
+        remotePort: 0,
+        sendControl: (_, _) {},
+      );
+      expect(world.controller.isSelected(xiaomiDevice.uid), isTrue);
     });
 
-    test('turning it on again offers the sound again', () async {
+    test('checking it again offers the sound again', () async {
       await world.controller.toggle(imacDevice.uid);
       await stopsThere(imacDevice.uid);
       world.sentGroup.clear();
 
-      await world.controller.setOn(true);
+      await world.controller.toggle(imacDevice.uid);
 
       expect(world.controller.on, isTrue);
+      expect(world.controller.isSelected(imacDevice.uid), isTrue);
       expect(world.sentGroup.map((sent) => (sent.$1, sent.$2.action)), [
         (imacDevice.uid, AudioGroupControlAction.groupOffer),
+      ]);
+    });
+
+    test('checking another device does not play to it again', () async {
+      await world.controller.toggle(imacDevice.uid);
+      await stopsThere(imacDevice.uid);
+      world.sentGroup.clear();
+
+      await world.controller.toggle(xiaomiDevice.uid);
+
+      expect(world.controller.selection.keys, [xiaomiDevice.uid]);
+      expect(world.sentGroup.map((sent) => (sent.$1, sent.$2.action)), [
+        (xiaomiDevice.uid, AudioGroupControlAction.groupOffer),
       ]);
     });
 
@@ -392,7 +427,7 @@ void main() {
       ]);
       final row = world.controller.rowFor(xiaomiDevice);
       expect(row.phase, SoundRowPhase.disconnected);
-      expect(row.checked, isTrue);
+      expect(row.checked, isFalse);
     });
 
     test('unchecking and checking again retries a failed one', () async {

@@ -224,9 +224,13 @@ class ShellSoundController extends ChangeNotifier {
   int _attached = 0;
 
   /// The devices checked and their channels.
-  Map<String, AudioChannelRole> get selection => _members.roles;
+  Map<String, AudioChannelRole> get selection => {
+    for (final entry in _members.roles.entries)
+      if (!_left.contains(entry.key)) entry.key: entry.value,
+  };
 
-  bool isSelected(String peerId) => _members.contains(peerId);
+  bool isSelected(String peerId) =>
+      _members.contains(peerId) && !_left.contains(peerId);
 
   /// Sound is going there, or on its way: checked is not enough, the other
   /// device may have stopped playing it.
@@ -241,6 +245,11 @@ class ShellSoundController extends ChangeNotifier {
   ValueChanged<String>? onMemberStopped;
   Map<String, AudioGroupSinkState> _sinkStates = const {};
 
+  /// Who did: no sound goes there, so it is shown unchecked, with why. It
+  /// stays in the group while that lasts, paused, so that it can ask for
+  /// the sound again from its side, which checks it again here.
+  final Set<String> _left = {};
+
   AudioChannelRole? channelOf(String peerId) => _members.roleOf(peerId);
 
   /// The master switch.
@@ -249,8 +258,8 @@ class ShellSoundController extends ChangeNotifier {
   /// Sharing, with nothing to send: the computer is playing nothing.
   bool get silent => _group.sourceSilent;
 
-  /// Is it shown at all: only once there are members.
-  bool get hasMembers => !_members.isEmpty;
+  /// Is anything checked: the master switch has something to play to.
+  bool get hasMembers => _members.length > _left.length;
 
   bool get permissionNeeded =>
       _backend.captureDenied() ||
@@ -296,7 +305,12 @@ class ShellSoundController extends ChangeNotifier {
   /// and checking another device replaces it.
   Future<void> toggle(String peerId) => _run(() async {
     if (sinkView != null) return;
-    if (_members.contains(peerId)) {
+    if (_left.remove(peerId)) {
+      // Shown unchecked because it stopped there: checking it plays to it
+      // again.
+      await _remove(peerId);
+      await _add(peerId);
+    } else if (_members.contains(peerId)) {
       await _remove(peerId);
     } else {
       await _add(peerId);
@@ -311,6 +325,7 @@ class ShellSoundController extends ChangeNotifier {
       await _remove(peerId);
       return;
     }
+    _left.remove(peerId);
     if (_members.contains(peerId)) await _remove(peerId);
     await _add(peerId);
   });
@@ -341,6 +356,12 @@ class ShellSoundController extends ChangeNotifier {
 
   Future<void> _add(String peerId) async {
     _failure = null;
+    if (!(_group.session?.isLive ?? false)) {
+      // A new group starts: whoever stopped on their own device is not
+      // played to again because another device was checked.
+      _left.forEach(_members.remove);
+      _left.clear();
+    }
     if (!_backend.supportsGroupSink(peerId)) {
       await _stopAll();
       _members
@@ -383,19 +404,25 @@ class ShellSoundController extends ChangeNotifier {
       await _startSolo(_soloPeer);
       return;
     }
+    final session = _group.session;
+    final live =
+        session != null &&
+        session.isLive &&
+        session.sinks.isNotEmpty &&
+        !_sinkMode;
     final sinks = <String, AudioChannelRole>{
       for (final entry in _members.roles.entries)
-        if (_backend.isConnected(entry.key)) entry.key: entry.value,
+        // Whoever stopped on their own device stays in a group that goes
+        // on, paused; a new one does not start with them.
+        if (_backend.isConnected(entry.key) &&
+            (live || !_left.contains(entry.key)))
+          entry.key: entry.value,
     };
     if (sinks.isEmpty) {
       await _stopGroup();
       return;
     }
-    final session = _group.session;
-    if (session != null &&
-        session.isLive &&
-        session.sinks.isNotEmpty &&
-        !_sinkMode) {
+    if (live) {
       await _group.updateGroup(
         sinks: sinks,
         sendControl: _backend.sendGroupControl,
@@ -492,10 +519,23 @@ class ShellSoundController extends ChangeNotifier {
           before != null &&
           before != AudioGroupSinkState.stopped &&
           before != AudioGroupSinkState.failed) {
+        _left.add(entry.key);
         onMemberStopped?.call(entry.key);
       }
     }
     _sinkStates = now;
+  }
+
+  /// Who of [_left] is back, and who has no group left to come back to.
+  void _settleLeft(AudioGroupSession? session) {
+    _left.removeWhere((peer) {
+      final sink = session?.sinks[peer];
+      if (sink == null) {
+        _members.remove(peer);
+        return true;
+      }
+      return sink.state != AudioGroupSinkState.stopped;
+    });
   }
 
   void _sync() {
@@ -527,6 +567,7 @@ class ShellSoundController extends ChangeNotifier {
         _on = false;
       }
       _wasLive = groupLive || _singleLive;
+      _settleLeft(_sinkMode ? null : session);
     }
     if (_group.isPlaybackActive || !_group.canRejoinAsSink) {
       _resuming = false;
@@ -547,7 +588,7 @@ class ShellSoundController extends ChangeNotifier {
   SoundRow rowFor(DeviceData device) {
     final peer = device.uid;
     final group = _backend.supportsGroupSink(peer);
-    final checked = _members.contains(peer);
+    final checked = isSelected(peer);
     // A channel only means something between two or more devices.
     final channel =
         checked && group && peer != _soloPeer && _members.length >= 2
@@ -566,17 +607,12 @@ class ShellSoundController extends ChangeNotifier {
       failure: failure,
     );
 
+    // Unchecked because that device stopped it, not because of anything here.
+    if (_left.contains(peer)) return row(SoundRowPhase.disconnected);
     if (!checked) {
       return row(group ? SoundRowPhase.idle : SoundRowPhase.soloOnly);
     }
-    if (!_on || permissionNeeded) {
-      // Off because that device stopped it, not because of the switch here.
-      final left =
-          !permissionNeeded &&
-          !_sinkMode &&
-          _group.session?.sinks[peer]?.state == AudioGroupSinkState.stopped;
-      return row(left ? SoundRowPhase.disconnected : SoundRowPhase.stopped);
-    }
+    if (!_on || permissionNeeded) return row(SoundRowPhase.stopped);
     if (peer == _soloPeer) {
       final state = _single.state;
       if (state.peerId != peer) return row(SoundRowPhase.connecting);

@@ -306,7 +306,7 @@
 | `active`，声音到不了它 | 收不到声音（`warn`），下面不写数字。这台一直在发、它 3 秒没有回报（开始发或从无声恢复后先等 3 秒），或它回报的缓冲超过 250ms（超出它能放的，包在到期前就被挤掉）。回报只在收到包时才发，停了不会自己说，所以这台每半秒看一次 |
 | `lagging` | 同步波动 |
 | `failed` | 没有放出来，选中看原因。`lastError` 是 `AudioFailureReason` 的名字，用 `audioFailureReasonFor` 和现有的 `_audioFailureDetail` 转成文字 |
-| `stopped` | 已断开。对方暂停或断开都是这个状态，可能回来（`sinkJoinRequest`），留在列表里，保持勾选 |
+| `stopped` | 对方已停止播放。对方暂停或断开都是这个状态。留在列表里，**显示为未勾选**，第二行写「对方已停止播放」：勾着却没有声音过去会让人以为还在放。托盘菜单同样不打勾。这一组还在放时它留在组里，对方点继续（`sinkJoinRequest`）就自动勾回；在这边再勾选它是重新放给它；新开一组时不带它。全部成员都停了，总开关回到不能点 |
 
 **不支持组播放的旧设备**（`supportsAudioGroupSinkFor` 为假）也列出来，只是它不能和别的设备一起放：没有声道控件，下面写「只能单独放」。勾选它时取消其他成员，走 `AudioShareCoordinator.startSharingToConnectedPeer`；已经单独放给它时勾选别的设备，先停止它。
 
