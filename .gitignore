@@ -51,3 +51,4 @@ whisper-web
 
 # What a failed golden test leaves behind
 test/failures/
+logs/*

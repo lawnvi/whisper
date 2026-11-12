@@ -348,6 +348,36 @@ void main() {
     });
   });
 
+  // A transfer to a phone and then one to a desktop shared what the first
+  // had counted: the second started held to the phone's link and crawled
+  // until it found out, longer while the pointer moved.
+  test('what the link carried is kept for the same device only', () {
+    final live = TransferPacer(now: () => now);
+    addTearDown(live.dispose);
+    var offset = 0;
+    unawaited(live.take(64 << 10, peer: 'phone'));
+    for (var i = 0; i < 40; i++) {
+      offset += 256 << 10; // about 1 MB/s
+      live.sent('t', offset);
+      now = now.add(const Duration(milliseconds: 250));
+      live.acknowledged('t', offset, interval: 32 << 20, size: 1 << 30);
+      live.evaluate();
+    }
+    expect(live.rate, lessThan(1e6), reason: 'held under the phone link');
+    void rest() {
+      now = now.add(const Duration(seconds: 3));
+      live.evaluate();
+      expect(live.rate, double.infinity);
+    }
+
+    rest();
+    unawaited(live.take(64 << 10, peer: 'phone'));
+    expect(live.rate, lessThan(1e6), reason: 'held from the start');
+    rest();
+    unawaited(live.take(64 << 10, peer: 'desktop'));
+    expect(live.rate, double.infinity, reason: 'counts the desktop link');
+  });
+
   test('with nothing live it holds nothing back', () async {
     final free = TransferPacer(active: () => false);
     addTearDown(free.dispose);

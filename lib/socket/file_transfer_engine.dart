@@ -2713,7 +2713,7 @@ class FileTransferEngine {
         pacedEnd - cursor,
       );
       if (pacer != null) {
-        await pacer.take(length);
+        await pacer.take(length, peer: transfer.peerUid);
         if (_transferRuntime.activeOutgoingFor(transfer.peerUid) !=
                 transfer.transferId ||
             _outgoingStopRequests.contains(transfer.transferId)) {

@@ -63,11 +63,20 @@ void _log(TransferPacerLook look) =>
       PrivacyField.lateMaxMs: look.wake.inMilliseconds,
     });
 
-/// Whether something live shares the link now: the pointer on another
-/// device or this one controlled from elsewhere, or sound going either way.
-bool liveTrafficOnLink() =>
-    RemoteInputWorkspaceCoordinator.shared.snapshot.status ==
-        RemoteInputWorkspaceStatus.active ||
-    RemoteInputCoordinator.shared.state.isActive ||
-    AudioGroupCoordinator.shared.hasLiveSession ||
-    AudioGroupCoordinator.shared.isPlaybackActive;
+/// Whether something live shares the link now: keyboard and mouse shared
+/// with another device, either way, or sound going either way.
+///
+/// Shared, not only in use: the pointer may cross at any moment, and a
+/// transfer that went unheld until then has filled the link. It counted
+/// what the link carries for the next seconds before it held back, and the
+/// pointer lagged all the while.
+bool liveTrafficOnLink() {
+  final workspace = RemoteInputWorkspaceCoordinator.shared.snapshot.status;
+  final runtime = RemoteInputCoordinator.shared.state.status;
+  return workspace == RemoteInputWorkspaceStatus.armed ||
+      workspace == RemoteInputWorkspaceStatus.active ||
+      runtime == RemoteInputRuntimeStatus.armed ||
+      runtime == RemoteInputRuntimeStatus.active ||
+      AudioGroupCoordinator.shared.hasLiveSession ||
+      AudioGroupCoordinator.shared.isPlaybackActive;
+}

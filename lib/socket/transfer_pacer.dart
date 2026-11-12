@@ -105,8 +105,11 @@ class TransferPacer {
   Timer? _timer;
 
   /// What the link carries, in bytes per second. Kept a while after the
-  /// last transfer: the next is most likely over the same link.
+  /// last transfer for the next to the same device ([_linkPeer]): it most
+  /// likely goes over the same link. Another device's may be far slower or
+  /// faster, and a transfer held to that would crawl until it found out.
   double? _link;
+  String? _linkPeer;
 
   /// Counting what arrives: every byte confirmed and every byte let go so
   /// far; those counts when the count began; from when it may begin (after
@@ -348,15 +351,18 @@ class TransferPacer {
     );
   }
 
-  /// Waits until [bytes] more may go.
-  Future<void> take(int bytes) async {
+  /// Waits until [bytes] more, to device [peer], may go.
+  Future<void> take(int bytes, {String? peer}) async {
     final now = _now();
     _lastUse = now;
     if (_timer == null) {
-      // In use again. What the link carried a while ago may be another
-      // link's by now.
+      // In use again. What the link carried a while ago, or to another
+      // device, may be another link's.
       final idleSince = _idleSince;
-      if (idleSince != null && now.difference(idleSince) > _linkMemory) {
+      final peerBefore = _linkPeer;
+      _linkPeer = peer;
+      if (peer != peerBefore ||
+          (idleSince != null && now.difference(idleSince) > _linkMemory)) {
         _link = null;
         _unheldRate = null;
         _doubted = null;
