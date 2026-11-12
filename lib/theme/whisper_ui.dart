@@ -327,7 +327,7 @@ abstract final class WhisperRadius {
       viewfinderMark = 12.0;
 }
 
-/// Seven roles, two densities. Touch is used in the compact size class.
+/// Six roles, two densities. Touch is used in the compact size class.
 class WhisperType {
   const WhisperType({required this.touch});
 
@@ -339,7 +339,6 @@ class WhisperType {
   double get body => touch ? 16 : 14;
   double get note => touch ? 14 : 12;
   double get tiny => touch ? 12 : 11;
-  double get micro => touch ? 11 : 10;
 }
 
 abstract final class WhisperSizes {

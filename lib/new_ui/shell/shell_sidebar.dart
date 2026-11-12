@@ -143,65 +143,44 @@ class ShellSidebar extends StatelessWidget {
             child: Row(
               children: [
                 Expanded(
-                  child: Pressable(
-                    onTap: onOpenSelf,
-                    radius: WhisperRadius.s,
-                    label: self?.name,
-                    child: Padding(
-                      // The icon starts where the rows' pictures start.
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 9,
-                        vertical: 5,
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              DeviceGlyph(
-                                kind: self == null
-                                    ? DeviceKind.laptop
-                                    : selfKindOf(self),
-                                os: deviceOsFor(self?.platform ?? ''),
-                                color: data.lanDown ? c.warn : second,
-                                size: 18,
-                              ),
-                              const SizedBox(width: 7),
-                              Expanded(
-                                child: Text(
-                                  self?.name ?? '',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: type.note,
-                                    fontWeight: FontWeight.w500,
-                                    color: c.ink,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          // Where others reach it, quietly under its name,
-                          // which stays level with the icon.
-                          if (data.selfAddress.isNotEmpty)
-                            Padding(
-                              padding: const EdgeInsets.only(left: 25),
+                  // Where others reach it, when the pointer rests on it.
+                  child: Tooltip(
+                    message: data.selfAddress,
+                    child: Pressable(
+                      onTap: onOpenSelf,
+                      radius: WhisperRadius.s,
+                      label: self?.name,
+                      child: Padding(
+                        // The icon starts where the rows' pictures start.
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 9,
+                          vertical: 5,
+                        ),
+                        child: Row(
+                          children: [
+                            DeviceGlyph(
+                              kind: self == null
+                                  ? DeviceKind.laptop
+                                  : selfKindOf(self),
+                              os: deviceOsFor(self?.platform ?? ''),
+                              color: data.lanDown ? c.warn : second,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 7),
+                            Expanded(
                               child: Text(
-                                data.selfAddress,
+                                self?.name ?? '',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
-                                  fontSize: type.micro,
-                                  height: 1.2,
-                                  color: c.ink3,
-                                  fontFeatures: const [
-                                    FontFeature.tabularFigures(),
-                                  ],
+                                  fontSize: type.note,
+                                  fontWeight: FontWeight.w500,
+                                  color: c.ink,
                                 ),
                               ),
                             ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),

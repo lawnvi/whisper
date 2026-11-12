@@ -31,7 +31,7 @@ The QR code carries both the LAN address and the device identity, so there is no
 
 On Linux, discovery depends on Avahi. On networks that block mDNS / Bonjour, connecting by IP is more reliable.
 
-Once connected, the "Network" row on the device card shows the link's quality and latency; select it for jitter and loss. High latency, a lot of jitter or loss makes keyboard and mouse stutter and files slow; 5 GHz Wi-Fi, a spot nearer the router or a cable helps a lot. The row below it is the other device's address; select it to copy it. This device's address is under its name at the bottom left. When the other device also runs 0.0.61 or later, the card shows its version too.
+Once connected, the "Network" row on the device card shows the link's quality and latency; select it for jitter and loss. High latency, a lot of jitter or loss makes keyboard and mouse stutter and files slow; 5 GHz Wi-Fi, a spot nearer the router or a cable helps a lot. The row below it is the other device's address; select it to copy it. Rest the pointer on this device's name at the bottom left to see its address. When the other device also runs 0.0.61 or later, the card shows its version too.
 
 When there are too many devices to tell apart, give one a name in "Custom name" on its device card, such as "Study desktop". The sidebar, chats, the tray and every device picker use that name. It is kept on this device only: the device itself and others still see its own name. Empty the field to go back to it.
 
