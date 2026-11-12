@@ -186,7 +186,10 @@ abstract interface class DatagramPath {
 ///
 /// Keepalives carry stamps, and the other end's answers echo them, so each
 /// end knows how long the way there and back takes now and with nothing
-/// queued ([queueing]). While [probing] it asks for an answer every
+/// queued, and how long the other end's stamps take to get here. What a
+/// lane carries goes from the dialer (keyboard and mouse from the
+/// controlling computer, sound from its source), and [queueing] is the
+/// wait on that way only. While [probing] it asks for an answer every
 /// [probeEvery]. [delay] is told about the lane for as long as it is open.
 final class DatagramLane implements DatagramPath, TimedLane {
   DatagramLane({
@@ -203,6 +206,7 @@ final class DatagramLane implements DatagramPath, TimedLane {
     LinkDelay? delay,
     DateTime Function()? now,
   }) : _endpoint = endpoint,
+       _dialer = dialer,
        _delay = delay,
        _keys = keys,
        _sealer = keys.sealer(
@@ -230,7 +234,7 @@ final class DatagramLane implements DatagramPath, TimedLane {
   /// there and back from the echo of its own stamp.
   static const int _stampBytes = 13;
   static const int _asks = 1, _echoes = 2;
-  static const int _mask = 0xffffffff;
+  static const int _mask = 0xffffffff, _half = 0x80000000;
   static const int _longestTrip = 10 * Duration.microsecondsPerSecond;
 
   /// Answers to asks no closer together than this.
@@ -238,6 +242,7 @@ final class DatagramLane implements DatagramPath, TimedLane {
   static final Stopwatch _clock = Stopwatch()..start();
 
   final DatagramEndpoint _endpoint;
+  final bool _dialer;
   final DatagramKeys _keys;
   final DatagramSealer _sealer;
   final DatagramOpener _opener;
@@ -246,6 +251,12 @@ final class DatagramLane implements DatagramPath, TimedLane {
   final Duration keepalive, healthyWithin, answerEvery, probeEvery;
   final LinkDelay? _delay;
   final RoundTrips _trips = RoundTrips();
+
+  /// How long the other end's stamps take to get here, against the first:
+  /// the two clocks differ by some constant, which the least takes out as
+  /// it does from a round trip.
+  final RoundTrips _inbound = RoundTrips();
+  int? _inboundFirst;
   int? _heardStamp;
   int _heardStampAt = 0;
   int _answeredAsk = -_longestTrip;
@@ -268,8 +279,22 @@ final class DatagramLane implements DatagramPath, TimedLane {
         _now().difference(heard) <= healthyWithin;
   }
 
+  /// How long a datagram from the dialer waits now. A file sent the other
+  /// way queues on the way back only, and nothing the lane carries waits
+  /// behind it: going by the round trip, a file sent to the controlling
+  /// computer ran at half the link for a queue the pointer never met. The
+  /// answering end reads it from the dialer's stamps; the dialer takes the
+  /// way back out of the round trip.
   @override
-  Duration? get queueing => _trips.queueing(_clock.elapsedMicroseconds);
+  Duration? get queueing {
+    final now = _clock.elapsedMicroseconds;
+    final inbound = _inbound.queueing(now);
+    if (!_dialer) return inbound;
+    final trip = _trips.queueing(now);
+    if (trip == null || inbound == null) return trip;
+    final out = trip - inbound;
+    return out.isNegative ? Duration.zero : out;
+  }
 
   @override
   set probing(bool value) {
@@ -324,8 +349,12 @@ final class DatagramLane implements DatagramPath, TimedLane {
     final now = _clock.elapsedMicroseconds;
     final body = ByteData.sublistView(payload, 1, 1 + _stampBytes);
     final flags = body.getUint8(0);
-    _heardStamp = body.getUint32(1);
+    final stamp = body.getUint32(1);
+    _heardStamp = stamp;
     _heardStampAt = now;
+    final offset = (now - stamp) & _mask;
+    final first = _inboundFirst ??= offset;
+    _inbound.add(((offset - first + _half) & _mask) - _half, now);
     if (flags & _echoes != 0) {
       final took = (now - body.getUint32(5) - body.getUint32(9)) & _mask;
       if (took < _longestTrip) _trips.add(took, now);

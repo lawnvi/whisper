@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -211,6 +212,61 @@ void main() {
     expect(heard.last, [3]);
   });
 
+  // A file sent to the controlling computer queued only on the way back,
+  // yet the round trip said the pointer waited 20 to 80 ms, and the file
+  // ran at half the link for a queue the pointer never met.
+  test('the wait a lane tells is on the way from the dialer, at both ends; '
+      'a queue on the way back is not', () async {
+    final relay = await _Relay.start();
+    final dialerEnd = await DatagramEndpoint.bind();
+    final answerEnd = await DatagramEndpoint.bind();
+    relay.answererPort = answerEnd.port;
+    final answering = DatagramLane(
+      endpoint: answerEnd,
+      keys: _keys(),
+      dialer: false,
+      onData: (_) {},
+      keepalive: const Duration(hours: 1),
+      probeEvery: const Duration(milliseconds: 10),
+    );
+    final dialing = DatagramLane(
+      endpoint: dialerEnd,
+      keys: _keys(),
+      dialer: true,
+      peer: InternetAddress.loopbackIPv4,
+      peerPort: relay.dialerFacing.port,
+      onData: (_) {},
+      keepalive: const Duration(hours: 1),
+      probeEvery: const Duration(milliseconds: 10),
+    );
+    addTearDown(() async {
+      dialing.close();
+      answering.close();
+      await dialerEnd.close();
+      await answerEnd.close();
+      relay.close();
+    });
+    dialing.probing = true;
+    answering.probing = true;
+    Future<(Duration?, Duration?)> settle() async {
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+      return (dialing.queueing, answering.queueing);
+    }
+
+    await settle();
+    relay.toAnswerer = const Duration(milliseconds: 40);
+    final (dialerThere, answererThere) = await settle();
+    expect(dialerThere, greaterThan(const Duration(milliseconds: 25)));
+    expect(answererThere, greaterThan(const Duration(milliseconds: 25)));
+
+    relay
+      ..toAnswerer = Duration.zero
+      ..toDialer = const Duration(milliseconds: 40);
+    final (dialerBack, answererBack) = await settle();
+    expect(dialerBack, lessThan(const Duration(milliseconds: 12)));
+    expect(answererBack, lessThan(const Duration(milliseconds: 12)));
+  });
+
   // A laptop that only received sound by UDP let its Wi-Fi card doze, and
   // packets waited at the access point for up to 280 ms: late sound that TCP
   // never had, as its ACKs kept the card awake. The receiving end now
@@ -316,4 +372,50 @@ void main() {
     expect(answering.queueing, isNotNull);
     expect(toOlder.queueing, isNull);
   });
+}
+
+/// Carries datagrams between a dialer and an answerer on this machine,
+/// holding each back by what [toAnswerer] or [toDialer] says when it comes.
+final class _Relay {
+  _Relay._(this.dialerFacing, this.answererFacing) {
+    dialerFacing.listen((event) {
+      final datagram = event == RawSocketEvent.read
+          ? dialerFacing.receive()
+          : null;
+      if (datagram == null) return;
+      _dialer = (datagram.address, datagram.port);
+      Timer(toAnswerer, () {
+        answererFacing.send(
+          datagram.data,
+          InternetAddress.loopbackIPv4,
+          answererPort,
+        );
+      });
+    });
+    answererFacing.listen((event) {
+      final datagram = event == RawSocketEvent.read
+          ? answererFacing.receive()
+          : null;
+      final dialer = _dialer;
+      if (datagram == null || dialer == null) return;
+      Timer(toDialer, () {
+        dialerFacing.send(datagram.data, dialer.$1, dialer.$2);
+      });
+    });
+  }
+
+  static Future<_Relay> start() async => _Relay._(
+    await RawDatagramSocket.bind(InternetAddress.loopbackIPv4, 0),
+    await RawDatagramSocket.bind(InternetAddress.loopbackIPv4, 0),
+  );
+
+  final RawDatagramSocket dialerFacing, answererFacing;
+  (InternetAddress, int)? _dialer;
+  int answererPort = 0;
+  Duration toAnswerer = Duration.zero, toDialer = Duration.zero;
+
+  void close() {
+    dialerFacing.close();
+    answererFacing.close();
+  }
 }

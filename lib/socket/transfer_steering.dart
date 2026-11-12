@@ -15,7 +15,10 @@ import 'dart:math' as math;
 ///   full): it may carry more. Quickly at first, with nothing known, and
 ///   back to what it carried before a cut; past that, a little at a time,
 ///   and while the pointer moves seldom and by less, since every try
-///   queues for a moment.
+///   queues for a moment. With the pointer still and next to nothing
+///   queued (under a quarter of the target), twice as often and by twice
+///   as much. Not while it moves: going over a steady link that often
+///   cuts it that often, and left it a fifth short in the simulation.
 ///
 /// A round trip also waits for both ends' event loops. So a single late
 /// one neither cuts (the lanes tell the least of 200 ms, and it has to be
@@ -41,6 +44,8 @@ final class TransferSteering {
   static const _quiet = Duration(milliseconds: 500);
   static const _upBusy = 0.02;
   static const _quietBusy = Duration(seconds: 2);
+  static const _upClear = 0.10;
+  static const _quietClear = Duration(milliseconds: 250);
   static const _deepest = 0.25;
   static const _usedOver = Duration(milliseconds: 500);
 
@@ -120,13 +125,14 @@ final class TransferSteering {
     }
     if (now.isBefore(upAt) || queue * 2 >= target || !using) return link;
     final before = _beforeCut;
+    final clear = queue * 4 < target;
     final (more, next) = _startingUp
         ? (_startUp, every * 2)
         : before != null && link < before * share
         ? (_back, every * 4)
         : busy
         ? (_upBusy, _quietBusy)
-        : (_up, _quiet);
+        : (clear ? (_upClear, _quietClear) : (_up, _quiet));
     _upAt = now.add(next);
     return link * (1 + more);
   }

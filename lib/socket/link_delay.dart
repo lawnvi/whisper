@@ -1,10 +1,10 @@
 import 'dart:math' as math;
 
 /// The way there and back of one UDP lane, from the stamps its keepalives
-/// carry: the least lately, which is the way with nothing queued, and the
-/// least of the last moment, which is the way now. The difference is how
-/// long a datagram waits behind whatever else is queued on the link,
-/// a file most of all.
+/// carry, or one way, from the other end's stamps: the least lately, which
+/// is the way with nothing queued, and the least of the last moment, which
+/// is the way now. The difference is how long a datagram waits behind
+/// whatever else is queued on the link, a file most of all.
 final class RoundTrips {
   RoundTrips({
     this.recent = const Duration(milliseconds: 200),
@@ -68,8 +68,8 @@ abstract interface class TimedLane {
   /// milliseconds, instead of a few times a second.
   set probing(bool value);
 
-  /// How long its datagrams wait in a queue now; null when not known (an
-  /// older version does not answer stamps).
+  /// How long its datagrams wait in a queue now, on the way they go; null
+  /// when not known (an older version does not answer stamps).
   Duration? get queueing;
 }
 
