@@ -1,6 +1,7 @@
 #include "remote_input_plugin.h"
 #include "remote_input_cursor.h"
 #include "remote_input_service_client.h"
+#include "remote_input_wheel_capture.h"
 
 #include <flutter/encodable_value.h>
 #include <flutter/method_channel.h>
@@ -840,12 +841,6 @@ std::string MouseButtonPayload(POINT point, int button, bool down) {
   return json.str();
 }
 
-std::string MouseWheelPayload(int delta_x, int delta_y) {
-  std::ostringstream json;
-  json << "{\"deltaX\":" << delta_x << ",\"deltaY\":" << delta_y << "}";
-  return json.str();
-}
-
 std::string KeyPayload(USHORT virtual_key, bool down) {
   std::ostringstream json;
   json << "{\"sourcePlatform\":\"windows\""
@@ -1122,6 +1117,13 @@ class RemoteInputPlugin : public flutter::Plugin {
       keyboard.vkCode = static_cast<DWORD>(wparam & 0xffff);
       HandleLowLevelKeyboard((lparam & 1) ? WM_KEYDOWN : WM_KEYUP,
                              &keyboard, (lparam & 2) != 0);
+      return true;
+    }
+    if (message == kRemoteInputWheelMessage) {
+      const auto turned = wheel_capture_.Drain();
+      if (capture_active_ && turned.has_value()) {
+        EmitInputEvent("mouseWheel", JsonBytes(*turned));
+      }
       return true;
     }
     if (message == kRawMouseInputMessage) {
@@ -1519,6 +1521,7 @@ class RemoteInputPlugin : public flutter::Plugin {
     HideFrontHint();
     hook_can_activate_keyboard_.store(false);
     hook_suppress_keyboard_.store(false);
+    wheel_capture_.End();
     if (!capture_session_id_.empty()) {
       RegisterRawInput(false);
     }
@@ -1558,6 +1561,7 @@ class RemoteInputPlugin : public flutter::Plugin {
       EmitDiagnostic(RemoteInputDiagnosticEvent::kCapturePaused);
       hook_can_activate_keyboard_.store(false);
       hook_suppress_keyboard_.store(false);
+      wheel_capture_.End();
       ReleaseCommonModifierKeys();
       if (!release_edge.empty()) {
         ApplyCaptureRoute(
@@ -1707,9 +1711,11 @@ class RemoteInputPlugin : public flutter::Plugin {
       // needs to suppress the local cursor. While armed, probe the edge; when
       // paused, keep probing until the cursor has re-entered the interior.
       if (g_plugin->hook_suppress_keyboard_.load()) {
-        return g_plugin->HookOwnerIsHung()
-                   ? CallNextHookEx(nullptr, code, wparam, lparam)
-                   : 1;
+        if (g_plugin->HookOwnerIsHung()) {
+          return CallNextHookEx(nullptr, code, wparam, lparam);
+        }
+        g_plugin->wheel_capture_.Take(wparam, lparam, g_plugin->window_);
+        return 1;
       }
       if (!g_plugin->capture_requires_interior_rearm_.load() &&
           !g_plugin->IsHookCursorAtCaptureEdge()) {
@@ -1866,14 +1872,6 @@ class RemoteInputPlugin : public flutter::Plugin {
     if (flags & RI_MOUSE_MIDDLE_BUTTON_UP) {
       EmitInputEvent("mouseButton", JsonBytes(MouseButtonPayload(point, 2, false)));
       SetCaptureButton(2, false);
-    }
-    if (flags & RI_MOUSE_WHEEL) {
-      const auto delta = static_cast<SHORT>(mouse.usButtonData);
-      EmitInputEvent("mouseWheel", JsonBytes(MouseWheelPayload(0, delta)));
-    }
-    if (flags & RI_MOUSE_HWHEEL) {
-      const auto delta = static_cast<SHORT>(mouse.usButtonData);
-      EmitInputEvent("mouseWheel", JsonBytes(MouseWheelPayload(delta, 0)));
     }
   }
 
@@ -2646,6 +2644,7 @@ class RemoteInputPlugin : public flutter::Plugin {
     }
     capture_active_ = true;
     if (front_taken_from_ != nullptr) CoverWithFrontSink();
+    wheel_capture_.Begin();
     hook_suppress_keyboard_.store(true);
     pending_active_start_ = true;
     capture_activation_sequence_ = sequence_ + 1;
@@ -3735,6 +3734,7 @@ class RemoteInputPlugin : public flutter::Plugin {
   HWND held_caption_window_ = nullptr;
   bool injected_cursor_entered_interior_ = false;
   bool injection_blocked_ = false;
+  RemoteInputWheelCapture wheel_capture_;
   // Taking the front from an administrator's window (WatchElevatedFront).
   UINT_PTR front_watch_ = 0;
   HWND front_sink_ = nullptr;
