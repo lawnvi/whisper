@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:whisper/remote_input/remote_input_activity.dart';
 import 'package:whisper/remote_input/remote_input_datagrams.dart';
 import 'package:whisper/remote_input/remote_input_lane.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
@@ -46,6 +47,9 @@ class RemoteInputPacketByteTransport implements RemoteInputPacketTransport {
   void send(RemoteInputPacketFrame packet) {
     if (_inner.isClosed) {
       return;
+    }
+    if (packet.eventType != RemoteInputEventType.heartbeat) {
+      RemoteInputActivity.note();
     }
     final kind = switch (packet.eventType) {
       RemoteInputEventType.mouseMove =>
@@ -160,7 +164,9 @@ class RemoteInputWebSocketPacketTransport extends RemoteInputPacketByteTransport
             mediaKey: mediaMacKey,
             accept: accept,
           );
-    return lane == null ? transport : RemoteInputLaneTransport(transport, lane);
+    return lane == null
+        ? transport
+        : RemoteInputLaneTransport(transport, lane, report: true);
   }
 
   static Future<RemoteInputWebSocketPacketTransport> _connectSocket(

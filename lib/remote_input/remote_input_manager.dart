@@ -8,6 +8,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:whisper/helper/privacy_log.dart';
 import 'package:whisper/remote_input/remote_input_datagrams.dart';
 import 'package:whisper/remote_input/remote_input_lane.dart';
+import 'package:whisper/remote_input/remote_input_lane_report.dart';
 import 'package:whisper/remote_input/remote_input_lifecycle.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
 import 'package:whisper/socket/bounded_binary_websocket_session.dart';
@@ -411,6 +412,10 @@ class RemoteInputManager {
     final merger = RemoteInputLaneMerger(
       (packet) => tail = tail.then((_) => _deliver(packet)),
     );
+    final report = RemoteInputLaneReport(
+      RemoteInputLaneSide.receiver,
+      merger.takeWindow,
+    );
     RemoteInputPacketFrame framed(Uint8List bytes) {
       final packet = RemoteInputPacketFrame.decode(bytes);
       if (packet.sessionId != claim.sessionId) {
@@ -457,6 +462,7 @@ class RemoteInputManager {
           }
         },
         onClosed: () {
+          report.close();
           _logLane(merger, withLane: lane != null);
           lane?.close();
           packetDecoder.destroy();
@@ -469,6 +475,7 @@ class RemoteInputManager {
       }
       return true;
     } catch (_) {
+      report.close();
       lane?.close();
       packetDecoder.destroy();
       rethrow;

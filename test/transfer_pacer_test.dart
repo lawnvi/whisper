@@ -9,12 +9,14 @@ import 'package:whisper/socket/transfer_pacer.dart';
 /// over the second half, the longest a frame waited behind others after the
 /// first ten seconds, the longest nothing arrived for, and how long
 /// something small and live, sent at any moment of the second half, waits
-/// for the link to be free of file data (19 times in 20 no longer).
+/// for the link to be free of file data (19 times in 20 no longer, and at
+/// the worst).
 typedef _Carried = ({
   double rate,
   Duration worstWait,
   Duration stillest,
   Duration liveWait,
+  Duration worstLiveWait,
 });
 
 /// Sends through a pacer for [seconds], as the engine does, over a link
@@ -24,7 +26,8 @@ typedef _Carried = ({
 /// what came, which takes [answering] and holds up whatever comes
 /// meanwhile. With [sleepy], whatever arrives after a quiet moment waits
 /// that long first, as on a phone whose radio saves power. Something live
-/// shares the link unless [live] says otherwise.
+/// shares the link unless [live] says otherwise; with [busy] the pointer is
+/// moving all the while.
 Future<_Carried> _transfer(
   WidgetTester tester, {
   required double capacity,
@@ -32,6 +35,7 @@ Future<_Carried> _transfer(
   Duration sleepy = Duration.zero,
   Duration answering = const Duration(milliseconds: 3),
   bool live = true,
+  bool busy = false,
   int seconds = 40,
 }) async {
   const id = 't';
@@ -43,7 +47,7 @@ Future<_Carried> _transfer(
   final began = tester.binding.clock.now();
   DateTime now() => tester.binding.clock.now();
   Duration elapsed() => now().difference(began);
-  final pacer = TransferPacer(active: () => live, now: now);
+  final pacer = TransferPacer(active: () => live, busy: () => busy, now: now);
   final clock = IncomingAckClock(now: now);
   var cursor = 0, acked = 0, received = 0, answered = 0;
   var writing = false, stopped = false;
@@ -126,16 +130,19 @@ Future<_Carried> _transfer(
 
   unawaited(() async {
     while (!stopped) {
+      // As the engine does: an answer that comes while it is sending moves
+      // the end on, it does not wait for the one after.
       final end = acked + pacer.inFlight(id, window, timely: true);
-      while (cursor < end && !stopped) {
-        final length = math.min(pacer.frameBytes(chunk, id), end - cursor);
-        await pacer.take(length);
-        write(length);
-        cursor += length;
-        pacer.sent(id, cursor);
+      if (cursor >= end) {
+        wake = Completer<void>();
+        await wake!.future;
+        continue;
       }
-      wake = Completer<void>();
-      await wake!.future;
+      final length = math.min(pacer.frameBytes(chunk, id), end - cursor);
+      await pacer.take(length);
+      write(length);
+      cursor += length;
+      pacer.sent(id, cursor);
     }
   }());
 
@@ -162,6 +169,7 @@ Future<_Carried> _transfer(
     worstWait: worstWait,
     stillest: stillest,
     liveWait: liveWaits[liveWaits.length * 19 ~/ 20],
+    worstLiveWait: liveWaits.last,
   );
 }
 
@@ -256,9 +264,36 @@ void main() {
         // link was left over: frames of megabytes kept the link full for
         // most of every quarter second, and what was live waited 80 to
         // 200 ms behind each. In slices it is about 20.
+        // Not on the slowest: its smallest frame alone is 16 ms of the
+        // link, and frames further apart than a receiver waits before it
+        // answers would have it answer every one.
+        if (capacity > 2e6) {
+          expect(
+            carried.liveWait,
+            lessThan(const Duration(milliseconds: 40)),
+            reason: '$capacity',
+          );
+        }
+      }
+    });
+
+    // Every ten seconds to two minutes it went over what the link carries
+    // for a few seconds, to see whether it carries more, and the pointer
+    // lagged for as long.
+    testWidgets('while the pointer moves, it never goes over what the link '
+        'carries', (tester) async {
+      for (final capacity in [8e6, 50e6]) {
+        final carried = await _transfer(
+          tester,
+          capacity: capacity,
+          busy: true,
+          seconds: 120,
+        );
+        expect(carried.rate, greaterThan(capacity * 0.8), reason: '$capacity');
+        // One slice of ten milliseconds is all that is ever ahead of it.
         expect(
-          carried.liveWait,
-          lessThan(const Duration(milliseconds: 40)),
+          carried.worstLiveWait,
+          lessThan(const Duration(milliseconds: 20)),
           reason: '$capacity',
         );
       }

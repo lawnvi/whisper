@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:whisper/helper/privacy_log.dart';
+import 'package:whisper/remote_input/remote_input_activity.dart';
+import 'package:whisper/remote_input/remote_input_lane_report.dart';
 import 'package:whisper/remote_input/remote_input_packet_transport.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
 import 'package:whisper/socket/datagram_endpoint.dart';
@@ -59,10 +61,32 @@ class RemoteInputLaneTransport implements RemoteInputObservablePacketTransport {
       Duration(milliseconds: 24),
     ],
     this.trailing = const Duration(milliseconds: 16),
-  });
+    bool report = false,
+  }) {
+    if (report) {
+      _report = RemoteInputLaneReport(RemoteInputLaneSide.sender, _window);
+    }
+  }
 
   final RemoteInputObservablePacketTransport _socket;
   final DatagramPath _lane;
+
+  /// Moves since the report last asked: how long each took from being
+  /// captured to being sent, and how many had gone each way then.
+  RemoteInputLaneReport? _report;
+  final MoveWaits _waits = MoveWaits();
+  int _toldByLane = 0, _toldBySocket = 0;
+
+  Map<PrivacyField, Object>? _window() {
+    final fields = _waits.take();
+    final byLane = movesByLane - _toldByLane;
+    final bySocket = movesBySocket - _toldBySocket;
+    _toldByLane = movesByLane;
+    _toldBySocket = movesBySocket;
+    return fields
+      ?..[PrivacyField.viaLane] = byLane
+      ..[PrivacyField.viaSocket] = bySocket;
+  }
 
   /// When an event that must not be skipped is sent again by UDP.
   final List<Duration> repeats;
@@ -100,7 +124,14 @@ class RemoteInputLaneTransport implements RemoteInputObservablePacketTransport {
       _socket.send(stamped);
       return;
     }
+    RemoteInputActivity.note();
     if (!fenced) {
+      if (packet.timestampMicros > 0) {
+        _waits.add(
+          (DateTime.now().microsecondsSinceEpoch - packet.timestampMicros) ~/
+              1000,
+        );
+      }
       _trailingTimer?.cancel();
       final bytes = stamped.encode();
       if (_lane.healthy && _lane.send(bytes)) {
@@ -136,6 +167,7 @@ class RemoteInputLaneTransport implements RemoteInputObservablePacketTransport {
       });
     }
     _closed = true;
+    _report?.close();
     _trailingTimer?.cancel();
     for (final timer in _repeatTimers) {
       timer.cancel();
@@ -156,6 +188,9 @@ class RemoteInputLaneMerger {
     DateTime Function()? now,
   }) : _now = now ?? DateTime.now {
     _emit = (packet) {
+      if (packet.eventType != RemoteInputEventType.heartbeat) {
+        RemoteInputActivity.note();
+      }
       _timeMove(packet);
       emit(packet);
     };
@@ -266,9 +301,30 @@ class RemoteInputLaneMerger {
         _moveTransitMs.length >= 1 << 16) {
       return;
     }
-    _moveTransitMs.add(
-      _now().microsecondsSinceEpoch ~/ 1000 - packet.timestampMicros ~/ 1000,
-    );
+    final transit =
+        _now().microsecondsSinceEpoch ~/ 1000 - packet.timestampMicros ~/ 1000;
+    _moveTransitMs.add(transit);
+    _waits.add(transit);
+    final quickest = _quickestMs;
+    if (quickest == null || transit < quickest) _quickestMs = transit;
+  }
+
+  /// The moves since this was last asked, for [RemoteInputLaneReport]: how
+  /// much longer than the session's quickest they took, and how many
+  /// packets came each way.
+  final MoveWaits _waits = MoveWaits();
+  int? _quickestMs;
+  int _toldViaLane = 0, _toldViaSocket = 0;
+
+  Map<PrivacyField, Object>? takeWindow() {
+    final fields = _waits.take(quickest: _quickestMs ?? 0);
+    final byLane = viaLane - _toldViaLane;
+    final bySocket = viaSocket - _toldViaSocket;
+    _toldViaLane = viaLane;
+    _toldViaSocket = viaSocket;
+    return fields
+      ?..[PrivacyField.viaLane] = byLane
+      ..[PrivacyField.viaSocket] = bySocket;
   }
 
   /// How much longer than the quickest a move waited, at [fraction] of all

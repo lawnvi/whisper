@@ -53,5 +53,6 @@
 - [2026-11-11 共享声音或键鼠时传输越来越慢](records/2026-11-11-transfer-pacing-live.md)
 - [2026-11-12 传文件时给声音和键鼠留一成带宽](records/2026-11-12-transfer-pacing-headroom.md)
 - [2026-11-12 留了带宽，指针还是不跟手](records/2026-11-12-transfer-pacing-slices.md)
+- [2026-11-12 切成小片之后指针还是掉帧](records/2026-11-12-transfer-pacing-pointer-busy.md)
 
 各子系统的设计稿和计划在 [superpowers/specs](superpowers/specs) 和 [superpowers/plans](superpowers/plans)，按日期命名。它们记录的是当时的打算，代码和上面的开发文档以现在为准。
