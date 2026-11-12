@@ -5,9 +5,9 @@
 //   FONT=NotoSans-Regular.ttf swift tool/icon_word.swift 'wɪspə' <png|ico>...
 //
 // Noto Sans Regular (OFL, notofonts.github.io) has the phonetic letters. The
-// x-height is 0.29 of the ring's inner radius (XHEIGHT; the old word's was
+// x-height is 0.27 of the ring's inner radius (XHEIGHT; the old word's was
 // 0.2214), its middle where the old word's was, a little above the centre;
-// the colour is #33373D (INK; the old word's was #60646C). Letters are set
+// the colour is #464A51 (INK; the old word's was #60646C). Letters are set
 // by their ink, the same gap apart. An .ico keeps its PNG or 32-bit BMP
 // entries as they were. Afterwards, files that had no alpha channel (iOS,
 // assets/app_icon.png) must be made opaque again: the App Store refuses the
@@ -27,10 +27,10 @@ let gapPerXHeight = 0.36
 let env = ProcessInfo.processInfo.environment
 /// Of the ring's inner radius: the x-height, and where the middle of the
 /// x-height sits above the centre (the old word's, kept as the word grows).
-let xHeightPerRadius = Double(env["XHEIGHT"] ?? "") ?? 0.29
+let xHeightPerRadius = Double(env["XHEIGHT"] ?? "") ?? 0.27
 let xMiddlePerRadius = 0.0094
 /// The word's colour, as RRGGBB.
-let inkHex = UInt32(env["INK"] ?? "33373D", radix: 16)
+let inkHex = UInt32(env["INK"] ?? "464A51", radix: 16)
 
 struct Report { var changed = false; var note = "" }
 
