@@ -5,20 +5,26 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/socket/incoming_transfer_parts.dart';
 import 'package:whisper/socket/transfer_pacer.dart';
 
-/// What a transfer over a simulated link came to.
-typedef _Carried = ({double rate, Duration worstWait});
+/// What a transfer over a simulated link came to: bytes a second carried
+/// over the second half, the longest a frame waited behind others after the
+/// first ten seconds, and the longest nothing arrived for.
+typedef _Carried = ({double rate, Duration worstWait, Duration stillest});
 
-/// Sends through a live pacer for [seconds], as the engine does, over a link
-/// that carries [capacity] bytes a second and never refuses a write: what it
-/// has not carried yet queues up. The receiver answers by the real
-/// [IncomingAckClock], after writing what came. With [sleepy], whatever
-/// arrives after a quiet moment waits that long first, as on a phone whose
-/// radio saves power. Gives the rate carried over the second half and the
-/// longest a frame waited behind others after the first ten seconds.
+/// Sends through a pacer for [seconds], as the engine does, over a link
+/// that carries [capacity] bytes a second ([capacityAt] when that changes on
+/// the way) and never refuses a write: what it has not carried yet queues
+/// up. The receiver answers by the real [IncomingAckClock], after writing
+/// what came, which takes [answering] and holds up whatever comes
+/// meanwhile. With [sleepy], whatever arrives after a quiet moment waits
+/// that long first, as on a phone whose radio saves power. Something live
+/// shares the link unless [live] says otherwise.
 Future<_Carried> _transfer(
   WidgetTester tester, {
   required double capacity,
+  double Function(Duration at)? capacityAt,
   Duration sleepy = Duration.zero,
+  Duration answering = const Duration(milliseconds: 3),
+  bool live = true,
   int seconds = 40,
 }) async {
   const id = 't';
@@ -30,22 +36,28 @@ Future<_Carried> _transfer(
   final began = tester.binding.clock.now();
   DateTime now() => tester.binding.clock.now();
   Duration elapsed() => now().difference(began);
-  final pacer = TransferPacer(audioStrained: () => false, now: now);
+  final pacer = TransferPacer(active: () => live, now: now);
   final clock = IncomingAckClock(now: now);
   var cursor = 0, acked = 0, received = 0, answered = 0;
   var writing = false, stopped = false;
   var linkFreeAt = Duration.zero, lastArrival = Duration.zero;
-  var worstWait = Duration.zero;
+  var worstWait = Duration.zero, stillest = Duration.zero;
+  Duration? arrivedAt;
   Completer<void>? wake;
 
   void answer() {
     if (received <= answered || writing) return;
     final since = answered, upTo = received;
     writing = true;
-    // The write to disk before an answer: 500 MB/s.
-    final write = Duration(
-      microseconds: 3000 + ((upTo - since) / 500e6 * 1e6).round(),
-    );
+    // The write to disk before an answer: 500 MB/s. A receiver that takes
+    // long over it reads nothing more from the link until it is done.
+    final write =
+        answering +
+        Duration(microseconds: ((upTo - since) / 500e6 * 1e6).round());
+    if (answering > const Duration(milliseconds: 50)) {
+      final at = elapsed();
+      linkFreeAt = (linkFreeAt > at ? linkFreeAt : at) + answering;
+    }
     Timer(write, () {
       writing = false;
       answered = upTo;
@@ -60,13 +72,18 @@ Future<_Carried> _transfer(
           since: since,
         );
         acked = upTo;
-        wake?.complete();
+        final waiting = wake;
         wake = null;
+        waiting?.complete();
       });
     });
   }
 
   void arrived(int end) {
+    final at = elapsed();
+    final last = arrivedAt;
+    if (last != null && at - last > stillest) stillest = at - last;
+    arrivedAt = at;
     received = end;
     if (clock.due(
       id,
@@ -86,8 +103,9 @@ Future<_Carried> _transfer(
     if (at > const Duration(seconds: 10) && start - at > worstWait) {
       worstWait = start - at;
     }
+    final carries = capacityAt?.call(at) ?? capacity;
     linkFreeAt =
-        start + Duration(microseconds: (length / capacity * 1e6).round());
+        start + Duration(microseconds: (length / carries * 1e6).round());
     var arrival = linkFreeAt + latency;
     if (sleepy > Duration.zero &&
         arrival - lastArrival > const Duration(milliseconds: 40)) {
@@ -119,57 +137,24 @@ Future<_Carried> _transfer(
   await tester.pump(Duration(seconds: seconds - seconds ~/ 2));
   final rate = (received - half) / (seconds - seconds ~/ 2);
   stopped = true;
-  wake?.complete();
+  final waiting = wake;
+  wake = null;
+  waiting?.complete();
   pacer.dispose();
   // What is still on its way arrives; nothing follows.
   await tester.pump(const Duration(seconds: 30));
-  return (rate: rate, worstWait: worstWait);
+  return (rate: rate, worstWait: worstWait, stillest: stillest);
 }
 
 void main() {
-  // One look at the pacer: [sent] bytes went in the last tick.
   late DateTime now;
-  late bool strained;
   late TransferPacer pacer;
 
   setUp(() {
     now = DateTime(2026);
-    strained = false;
-    pacer = TransferPacer(audioStrained: () => strained, now: () => now);
+    pacer = TransferPacer(now: () => now);
   });
   tearDown(() => pacer.dispose());
-
-  Future<void> tick({required double sent}) async {
-    // What went: taken without waiting on the real clock.
-    final bytes = (sent * TransferPacer.tick.inMilliseconds / 1000).round();
-    final at = now;
-    final pending = pacer.take(bytes);
-    now = at.add(TransferPacer.tick);
-    pacer.evaluate();
-    await pending.timeout(const Duration(seconds: 1), onTimeout: () {});
-  }
-
-  test('with the sound fine it speeds up as far as the link goes', () async {
-    for (var i = 0; i < 20; i++) {
-      await tick(sent: pacer.rate);
-    }
-    expect(pacer.rate, greaterThan(pacer.start * 4));
-  });
-
-  test('the sound suffering, it drops and stays below that speed', () async {
-    for (var i = 0; i < 6; i++) {
-      await tick(sent: pacer.rate);
-    }
-    final troubleAt = pacer.rate;
-    strained = true;
-    await tick(sent: troubleAt);
-    expect(pacer.rate, closeTo(troubleAt * 0.6, 1));
-    strained = false;
-    for (var i = 0; i < 40; i++) {
-      await tick(sent: pacer.rate);
-    }
-    expect(pacer.rate, lessThanOrEqualTo(troubleAt * 0.85 + 1));
-  });
 
   test('frames are a quarter second of what the receiver confirms', () {
     expect(pacer.frameBytes(4 << 20), 512 << 10, reason: 'nothing known yet');
@@ -178,23 +163,6 @@ void main() {
     now = now.add(const Duration(seconds: 1));
     pacer.acknowledged('t', 200 << 10); // a slow link: 200 KiB/s
     expect(pacer.frameBytes(4 << 20), 48 << 10);
-  });
-
-  test('answers coming back later than the link takes empty slow it down', () {
-    pacer.sent('t', 1 << 20);
-    now = now.add(const Duration(milliseconds: 20));
-    pacer.acknowledged('t', 1 << 20); // the link with nothing queued
-    pacer.take(1);
-    for (var i = 2; i < 6; i++) {
-      pacer.sent('t', i << 20);
-      now = now.add(const Duration(milliseconds: 400));
-      pacer.acknowledged('t', i << 20); // each now waits behind a queue
-    }
-    final before = pacer.rate;
-    now = now.add(TransferPacer.tick);
-    pacer.evaluate();
-    expect(pacer.queueDelay, greaterThan(const Duration(milliseconds: 80)));
-    expect(pacer.rate, lessThan(before));
   });
 
   test('an old receiver is never held back', () {
@@ -238,27 +206,54 @@ void main() {
     expect(pacer.queueDelay, greaterThanOrEqualTo(Duration.zero));
   });
 
+  // Transfers crawled while sound or pointer was shared: a seventh of the
+  // link with sound, slower the longer it ran to a locked phone, seconds of
+  // standing still at the start. Each time the pacer had slowed down for
+  // something that was not the transfer's doing: an answer as late as the
+  // frame it answers is large, a phone that answers later the less it is
+  // sent, a speaker that is always about to run dry. It leaves a tenth of
+  // what the link is counted to carry now, and goes by nothing else.
   group('with something live, over a link', () {
-    // Transfers went at a third of a healthy Wi-Fi link while sound or
-    // pointer was shared, and slower the longer they ran. An answer to a
-    // frame takes as long as the frame does to cross the link; that passed
-    // for a queue, and every look slowed the transfer again.
-    testWidgets('that is fine, most of what it carries goes '
-        'and little queues', (tester) async {
-      for (final capacity in [1e6, 8e6, 30e6]) {
+    testWidgets('that is fine, it takes most of what the link carries, '
+        'leaves a little, and little queues', (tester) async {
+      for (final capacity in [1e6, 8e6, 50e6]) {
         final carried = await _transfer(tester, capacity: capacity);
-        expect(carried.rate, greaterThan(capacity * 0.6), reason: '$capacity');
+        expect(
+          carried.rate,
+          inInclusiveRange(capacity * 0.8, capacity * 0.95),
+          reason: '$capacity',
+        );
         expect(
           carried.worstWait,
           lessThan(const Duration(seconds: 1)),
           reason: '$capacity',
         );
+        expect(
+          carried.stillest,
+          lessThan(const Duration(seconds: 2)),
+          reason: '$capacity',
+        );
       }
     });
 
-    // A locked phone answered later the less it was sent. Each late answer
-    // slowed the transfer, which made the next later still: 0.1 MB/s over a
-    // link that carried 3.
+    testWidgets('that gets slower or faster, it follows', (tester) async {
+      final slower = await _transfer(
+        tester,
+        capacity: 50e6,
+        capacityAt: (at) => at.inSeconds < 20 ? 50e6 : 20e6,
+        seconds: 80,
+      );
+      expect(slower.rate, inInclusiveRange(20e6 * 0.8, 20e6 * 0.95));
+      final faster = await _transfer(
+        tester,
+        capacity: 20e6,
+        capacityAt: (at) => at.inSeconds < 20 ? 20e6 : 50e6,
+        // It looks for more every half minute to two minutes.
+        seconds: 240,
+      );
+      expect(faster.rate, greaterThan(50e6 * 0.8));
+    });
+
     testWidgets('whose receiver saves power, it does not slow to a crawl', (
       tester,
     ) async {
@@ -269,39 +264,32 @@ void main() {
         sleepy: const Duration(milliseconds: 150),
       );
       expect(carried.rate, greaterThan(capacity * 0.2));
+      expect(carried.stillest, lessThan(const Duration(seconds: 2)));
+    });
+
+    // Such a receiver answers every frame that comes after a pause, and a
+    // held transfer is all pauses: it gets through less the slower it is
+    // sent to, and going under what it takes never ends.
+    testWidgets('whose receiver takes long over every answer, it lets go '
+        'rather than crawl', (tester) async {
+      Future<_Carried> run({required bool live}) => _transfer(
+        tester,
+        capacity: 8e6,
+        answering: const Duration(milliseconds: 250),
+        live: live,
+        seconds: 100,
+      );
+      final unheld = await run(live: false);
+      final held = await run(live: true);
+      expect(held.rate, greaterThan(unheld.rate * 0.8));
     });
   });
 
-  // Slowing down again and again for a sound that suffers for another
-  // reason only made the transfer slow.
-  test('while the sound suffers whatever it does, it gives way three times '
-      'and no further', () async {
-    for (var i = 0; i < 6; i++) {
-      await tick(sent: pacer.rate);
-    }
-    final before = pacer.rate;
-    strained = true;
-    final rates = <double>[];
-    for (var i = 0; i < 80; i++) {
-      await tick(sent: pacer.rate);
-      rates.add(pacer.rate);
-    }
-    expect(rates.last, closeTo(before * 0.6 * 0.6 * 0.6, 1));
-    expect(rates[40], rates.last);
-  });
-
   test('with nothing live it holds nothing back', () async {
-    final free = TransferPacer(audioStrained: () => true, active: () => false);
+    final free = TransferPacer(active: () => false);
     addTearDown(free.dispose);
     for (var i = 0; i < 100; i++) {
       await free.take(64 << 20).timeout(const Duration(milliseconds: 50));
     }
-  });
-
-  test('it never runs far ahead of what actually goes', () async {
-    for (var i = 0; i < 20; i++) {
-      await tick(sent: 10e6);
-    }
-    expect(pacer.rate, lessThan(10e6 * 1.3 + 2e6 + 1));
   });
 }

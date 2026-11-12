@@ -12,11 +12,8 @@ final class TransferPacing {
   TransferPacing({
     required bool Function(String transferId) isClipboard,
     bool Function()? live,
-    bool Function()? audioStrained,
   }) : _isClipboard = isClipboard,
-       _live = live ?? liveTrafficOnLink,
-       _audioStrained =
-           audioStrained ?? (() => AudioGroupCoordinator.shared.audioStrained);
+       _live = live ?? liveTrafficOnLink;
 
   /// The app's: transfers give way to its sound, keyboard and mouse. A
   /// manager without the app's coordinators (tests) has nothing live.
@@ -24,20 +21,13 @@ final class TransferPacing {
       TransferPacing(
         isClipboard: TransferPlacements.shared.isEphemeral,
         live: withCoordinators ? null : () => false,
-        audioStrained: withCoordinators ? null : () => false,
       );
 
   final bool Function(String transferId) _isClipboard;
   final bool Function() _live;
-  final bool Function() _audioStrained;
 
-  late final TransferPacer clipboard = TransferPacer(
-    audioStrained: _audioStrained,
-  );
-  late final TransferPacer general = TransferPacer(
-    audioStrained: _audioStrained,
-    active: _live,
-  );
+  late final TransferPacer clipboard = TransferPacer();
+  late final TransferPacer general = TransferPacer(active: _live);
 
   TransferPacer forTransfer(String transferId) =>
       _isClipboard(transferId) ? clipboard : general;

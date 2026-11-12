@@ -166,51 +166,6 @@ class AudioGroupCoordinator extends ChangeNotifier {
   /// a source does not look like it is playing when nothing is heard.
   AudioFailureReason? get captureFailure => _captureFailure;
 
-  /// The sound is close to breaking up right now: a sink (or this device's
-  /// own playback) has almost nothing buffered, or got packets too late since
-  /// the last look. What shares the link, like a paste's files, gives way.
-  bool get audioStrained {
-    final now = _clockMicros();
-    var strained = false;
-    final current = _session;
-    if (current != null && current.isLive && _captureSource != null) {
-      // With nothing to send, a sink has nothing to report either.
-      final sending = !sourceSilent;
-      for (final sink in current.sinks.values) {
-        if (sink.state != AudioGroupSinkState.active) continue;
-        final heard = _sinkHeardAtMicros[sink.sinkPeerId] ?? 0;
-        final late = sink.latePacketCount;
-        final before = _lateSeen[sink.sinkPeerId];
-        _lateSeen[sink.sinkPeerId] = late;
-        if (heard == 0) continue;
-        // Reports stopped coming: the sink is too busy to say how it is.
-        if ((sending && now - heard > _strainReportAgeMicros) ||
-            (before != null && late > before) ||
-            sink.bufferTargetMicros < _strainBufferMicros) {
-          strained = true;
-        }
-      }
-    }
-    final own = _ownPlaybackReport;
-    if (_playback != null &&
-        own != null &&
-        now - _ownPlaybackReportAtMicros <= _strainReportAgeMicros) {
-      final before = _lateSeen[''];
-      _lateSeen[''] = own.latePacketCount;
-      if ((before != null && own.latePacketCount > before) ||
-          own.bufferDepthMicros < _strainBufferMicros) {
-        strained = true;
-      }
-    }
-    return strained;
-  }
-
-  static const _strainBufferMicros = 25000;
-  static const _strainReportAgeMicros = 1500000;
-  final Map<String, int> _lateSeen = <String, int>{};
-  AudioGroupPlaybackReport? _ownPlaybackReport;
-  int _ownPlaybackReportAtMicros = 0;
-
   /// This device shares, but has had nothing to send for a while: on Windows,
   /// the computer is playing nothing.
   bool get sourceSilent {
@@ -1351,8 +1306,6 @@ class AudioGroupCoordinator extends ChangeNotifier {
   }
 
   void _sendPlaybackLatencyReport(AudioGroupPlaybackReport report) {
-    _ownPlaybackReport = report;
-    _ownPlaybackReportAtMicros = _clockMicros();
     final sendControl = _playbackSendControl;
     final localPeerId = _playbackLocalPeerId;
     final current = _session;

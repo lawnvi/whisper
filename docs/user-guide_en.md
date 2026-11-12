@@ -58,7 +58,7 @@ To send without opening a conversation first:
 - **Android**: choose Whisper from the system share sheet.
 - **Desktop**: use the file context menu, or press `Cmd+Option+V` (macOS) or `Ctrl+Alt+V` (Windows / Linux) to send the current clipboard content.
 
-An interrupted file transfer continues from the last confirmed position.
+An interrupted file transfer continues from the last confirmed position. While sound or keyboard and mouse are shared, a transfer leaves about a tenth of the bandwidth to them, after a few seconds at full speed to measure the network.
 
 On desktop you can also send a whole folder: drop it into the conversation, or choose "Folder" from `+` in the message box. A folder goes as one transfer, without being archived first, and arrives with the same structure. Links are not sent. If some files could not be transferred, the message shows how many; open it to see which. If Whisper on the other device is too old, you are asked to update it first.
 
