@@ -25,21 +25,23 @@ Whisper is a LAN collaboration app. Paired devices connect to each other directl
 
 | Feature | What it does |
 | --- | --- |
-| **Text and files** | Send text, files and whole folders like chat messages; transfers resume and are verified on arrival. Also from the share sheet, a context menu or a global hotkey |
-| **The other device's files** | Browse, copy and edit them, or mount them in Finder, File Explorer or a Linux file manager and use them like a local disk |
-| **Share links** | For a device without Whisper: send a link and it downloads in a browser, with an optional password |
-| **Keyboard and mouse sharing** | A software KVM: one keyboard and mouse across several computers, switching when the pointer crosses a screen edge. Sleeping computers are woken automatically |
+| **Text and files** | Send text, files and whole folders like chat messages; transfers resume |
+| **Remote files** | Browse, copy and edit the other device's files, or mount them as a disk |
+| **Share links** | A browser download link for devices without Whisper |
+| **Keyboard and mouse** | A software KVM: one keyboard and mouse across several computers |
+| **Wake-on-LAN** | Wake a sleeping computer; starting sharing wakes it for you |
 | **Phone controller** | An Android phone as a touchpad, air mouse and keyboard |
 | **System audio** | Play a computer's sound on one or more other devices |
-| **Window flow** | Open and use a computer's windows or an Android phone's apps on another device |
+| **Window flow** | Use a computer's windows or a phone's apps on another device |
 | **Clipboard sync** | Copy on one device, paste on another |
-| **Notification forwarding** | Send chosen Android apps' notifications, such as verification codes, to your computer |
+| **Notifications** | Android notifications, such as verification codes, on your computer |
 
-There are also desktop screenshots with markup, and receiving DLNA casts from video apps (experimental).
+Also: quick send from the share sheet, a context menu or a hotkey; screenshots with markup; receiving DLNA casts (experimental).
 
-| Audio sharing | Keyboard and mouse sharing |
-| --- | --- |
-| ![Whisper audio sharing](.github/image/audio-share.png) | ![Whisper keyboard and mouse sharing](.github/image/keyboard-share.png) |
+<p align="center">
+  <img src=".github/image/keyboard-share.png" width="49%" alt="Whisper keyboard and mouse sharing">
+  <img src=".github/image/audio-share.png" width="49%" alt="Whisper audio sharing">
+</p>
 
 ## Download
 
@@ -47,8 +49,8 @@ Get the installer for your platform from [Releases](https://github.com/lawnvi/wh
 
 | Platform | Requirement | Installer |
 | --- | --- | --- |
-| Android | 7.0 or later | `android-arm64-v8a.apk` for most phones, `android-universal.apk` if unsure |
-| macOS | 10.15 or later | `macos-arm64.dmg` for Apple silicon, `macos-x86_64.dmg` for Intel |
+| Android | 7.0 or later | `android-arm64-v8a.apk`, or `android-universal.apk` if unsure |
+| macOS | 10.15 or later | Apple silicon `macos-arm64.dmg`, Intel `macos-x86_64.dmg` |
 | Windows | 10 / 11, 64-bit | `windows-x86_64.exe` |
 | Linux | x86_64 | `.deb`, `.rpm`, or `.AppImage` |
 
@@ -65,10 +67,10 @@ If the other device is not listed, select this device's name at the bottom left 
 
 Two shortcuts worth remembering:
 
-| Shortcut | What it does |
-| --- | --- |
-| `Ctrl+Alt+V` (`Cmd+Option+V` on macOS) | Sends what is on the clipboard to the other device |
-| `Ctrl+Alt+Esc` (`Control+Option+Esc` on macOS) | Leaves keyboard/mouse sharing and brings the pointer back |
+| Action | Windows / Linux | macOS |
+| --- | --- | --- |
+| Send what is on the clipboard | `Ctrl+Alt+V` | `Cmd+Option+V` |
+| Leave keyboard and mouse sharing | `Ctrl+Alt+Esc` | `Control+Option+Esc` |
 
 The [user guide](docs/user-guide_en.md) covers every feature; for install, connection or stutter problems, see [Troubleshooting](docs/troubleshooting_en.md).
 
@@ -79,18 +81,18 @@ The [user guide](docs/user-guide_en.md) covers every feature; for install, conne
 | Text and files | ✅ | ✅ | ✅ | ✅ |
 | Sending folders | Receive only | ✅ | ✅ | ✅ |
 | File browsing | ✅ | ✅ | ✅ | ✅ |
-| Mounting the other device's files | Can be mounted only | ✅ | ✅ | Needs fuse3 |
+| Mounting | Can be mounted | ✅ | ✅ | Needs fuse3 |
 | Share links | ✅ | ✅ | ✅ | ✅ |
-| Keyboard and mouse sharing | — | ✅ | ✅ | X11, GNOME or KDE Plasma |
-| Phone controller | Controls | Controlled | Controlled | Controlled, same as above |
+| Keyboard and mouse | — | ✅ | ✅ | X11, GNOME, KDE Plasma |
+| Phone controller | Controls | Controlled | Controlled | Controlled, as above |
 | Wake-on-LAN | — | ✅ | ✅ | ✅ |
 | System audio | Playback only | ✅ | ✅ | ✅ |
 | Window flow: view | ✅ | ✅ | ✅ | ✅ |
-| Window flow: share | Android 10 or later | ✅ | ✅ | GNOME 45+ or KDE Plasma 6 |
-| Clipboard sync | Text, foreground only | ✅ | ✅ | ✅ |
-| Notification forwarding | Sends | Receives | Receives | Receives |
-| Desktop screenshots | — | ✅ | ✅ | Depends on desktop |
-| TV casting receiver | — | ✅ | ✅ | ✅ |
+| Window flow: share | Android 10+ | ✅ | ✅ | GNOME 45+, KDE Plasma 6 |
+| Clipboard sync | Text, in foreground | ✅ | ✅ | ✅ |
+| Notifications | Sends | Receives | Receives | Receives |
+| Screenshots | — | ✅ | ✅ | Varies by desktop |
+| TV casting | — | ✅ | ✅ | ✅ |
 
 On Linux, discovery depends on Avahi; video previews and TV casting need libmpv, and window flow needs FFmpeg 4 or later. Everything else works without them. For what each desktop needs on Wayland and how it asks for permission, see the user guide on [keyboard and mouse sharing](docs/user-guide_en.md#permissions-and-platform-limits) and [window flow](docs/user-guide_en.md#the-device-being-shown).
 

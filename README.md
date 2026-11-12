@@ -27,21 +27,23 @@ Whisper 是一个局域网协作工具。设备配对后通过加密通道直接
 
 | 功能 | 说明 |
 | --- | --- |
-| **文本与文件** | 像聊天一样发文字、文件和整个文件夹，断线可续传，收到后自动校验；也能从分享菜单、右键菜单或全局快捷键直接发 |
-| **对方的文件** | 浏览、拷贝和修改对方的文件，或者挂进访达、资源管理器和 Linux 文件管理器，当成本机的磁盘用 |
-| **共享链接** | 对方没装 Whisper 也能收：发一个链接，用浏览器下载，可以加密码 |
-| **键鼠共享** | 软件 KVM：一套键盘鼠标用多台电脑，指针移到屏幕边缘就过去；睡着的电脑会被自动唤醒 |
+| **文本与文件** | 像聊天一样发文字、文件和整个文件夹，断线可续传 |
+| **对方的文件** | 浏览、拷贝、修改，或者挂进访达和资源管理器当本机磁盘用 |
+| **共享链接** | 对方没装 Whisper 也能收：发个链接，用浏览器下载 |
+| **键鼠共享** | 软件 KVM：一套键盘鼠标用多台电脑，指针移到屏幕边缘就过去 |
+| **网络唤醒** | 叫醒睡着的电脑，开始键鼠共享时会自动唤醒 |
 | **手机控制电脑** | Android 手机当触控板、体感鼠标和键盘 |
 | **系统音频** | 把电脑的声音送到一台或多台设备播放 |
-| **窗口流转** | 电脑的窗口、安卓手机的应用，在另一台设备上打开并直接操作 |
+| **窗口流转** | 电脑的窗口、安卓手机的应用，在另一台设备上打开并操作 |
 | **剪贴板同步** | 在一台设备上复制，到另一台粘贴 |
 | **通知转发** | 把 Android 上选定 App 的通知（比如验证码）送到电脑 |
 
-另外还有带标注的桌面截图，以及接收视频 App 的 DLNA 投屏（实验性）。
+另外还有：从分享菜单、右键菜单或快捷键直接发送，带标注的桌面截图，接收 DLNA 投屏（实验性）。
 
-| 音频共享 | 键鼠共享 |
-| --- | --- |
-| ![Whisper 音频共享](.github/image/audio-share.png) | ![Whisper 键鼠共享](.github/image/keyboard-share.png) |
+<p align="center">
+  <img src=".github/image/keyboard-share.png" width="49%" alt="Whisper 键鼠共享">
+  <img src=".github/image/audio-share.png" width="49%" alt="Whisper 音频共享">
+</p>
 
 ## 下载
 
@@ -49,8 +51,8 @@ Whisper 是一个局域网协作工具。设备配对后通过加密通道直接
 
 | 平台 | 系统要求 | 安装包 |
 | --- | --- | --- |
-| Android | 7.0 及以上 | 多数手机选 `android-arm64-v8a.apk`，不确定就选 `android-universal.apk` |
-| macOS | 10.15 及以上 | Apple 芯片选 `macos-arm64.dmg`，Intel 选 `macos-x86_64.dmg` |
+| Android | 7.0 及以上 | `android-arm64-v8a.apk`，不确定选 `android-universal.apk` |
+| macOS | 10.15 及以上 | Apple 芯片 `macos-arm64.dmg`，Intel `macos-x86_64.dmg` |
 | Windows | 10 / 11，64 位 | `windows-x86_64.exe` |
 | Linux | x86_64 | `.deb`、`.rpm` 或 `.AppImage` |
 
@@ -67,10 +69,10 @@ Whisper 是一个局域网协作工具。设备配对后通过加密通道直接
 
 两个值得记住的快捷键：
 
-| 快捷键 | 作用 |
-| --- | --- |
-| `Ctrl+Alt+V`（macOS 为 `Cmd+Option+V`） | 把剪贴板里的内容发给对方 |
-| `Ctrl+Alt+Esc`（macOS 为 `Control+Option+Esc`） | 退出键鼠共享，把指针拿回本机 |
+| 作用 | Windows / Linux | macOS |
+| --- | --- | --- |
+| 发送剪贴板里的内容 | `Ctrl+Alt+V` | `Cmd+Option+V` |
+| 退出键鼠共享 | `Ctrl+Alt+Esc` | `Control+Option+Esc` |
 
 每项功能怎么用，见[使用指南](docs/user-guide.md)；装不上、连不上或卡顿，见[排障指南](docs/troubleshooting.md)。
 
