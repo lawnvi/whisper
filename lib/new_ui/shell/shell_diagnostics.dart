@@ -37,9 +37,14 @@ class ShellDiagnostics extends StatefulWidget {
 }
 
 class _ShellDiagnosticsState extends State<ShellDiagnostics> {
-  static final _issues = Uri.https('github.com', '/lawnvi/whisper/issues/new', {
-    'template': 'bug_report.yml',
-  });
+  /// The issue form in the app's language: Chinese, or else English. Older
+  /// versions open `bug_report.yml`, which stays the Chinese one.
+  Uri _issues(BuildContext context) =>
+      Uri.https('github.com', '/lawnvi/whisper/issues/new', {
+        'template': Localizations.localeOf(context).languageCode == 'zh'
+            ? 'bug_report.yml'
+            : 'bug_report_en.yml',
+      });
 
   String? _address;
   var _busy = false;
@@ -63,8 +68,9 @@ class _ShellDiagnosticsState extends State<ShellDiagnostics> {
   /// The report goes on the clipboard, to paste there.
   Future<void> _feedback() async {
     final l10n = AppLocalizations.of(context)!;
+    final issues = _issues(context);
     await Clipboard.setData(ClipboardData(text: await buildDiagnosticReport()));
-    await launchUrl(_issues, mode: LaunchMode.externalApplication);
+    await launchUrl(issues, mode: LaunchMode.externalApplication);
     showAppToast(l10n.diagFeedbackCopied);
   }
 

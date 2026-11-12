@@ -101,7 +101,7 @@ xattr -dr com.apple.quarantine /Applications/Whisper.app
 
 ## 提交问题
 
-上面都试过还不行，就[提交问题](https://github.com/lawnvi/whisper/issues/new/choose)：
+上面都试过还不行，就[提交问题](https://github.com/lawnvi/whisper/issues/new/choose)，选「中文」：
 
 1. 在设置里打开「诊断信息」，点「反馈问题」。诊断信息会被拷贝，同时打开 GitHub 的问题表单。
 2. 把诊断信息粘贴进去，写上两台设备的 Whisper 版本和系统版本，以及怎么复现。

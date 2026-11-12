@@ -1,81 +1,25 @@
-name: 问题反馈 / Bug report
-description: 出错、连不上、卡住或崩溃 / Something doesn't work
-labels: ["bug"]
+# The file keeps its name: older versions of the app open it directly.
+name: 中文
+description: 反馈问题或提建议
 body:
   - type: markdown
     attributes:
-      value: |
-        先看一眼[排障指南](https://github.com/lawnvi/whisper/blob/HEAD/docs/troubleshooting.md)，装不上、连不上、权限这类问题多数能直接解决。
-        Please check [Troubleshooting](https://github.com/lawnvi/whisper/blob/HEAD/docs/troubleshooting_en.md) first; most install, connection and permission problems are covered there.
-  - type: input
-    id: version
-    attributes:
-      label: Whisper 版本 / Version
-      description: 涉及两台设备时两边都写 / Both devices if two are involved
-      placeholder: "0.0.59 → 0.0.59"
-    validations:
-      required: true
-  - type: input
-    id: devices
-    attributes:
-      label: 设备和系统 / Devices and systems
-      placeholder: "MacBook Air（macOS 15.3）→ Windows 11 24H2"
-    validations:
-      required: true
-  - type: dropdown
-    id: area
-    attributes:
-      label: 哪个功能 / Feature
-      options:
-        - 连接与配对 / Connecting and pairing
-        - 文本与文件 / Text and files
-        - 文件夹 / Folders
-        - 浏览文件与挂载 / Browsing and mounting files
-        - 共享链接 / Share links
-        - 窗口流转 / Window flow
-        - 剪贴板 / Clipboard
-        - 键鼠共享 / Keyboard and mouse sharing
-        - 手机控制电脑 / Phone as mouse and keyboard
-        - 系统音频 / System audio
-        - 截图 / Screenshots
-        - 通知转发 / Notifications
-        - 电视投屏 / TV casting
-        - 安装与更新 / Install and update
-        - 其他 / Other
-    validations:
-      required: true
+      value: 装不上、连不上、权限这类问题，先看[排障指南](https://github.com/lawnvi/whisper/blob/HEAD/docs/troubleshooting.md)，多数能直接解决。
   - type: textarea
     id: what
     attributes:
-      label: 发生了什么 / What happened
-      description: 实际看到了什么，本来应该怎样 / What you saw, and what you expected instead
+      label: 想说什么
+      description: 遇到的问题（看到了什么、本来应该怎样），或想要的功能。截图可以直接拖进来。
     validations:
       required: true
-  - type: textarea
-    id: steps
+  - type: input
+    id: versions
     attributes:
-      label: 怎么复现 / Steps to reproduce
-      placeholder: |
-        1.
-        2.
-        3.
+      label: 版本和设备（选填）
+      placeholder: 0.0.60，MacBook Air（macOS 15）→ Windows 11
   - type: textarea
     id: diagnostics
     attributes:
-      label: 诊断信息 / Diagnostics
-      description: |
-        设置 →「诊断信息」→「反馈问题」或「拷贝」，粘贴到这里。不含消息、文件和设备名。
-        Settings → Diagnostics → Report or Copy, then paste it here. It contains no messages, files or device names.
+      label: 诊断信息（选填）
+      description: 设置 →「诊断信息」→「反馈问题」会自动拷贝，粘贴到这里。不含消息、文件和设备名。
       render: text
-  - type: textarea
-    id: extra
-    attributes:
-      label: 截图或其他 / Screenshots or anything else
-      description: 连接问题请附上「连接诊断」的截图 / For connection problems, attach a screenshot of Connection diagnostics
-  - type: checkboxes
-    id: checked
-    attributes:
-      label: 确认 / Checklist
-      options:
-        - label: 我看过排障指南 / I have read the troubleshooting guide
-          required: true

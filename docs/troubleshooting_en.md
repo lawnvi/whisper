@@ -101,7 +101,7 @@ xattr -dr com.apple.quarantine /Applications/Whisper.app
 
 ## Report a problem
 
-If none of this helps, [open an issue](https://github.com/lawnvi/whisper/issues/new/choose):
+If none of this helps, [open an issue](https://github.com/lawnvi/whisper/issues/new/choose) and choose "English":
 
 1. Open "Diagnostics" in Settings and click "Report". The diagnostics are copied, and GitHub's issue form opens.
 2. Paste the diagnostics in, and add both devices' Whisper and system versions and how to reproduce the problem.
