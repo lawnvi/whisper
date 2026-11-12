@@ -411,8 +411,9 @@ class _DeviceRow extends StatelessWidget {
                   child: DeviceGlyph(
                     kind: deviceKindOf(device),
                     os: deviceOsFor(device.platform),
-                    color: Radix.white,
-                    size: avatar * .68,
+                    // Grey on grey when gone, as a control that is off.
+                    color: state == null ? c.deviceOffMark : Radix.white,
+                    size: avatar * .62,
                   ),
                 ),
               ),

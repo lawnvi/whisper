@@ -14,6 +14,7 @@ import 'package:flutter/physics.dart';
 import 'package:whisper/theme/radix_colors.dart';
 
 export 'package:whisper/theme/radix_colors.dart';
+export 'package:whisper/theme/whisper_settings_icons.dart';
 
 /// All colors of the design language. Values come from DESIGN.md.
 @immutable
@@ -58,6 +59,7 @@ class WhisperColors extends ThemeExtension<WhisperColors> {
     required this.deviceNear,
     required this.deviceOff,
     required this.deviceOffDot,
+    required this.deviceOffMark,
     required this.deviceSelected,
   });
 
@@ -101,6 +103,7 @@ class WhisperColors extends ThemeExtension<WhisperColors> {
     deviceNear: Color(0xFF4CAF50),
     deviceOff: Color(0xFFE0E0E0),
     deviceOffDot: Color(0xFF9E9E9E),
+    deviceOffMark: Color(0xFF9E9E9E),
     deviceSelected: Color(0x142563EB),
   );
 
@@ -144,6 +147,7 @@ class WhisperColors extends ThemeExtension<WhisperColors> {
     deviceNear: Color(0xFF4CAF50),
     deviceOff: Color(0xFF616161),
     deviceOffDot: Color(0xFF9E9E9E),
+    deviceOffMark: Color(0xFFBDBDBD),
     deviceSelected: Radix.whiteA2,
   );
 
@@ -182,7 +186,7 @@ class WhisperColors extends ThemeExtension<WhisperColors> {
   /// The device list keeps the colours it had before the redesign: the user
   /// looked at both. Not Radix, and only here. See decisions.md.
   final Color deviceName, deviceMuted, deviceOn, deviceNear;
-  final Color deviceOff, deviceOffDot, deviceSelected;
+  final Color deviceOff, deviceOffDot, deviceOffMark, deviceSelected;
 
   /// `panel`'s tint, for what draws its own blur: the file menu.
   Color get panelTint => this == WhisperColors.dark
@@ -236,6 +240,7 @@ class WhisperColors extends ThemeExtension<WhisperColors> {
     deviceNear: deviceNear,
     deviceOff: deviceOff,
     deviceOffDot: deviceOffDot,
+    deviceOffMark: deviceOffMark,
     deviceSelected: deviceSelected,
     scrim: scrim,
   );
@@ -283,6 +288,7 @@ class WhisperColors extends ThemeExtension<WhisperColors> {
       deviceNear: l(deviceNear, other.deviceNear),
       deviceOff: l(deviceOff, other.deviceOff),
       deviceOffDot: l(deviceOffDot, other.deviceOffDot),
+      deviceOffMark: l(deviceOffMark, other.deviceOffMark),
       deviceSelected: l(deviceSelected, other.deviceSelected),
       scrim: l(scrim, other.scrim),
     );
@@ -299,20 +305,6 @@ extension WhisperTheme on BuildContext {
             ? WhisperColors.dark
             : WhisperColors.light);
   }
-}
-
-/// The coloured tiles of the settings sections, the one place the interface
-/// colours an icon for its own sake (DESIGN.md「色彩」). The same in both themes;
-/// 连接 uses `accent`, the one blue.
-abstract final class WhisperSettingsIcons {
-  static const general = Radix.slate9;
-  static const system = Radix.slate11;
-  static const sharing = Radix.crimson9;
-  static const notifications = Radix.orange9;
-  static const about = Radix.slate9;
-
-  /// The hairline along the top of a tile.
-  static const highlight = Radix.whiteA5;
 }
 
 abstract final class WhisperRadius {

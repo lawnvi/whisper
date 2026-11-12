@@ -528,14 +528,16 @@ class _DeviceArtPainter extends CustomPainter {
       old.bare != bare;
 }
 
-/// A one-color line icon of a device: in the device list, white on the
-/// round avatar, and in the device pickers. [size] is the square it sits
-/// in; the stroke scales with it, 2 in a viewBox of 32.
+/// A one-color icon of a device: in the device list, white on the round
+/// avatar, and in the device pickers. [size] is the square it sits in.
 ///
-/// Only the outline says what it is: a laptop, a monitor on its stand, a
-/// phone or a tablet, the last two by their proportions alone. With [os],
-/// the system's mark in the middle of the screen: an apple, the four panes
-/// of Windows, a prompt for Linux, Android's robot.
+/// Solid, the way small system icons are drawn: thin outlines of a few
+/// pixels looked like clip art and faded into a pale avatar. Only the
+/// shape says what it is: a laptop, a monitor on its stand, a phone or a
+/// tablet, the last two by their proportions alone. With [os], the
+/// system's mark is cut out of the middle of the screen, so it shows what
+/// is behind: an apple, the four panes of Windows, a prompt for Linux,
+/// Android's robot.
 class DeviceGlyph extends StatelessWidget {
   const DeviceGlyph({
     super.key,
@@ -564,44 +566,49 @@ class _DeviceGlyphPainter extends CustomPainter {
   final Color color;
   final DeviceOs os;
 
-  static RRect _r(double x, double y, double w, double h, double c) =>
-      RRect.fromRectAndRadius(Rect.fromLTWH(x, y, w, h), Radius.circular(c));
-
-  Paint _stroke(double width) => Paint()
-    ..color = color
-    ..style = PaintingStyle.stroke
-    ..strokeWidth = width
-    ..strokeCap = StrokeCap.round
-    ..strokeJoin = StrokeJoin.round;
+  static RRect _r(Rect rect, double c) =>
+      RRect.fromRectAndRadius(rect, Radius.circular(c));
 
   @override
   void paint(Canvas canvas, Size size) {
     canvas.save();
     canvas.scale(size.width / 32, size.height / 32);
-    final line = _stroke(2);
+    // A layer of its own, so the mark can be cut out of it.
+    canvas.saveLayer(const Rect.fromLTWH(0, 0, 32, 32), Paint());
+    final fill = Paint()..color = color;
+    final (Rect screen, double radius, double mark) = switch (kind) {
+      DeviceKind.laptop => (const Rect.fromLTRB(6, 7.5, 26, 21.5), 2.0, 7.5),
+      DeviceKind.desktop => (const Rect.fromLTRB(4, 5, 28, 21), 2.5, 8.0),
+      DeviceKind.phone => (const Rect.fromLTRB(10, 4, 22, 28), 3.2, 7.0),
+      DeviceKind.tablet => (const Rect.fromLTRB(7, 4.5, 25, 27.5), 2.8, 8.5),
+    };
+    canvas.drawRRect(_r(screen, radius), fill);
     switch (kind) {
       case DeviceKind.laptop:
-        canvas.drawRRect(_r(6, 7, 20, 14, 2), line);
-        canvas.drawLine(const Offset(3, 24.5), const Offset(29, 24.5), line);
-        _mark(canvas, const Offset(16, 14), 7.5);
+        // The base, wider than the screen, its ends rounded.
+        canvas.drawRRect(_r(const Rect.fromLTRB(3, 22.8, 29, 25), 1.1), fill);
       case DeviceKind.desktop:
-        canvas.drawRRect(_r(3, 4.5, 26, 17.5, 2.5), line);
-        canvas.drawLine(const Offset(16, 22), const Offset(16, 26.5), line);
-        canvas.drawLine(const Offset(11, 26.5), const Offset(21, 26.5), line);
-        _mark(canvas, const Offset(16, 13.25), 8.5);
-      case DeviceKind.phone:
-        canvas.drawRRect(_r(10, 4, 12, 24, 3), line);
-        _mark(canvas, const Offset(16, 16), 7);
-      case DeviceKind.tablet:
-        canvas.drawRRect(_r(7, 5, 18, 22, 2.5), line);
-        _mark(canvas, const Offset(16, 16), 8);
+        canvas.drawPath(
+          Path()
+            ..moveTo(14, 21)
+            ..lineTo(18, 21)
+            ..lineTo(18.8, 25.6)
+            ..lineTo(13.2, 25.6)
+            ..close(),
+          fill,
+        );
+        canvas.drawRRect(_r(const Rect.fromLTRB(10.5, 25, 21.5, 27), 1), fill);
+      case DeviceKind.phone || DeviceKind.tablet:
+        break;
     }
+    _mark(canvas, screen.center, mark);
+    canvas.restore();
     canvas.restore();
   }
 
-  /// The system's mark, [side] across, centred on [c].
+  /// The system's mark, [side] across, centred on [c], cut out.
   void _mark(Canvas canvas, Offset c, double side) {
-    final fill = Paint()..color = color;
+    final cut = Paint()..blendMode = BlendMode.clear;
     switch (os) {
       case DeviceOs.mac || DeviceOs.ios:
         // A little taller than the panes: it is rounder and looks smaller.
@@ -609,7 +616,7 @@ class _DeviceGlyphPainter extends CustomPainter {
         canvas.save();
         canvas.translate(c.dx - 12 * k, c.dy - 12.4 * k);
         canvas.scale(k);
-        canvas.drawPath(whisperSvgPath(_apple), fill);
+        canvas.drawPath(whisperSvgPath(_apple), cut);
         canvas.restore();
       case DeviceOs.windows:
         final gap = side * .1, pane = (side - gap) / 2;
@@ -621,11 +628,16 @@ class _DeviceGlyphPainter extends CustomPainter {
               pane,
               pane,
             ),
-            fill,
+            cut,
           );
         }
       case DeviceOs.linux:
-        final prompt = _stroke(side * .2);
+        final prompt = Paint()
+          ..blendMode = BlendMode.clear
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = side * .2
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round;
         final x = c.dx - side * .45, h = side * .32;
         canvas.drawPath(
           Path()
@@ -640,42 +652,33 @@ class _DeviceGlyphPainter extends CustomPainter {
           prompt,
         );
       case DeviceOs.android:
-        _robot(canvas, c, side * 1.15);
+        _robot(canvas, c, side * 1.15, cut);
       case DeviceOs.other:
         break;
     }
   }
 
   /// Android's robot, its head: [width] across, centred on [c] with its
-  /// feelers.
-  void _robot(Canvas canvas, Offset c, double width) {
+  /// feelers. Cut out, with its eyes left.
+  void _robot(Canvas canvas, Offset c, double width, Paint cut) {
     final r = width / 2;
     final chin = c + Offset(0, r * .55);
     canvas.drawPath(
       Path()
-        ..fillType = PathFillType.evenOdd
         ..addArc(Rect.fromCircle(center: chin, radius: r), math.pi, math.pi)
-        ..close()
-        ..addOval(
-          Rect.fromCircle(
-            center: chin + Offset(-r * .42, -r * .45),
-            radius: r * .13,
-          ),
-        )
-        ..addOval(
-          Rect.fromCircle(
-            center: chin + Offset(r * .42, -r * .45),
-            radius: r * .13,
-          ),
-        ),
-      Paint()..color = color,
+        ..close(),
+      cut,
     );
-    final feeler = _stroke(r * .2);
+    final eye = Paint()..color = color;
     for (final side in const [-1, 1]) {
+      canvas.drawCircle(chin + Offset(side * r * .42, -r * .45), r * .13, eye);
       canvas.drawLine(
         chin + Offset(side * r * .5, -r * .86),
         chin + Offset(side * r * .78, -r * 1.25),
-        feeler,
+        Paint()
+          ..blendMode = BlendMode.clear
+          ..strokeWidth = r * .2
+          ..strokeCap = StrokeCap.round,
       );
     }
   }
