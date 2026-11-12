@@ -70,7 +70,6 @@ ChatSessionItem shareSession(
   isConnected: connected,
   isNearby: nearby,
   hasHistory: false,
-  avatarLabel: '',
 );
 
 final selfMac = shareDevice('self', 'xiaoxin 的 MacBook Air 13 英寸');

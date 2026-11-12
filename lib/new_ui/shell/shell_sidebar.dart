@@ -403,14 +403,13 @@ class _DeviceRow extends StatelessWidget {
                     color: state ?? c.deviceOff,
                     shape: BoxShape.circle,
                   ),
-                  child: Text(
-                    session.avatarLabel.toUpperCase(),
-                    style: TextStyle(
-                      fontSize: touch ? 20 : 16,
-                      fontWeight: FontWeight.w600,
-                      height: 1,
-                      color: Radix.white,
-                    ),
+                  // What it is and runs, where the first letter of its
+                  // name was: the name is right beside it.
+                  child: DeviceGlyph(
+                    kind: deviceKindOf(device),
+                    os: deviceOsFor(device.platform),
+                    color: Radix.white,
+                    size: avatar * .68,
                   ),
                 ),
               ),

@@ -60,7 +60,6 @@ ChatSessionItem _session(
   isConnected: connected,
   isNearby: nearby,
   hasHistory: true,
-  avatarLabel: device.name.substring(0, 1),
 );
 
 final _sessions = [
@@ -78,6 +77,9 @@ final _sessions = [
   _session(_device('pad', 'Redmi Pad', 'android', id: 4), nearby: true),
   _session(_device('ub', 'Ubuntu', 'linux', id: 5)),
   _session(_device('px', 'Pixel 6', 'android', id: 7)),
+  _session(_device('ip', 'iPhone 15', 'ios', id: 8), nearby: true),
+  _session(_device('ipad', 'iPad Air', 'ipad', id: 9)),
+  _session(_device('pc', 'DESKTOP-1T2E3R7', 'windows', id: 10)),
 ];
 
 ShellActions _actions(

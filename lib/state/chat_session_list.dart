@@ -24,7 +24,6 @@ class ChatSessionItem {
     required this.isConnected,
     required this.isNearby,
     required this.hasHistory,
-    required this.avatarLabel,
     this.isSelf = false,
   });
 
@@ -35,7 +34,6 @@ class ChatSessionItem {
   final bool isConnected;
   final bool isNearby;
   final bool hasHistory;
-  final String avatarLabel;
 
   /// 本机: this device itself, which nothing connects to.
   final bool isSelf;
@@ -144,7 +142,6 @@ class ChatSessionListBuilder {
       isConnected: isConnected,
       isNearby: isNearby,
       hasHistory: hasHistory,
-      avatarLabel: _avatarLabel(device.label),
       isSelf: isSelf,
     );
   }
@@ -183,13 +180,5 @@ class ChatSessionListBuilder {
       return strings.nearbyAvailable;
     }
     return strings.noMessagesYet;
-  }
-
-  static String _avatarLabel(String name) {
-    final trimmed = name.trim();
-    if (trimmed.isEmpty) {
-      return '?';
-    }
-    return trimmed.substring(0, 1).toUpperCase();
   }
 }
