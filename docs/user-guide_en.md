@@ -39,12 +39,14 @@ In the device list, each device's round icon shows whether it is a laptop, deskt
 
 ### Wake a sleeping computer
 
+This feature is experimental: it has not been verified end to end on a real computer on a cable yet. If a computer does not wake, please [report it](troubleshooting_en.md#report-a-problem).
+
 Once a computer has connected, Whisper remembers its network cards. After it goes to sleep and drops off, select "Wake" on its device card. Starting keyboard and mouse sharing also wakes computers in the layout that are asleep, and they reconnect once awake.
 
 The computer being woken needs:
 
 - A new version of Whisper on both devices. Older versions don't share their network cards.
-- Preferably a cable. Most computers on Wi-Fi don't hear the wake signal while asleep.
+- A cable. Computers on Wi-Fi generally don't hear the wake signal while asleep.
 - To be asleep, not shut down or hibernated, and on the same subnet as the device waking it.
 - Wake-on-LAN turned on:
   - **Windows**: in Device Manager, open the network adapter's properties and, under Power Management, tick "Allow this device to wake the computer" and "Only allow a magic packet to wake the computer". Some PCs also need Wake on LAN turned on in the BIOS.

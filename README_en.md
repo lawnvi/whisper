@@ -29,14 +29,15 @@ Whisper is a LAN collaboration app. Paired devices connect to each other directl
 | **Remote files** | Browse, copy and edit the other device's files, or mount them as a disk |
 | **Share links** | A browser download link for devices without Whisper |
 | **Keyboard and mouse** | A software KVM: one keyboard and mouse across several computers |
-| **Wake-on-LAN** | Wake a sleeping computer; starting sharing wakes it for you |
 | **Phone controller** | An Android phone as a touchpad, air mouse and keyboard |
 | **System audio** | Play a computer's sound on one or more other devices |
 | **Window flow** | Use a computer's windows or a phone's apps on another device |
 | **Clipboard sync** | Copy on one device, paste on another |
 | **Notifications** | Android notifications, such as verification codes, on your computer |
 
-Also: quick send from the share sheet, a context menu or a hotkey; screenshots with markup; receiving DLNA casts (experimental).
+Also: quick send from the share sheet, a context menu or a hotkey, and desktop screenshots with markup.
+
+Experimental: receiving DLNA casts from video apps; waking a sleeping computer (it needs a cable, and has not been verified on real hardware yet).
 
 <p align="center">
   <img src=".github/image/keyboard-share.png" width="49%" alt="Whisper keyboard and mouse sharing">
@@ -85,7 +86,6 @@ The [user guide](docs/user-guide_en.md) covers every feature; for install, conne
 | Share links | ✅ | ✅ | ✅ | ✅ |
 | Keyboard and mouse | — | ✅ | ✅ | X11, GNOME, KDE Plasma |
 | Phone controller | Controls | Controlled | Controlled | Controlled, as above |
-| Wake-on-LAN | — | ✅ | ✅ | ✅ |
 | System audio | Playback only | ✅ | ✅ | ✅ |
 | Window flow: view | ✅ | ✅ | ✅ | ✅ |
 | Window flow: share | Android 10+ | ✅ | ✅ | GNOME 45+, KDE Plasma 6 |
