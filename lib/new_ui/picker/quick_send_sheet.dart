@@ -82,6 +82,7 @@ class _QuickSendPickerState extends State<QuickSendPicker> {
                 id: target.id,
                 name: PeerAliases.shared.labelOf(target.id, target.name),
                 kind: _kind(target),
+                os: deviceOsFor(target.platform),
                 checked: target.id == marked,
               ),
               onTap: () => Navigator.of(context).pop(target.id),

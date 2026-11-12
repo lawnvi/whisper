@@ -1,6 +1,8 @@
 // Realistic device pictures, the main source of texture in the interface. The
 // geometry follows art() in docs/design/whisper-ui-language.html.
 
+import 'dart:math' as math;
+
 import 'package:flutter/widgets.dart';
 import 'package:whisper/theme/radix_colors.dart';
 import 'package:whisper/theme/whisper_icons.dart';
@@ -17,16 +19,20 @@ enum DeviceKind {
   bool get handheld => this == phone || this == tablet;
 }
 
-/// Which system a computer runs. No vendor's logo: Apple and Microsoft do not allow
-/// it, so a Mac is silver with a menu bar and a Dock, Windows is graphite with a
-/// taskbar, and Linux has the penguin, which is free to use.
-enum DeviceOs { mac, windows, linux, other }
+/// Which system a device runs. No vendor's logo: Apple and Microsoft do not
+/// allow it, so a Mac is silver with a menu bar and a Dock, Windows is graphite
+/// with a taskbar, an iPhone has the island at the top and the bar at the
+/// bottom; Linux has the penguin and Android the robot's head, which are free
+/// to use.
+enum DeviceOs { mac, windows, linux, android, ios, other }
 
 DeviceOs deviceOsFor(String platform) =>
     switch (platform.trim().toLowerCase()) {
       'mac' || 'macos' || 'darwin' => DeviceOs.mac,
       'windows' || 'win32' => DeviceOs.windows,
       'linux' => DeviceOs.linux,
+      'android' => DeviceOs.android,
+      'ios' || 'iphone' || 'ipad' => DeviceOs.ios,
       _ => DeviceOs.other,
     };
 
@@ -173,7 +179,7 @@ class DeviceArt extends StatelessWidget {
   final double size;
   final DeviceArtState state;
 
-  /// Only a computer shows it: a phone's screen is too narrow to say anything.
+  /// What the screen and the body say about the system: see [DeviceOs].
   final DeviceOs os;
 
   // CSS filter: saturate(.7) and grayscale(1), for sRGB luminance.
@@ -324,7 +330,7 @@ class _DeviceArtPainter extends CustomPainter {
         }
       case DeviceOs.linux:
         _penguin(canvas, s.center, s.height * .68);
-      case DeviceOs.other:
+      case DeviceOs.android || DeviceOs.ios || DeviceOs.other:
         break;
     }
     canvas.restore();
@@ -422,23 +428,71 @@ class _DeviceArtPainter extends CustomPainter {
     canvas.restore();
   }
 
+  /// An iPhone has the island and the bar under the apps; an Android phone,
+  /// a little squarer, a punched-out camera and the robot on its screen.
   void _phone(Canvas canvas, Size size) {
+    final android = os == DeviceOs.android;
     canvas.save();
     canvas.scale(size.width / 56, size.height / 100);
-    canvas.drawRRect(_r(1, 1, 54, 98, 11), Paint()..color = _phoneBody);
+    final round = android ? 8.0 : 11.0;
+    canvas.drawRRect(_r(1, 1, 54, 98, round), Paint()..color = _phoneBody);
     canvas.drawRRect(
-      _r(2, 2, 52, 96, 10),
+      _r(2, 2, 52, 96, round - 1),
       Paint()
         ..color = _phoneEdge
         ..style = PaintingStyle.stroke
         ..strokeWidth = .8,
     );
-    final screen = _r(4, 4, 48, 92, 8);
+    final screen = _r(4, 4, 48, 92, round - 3);
     canvas.drawRRect(screen, _wall(screen.outerRect));
-    canvas.drawRRect(_r(20, 8, 16, 4.5, 2.25), Paint()..color = _phoneIsland);
+    if (android) {
+      if (!bare) _robot(canvas, screen.outerRect.center, 30);
+      canvas.drawCircle(
+        const Offset(28, 9.5),
+        2.1,
+        Paint()..color = _phoneIsland,
+      );
+    } else {
+      canvas.drawRRect(_r(20, 8, 16, 4.5, 2.25), Paint()..color = _phoneIsland);
+      if (os == DeviceOs.ios && !bare) _homeBar(canvas, 28, 91.5, 16);
+    }
     canvas.restore();
   }
 
+  /// The line along the bottom of an iPhone's or an iPad's screen.
+  void _homeBar(Canvas canvas, double center, double y, double width) =>
+      canvas.drawRRect(
+        _r(center - width / 2, y, width, 1.5, .75),
+        Paint()..color = Radix.whiteA11,
+      );
+
+  /// Android's robot, its head only: green, two eyes, two feelers.
+  void _robot(Canvas canvas, Offset center, double width) {
+    canvas.save();
+    canvas.translate(center.dx - width / 2, center.dy - width * .33);
+    canvas.scale(width / 24);
+    final green = Paint()..color = Radix.green9;
+    canvas.drawArc(
+      Rect.fromCircle(center: const Offset(12, 15), radius: 10),
+      math.pi,
+      math.pi,
+      true,
+      green,
+    );
+    final feeler = Paint()
+      ..color = Radix.green9
+      ..strokeWidth = 1.5
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(const Offset(6.6, 7.6), const Offset(4.4, 3.8), feeler);
+    canvas.drawLine(const Offset(17.4, 7.6), const Offset(19.6, 3.8), feeler);
+    final eye = Paint()..color = Radix.white;
+    canvas.drawCircle(const Offset(8, 10.8), 1.25, eye);
+    canvas.drawCircle(const Offset(16, 10.8), 1.25, eye);
+    canvas.restore();
+  }
+
+  /// An iPad has the bar along the bottom; an Android tablet the robot.
+  /// Both have the camera in the bezel.
   void _tablet(Canvas canvas, Size size) {
     canvas.save();
     canvas.scale(size.width / 76, size.height / 100);
@@ -452,6 +506,17 @@ class _DeviceArtPainter extends CustomPainter {
     );
     final screen = _r(4.5, 4.5, 67, 91, 3.5);
     canvas.drawRRect(screen, _wall(screen.outerRect));
+    if (os == DeviceOs.android || os == DeviceOs.ios) {
+      canvas.drawCircle(
+        const Offset(38, 2.9),
+        .9,
+        Paint()..color = _phoneIsland,
+      );
+    }
+    if (!bare) {
+      if (os == DeviceOs.android) _robot(canvas, screen.outerRect.center, 34);
+      if (os == DeviceOs.ios) _homeBar(canvas, 38, 91.5, 20);
+    }
     canvas.restore();
   }
 
@@ -465,30 +530,37 @@ class _DeviceArtPainter extends CustomPainter {
 
 /// A one-color line icon of a device, for the device picker. [size] is the
 /// square it sits in; the stroke scales with it, 2 in a viewBox of 32.
+///
+/// With [os], a mark of the system in the screen, the same few as the
+/// pictures: a Mac's menu bar, Windows' taskbar, a Linux prompt, an iPhone's
+/// island or an iPad's bar, an Android's punched-out camera.
 class DeviceGlyph extends StatelessWidget {
   const DeviceGlyph({
     super.key,
     required this.kind,
     required this.color,
     this.size = 20,
+    this.os = DeviceOs.other,
   });
 
   final DeviceKind kind;
   final Color color;
   final double size;
+  final DeviceOs os;
 
   @override
   Widget build(BuildContext context) => CustomPaint(
     size: Size.square(size),
-    painter: _DeviceGlyphPainter(kind, color),
+    painter: _DeviceGlyphPainter(kind, color, os),
   );
 }
 
 class _DeviceGlyphPainter extends CustomPainter {
-  const _DeviceGlyphPainter(this.kind, this.color);
+  const _DeviceGlyphPainter(this.kind, this.color, this.os);
 
   final DeviceKind kind;
   final Color color;
+  final DeviceOs os;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -502,25 +574,84 @@ class _DeviceGlyphPainter extends CustomPainter {
       ..strokeJoin = StrokeJoin.round;
     RRect r(double x, double y, double w, double h, double c) =>
         RRect.fromRectAndRadius(Rect.fromLTWH(x, y, w, h), Radius.circular(c));
+    final fill = Paint()..color = color;
+    final fine = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
     switch (kind) {
       case DeviceKind.phone:
         canvas.drawRRect(r(11, 3, 10, 26, 2.5), p);
-        canvas.drawLine(const Offset(14.5, 5.8), const Offset(17.5, 5.8), p);
+        if (os == DeviceOs.android) {
+          canvas.drawCircle(const Offset(16, 6.2), 1.1, fill);
+        } else {
+          canvas.drawLine(const Offset(14.5, 5.8), const Offset(17.5, 5.8), p);
+        }
       case DeviceKind.tablet:
         canvas.drawRRect(r(7, 3, 18, 26, 2.5), p);
+        if (os == DeviceOs.android) {
+          canvas.drawCircle(const Offset(16, 6.2), 1.1, fill);
+        } else if (os == DeviceOs.ios) {
+          canvas.drawLine(
+            const Offset(13.5, 25.6),
+            const Offset(18.5, 25.6),
+            fine,
+          );
+        }
       case DeviceKind.desktop:
         canvas.drawRRect(r(3, 5, 26, 17, 2.5), p);
         canvas.drawLine(const Offset(13, 22), const Offset(12.2, 26.5), p);
         canvas.drawLine(const Offset(19, 22), const Offset(19.8, 26.5), p);
         canvas.drawLine(const Offset(10, 26.5), const Offset(22, 26.5), p);
+        _screenMark(canvas, const Rect.fromLTRB(3, 5, 29, 22), fill, fine);
       case DeviceKind.laptop:
         canvas.drawRRect(r(6.5, 7, 19, 14, 2), p);
         canvas.drawLine(const Offset(3, 24.5), const Offset(29, 24.5), p);
+        _screenMark(canvas, const Rect.fromLTRB(6.5, 7, 25.5, 21), fill, fine);
     }
     canvas.restore();
   }
 
+  /// A computer's system, inside [screen]'s outline.
+  void _screenMark(Canvas canvas, Rect screen, Paint fill, Paint fine) {
+    final c = screen.center;
+    switch (os) {
+      case DeviceOs.mac:
+        canvas.drawLine(
+          Offset(screen.left + 3, screen.top + 3.2),
+          Offset(screen.right - 3, screen.top + 3.2),
+          fine,
+        );
+      case DeviceOs.windows:
+        for (var i = -1; i <= 1; i++) {
+          canvas.drawCircle(
+            Offset(c.dx + i * 3.2, screen.bottom - 3.4),
+            1,
+            fill,
+          );
+        }
+      case DeviceOs.linux:
+        final x = c.dx - 4.2, y = c.dy;
+        canvas.drawPath(
+          Path()
+            ..moveTo(x, y - 2.6)
+            ..lineTo(x + 2.6, y)
+            ..lineTo(x, y + 2.6),
+          fine,
+        );
+        canvas.drawLine(
+          Offset(x + 4.2, y + 2.6),
+          Offset(x + 8.2, y + 2.6),
+          fine,
+        );
+      case DeviceOs.android || DeviceOs.ios || DeviceOs.other:
+        break;
+    }
+  }
+
   @override
   bool shouldRepaint(_DeviceGlyphPainter old) =>
-      old.kind != kind || old.color != color;
+      old.kind != kind || old.color != color || old.os != os;
 }

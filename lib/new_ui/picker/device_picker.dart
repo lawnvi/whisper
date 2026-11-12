@@ -17,12 +17,14 @@ class DevicePickerEntry {
     required this.id,
     required this.name,
     this.kind = DeviceKind.desktop,
+    this.os = DeviceOs.other,
     this.glyph,
     this.checked = false,
   });
 
   final String id, name;
   final DeviceKind kind;
+  final DeviceOs os;
   final WhisperGlyph? glyph;
   final bool checked;
 }
@@ -85,7 +87,7 @@ class DevicePickerGlyph extends StatelessWidget {
     final glyph = device.glyph;
     return glyph != null
         ? WhisperIcon(glyph, size: 20, color: color)
-        : DeviceGlyph(kind: device.kind, color: color, size: 20);
+        : DeviceGlyph(kind: device.kind, os: device.os, color: color, size: 20);
   }
 }
 

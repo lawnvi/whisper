@@ -159,6 +159,7 @@ class ShellSidebar extends StatelessWidget {
                             kind: self == null
                                 ? DeviceKind.laptop
                                 : selfKindOf(self),
+                            os: deviceOsFor(self?.platform ?? ''),
                             color: data.lanDown ? c.warn : second,
                             size: 18,
                           ),

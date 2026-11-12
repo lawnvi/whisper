@@ -1709,12 +1709,12 @@ class _NewListRowState extends State<_NewListRow> {
 
 class _DeviceMenuGlyph extends StatelessWidget {
   const _DeviceMenuGlyph({required this.device});
-
   final FilesDevice device;
 
   @override
   Widget build(BuildContext context) => art.DeviceGlyph(
     kind: art.deviceKindFor(device.platform),
+    os: art.deviceOsFor(device.platform),
     color: IconTheme.of(context).color ?? context.wc.accent,
     size: 18,
   );
