@@ -138,6 +138,7 @@ flutter:
     - assets/tray_icon_linux.png
     - assets/tray_icon.ico
     - assets/tray_icon_on_light.ico
+    - assets/web_transfer/index.html
     - path: assets/fonts/NotoSansSC-Compact.ttf
       platforms: [windows]
     - path: assets/fonts/OFL.txt
