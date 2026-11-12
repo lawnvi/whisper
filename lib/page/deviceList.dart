@@ -31,6 +31,7 @@ import 'package:whisper/new_ui/shell/shell_requests.dart';
 import 'package:whisper/new_ui/shell/shell_self_panel.dart';
 import 'package:whisper/new_ui/shell/shell_share_links.dart';
 import 'package:whisper/helper/desktop_screenshot.dart';
+import 'package:whisper/helper/process_end.dart';
 import 'package:whisper/new_ui/input/input_controller.dart';
 import 'package:whisper/new_ui/input/shell_input_page.dart';
 import 'package:whisper/new_ui/settings/whisper_settings.dart';
@@ -741,24 +742,9 @@ class _DeviceListScreen extends State<DeviceListScreen>
           PrivacyField.errorType: privacyLog.errorType(error),
         });
       }
-      _endWindowsProcess();
+      await endWindowsProcess();
     }
     return AppExitResponse.exit;
-  }
-
-  /// On Windows the process is ended here, once everything of ours is
-  /// closed, instead of letting the engine take the plugins down.
-  ///
-  /// Left to the engine, every exit ends in an access violation inside
-  /// flutter_windows.dll, and the couple of seconds Windows spends on a
-  /// crash are what closing the app seemed to take. It is in the crash
-  /// records of 0.0.53 to 0.0.56 and newer plugin versions have not changed
-  /// it; which plugin is behind it is not known. Discovery is not stopped
-  /// on the way out either, see [_shutdownDesktopResources].
-  void _endWindowsProcess() {
-    if (Platform.isWindows) {
-      exit(0);
-    }
   }
 
   Future<void> _stopClipboardWatcher() async {
@@ -1385,7 +1371,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
       RemoteMounts.shared.unmountAll,
       // Left running on Windows: the process ends right after the rest,
       // and with older versions of the plugin the stop itself crashed. See
-      // [_endWindowsProcess].
+      // [endWindowsProcess].
       if (!Platform.isWindows) _stopDiscovery,
       _stopBroadcast,
       _stopClipboardWatcher,
@@ -1403,7 +1389,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     try {
       await _shutdownDesktopResources();
     } finally {
-      _endWindowsProcess();
+      await endWindowsProcess();
     }
     await windowManager.destroy();
   }

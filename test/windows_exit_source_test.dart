@@ -1,3 +1,4 @@
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
@@ -25,8 +26,10 @@ void main() {
       expect(resources, contains(step));
     }
 
-    final end = memberSource(source, 'void _endWindowsProcess() {');
-    expect(end, contains('if (Platform.isWindows) {\n      exit(0);'));
+    // Not by exit either: ExitProcess runs every library's unload code,
+    // and flutter_windows.dll crashed in it now and then (0.0.59, 0.0.60).
+    final end = File('lib/helper/process_end.dart').readAsStringSync();
+    expect(end, contains("'TerminateProcess'"));
 
     // Both ways out reach it only after everything has been closed.
     final requested = memberSource(
@@ -35,14 +38,14 @@ void main() {
     );
     expect(
       requested.indexOf('await _shutdownDesktopResources();'),
-      inInclusiveRange(0, requested.indexOf('_endWindowsProcess();')),
+      inInclusiveRange(0, requested.indexOf('await endWindowsProcess();')),
     );
     final destroy = memberSource(
       source,
       'Future<void> _shutdownAndDestroyWindow() async {',
     );
     expect(
-      destroy.indexOf('_endWindowsProcess();'),
+      destroy.indexOf('await endWindowsProcess();'),
       inInclusiveRange(
         destroy.indexOf('await _shutdownDesktopResources();'),
         destroy.indexOf('await windowManager.destroy();'),
