@@ -1,1 +1,8 @@
 blank_issues_enabled: false
+contact_links:
+  - name: 排障指南
+    url: https://github.com/lawnvi/whisper/blob/HEAD/docs/troubleshooting.md
+    about: 装不上、连不上、卡顿，多数问题这里能直接解决
+  - name: Troubleshooting
+    url: https://github.com/lawnvi/whisper/blob/HEAD/docs/troubleshooting_en.md
+    about: Most install, connection and stutter problems are answered here

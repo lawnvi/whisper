@@ -1,24 +1,21 @@
 name: English
-description: Report a problem or suggest something
+description: Report a problem or suggest an idea
 body:
-  - type: markdown
-    attributes:
-      value: For install, connection and permission problems, [Troubleshooting](https://github.com/lawnvi/whisper/blob/HEAD/docs/troubleshooting_en.md) usually has the answer.
   - type: textarea
     id: what
     attributes:
-      label: What's up
-      description: The problem (what you saw, what you expected) or what you'd like. Drag screenshots in here.
+      label: Description
+      placeholder: What you saw and what you expected, or what you would like added. Screenshots can be dragged in.
     validations:
       required: true
   - type: input
     id: versions
     attributes:
-      label: Versions and devices (optional)
-      placeholder: 0.0.60, MacBook Air (macOS 15) → Windows 11
+      label: Version and devices
+      placeholder: 0.0.61, MacBook Air (macOS 15) → Windows 11
   - type: textarea
     id: diagnostics
     attributes:
-      label: Diagnostics (optional)
-      description: Settings → Diagnostics → Report copies them for you; paste them here. They contain no messages, files or device names.
+      label: Diagnostics
+      placeholder: In Whisper, Settings → Diagnostics → Report copies them for you; paste them here. They contain no messages, files or device names.
       render: text

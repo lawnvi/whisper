@@ -1,25 +1,23 @@
 # The file keeps its name: older versions of the app open it directly.
-name: 中文
-description: 反馈问题或提建议
+# GitHub silently drops a template whose name is shorter than 3 characters.
+name: 简体中文
+description: 反馈问题，或者提一个建议
 body:
-  - type: markdown
-    attributes:
-      value: 装不上、连不上、权限这类问题，先看[排障指南](https://github.com/lawnvi/whisper/blob/HEAD/docs/troubleshooting.md)，多数能直接解决。
   - type: textarea
     id: what
     attributes:
-      label: 想说什么
-      description: 遇到的问题（看到了什么、本来应该怎样），或想要的功能。截图可以直接拖进来。
+      label: 描述
+      placeholder: 看到了什么、本来应该怎样，或者想要什么功能。截图可以直接拖进来。
     validations:
       required: true
   - type: input
     id: versions
     attributes:
-      label: 版本和设备（选填）
-      placeholder: 0.0.60，MacBook Air（macOS 15）→ Windows 11
+      label: 版本和设备
+      placeholder: 0.0.61，MacBook Air（macOS 15）→ Windows 11
   - type: textarea
     id: diagnostics
     attributes:
-      label: 诊断信息（选填）
-      description: 设置 →「诊断信息」→「反馈问题」会自动拷贝，粘贴到这里。不含消息、文件和设备名。
+      label: 诊断信息
+      placeholder: 在 Whisper 的「设置 → 诊断信息」里点「反馈问题」会自动拷贝，粘贴到这里。不含消息、文件和设备名。
       render: text
