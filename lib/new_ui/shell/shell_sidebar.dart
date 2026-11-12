@@ -153,23 +153,23 @@ class ShellSidebar extends StatelessWidget {
                         horizontal: 9,
                         vertical: 5,
                       ),
-                      child: Row(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          DeviceGlyph(
-                            kind: self == null
-                                ? DeviceKind.laptop
-                                : selfKindOf(self),
-                            os: deviceOsFor(self?.platform ?? ''),
-                            color: data.lanDown ? c.warn : second,
-                            size: 18,
-                          ),
-                          const SizedBox(width: 7),
-                          Expanded(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
+                          Row(
+                            children: [
+                              DeviceGlyph(
+                                kind: self == null
+                                    ? DeviceKind.laptop
+                                    : selfKindOf(self),
+                                os: deviceOsFor(self?.platform ?? ''),
+                                color: data.lanDown ? c.warn : second,
+                                size: 18,
+                              ),
+                              const SizedBox(width: 7),
+                              Expanded(
+                                child: Text(
                                   self?.name ?? '',
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
@@ -179,25 +179,28 @@ class ShellSidebar extends StatelessWidget {
                                     color: c.ink,
                                   ),
                                 ),
-                                // Where others reach it, quietly under its
-                                // name: what a device's card used to repeat.
-                                if (data.selfAddress.isNotEmpty)
-                                  Text(
-                                    data.selfAddress,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontSize: type.tiny,
-                                      height: 1.3,
-                                      color: c.ink3,
-                                      fontFeatures: const [
-                                        FontFeature.tabularFigures(),
-                                      ],
-                                    ),
-                                  ),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
+                          // Where others reach it, quietly under its name,
+                          // which stays level with the icon.
+                          if (data.selfAddress.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(left: 25),
+                              child: Text(
+                                data.selfAddress,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: type.micro,
+                                  height: 1.2,
+                                  color: c.ink3,
+                                  fontFeatures: const [
+                                    FontFeature.tabularFigures(),
+                                  ],
+                                ),
+                              ),
+                            ),
                         ],
                       ),
                     ),

@@ -335,7 +335,7 @@ abstract final class WhisperRadius {
       viewfinderMark = 12.0;
 }
 
-/// Six roles, two densities. Touch is used in the compact size class.
+/// Seven roles, two densities. Touch is used in the compact size class.
 class WhisperType {
   const WhisperType({required this.touch});
 
@@ -347,6 +347,7 @@ class WhisperType {
   double get body => touch ? 16 : 14;
   double get note => touch ? 14 : 12;
   double get tiny => touch ? 12 : 11;
+  double get micro => touch ? 11 : 10;
 }
 
 abstract final class WhisperSizes {
@@ -820,8 +821,7 @@ class LiquidSegmented<T> extends StatefulWidget {
   final ValueChanged<T> onChanged;
   final double height, padding, fontSize;
 
-  /// Each side of a label. Tabs have room; the small segments of settings do
-  /// not.
+  /// Each side of a label: tabs have room, settings' small segments do not.
   final double segmentPadding;
 
   /// Equal widths filling the parent, as on the phone's connect page.

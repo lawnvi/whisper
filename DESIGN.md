@@ -120,6 +120,7 @@ typography:
   body: [14, 16]
   note: [12, 14]
   tiny: [11, 12]
+  micro: [10, 11]
 rounded:
   xs: 6
   s: 10
