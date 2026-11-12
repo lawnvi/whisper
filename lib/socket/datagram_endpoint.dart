@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:whisper/socket/datagram_seal.dart';
+import 'package:whisper/socket/link_delay.dart';
 
 /// One UDP socket that serves every lane of an isolate. Datagrams find
 /// their lane by the id in clear at their start ([DatagramFormat]); a lane
@@ -128,7 +130,12 @@ abstract interface class DatagramPath {
 /// [answerEvery]. A Wi-Fi card that only receives dozes between beacons,
 /// and the access point holds what comes for it until it wakes: up to a few
 /// hundred milliseconds. Over TCP the ACKs keep it awake.
-final class DatagramLane implements DatagramPath {
+///
+/// Keepalives carry stamps, and the other end's answers echo them, so each
+/// end knows how long the way there and back takes now and with nothing
+/// queued ([queueing]). While [probing] it asks for an answer every
+/// [probeEvery]. [delay] is told about the lane for as long as it is open.
+final class DatagramLane implements DatagramPath, TimedLane {
   DatagramLane({
     required DatagramEndpoint endpoint,
     required DatagramKeys keys,
@@ -139,8 +146,11 @@ final class DatagramLane implements DatagramPath {
     this.keepalive = const Duration(milliseconds: 250),
     this.healthyWithin = const Duration(milliseconds: 1000),
     this.answerEvery = const Duration(milliseconds: 40),
+    this.probeEvery = const Duration(milliseconds: 25),
+    LinkDelay? delay,
     DateTime Function()? now,
   }) : _endpoint = endpoint,
+       _delay = delay,
        _keys = keys,
        _sealer = keys.sealer(
          dialer ? DatagramDirection.fromDialer : DatagramDirection.toDialer,
@@ -155,10 +165,24 @@ final class DatagramLane implements DatagramPath {
     _endpoint.attach(_opener.laneId, _receive);
     _timer = Timer.periodic(keepalive, (_) => _sendKeepalive());
     _sendKeepalive();
+    delay?.attach(this);
   }
 
   static const int _kindKeepalive = 0;
   static const int _kindData = 1;
+
+  /// After a keepalive's kind (older versions read nothing more): flags,
+  /// this end's clock, the last stamp heard from the other end and how long
+  /// ago it came, in microseconds, each in 32 bits. An end takes its way
+  /// there and back from the echo of its own stamp.
+  static const int _stampBytes = 13;
+  static const int _asks = 1, _echoes = 2;
+  static const int _mask = 0xffffffff;
+  static const int _longestTrip = 10 * Duration.microsecondsPerSecond;
+
+  /// Answers to asks no closer together than this.
+  static const int _answerAskEvery = 10000;
+  static final Stopwatch _clock = Stopwatch()..start();
 
   final DatagramEndpoint _endpoint;
   final DatagramKeys _keys;
@@ -166,7 +190,13 @@ final class DatagramLane implements DatagramPath {
   final DatagramOpener _opener;
   final void Function(Uint8List payload) _onData;
   final DateTime Function() _now;
-  final Duration keepalive, healthyWithin, answerEvery;
+  final Duration keepalive, healthyWithin, answerEvery, probeEvery;
+  final LinkDelay? _delay;
+  final RoundTrips _trips = RoundTrips();
+  int? _heardStamp;
+  int _heardStampAt = 0;
+  int _answeredAsk = -_longestTrip;
+  Timer? _probeTimer;
   InternetAddress? _peer;
   int _peerPort;
   DateTime? _heard, _answered;
@@ -183,6 +213,22 @@ final class DatagramLane implements DatagramPath {
         !_endpoint.isClosed &&
         heard != null &&
         _now().difference(heard) <= healthyWithin;
+  }
+
+  @override
+  Duration? get queueing => _trips.queueing(_clock.elapsedMicroseconds);
+
+  @override
+  set probing(bool value) {
+    if (!value || _closed) {
+      _probeTimer?.cancel();
+      _probeTimer = null;
+    } else {
+      _probeTimer ??= Timer.periodic(
+        probeEvery,
+        (_) => _sendKeepalive(ask: true),
+      );
+    }
   }
 
   /// Sends [payload] at once; false when it could not go.
@@ -204,7 +250,38 @@ final class DatagramLane implements DatagramPath {
     return true;
   }
 
-  void _sendKeepalive() => _put(_kindKeepalive, Uint8List(0));
+  void _sendKeepalive({bool ask = false}) {
+    final now = _clock.elapsedMicroseconds;
+    final heard = _heardStamp;
+    final body = ByteData(_stampBytes)
+      ..setUint8(0, (ask ? _asks : 0) | (heard == null ? 0 : _echoes))
+      ..setUint32(1, now & _mask);
+    if (heard != null) {
+      body
+        ..setUint32(5, heard)
+        ..setUint32(9, math.min(now - _heardStampAt, _mask));
+    }
+    _put(_kindKeepalive, body.buffer.asUint8List());
+  }
+
+  /// A keepalive with stamps: the other end's to echo, an echo of this
+  /// end's, and maybe an ask for an answer now. The answer asks nothing, or
+  /// two ends that both ask would answer each other on and on.
+  void _readStamps(Uint8List payload) {
+    final now = _clock.elapsedMicroseconds;
+    final body = ByteData.sublistView(payload, 1, 1 + _stampBytes);
+    final flags = body.getUint8(0);
+    _heardStamp = body.getUint32(1);
+    _heardStampAt = now;
+    if (flags & _echoes != 0) {
+      final took = (now - body.getUint32(5) - body.getUint32(9)) & _mask;
+      if (took < _longestTrip) _trips.add(took, now);
+    }
+    if (flags & _asks != 0 && now - _answeredAsk >= _answerAskEvery) {
+      _answeredAsk = now;
+      _sendKeepalive();
+    }
+  }
 
   void _receive(Datagram datagram) {
     if (_closed) return;
@@ -217,6 +294,9 @@ final class DatagramLane implements DatagramPath {
     // Answer at once, so the dialer knows the lane works without waiting
     // for the next keepalive.
     if (firstHeard) _sendKeepalive();
+    if (payload[0] == _kindKeepalive && payload.length > _stampBytes) {
+      _readStamps(payload);
+    }
     if (payload[0] != _kindData) return;
     final answered = _answered;
     if (answered == null || _heard!.difference(answered) >= answerEvery) {
@@ -231,6 +311,8 @@ final class DatagramLane implements DatagramPath {
     if (_closed) return;
     _closed = true;
     _timer?.cancel();
+    _probeTimer?.cancel();
+    _delay?.detach(this);
     _endpoint.detach(_opener.laneId);
     _keys.destroy();
   }

@@ -55,5 +55,6 @@
 - [2026-11-12 留了带宽，指针还是不跟手](records/2026-11-12-transfer-pacing-slices.md)
 - [2026-11-12 切成小片之后指针还是掉帧](records/2026-11-12-transfer-pacing-pointer-busy.md)
 - [2026-11-12 用户贴的日志：传文件时指针卡在哪](records/2026-11-12-transfer-pacing-user-logs.md)
+- [2026-11-12 传文件时按键鼠包排队的时间调速](records/2026-11-12-transfer-pacing-steered.md)
 
 各子系统的设计稿和计划在 [superpowers/specs](superpowers/specs) 和 [superpowers/plans](superpowers/plans)，按日期命名。它们记录的是当时的打算，代码和上面的开发文档以现在为准。

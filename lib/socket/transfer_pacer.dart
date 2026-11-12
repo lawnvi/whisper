@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:math' as math;
 
+import 'package:whisper/socket/transfer_steering.dart';
+
 /// Keeps transfers from filling the link they share with sound, keyboard
 /// and mouse. Those need little, but must not wait behind file data. So
 /// while something live is going ([active]) a transfer takes what the link
@@ -38,6 +40,14 @@ import 'dart:math' as math;
 /// pointer lags for as long. So it is not tried while a key or the pointer
 /// is going over the link ([busy]), only once they rest.
 ///
+/// All of the above guesses at a queue from bytes counted seconds apart.
+/// Where the keyboard and mouse lanes can say how long their datagrams wait
+/// ([queueing]: a newer version at the other end answers their stamps), it
+/// goes by that instead ([TransferPacerMode.steered]): a little faster while
+/// nothing waits, slower as soon as something does, and never unheld. On
+/// Wi-Fi that carried 2 to 3 MB/s and changed by the second, counting went
+/// over, went unheld to count again and let the pointer wait 200 ms.
+///
 /// Whatever is going, frames are kept to a quarter second of what the link
 /// has been seen to carry, and, with a receiver that answers every second,
 /// what is unconfirmed to two seconds of it: on a slow link a whole file
@@ -47,7 +57,7 @@ import 'dart:math' as math;
 /// link carries ([measuring], [recounting]) or because the receiver cannot
 /// be gone under ([released]); or held, a little under the link ([held]),
 /// over it for a moment ([peeking]), or well under while what piled up
-/// clears ([draining]).
+/// clears ([draining]); or going by how long datagrams wait ([steered]).
 enum TransferPacerMode {
   measuring,
   recounting,
@@ -55,6 +65,7 @@ enum TransferPacerMode {
   held,
   peeking,
   draining,
+  steered,
 }
 
 /// How a pacer was doing over its last few seconds, for diagnostics: bytes
@@ -71,17 +82,22 @@ typedef TransferPacerLook = ({
   bool busy,
   Duration lag,
   Duration wake,
+  Duration? queue,
 });
 
 class TransferPacer {
   TransferPacer({
     bool Function()? active,
     bool Function()? busy,
+    Duration? Function()? queueing,
+    void Function(bool wanted)? probe,
     void Function(TransferPacerLook look)? report,
     this.floor = 64e3,
     DateTime Function()? now,
   }) : _active = active ?? _always,
        _busy = busy ?? _never,
+       _queueing = queueing,
+       _probe = probe,
        _report = report,
        _now = now ?? DateTime.now;
 
@@ -92,6 +108,11 @@ class TransferPacer {
   final double floor;
   final bool Function() _active;
   final bool Function() _busy;
+
+  /// How long datagrams on the live lanes wait now, when they can tell, and
+  /// asking them to tell often.
+  final Duration? Function()? _queueing;
+  final void Function(bool wanted)? _probe;
   final void Function(TransferPacerLook look)? _report;
   final DateTime Function() _now;
 
@@ -219,6 +240,10 @@ class TransferPacer {
   /// Bytes per second the receivers confirmed, smoothed.
   double? _confirmed;
 
+  /// Whether it goes by the lanes ([TransferPacerMode.steered]), and how.
+  bool _steering = false;
+  final TransferSteering _steerer = TransferSteering();
+
   /// How long a byte takes to be confirmed: the least seen lately (the link
   /// with nothing queued), and now (smoothed). Only the cap on what is
   /// unconfirmed goes by these.
@@ -275,6 +300,7 @@ class TransferPacer {
   /// How many looks apart it says how things are, while something is live.
   static const _tellEvery = 20;
   static const _minFrame = 16 * 1024;
+
   static const _firstCap = 128 * 1024;
   static const _largestCap = 1 << 30;
 
@@ -287,6 +313,7 @@ class TransferPacer {
 
   /// What it is doing now.
   TransferPacerMode get mode {
+    if (_steering) return TransferPacerMode.steered;
     if (_rate.isInfinite) {
       if (_released) return TransferPacerMode.released;
       return _recounting
@@ -340,7 +367,9 @@ class TransferPacer {
     // Not on a link so slow that the smallest frames would come further
     // apart than a receiver waits before it answers (20 ms): it would
     // answer every one of them, and write to disk each time.
-    if (rate.isFinite && _minFrame / rate <= _closeEnough) {
+    // Steered, always: a frame of a quarter second queues behind itself,
+    // which reads as the link being full and slows it down for nothing.
+    if (rate.isFinite && (_steering || _minFrame / rate <= _closeEnough)) {
       final slice =
           rate * _slice.inMicroseconds ~/ Duration.microsecondsPerSecond;
       wanted = math.min(wanted, slice);
@@ -376,6 +405,9 @@ class TransferPacer {
       _countFrom = null;
       _countNotBefore = now.add(_countAfter);
       _decide(now, Duration.zero, fresh: true);
+    } else if (_steering) {
+      final queue = _active() ? _queueing?.call() : null;
+      if (queue != null) _steer(queue, now);
     }
     _takenBytes += bytes;
     _frames++;
@@ -466,7 +498,8 @@ class TransferPacer {
     }
     _measure(transferId, durableOffset, now);
     _resize(transferId);
-    _counted(now);
+    // Steered, the lanes say what counting would guess at.
+    if (!_steering) _counted(now);
   }
 
   void _measure(String transferId, int durableOffset, DateTime now) {
@@ -493,7 +526,11 @@ class TransferPacer {
   void _resize(String transferId) {
     final cap = _capOf[transferId] ?? _firstCap;
     final delay = queueDelay;
-    final rate = _rateOf[transferId];
+    // Steered, answers late from a queue that is clearing must not hold it
+    // under what it may go: it would never get back up.
+    final rate = _steering
+        ? math.max(_rateOf[transferId] ?? 0, _rate)
+        : _rateOf[transferId];
     // An answer always waits a little: the receiver's pause before it
     // answers, its write to disk. Only well past that is anything queued.
     if (delay <= const Duration(milliseconds: 60)) {
@@ -546,6 +583,8 @@ class TransferPacer {
       _left = 1;
       _gaveWay = 0;
       _short = 0;
+      _steering = false;
+      _probe?.call(false);
       return;
     }
     _looks++;
@@ -568,6 +607,7 @@ class TransferPacer {
         busy: _busy(),
         lag: _worstLag,
         wake: _worstWake,
+        queue: _steerer.takeWorst(),
       ));
     }
     _looksSinceTold = 0;
@@ -596,6 +636,19 @@ class TransferPacer {
   /// Sets the rate. [fresh] at the start of a transfer: nothing has piled
   /// up that would have to drain.
   void _decide(DateTime now, Duration lag, {bool fresh = false}) {
+    final active = _active();
+    _probe?.call(active);
+    final queue = active ? _queueing?.call() : null;
+    if (queue != null) {
+      _steer(queue, now, fresh: fresh);
+      return;
+    }
+    if (_steering) {
+      // The lanes went quiet: held where steering left it, as if counted.
+      _steering = false;
+      _countFrom = null;
+      _countNotBefore = now.add(_countAfter);
+    }
     final link = _link;
     final busy = _busy();
     // Counting again what the link carries can wait until it is not busy:
@@ -670,6 +723,36 @@ class TransferPacer {
       rate = math.max(least, room * _left);
     }
     _setRate(rate, now);
+  }
+
+  /// One step by how long datagrams wait ([queue]): a little under what
+  /// [TransferSteering] takes the link to carry, and never unheld.
+  void _steer(Duration queue, DateTime now, {bool fresh = false}) {
+    if (!_steering) {
+      _steering = true;
+      _peekSince = null;
+      _drainUntil = null;
+      _unheldUntil = null;
+      _doubted = null;
+      _recounting = false;
+      _released = false;
+      _left = 1;
+      _steerer.reset();
+    }
+    var link = _steerer.step(
+      queue: queue,
+      now: now,
+      link: _link ?? (_rate.isFinite ? _rate / _use : null),
+      taken: _takenBytes,
+      share: _use,
+      busy: _busy(),
+      fresh: fresh,
+    );
+    if (link == null) return;
+    link = math.max(floor / _use, link);
+    _link = link;
+    final rate = math.max(floor, math.min(link * _use, link - _spare));
+    if (rate != _rate) _setRate(rate, now);
   }
 
   /// Whether a transfer with nothing held back has shown what the link

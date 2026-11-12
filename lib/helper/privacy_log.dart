@@ -101,6 +101,7 @@ enum PrivacyField {
   loopLagMs,
   mode,
   peerId,
+  queueMs,
   rateKb,
   reason,
   repeats,

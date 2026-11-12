@@ -4,6 +4,7 @@ import 'package:whisper/remote_files/fs_placement.dart';
 import 'package:whisper/remote_input/remote_input_activity.dart';
 import 'package:whisper/remote_input/remote_input_coordinator.dart';
 import 'package:whisper/remote_input/remote_input_workspace_coordinator.dart';
+import 'package:whisper/socket/link_delay.dart';
 import 'package:whisper/socket/transfer_pacer.dart';
 
 /// Which pacer an outgoing transfer goes through. A paste's files always give
@@ -15,9 +16,11 @@ final class TransferPacing {
     required bool Function(String transferId) isClipboard,
     bool Function()? live,
     bool Function()? busy,
+    LinkDelay? delay,
   }) : _isClipboard = isClipboard,
        _live = live ?? liveTrafficOnLink,
-       _busy = busy ?? inputGoingOverLink;
+       _busy = busy ?? inputGoingOverLink,
+       _delay = delay;
 
   /// The app's: transfers give way to its sound, keyboard and mouse. A
   /// manager without the app's coordinators (tests) has nothing live.
@@ -26,16 +29,26 @@ final class TransferPacing {
         isClipboard: TransferPlacements.shared.isEphemeral,
         live: withCoordinators ? null : () => false,
         busy: withCoordinators ? null : () => false,
+        delay: withCoordinators ? LinkDelay.shared : null,
       );
 
   final bool Function(String transferId) _isClipboard;
   final bool Function() _live;
   final bool Function() _busy;
 
-  late final TransferPacer clipboard = TransferPacer(busy: _busy);
+  /// How long the keyboard and mouse datagrams wait, where they can say.
+  final LinkDelay? _delay;
+
+  late final TransferPacer clipboard = TransferPacer(
+    busy: _busy,
+    queueing: _delay?.queueing,
+    probe: _delay == null ? null : (wanted) => _delay.want(#clipboard, wanted),
+  );
   late final TransferPacer general = TransferPacer(
     active: _live,
     busy: _busy,
+    queueing: _delay?.queueing,
+    probe: _delay == null ? null : (wanted) => _delay.want(#general, wanted),
     report: _log,
   );
 
@@ -61,6 +74,7 @@ void _log(TransferPacerLook look) =>
       PrivacyField.busy: look.busy,
       PrivacyField.loopLagMs: look.lag.inMilliseconds,
       PrivacyField.lateMaxMs: look.wake.inMilliseconds,
+      if (look.queue != null) PrivacyField.queueMs: look.queue!.inMilliseconds,
     });
 
 /// Whether something live shares the link now: keyboard and mouse shared

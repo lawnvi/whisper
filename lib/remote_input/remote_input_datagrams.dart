@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
 import 'package:whisper/socket/datagram_endpoint.dart';
 import 'package:whisper/socket/datagram_seal.dart';
+import 'package:whisper/socket/link_delay.dart';
 import 'package:whisper/socket/packet_byte_transport.dart';
 
 /// The UDP side of keyboard and mouse sharing (`remote_input_lane.dart`):
@@ -79,6 +80,7 @@ abstract final class RemoteInputDatagrams {
       peerPort: accept.datagramPort,
       // The dialer only hears keepalives.
       onData: (_) {},
+      delay: LinkDelay.shared,
     );
   }
 
@@ -102,6 +104,7 @@ abstract final class RemoteInputDatagrams {
       ),
       dialer: false,
       onData: onData,
+      delay: LinkDelay.shared,
     );
   }
 }

@@ -205,4 +205,65 @@ void main() {
     expect(answering.received, 25);
     expect(dialing.healthy, isTrue);
   });
+
+  // A transfer goes by how long keyboard and mouse datagrams wait (the
+  // pacer steered). The stamps ride on keepalives, past the kind byte that
+  // is all an older version reads; an older end answers none of them.
+  test('keepalive stamps tell how long the way there and back takes; an '
+      'older end tells nothing and its lane still works', () async {
+    final dialerEnd = await DatagramEndpoint.bind();
+    final answerEnd = await DatagramEndpoint.bind();
+    final olderEnd = await DatagramEndpoint.bind();
+    final older = _keys(session: 'older');
+    final olderOpener = older.opener(DatagramDirection.fromDialer);
+    final olderSealer = older.sealer(DatagramDirection.toDialer);
+    olderEnd.attach(olderOpener.laneId, (datagram) {
+      if (olderOpener.open(datagram.data) == null) return;
+      olderEnd.send(
+        olderSealer.seal(_bytes([0])),
+        datagram.address,
+        datagram.port,
+      );
+    });
+    DatagramLane dial(String session, int port) => DatagramLane(
+      endpoint: dialerEnd,
+      keys: _keys(session: session),
+      dialer: true,
+      peer: InternetAddress.loopbackIPv4,
+      peerPort: port,
+      onData: (_) {},
+      keepalive: const Duration(hours: 1),
+      probeEvery: const Duration(milliseconds: 10),
+    );
+    final answering = DatagramLane(
+      endpoint: answerEnd,
+      keys: _keys(),
+      dialer: false,
+      onData: (_) {},
+      keepalive: const Duration(hours: 1),
+    );
+    final dialing = dial('session-a', answerEnd.port);
+    final toOlder = dial('older', olderEnd.port);
+    addTearDown(() async {
+      dialing.close();
+      toOlder.close();
+      answering.close();
+      await dialerEnd.close();
+      await answerEnd.close();
+      await olderEnd.close();
+    });
+
+    expect(dialing.queueing, isNull);
+    dialing.probing = true;
+    toOlder.probing = true;
+    final deadline = DateTime.now().add(const Duration(seconds: 2));
+    while (dialing.queueing == null || !toOlder.healthy) {
+      if (DateTime.now().isAfter(deadline)) fail('nothing answered');
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    expect(dialing.queueing, lessThan(const Duration(milliseconds: 50)));
+    // The end that only answers knows its own too, from the echoes.
+    expect(answering.queueing, isNotNull);
+    expect(toOlder.queueing, isNull);
+  });
 }

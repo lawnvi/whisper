@@ -27,7 +27,8 @@ typedef _Carried = ({
 /// meanwhile. With [sleepy], whatever arrives after a quiet moment waits
 /// that long first, as on a phone whose radio saves power. Something live
 /// shares the link unless [live] says otherwise; with [busy] the pointer is
-/// moving all the while.
+/// moving all the while. [steered] tells the pacer how long something live
+/// waits behind what is queued on the link, as the lanes' stamps do.
 Future<_Carried> _transfer(
   WidgetTester tester, {
   required double capacity,
@@ -36,6 +37,7 @@ Future<_Carried> _transfer(
   Duration answering = const Duration(milliseconds: 3),
   bool live = true,
   bool busy = false,
+  bool steered = false,
   int seconds = 40,
 }) async {
   const id = 't';
@@ -47,7 +49,6 @@ Future<_Carried> _transfer(
   final began = tester.binding.clock.now();
   DateTime now() => tester.binding.clock.now();
   Duration elapsed() => now().difference(began);
-  final pacer = TransferPacer(active: () => live, busy: () => busy, now: now);
   final clock = IncomingAckClock(now: now);
   var cursor = 0, acked = 0, received = 0, answered = 0;
   var writing = false, stopped = false;
@@ -55,6 +56,32 @@ Future<_Carried> _transfer(
   var worstWait = Duration.zero, stillest = Duration.zero;
   Duration? arrivedAt;
   Completer<void>? wake;
+  Duration queued() {
+    final busy = linkFreeAt - elapsed();
+    return busy > Duration.zero ? busy : Duration.zero;
+  }
+
+  // As the lanes tell it: a stamp answered every 25 ms, and the least of
+  // the last 200 ms is how long something waits now.
+  final stamps = <(Duration, Duration)>[];
+  final stamping = Timer.periodic(const Duration(milliseconds: 25), (_) {
+    final at = elapsed();
+    stamps
+      ..add((at, queued()))
+      ..removeWhere(
+        (stamp) => at - stamp.$1 > const Duration(milliseconds: 200),
+      );
+  });
+  Duration waitsNow() => stamps.isEmpty
+      ? Duration.zero
+      : stamps.map((stamp) => stamp.$2).reduce((a, b) => a < b ? a : b);
+
+  final pacer = TransferPacer(
+    active: () => live,
+    busy: () => busy,
+    queueing: steered ? waitsNow : null,
+    now: now,
+  );
 
   void answer() {
     if (received <= answered || writing) return;
@@ -149,12 +176,13 @@ Future<_Carried> _transfer(
   await tester.pump(Duration(seconds: seconds ~/ 2));
   final half = received;
   final liveWaits = <Duration>[];
-  final sampling = Timer.periodic(const Duration(milliseconds: 1), (_) {
-    final busy = linkFreeAt - elapsed();
-    liveWaits.add(busy > Duration.zero ? busy : Duration.zero);
-  });
+  final sampling = Timer.periodic(
+    const Duration(milliseconds: 1),
+    (_) => liveWaits.add(queued()),
+  );
   await tester.pump(Duration(seconds: seconds - seconds ~/ 2));
   sampling.cancel();
+  stamping.cancel();
   liveWaits.sort();
   final rate = (received - half) / (seconds - seconds ~/ 2);
   stopped = true;
@@ -315,6 +343,42 @@ void main() {
         seconds: 240,
       );
       expect(faster.rate, greaterThan(50e6 * 0.8));
+    });
+
+    // Wi-Fi that carried 2 to 3 MB/s and changed by the second: counted
+    // seconds apart, the link was taken for more than it carried, then
+    // gone unheld to count again, and the pointer waited 200 ms; on this
+    // simulated link that halves every 1.7 s, seconds. Where the lanes say
+    // how long their datagrams wait, it goes by that.
+    testWidgets('steered by how long datagrams wait, nothing live waits '
+        'long, and a steady link is used as well as counted', (tester) async {
+      // Halving at once, the queue grows for as long as it takes the lanes
+      // to tell (the least of 200 ms): tens of milliseconds, not seconds.
+      bool halves(Duration at) => at.inMilliseconds ~/ 1700 % 2 == 1;
+      final links = <(double, double Function(Duration), double, int)>[
+        (3e6, (_) => 3e6, 0.85, 20),
+        (40e6, (_) => 40e6, 0.85, 20),
+        (3e6, (at) => halves(at) ? 1.5e6 : 3e6, 0.45, 80),
+        (50e6, (at) => halves(at) ? 20e6 : 50e6, 0.45, 80),
+      ];
+      for (final (index, (fastest, capacityAt, share, waitMs))
+          in links.indexed) {
+        final carried = await _transfer(
+          tester,
+          capacity: fastest,
+          capacityAt: capacityAt,
+          steered: true,
+          busy: true,
+          seconds: 60,
+        );
+        final mean = (fastest + capacityAt(const Duration(seconds: 2))) / 2;
+        expect(carried.rate, greaterThan(mean * share), reason: '$index');
+        expect(
+          carried.liveWait,
+          lessThan(Duration(milliseconds: waitMs)),
+          reason: '$index',
+        );
+      }
     });
 
     testWidgets('whose receiver saves power, it does not slow to a crawl', (
