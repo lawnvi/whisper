@@ -1100,7 +1100,6 @@
   "shellCardAliasNote": "Solo este dispositivo lo llama así; {name} y los demás dispositivos siguen viendo su propio nombre. Déjalo vacío para volver a él.",
   "shellCardVersion": "Versión",
   "shellCardAddress": "Dirección",
-  "shellCardOwnAddress": "Dirección local",
   "shellCardCopied": "Copiado {value}",
   "shellCardNetwork": "Red",
   "networkTitle": "Red",

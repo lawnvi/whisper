@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:whisper/helper/helper.dart' show getLocalIpAddress;
 import 'package:whisper/helper/toast.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/new_ui/phone/phone_parts.dart' show ShellField;
@@ -14,8 +13,9 @@ import 'package:whisper/theme/whisper_ui.dart';
 
 /// The device card's rows about the device itself, in the card's own rows
 /// so they add nothing new to look at: the name it is given here, the
-/// version it runs, and where either end is on the network. A value is
-/// copied when its row is pressed.
+/// version it runs, and where it is on the network. This device's own
+/// address is under its name at the bottom left. A value is copied when its
+/// row is pressed.
 class ShellDeviceAbout extends StatefulWidget {
   const ShellDeviceAbout({
     super.key,
@@ -32,20 +32,6 @@ class ShellDeviceAbout extends StatefulWidget {
 }
 
 class _ShellDeviceAboutState extends State<ShellDeviceAbout> {
-  String? _ownAddress;
-
-  @override
-  void initState() {
-    super.initState();
-    unawaited(_readOwnAddress());
-  }
-
-  Future<void> _readOwnAddress() async {
-    final address = await getLocalIpAddress();
-    if (!mounted || address == '127.0.0.1') return;
-    setState(() => _ownAddress = address);
-  }
-
   void _copy(String value) {
     unawaited(Clipboard.setData(ClipboardData(text: value)));
     showAppToast(context.shellL10n.shellCardCopied(value));
@@ -68,7 +54,6 @@ class _ShellDeviceAboutState extends State<ShellDeviceAbout> {
     final version = widget.connected
         ? WsSvrManager().remoteProfileFor(device.uid)?.appVersion ?? ''
         : '';
-    final own = _ownAddress;
     return ListenableBuilder(
       listenable: PeerAliases.shared,
       builder: (context, _) {
@@ -109,13 +94,6 @@ class _ShellDeviceAboutState extends State<ShellDeviceAbout> {
                     label: l10n.shellCardAddress,
                     onTap: () => _copy(device.host),
                     trailing: _Value(device.host, touch: touch),
-                  ),
-                if (own != null)
-                  ShellRow(
-                    touch: touch,
-                    label: l10n.shellCardOwnAddress,
-                    onTap: () => _copy(own),
-                    trailing: _Value(own, touch: touch),
                   ),
               ],
             ),

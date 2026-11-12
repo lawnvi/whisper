@@ -2801,9 +2801,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get shellCardAddress => '地址';
 
   @override
-  String get shellCardOwnAddress => '本机地址';
-
-  @override
   String shellCardCopied(String value) {
     return '已复制 $value';
   }

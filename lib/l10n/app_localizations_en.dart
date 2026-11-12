@@ -2968,9 +2968,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get shellCardAddress => 'Address';
 
   @override
-  String get shellCardOwnAddress => 'Local address';
-
-  @override
   String shellCardCopied(String value) {
     return 'Copied $value';
   }

@@ -2132,7 +2132,6 @@
   },
   "shellCardVersion": "版本",
   "shellCardAddress": "地址",
-  "shellCardOwnAddress": "本机地址",
   "shellCardCopied": "已复制 {value}",
   "@shellCardCopied": {
     "placeholders": {

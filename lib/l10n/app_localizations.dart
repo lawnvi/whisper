@@ -5044,12 +5044,6 @@ abstract class AppLocalizations {
   /// **'地址'**
   String get shellCardAddress;
 
-  /// No description provided for @shellCardOwnAddress.
-  ///
-  /// In zh, this message translates to:
-  /// **'本机地址'**
-  String get shellCardOwnAddress;
-
   /// No description provided for @shellCardCopied.
   ///
   /// In zh, this message translates to:

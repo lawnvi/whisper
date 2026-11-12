@@ -3004,9 +3004,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get shellCardAddress => 'Dirección';
 
   @override
-  String get shellCardOwnAddress => 'Dirección local';
-
-  @override
   String shellCardCopied(String value) {
     return 'Copiado $value';
   }

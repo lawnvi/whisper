@@ -165,15 +165,37 @@ class ShellSidebar extends StatelessWidget {
                           ),
                           const SizedBox(width: 7),
                           Expanded(
-                            child: Text(
-                              self?.name ?? '',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: type.note,
-                                fontWeight: FontWeight.w500,
-                                color: c.ink,
-                              ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  self?.name ?? '',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: type.note,
+                                    fontWeight: FontWeight.w500,
+                                    color: c.ink,
+                                  ),
+                                ),
+                                // Where others reach it, quietly under its
+                                // name: what a device's card used to repeat.
+                                if (data.selfAddress.isNotEmpty)
+                                  Text(
+                                    data.selfAddress,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: type.tiny,
+                                      height: 1.3,
+                                      color: c.ink3,
+                                      fontFeatures: const [
+                                        FontFeature.tabularFigures(),
+                                      ],
+                                    ),
+                                  ),
+                              ],
                             ),
                           ),
                         ],

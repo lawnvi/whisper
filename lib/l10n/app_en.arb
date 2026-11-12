@@ -2019,7 +2019,6 @@
   "shellCardAliasNote": "Only this device calls it that; {name} itself and other devices still see its own name. Leave it empty to go back to that.",
   "shellCardVersion": "Version",
   "shellCardAddress": "Address",
-  "shellCardOwnAddress": "Local address",
   "shellCardCopied": "Copied {value}",
   "shellCardNetwork": "Network",
   "networkTitle": "Network",

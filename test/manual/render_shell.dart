@@ -115,6 +115,7 @@ ShellData _data({
   selectedPeerId: selected,
   place: place,
   linksActive: true,
+  selfAddress: '192.168.31.20',
   factsFor: (s) {
     final id = s.device.uid;
     if (id == 'imac') {

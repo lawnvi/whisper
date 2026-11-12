@@ -20,6 +20,7 @@ class ShellData {
     this.place = ShellPlace.device,
     this.loading = false,
     this.lanDown = false,
+    this.selfAddress = '',
     this.soundActive = false,
     this.inputActive = false,
     this.linksActive = false,
@@ -38,6 +39,9 @@ class ShellData {
 
   /// No local network: nothing can find this device.
   final bool lanDown;
+
+  /// This device's address on the local network; empty when it has none.
+  final String selfAddress;
 
   /// Whether what the bottom left buttons open is running right now.
   final bool soundActive, inputActive, linksActive;

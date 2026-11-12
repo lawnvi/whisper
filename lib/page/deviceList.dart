@@ -2323,16 +2323,27 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
   ShellPlace _shellPlace = ShellPlace.device;
   bool _lanDown = false;
+  String _selfAddress = '';
   Timer? _lanWatch;
 
-  /// A cable or Wi-Fi going away has no event of its own here: look now and then.
+  /// A cable or Wi-Fi going away, or another network, has no event of its own
+  /// here: look now and then. The address goes under the name at the bottom.
   void _watchLan() {
-    _lanWatch ??= Timer.periodic(const Duration(seconds: 10), (_) async {
-      final host = await getLocalIpAddress();
-      final down = host.isEmpty || host == '127.0.0.1';
-      if (mounted && down != _lanDown) setState(() => _lanDown = down);
-    });
+    if (_lanWatch != null) return;
+    _lanWatch = Timer.periodic(const Duration(seconds: 10), (_) => _readLan());
+    _readLan();
   }
+
+  void _readLan() => unawaited(
+    getLocalIpAddress().then((host) {
+      final address = host == '127.0.0.1' ? '' : host;
+      if (!mounted ||
+          (address == _selfAddress && _lanDown == address.isEmpty)) {
+        return;
+      }
+      setState(() => _lanDown = (_selfAddress = address).isEmpty);
+    }),
+  );
 
   void _updateStatusMoments(BuildContext context) {
     if (!isDesktop()) return;
@@ -2423,6 +2434,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
       selectedPeerId: _selectedDesktopPeerId ?? _firstDesktopPeerId,
       place: _shellPlace,
       lanDown: _lanDown,
+      selfAddress: _selfAddress,
       factsFor: _shellFacts,
       isPaired: _isTrustedDevice,
       loading: device == null,
