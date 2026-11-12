@@ -77,7 +77,7 @@ void main() {
     manager.registerEvent(chatListener);
 
     expect(
-      () => manager.debugDispatchMessage(_buildMessage()),
+      () => manager.dispatchMessage(_buildMessage()),
       returnsNormally,
     );
     expect(chatListener.messages, hasLength(1));

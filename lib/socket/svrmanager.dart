@@ -908,11 +908,11 @@ class WsSvrManager {
     _primaryEvent = null;
   }
 
-  void debugDispatchMessage(MessageData messageData) {
+  void dispatchMessage(MessageData messageData) {
     _dispatchToAll((event) => event.onMessage(messageData));
   }
 
-  void debugDispatchTransfer(TransferSnapshot snapshot) {
+  void dispatchTransfer(TransferSnapshot snapshot) {
     _dispatchToAll((event) => event.onTransferUpdated(snapshot));
   }
 
