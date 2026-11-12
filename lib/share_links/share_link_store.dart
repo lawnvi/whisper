@@ -191,6 +191,7 @@ class ShareLinkStore extends ChangeNotifier implements ShareServerSource {
   Timer? _missingTimer;
   bool _dirty = false;
   bool _disposed = false;
+  bool _held = false;
 
   /// Newest first.
   List<ShareLink> get links => List.unmodifiable(_links.reversed);
@@ -406,6 +407,17 @@ class ShareLinkStore extends ChangeNotifier implements ShareServerSource {
   /// Tries again after a failed start.
   Future<void> retry() => _enqueue(_reconcile);
 
+  /// Keeps the server up for web transfer, links or not. The file service
+  /// switch is about links only.
+  Future<void> hold(bool on) => _enqueue(() async {
+    await _ensureLoaded();
+    if (_held == on) {
+      return;
+    }
+    _held = on;
+    await _reconcile();
+  });
+
   /// Looks again at the network interfaces.
   Future<void> refreshAddresses() async {
     List<String> found;
@@ -575,7 +587,7 @@ class ShareLinkStore extends ChangeNotifier implements ShareServerSource {
     if (_disposed) {
       return;
     }
-    if (sharing) {
+    if (sharing || _held) {
       if (server.isRunning) {
         _setState(ShareServerState.running(server.port!));
         return;

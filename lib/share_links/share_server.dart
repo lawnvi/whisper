@@ -4,10 +4,9 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/services.dart' show rootBundle;
-import 'package:flutter/widgets.dart' show Locale;
-import 'package:mime/mime.dart';
 
 import '../l10n/app_localizations.dart';
+import 'share_http.dart';
 import 'share_lan.dart';
 import 'share_link.dart';
 import 'share_names.dart';
@@ -17,6 +16,8 @@ import 'share_paths.dart';
 import 'share_range.dart';
 import 'share_rate_limiter.dart';
 import 'share_zip.dart';
+
+export 'share_http.dart';
 
 /// What the server needs from the links' owner.
 abstract interface class ShareServerSource {
@@ -47,6 +48,17 @@ class ShareServerBindException implements Exception {
 
   @override
   String toString() => 'ShareServerBindException($ports, $cause)';
+}
+
+/// Something else served from the same port, asked before the links.
+abstract interface class ShareServerExtension {
+  /// Handles the request and returns true when [segments] are its own; the
+  /// root (no segments) included. Method and body are its to check.
+  Future<bool> handle(
+    HttpRequest request,
+    List<String> segments,
+    String client,
+  );
 }
 
 /// The HTTP server behind share links. Listens on all IPv4 interfaces,
@@ -80,6 +92,9 @@ class ShareServer {
   final ShareServerSource source;
   final ShareRateLimiter limiter;
   final ShareResolver resolver;
+
+  /// Web transfer, which takes `/` and `/w/...` while it is in use.
+  ShareServerExtension? extension;
 
   /// A download whose client has not taken a byte for this long is cut.
   final Duration stallTimeout;
@@ -217,12 +232,6 @@ class ShareServer {
     String client,
     SharePages pages,
   ) async {
-    final method = request.method;
-    if (method != 'GET' && method != 'HEAD' && method != 'POST') {
-      request.response.headers.set('allow', 'GET, HEAD, POST');
-      await _plain(request, HttpStatus.methodNotAllowed, '');
-      return;
-    }
     if (!shareHostAllowed(request.headers.value('host'))) {
       // A name from somewhere else pointing here (DNS rebinding).
       await _page(
@@ -241,6 +250,15 @@ class ShareServer {
         HttpStatus.badRequest,
         pages.message(ShareMessage.notFound),
       );
+      return;
+    }
+    if (await extension?.handle(request, segments, client) ?? false) {
+      return;
+    }
+    final method = request.method;
+    if (method != 'GET' && method != 'HEAD' && method != 'POST') {
+      request.response.headers.set('allow', 'GET, HEAD, POST');
+      await _plain(request, HttpStatus.methodNotAllowed, '');
       return;
     }
     if (segments.isEmpty) {
@@ -609,11 +627,11 @@ class ShareServer {
     final modified = target.modified;
     final etag =
         '"${size.toRadixString(36)}-${modified.millisecondsSinceEpoch.toRadixString(36)}"';
-    final mime = _mimeOf(name);
-    final active = _isActive(mime, name);
+    final mime = shareMimeOf(name);
+    final active = shareIsActive(mime, name);
     final inline = !wantsDownload && !active && sharePreviewOf(name) != null;
     final headers = response.headers
-      ..set('content-type', _contentType(mime))
+      ..set('content-type', shareContentType(mime))
       ..set('accept-ranges', 'bytes')
       ..set('etag', etag)
       ..set('last-modified', HttpDate.format(modified))
@@ -626,7 +644,7 @@ class ShareServer {
       // Never let a shared page or picture run script on this origin.
       headers.set('content-security-policy', "sandbox; default-src 'none'");
     }
-    if (_notModified(request, etag, modified)) {
+    if (shareNotModified(request, etag, modified)) {
       response
         ..statusCode = HttpStatus.notModified
         ..contentLength = 0;
@@ -635,7 +653,7 @@ class ShareServer {
     }
     var range = parseShareRange(request.headers.value('range'), size);
     final ifRange = request.headers.value('if-range');
-    if (ifRange != null && !_ifRangeMatches(ifRange, etag, modified)) {
+    if (ifRange != null && !shareIfRangeMatches(ifRange, etag, modified)) {
       range = const ShareRangeWhole();
     }
     final int start;
@@ -1040,36 +1058,6 @@ class ShareServer {
     }
   }
 
-  bool _notModified(HttpRequest request, String etag, DateTime modified) {
-    final match = request.headers.value('if-none-match');
-    if (match != null) {
-      return match
-          .split(',')
-          .map((tag) => tag.trim())
-          .any((tag) => tag == '*' || tag == etag || tag == 'W/$etag');
-    }
-    final since = request.headers.ifModifiedSince;
-    if (since != null) {
-      return modified.millisecondsSinceEpoch ~/ 1000 <=
-          since.millisecondsSinceEpoch ~/ 1000;
-    }
-    return false;
-  }
-
-  bool _ifRangeMatches(String value, String etag, DateTime modified) {
-    final trimmed = value.trim();
-    if (trimmed.startsWith('"') || trimmed.startsWith('W/')) {
-      return trimmed == etag;
-    }
-    try {
-      final date = HttpDate.parse(trimmed);
-      return modified.millisecondsSinceEpoch ~/ 1000 ==
-          date.millisecondsSinceEpoch ~/ 1000;
-    } on HttpException {
-      return false;
-    }
-  }
-
   String _fileHref(ShareLink link, List<String> relative) =>
       '/${link.route}/f/${_encode(relative)}';
 
@@ -1081,145 +1069,6 @@ const _pagePolicy =
     "default-src 'none'; img-src 'self' data:; media-src 'self'; "
     "style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; "
     "frame-ancestors 'none'";
-
-String _mimeOf(String name) =>
-    lookupMimeType(name.toLowerCase()) ?? 'application/octet-stream';
-
-/// Types a browser would run script in when opened directly.
-bool _isActive(String mime, String name) {
-  final lower = mime.toLowerCase();
-  return lower.contains('html') ||
-      lower.contains('xml') ||
-      lower.contains('svg') ||
-      lower.contains('javascript') ||
-      lower.contains('ecmascript') ||
-      name.toLowerCase().endsWith('.svgz');
-}
-
-String _contentType(String mime) {
-  if (mime.startsWith('text/') ||
-      mime == 'application/json' ||
-      mime == 'application/javascript') {
-    return '$mime; charset=utf-8';
-  }
-  return mime;
-}
-
-/// `attachment` (or `inline`) with an ASCII fallback name and the real one
-/// in RFC 5987 form, so every browser saves it under its own name.
-String shareContentDisposition(String name, {bool inline = false}) {
-  final fallback = StringBuffer();
-  for (final rune in name.runes) {
-    final ok =
-        rune >= 0x20 &&
-        rune < 0x7f &&
-        rune != 0x22 &&
-        rune != 0x5c &&
-        rune != 0x25;
-    fallback.writeCharCode(ok ? rune : 0x5f);
-  }
-  final encoded = StringBuffer();
-  for (final byte in utf8.encode(name)) {
-    final c = String.fromCharCode(byte);
-    final unreserved = RegExp(r"[A-Za-z0-9!#$&+.^_`|~-]").hasMatch(c);
-    encoded.write(
-      unreserved
-          ? c
-          : '%${byte.toRadixString(16).toUpperCase().padLeft(2, '0')}',
-    );
-  }
-  return '${inline ? 'inline' : 'attachment'}; filename="$fallback"; '
-      "filename*=UTF-8''$encoded";
-}
-
-/// Whether a request's `Host` names this device the way a LAN visitor
-/// would: an address, `localhost`, a single-label or `.local` / `.lan` /
-/// `.home.arpa` name. A public name that resolves here is a web page
-/// trying to read the LAN through someone's browser.
-bool shareHostAllowed(String? header) {
-  if (header == null || header.isEmpty) {
-    return true;
-  }
-  var host = header.trim().toLowerCase();
-  if (host.startsWith('[')) {
-    final end = host.indexOf(']');
-    return end > 0 && InternetAddress.tryParse(host.substring(1, end)) != null;
-  }
-  final colon = host.lastIndexOf(':');
-  if (colon >= 0) {
-    host = host.substring(0, colon);
-  }
-  if (host.endsWith('.')) {
-    host = host.substring(0, host.length - 1);
-  }
-  if (InternetAddress.tryParse(host) != null) {
-    return true;
-  }
-  return host == 'localhost' ||
-      !host.contains('.') ||
-      host.endsWith('.local') ||
-      host.endsWith('.lan') ||
-      host.endsWith('.home.arpa') ||
-      host.endsWith('.localdomain');
-}
-
-/// The value of cookie [name] in `Cookie` request headers, read leniently.
-String? shareCookieValue(List<String>? headers, String name) {
-  if (headers == null) {
-    return null;
-  }
-  for (final header in headers) {
-    for (final part in header.split(';')) {
-      final eq = part.indexOf('=');
-      if (eq <= 0) {
-        continue;
-      }
-      if (part.substring(0, eq).trim() == name) {
-        var value = part.substring(eq + 1).trim();
-        if (value.length >= 2 && value.startsWith('"') && value.endsWith('"')) {
-          value = value.substring(1, value.length - 1);
-        }
-        return value;
-      }
-    }
-  }
-  return null;
-}
-
-/// The page language for an `Accept-Language` header: the most wanted of
-/// Chinese, English and Spanish, else English.
-Locale shareLocaleFor(String? header) {
-  if (header == null || header.trim().isEmpty) {
-    return const Locale('en');
-  }
-  final options = <(String, double, int)>[];
-  var index = 0;
-  for (final part in header.split(',')) {
-    final pieces = part.trim().split(';');
-    final tag = pieces.first.trim().toLowerCase();
-    var quality = 1.0;
-    for (final parameter in pieces.skip(1)) {
-      final trimmed = parameter.trim();
-      if (trimmed.startsWith('q=')) {
-        quality = double.tryParse(trimmed.substring(2)) ?? 0;
-      }
-    }
-    if (tag.isNotEmpty && quality > 0) {
-      options.add((tag, quality, index++));
-    }
-  }
-  options.sort((a, b) {
-    final byQuality = b.$2.compareTo(a.$2);
-    return byQuality != 0 ? byQuality : a.$3.compareTo(b.$3);
-  });
-  for (final (tag, _, _) in options) {
-    final language = tag.split('-').first;
-    if (language == 'zh' || language == 'en' || language == 'es') {
-      return Locale(language);
-    }
-  }
-  return const Locale('en');
-}
 
 class _Transfer {
   _Transfer(this.linkId, this.socket);
@@ -1259,44 +1108,5 @@ Future<List<int>?> _appIcon() async {
     return data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
   } on Object {
     return null;
-  }
-}
-
-/// The start of a text file for its page: up to [limit] bytes decoded as
-/// UTF-8, and whether there was more. Null for anything that looks binary
-/// (a NUL early on) or cannot be read.
-Future<(String, bool)?> shareTextSnippet(
-  String path, {
-  int limit = 32768,
-}) async {
-  RandomAccessFile? file;
-  try {
-    file = await File(path).open();
-    final bytes = await file.read(limit + 1);
-    final probe = bytes.length < 8192 ? bytes.length : 8192;
-    for (var i = 0; i < probe; i++) {
-      if (bytes[i] == 0) {
-        return null;
-      }
-    }
-    final truncated = bytes.length > limit;
-    var text = utf8.decode(
-      truncated ? bytes.sublist(0, limit) : bytes,
-      allowMalformed: true,
-    );
-    if (text.startsWith('\uFEFF')) {
-      text = text.substring(1);
-    }
-    if (truncated) {
-      // A character cut in two at the end decodes as U+FFFD.
-      while (text.endsWith('\uFFFD')) {
-        text = text.substring(0, text.length - 1);
-      }
-    }
-    return (text, truncated);
-  } on FileSystemException {
-    return null;
-  } finally {
-    await file?.close();
   }
 }
