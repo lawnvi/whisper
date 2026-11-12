@@ -45,7 +45,7 @@ class _WhisperShellState extends State<WhisperShell> {
 
   List<String> get _orderedIds => _order.apply({
     for (final s in widget.data.sessions)
-      s.device.uid: s.isConnected
+      s.device.uid: s.isConnected || s.isWebOnline
           ? DevicePresence.connected
           : (s.isNearby ? DevicePresence.nearby : DevicePresence.away),
   });

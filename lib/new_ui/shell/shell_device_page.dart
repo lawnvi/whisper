@@ -110,13 +110,16 @@ class _ShellDevicePageBodyState extends State<_ShellDevicePageBody> {
   }
 
   /// Connect or disconnect: said once, in the toolbar, and not in the composer.
-  /// Blue is what can be done, red is letting go.
-  Widget _connection(BuildContext context) {
+  /// Blue is what can be done, red is letting go. A browser cannot be called
+  /// back: once its page is gone there is nothing to press.
+  Widget? _connection(BuildContext context) {
     final page = widget.page;
     final c = context.wc;
     final l10n = context.shellL10n;
     final device = page.device;
-    final connected = page.session.isConnected;
+    final session = page.session;
+    if (session.isWeb && !session.isWebOnline) return null;
+    final connected = session.isConnected || session.isWebOnline;
     final busy = !connected && page.connecting;
     return ShellToolCapsuleItem(
       key: const ValueKey('device-connection'),
@@ -209,7 +212,7 @@ class _ShellDevicePageBodyState extends State<_ShellDevicePageBody> {
                   key: page.controlsKey,
                   touch: true,
                   children: [
-                    _connection(context),
+                    ?_connection(context),
                     ShellToolCapsuleItem(
                       glyph: WhisperGlyph.more,
                       touch: true,
@@ -271,25 +274,27 @@ class _ShellDevicePageBodyState extends State<_ShellDevicePageBody> {
                 ),
               ),
               if (known) ...[
-                LiquidSegmented<int>(
-                  key: page.controlsKey,
-                  height: 36,
-                  fontSize: type.note,
-                  segmentPadding: 16,
-                  hitExtend: 6,
-                  segments: {
-                    0: l10n.shellTabChat,
-                    1: l10n.shellTabFiles,
-                    2: l10n.shellTabApps,
-                  },
-                  selected: page.tab,
-                  onChanged: page.onTab,
-                ),
-                const SizedBox(width: 6),
+                if (!session.isWeb) ...[
+                  LiquidSegmented<int>(
+                    key: page.controlsKey,
+                    height: 36,
+                    fontSize: type.note,
+                    segmentPadding: 16,
+                    hitExtend: 6,
+                    segments: {
+                      0: l10n.shellTabChat,
+                      1: l10n.shellTabFiles,
+                      2: l10n.shellTabApps,
+                    },
+                    selected: page.tab,
+                    onChanged: page.onTab,
+                  ),
+                  const SizedBox(width: 6),
+                ],
                 ShellToolCapsule(
                   touch: true,
                   children: [
-                    _connection(context),
+                    ?_connection(context),
                     ShellToolCapsuleItem(
                       glyph: WhisperGlyph.info,
                       touch: true,
@@ -380,20 +385,22 @@ class _ShellDevicePageBodyState extends State<_ShellDevicePageBody> {
                                 (session.isConnected ||
                                     page.paired ||
                                     !session.isNearby)) ...[
-                              LiquidSegmented<int>(
-                                key: page.controlsKey,
-                                segments: {
-                                  0: l10n.shellTabChat,
-                                  1: l10n.shellTabFiles,
-                                  2: l10n.shellTabApps,
-                                },
-                                selected: page.tab,
-                                onChanged: page.onTab,
-                              ),
-                              const SizedBox(width: 6),
+                              if (!session.isWeb) ...[
+                                LiquidSegmented<int>(
+                                  key: page.controlsKey,
+                                  segments: {
+                                    0: l10n.shellTabChat,
+                                    1: l10n.shellTabFiles,
+                                    2: l10n.shellTabApps,
+                                  },
+                                  selected: page.tab,
+                                  onChanged: page.onTab,
+                                ),
+                                const SizedBox(width: 6),
+                              ],
                               ShellToolCapsule(
                                 children: [
-                                  _connection(context),
+                                  ?_connection(context),
                                   ShellToolCapsuleItem(
                                     glyph: WhisperGlyph.info,
                                     color: c.ink,
@@ -437,8 +444,12 @@ class _ShellDevicePageBodyState extends State<_ShellDevicePageBody> {
                                 session.isNearby
                             ? page._away(context)
                             : WhisperTabView(
-                                index: session.isSelf ? 0 : page.tab,
-                                itemCount: session.isSelf ? 1 : 3,
+                                index: session.isSelf || session.isWeb
+                                    ? 0
+                                    : page.tab,
+                                itemCount: session.isSelf || session.isWeb
+                                    ? 1
+                                    : 3,
                                 contentKey: (device, session.isConnected),
                                 heavyPages: true,
                                 resetKey: session.isConnected,

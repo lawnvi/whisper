@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
+import 'package:whisper/web_transfer/web_transfer_visitor.dart';
 import 'package:whisper/helper/local.dart';
 import 'package:whisper/helper/macos_permissions.dart';
 import 'package:whisper/model/LocalDatabase.dart';
@@ -482,7 +483,9 @@ class ShellInputController extends ChangeNotifier {
   }) {
     final desktops = [
       for (final device in devices)
-        if (!deviceKindFor(device.platform).handheld) device,
+        if (!deviceKindFor(device.platform).handheld &&
+            !isWebVisitorUid(device.uid))
+          device,
     ];
     if (self != null) _selfName = self.name;
     final signature = _signatureOf(desktops);

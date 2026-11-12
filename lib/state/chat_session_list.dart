@@ -1,5 +1,6 @@
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/message.dart';
+import 'package:whisper/web_transfer/web_transfer_visitor.dart';
 
 class ChatSessionPreviewStrings {
   const ChatSessionPreviewStrings({
@@ -7,12 +8,14 @@ class ChatSessionPreviewStrings {
     required this.nearbyAvailable,
     required this.noMessagesYet,
     required this.sharedFile,
+    required this.connectedByWeb,
   });
 
   final String connectedNow;
   final String nearbyAvailable;
   final String noMessagesYet;
   final String sharedFile;
+  final String connectedByWeb;
 }
 
 class ChatSessionItem {
@@ -25,6 +28,7 @@ class ChatSessionItem {
     required this.isNearby,
     required this.hasHistory,
     this.isSelf = false,
+    this.isWebOnline = false,
   });
 
   final DeviceData device;
@@ -37,6 +41,13 @@ class ChatSessionItem {
 
   /// 本机: this device itself, which nothing connects to.
   final bool isSelf;
+
+  /// A browser's visit (web transfer) whose page is open now. Not
+  /// [isConnected], which is for Whisper devices and what they can do.
+  final bool isWebOnline;
+
+  /// A browser that visited through web transfer: only a conversation.
+  bool get isWeb => isWebVisitorUid(device.uid);
 
   bool matches(String query) {
     final normalized = query.trim().toLowerCase();
@@ -65,6 +76,7 @@ class ChatSessionListBuilder {
     Set<String> connectedPeerIds = const <String>{},
     String? selectedPeerId,
     String? selfUid,
+    Set<String> webOnline = const <String>{},
     required ChatSessionPreviewStrings strings,
   }) {
     final connected = <String>{
@@ -76,6 +88,7 @@ class ChatSessionListBuilder {
           (device) =>
               device.uid == selfUid ||
               connected.contains(device.uid) ||
+              webOnline.contains(device.uid) ||
               device.around == true ||
               device.auth ||
               latestMessages.containsKey(device.uid),
@@ -87,6 +100,7 @@ class ChatSessionListBuilder {
             connectedPeerIds: connected,
             strings: strings,
             isSelf: device.uid == selfUid,
+            isWebOnline: webOnline.contains(device.uid),
           ),
         )
         .toList(growable: false);
@@ -123,6 +137,7 @@ class ChatSessionListBuilder {
     required Set<String> connectedPeerIds,
     required ChatSessionPreviewStrings strings,
     bool isSelf = false,
+    bool isWebOnline = false,
   }) {
     final isConnected = connectedPeerIds.contains(device.uid);
     final isNearby = device.around == true;
@@ -136,6 +151,7 @@ class ChatSessionListBuilder {
         latestMessage: latestMessage,
         isConnected: isConnected,
         isNearby: isNearby,
+        isWebOnline: isWebOnline,
         strings: strings,
       ),
       lastTimestamp: lastTimestamp,
@@ -143,11 +159,12 @@ class ChatSessionListBuilder {
       isNearby: isNearby,
       hasHistory: hasHistory,
       isSelf: isSelf,
+      isWebOnline: isWebOnline,
     );
   }
 
   static int _rank(ChatSessionItem item) {
-    if (item.isConnected) {
+    if (item.isConnected || item.isWebOnline) {
       return 0;
     }
     if (item.isNearby || item.isSelf) {
@@ -160,6 +177,7 @@ class ChatSessionListBuilder {
     required MessageData? latestMessage,
     required bool isConnected,
     required bool isNearby,
+    required bool isWebOnline,
     required ChatSessionPreviewStrings strings,
   }) {
     if (latestMessage != null) {
@@ -175,6 +193,9 @@ class ChatSessionListBuilder {
     }
     if (isConnected) {
       return strings.connectedNow;
+    }
+    if (isWebOnline) {
+      return strings.connectedByWeb;
     }
     if (isNearby) {
       return strings.nearbyAvailable;

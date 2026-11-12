@@ -1659,5 +1659,49 @@
       }
     }
   },
-  "mediaPileCollapse": "Contraer"
+  "mediaPileCollapse": "Contraer",
+  "webTransferEntry": "¿El otro dispositivo no tiene Whisper? Usa la transferencia web",
+  "webTransferTitle": "Transferencia web",
+  "webTransferHint": "En un teléfono u ordenador de la misma red, escanea el código con la cámara o abre esto en un navegador:",
+  "webTransferPlain": "La página y este dispositivo se comunican sin cifrar. No envíes archivos privados en una red pública.",
+  "webTransferStarting": "Iniciando…",
+  "webTransferUnavailable": "La transferencia web no puede iniciarse ahora. Se volverá a intentar en breve.",
+  "webTransferCopyAddress": "Copiar dirección",
+  "webTransferAsk": "{name} quiere conectarse con la transferencia web",
+  "@webTransferAsk": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "webTransferAskAgain": "{name} quiere volver a conectarse",
+  "@webTransferAskAgain": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "webTransferCompare": "Comprueba que muestre este número",
+  "webTransferAllow": "Permitir",
+  "webTransferConnected": "Conectado por la web",
+  "webTransferVia": "Conectado por la web · {browser}",
+  "@webTransferVia": {
+    "placeholders": {
+      "browser": {
+        "type": "String"
+      }
+    }
+  },
+  "webTransferEnded": "La página de {device} está desconectada",
+  "@webTransferEnded": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "webTransferAwaitingDownload": "Esperando la descarga",
+  "webTransferNoFolders": "Una página web no puede recibir carpetas. Comprímela antes en un archivo."
 }

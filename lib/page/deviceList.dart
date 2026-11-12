@@ -121,6 +121,9 @@ import '../window_stream/android/phone_identity.dart';
 import '../window_stream/window_stream_coordinator.dart';
 import 'remote_files/remote_files_page.dart';
 import 'window_stream/flow_space_page.dart';
+import '../new_ui/shell/shell_web_transfer.dart';
+import '../web_transfer/web_transfer_coordinator.dart';
+import '../web_transfer/web_transfer_visitor.dart';
 
 enum DeviceListOperationKind {
   temporaryFileCleanup,
@@ -351,6 +354,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     WidgetsBinding.instance.addObserver(this);
     // A file-manager copy's message went away: previews follow.
     TransferPlacements.shared.addListener(_onCopiesChanged);
+    _webRequests.attach();
     _setDesktopWindow();
     _localNetworkPermissionBootstrap = _requestLocalNetworkPermission();
     unawaited(PhoneStreamIdentity.publish());
@@ -682,6 +686,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
       return;
     }
     TransferPlacements.shared.removeListener(_onCopiesChanged);
+    _webRequests.detach();
     ++_clipboardWatcherGeneration;
     // 在这里执行一些清理操作，比如取消订阅、关闭流、释放资源等
     _broadcastRestartTimer?.cancel();
@@ -1366,6 +1371,8 @@ class _DeviceListScreen extends State<DeviceListScreen>
   Future<void> _shutdownDesktopResources() {
     return _desktopShutdownFuture ??= _shutdownCoordinator.run([
       CastReceiverManager.shared.stop,
+      // Before the server goes: each page hears that the visit ended.
+      WebTransferCoordinator.shared.shutdown,
       ShareLinkStore.shared.shutdown,
       PlaybackWindowBridge.videos.close,
       WindowStreamCoordinator.shared.shutdown,
@@ -1716,7 +1723,11 @@ class _DeviceListScreen extends State<DeviceListScreen>
       for (final item in arr) item.uid: item,
     };
     await ConnectionCoordinator().bootstrap(temp.uid);
-    await ConnectionCoordinator().syncKnownDevices(arr);
+    // A browser (web transfer) is never connected to or looked for.
+    await ConnectionCoordinator().syncKnownDevices([
+      for (final item in arr)
+        if (!isWebVisitorUid(item.uid)) item,
+    ]);
     if (!mounted) return;
     var newArr = <DeviceData>[];
     var aroundIds = <String>{};
@@ -1773,6 +1784,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
           ? null
           : socketManager.receiver,
       connectedPeerIds: socketManager.connectedPeerIds,
+      webOnline: WebTransferCoordinator.shared.onlineUids,
       selectedPeerId: _selectedDesktopPeerId,
       selfUid: temp.uid,
       strings: _sessionPreviewStrings(context),
@@ -1838,6 +1850,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
       nearbyAvailable: l10n?.nearbyAvailable ?? '附近可连接',
       noMessagesYet: l10n?.noMessagesYet ?? '还没有消息',
       sharedFile: l10n?.sharedFile ?? '发送了一个文件',
+      connectedByWeb: l10n?.webTransferConnected ?? '通过网页连接',
     );
   }
 
@@ -2498,7 +2511,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
         ConnectionLifecycleState.reconnecting => !session.isConnected,
         _ => false,
       },
-      connected: session.isConnected,
+      connected: session.isConnected || session.isWebOnline,
       paired: _isTrustedDevice(session.device),
       nearby: session.isNearby,
       // With messages the row has their time at the end of its first line.
@@ -2681,7 +2694,11 @@ class _DeviceListScreen extends State<DeviceListScreen>
       });
     },
     connect: _shellConnect,
-    disconnect: (target) => unawaited(socketManager.disconnectPeer(target.uid)),
+    disconnect: (target) => unawaited(
+      isWebVisitorUid(target.uid)
+          ? WebTransferCoordinator.shared.end(target.uid)
+          : socketManager.disconnectPeer(target.uid),
+    ),
     openPairing: ({bool startWithAddress = false}) =>
         _openPairingQr(startWithAddress: startWithAddress),
     removeDevice: _removeDevice,
@@ -3190,6 +3207,15 @@ class _DeviceListScreen extends State<DeviceListScreen>
       }
     }
   }
+
+  /// Web transfer's requests on the island; who it let in opens on screen.
+  late final _webRequests = WebTransferRequests(
+    l10n: () => mounted ? AppLocalizations.of(context) : null,
+    onChanged: () => unawaited(_refreshDevice()),
+    onAllowed: (uid) => unawaited(
+      _refreshDevice().then((_) => mounted ? _shellShowDevice(uid) : null),
+    ),
+  );
 
   /// A device on screen: selected beside a sidebar, the top of the stack on a
   /// phone, whichever way the window is now.

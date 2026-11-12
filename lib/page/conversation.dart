@@ -70,6 +70,8 @@ import 'package:whisper/widget/glass_bottom_sheet.dart';
 import 'package:whisper/widget/media_message_preview.dart';
 import 'package:whisper/widget/message_link_text.dart';
 import 'package:whisper/widget/pairing_dialog.dart';
+import 'package:whisper/web_transfer/web_transfer_coordinator.dart';
+import 'package:whisper/web_transfer/web_transfer_visitor.dart';
 
 import '../helper/file.dart';
 import '../helper/helper.dart';
@@ -178,6 +180,10 @@ class _SendMessageScreen extends State<SendMessageScreen>
   final Map<String, bool> keyPressedMap = <String, bool>{};
   final key = GlobalKey<SliverAnimatedListState>();
   bool _isLocalhost = false;
+  final _web = WebTransferCoordinator.shared;
+
+  /// A browser (web transfer): texts and files, nothing else.
+  bool get _isWeb => isWebVisitorUid(device.uid);
   bool _isLoading = false; // loading file
   bool get embedded => widget.embedded;
 
@@ -253,6 +259,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
     _audioCoordinator.addListener(_handleAudioShareChanged);
     _audioGroupCoordinator.addListener(_handleAudioGroupChanged);
     _remoteInputCoordinator.addListener(_handleRemoteInputChanged);
+    _web.addListener(_historyChanged);
     // Before the listener: the first build has not happened yet.
     if (ComposerDrafts.shared.of(device.uid) case final draft?) {
       _textController.text = draft.text;
@@ -287,6 +294,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
     _audioCoordinator.removeListener(_handleAudioShareChanged);
     _audioGroupCoordinator.removeListener(_handleAudioGroupChanged);
     _remoteInputCoordinator.removeListener(_handleRemoteInputChanged);
+    _web.removeListener(_historyChanged);
     _history.removeListener(_historyChanged);
     _history.dispose();
     _scrollController.removeListener(_scrollListener);
@@ -600,7 +608,10 @@ class _SendMessageScreen extends State<SendMessageScreen>
     double? progressOverride,
   }) {
     if (transfer == null) {
-      return _messageSizeLabel(message);
+      // Offered to a browser, which has not fetched it yet.
+      return _isWeb && message.receiver == device.uid
+          ? l10n.webTransferAwaitingDownload
+          : _messageSizeLabel(message);
     }
     final progress = progressOverride ?? transfer.progress;
     switch (transfer.state) {
@@ -635,6 +646,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
   }
 
   Future<void> _retryTransfer(String transferId) async {
+    if (_isWeb) return;
     await socketManager.retryTransfer(transferId);
   }
 
@@ -658,6 +670,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
   }
 
   Future<void> _cancelTransfer(String transferId) async {
+    if (_isWeb) return _web.cancel(transferId);
     await socketManager.cancelTransfer(transferId);
   }
 
@@ -928,6 +941,10 @@ class _SendMessageScreen extends State<SendMessageScreen>
   /// Sends a folder as one transfer. Scanning a large tree takes a moment,
   /// during which the composer shows that it is busy.
   Future<bool> _sendFolder(String path) async {
+    if (_isWeb) {
+      showAppToast(l10n.webTransferNoFolders, tone: AppToastTone.error);
+      return false;
+    }
     if (mounted) {
       setState(() => _isLoading = true);
     }
@@ -970,7 +987,9 @@ class _SendMessageScreen extends State<SendMessageScreen>
   }
 
   bool get _canSendCurrentDevice {
-    return _isLocalhost || socketManager.isConnectedTo(device.uid);
+    return _isLocalhost ||
+        socketManager.isConnectedTo(device.uid) ||
+        _web.canSend(device.uid);
   }
 
   bool get _isConnectedSession {
@@ -1078,6 +1097,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
   /// Control (when it is a computer), files and apps: the phone's way into what
   /// a desktop shows as tabs. They stay in place while disconnected, dimmed.
   List<ShellDeviceEntry> _phoneEntries() {
+    if (_isWeb) return const [];
     final on = _isConnectedSession;
     void push(WidgetBuilder builder) => unawaited(
       Navigator.push<void>(context, WhisperPageRoute<void>(builder: builder)),
@@ -1401,6 +1421,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
   /// What this device can do from here, for its page. Rows show while it
   /// is offline too, dimmed, so where to find them stays the same.
   List<app_settings.DeviceFeature> _deviceFeatures() {
+    if (_isWeb) return const [];
     final capabilities = socketManager
         .remoteProfileFor(device.uid)
         ?.capabilities;
@@ -1586,7 +1607,9 @@ class _SendMessageScreen extends State<SendMessageScreen>
       pendingClipboardFiles: _pendingClipboardFiles,
       pendingClipboardImages: _pendingClipboardImages,
       onPickFiles: _pickFilesAndSend,
-      onPickFolder: isDesktop() && !_isLocalhost ? _pickFolderAndSend : null,
+      onPickFolder: isDesktop() && !_isLocalhost && !_isWeb
+          ? _pickFolderAndSend
+          : null,
       onSendClipboard: () async {
         await _sendText("", isClipboard: true);
       },
@@ -1599,7 +1622,9 @@ class _SendMessageScreen extends State<SendMessageScreen>
       onRemoveClipboardImage: _removePendingClipboardImage,
       onEditClipboardImage: _markUpPendingClipboardImage,
       composerHint: l10n.shellComposerHint(device.label),
-      disabledHint: l10n.shellComposerOffline(device.label),
+      disabledHint: _isWeb
+          ? l10n.webTransferEnded(device.label)
+          : l10n.shellComposerOffline(device.label),
     );
   }
 
@@ -1838,6 +1863,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
 
   /// What sending means in 本机: it goes in the list, and nowhere else.
   Future<bool> _sendFile(String path, {bool draft = false}) async {
+    if (_isWeb) return _web.sendFile(device.uid, path, draft: draft);
     if (!_isLocalhost) return socketManager.sendFileTo(device.uid, path);
     _noteAdded(await SelfNotes(db).addFile(device.uid, path, draft: draft));
     return true;
@@ -1887,6 +1913,13 @@ class _SendMessageScreen extends State<SendMessageScreen>
               name: item.name,
               size: item.size,
             ),
+          );
+        } else if (_isWeb) {
+          await _web.sendFile(
+            device.uid,
+            item.path ?? item.androidContentUri ?? '',
+            name: item.name,
+            size: item.size,
           );
         } else {
           await socketManager.sendPickedFileTo(device.uid, item);
@@ -2426,6 +2459,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
         _noteAdded(await SelfNotes(db).addText(device.uid, content));
         return true;
       }
+      if (_isWeb) return _web.sendText(device.uid, content);
       if (!socketManager.isConnectedTo(device.uid)) {
         if (mounted) {
           showAppToast(l10n.messageSendFailed, tone: AppToastTone.error);

@@ -10,6 +10,7 @@ import 'package:whisper/new_ui/phone/phone_parts.dart';
 import 'package:whisper/new_ui/phone/phone_viewfinder.dart';
 import 'package:whisper/new_ui/shell/shell_parts.dart';
 import 'package:whisper/new_ui/shell/shell_touch.dart';
+import 'package:whisper/new_ui/shell/shell_web_transfer.dart';
 import 'package:whisper/page/pairing_qr.dart';
 import 'package:whisper/state/pairing_invite.dart';
 import 'package:whisper/state/peer_endpoint.dart';
@@ -81,6 +82,9 @@ class _PhoneConnectPageState extends State<PhoneConnectPage>
   late int _tab = widget.startWithAddress ? _addressTab : _qrTab;
   late PairingInvite? _invite = widget.localInvite;
   bool _reloading = false;
+
+  /// The code turned over to web transfer.
+  bool _web = false;
 
   // Scan.
   PhoneScannerHandle? _camera;
@@ -416,118 +420,136 @@ class _PhoneConnectPageState extends State<PhoneConnectPage>
         : l10n.phoneConnectCopyLink;
     return SingleChildScrollView(
       padding: _pagePadding,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          DecoratedBox(
-            decoration: BoxDecoration(
-              color: c.group,
-              borderRadius: BorderRadius.circular(WhisperRadius.l),
-              boxShadow: WhisperShadow.e1(brightness),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 22, 16, 18),
-              // Too short for the code over its words: side by side.
-              child: _CodeAndWords(
-                beside: WhisperLayout.of(context).shortHeight,
-                code: [
-                  if (text != null)
-                    Semantics(
-                      label: l10n.qrMyCode,
-                      image: true,
-                      child: Container(
-                        width: 196,
-                        height: 196,
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(WhisperRadius.m),
-                        ),
-                        child: _qrImage(text),
-                      ),
-                    )
-                  else
-                    // Where the code would be, so that nothing else moves.
-                    ConstrainedBox(
-                      key: const ValueKey('connect-no-lan'),
-                      constraints: const BoxConstraints(minHeight: 196),
-                      child: Center(
-                        heightFactor: 1,
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              l10n.qrWifiUnavailable,
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: type.note,
-                                height: 1.5,
-                                color: c.ink2,
+      child: ShellFaceSwitch(
+        back: !_web,
+        child: _web
+            ? WebTransferPhoneFace(
+                key: const ValueKey('web'),
+                onBack: () => setState(() => _web = false),
+              )
+            : Column(
+                key: const ValueKey('code'),
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: c.group,
+                      borderRadius: BorderRadius.circular(WhisperRadius.l),
+                      boxShadow: WhisperShadow.e1(brightness),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 22, 16, 18),
+                      // Too short for the code over its words: side by side.
+                      child: _CodeAndWords(
+                        beside: WhisperLayout.of(context).shortHeight,
+                        code: [
+                          if (text != null)
+                            Semantics(
+                              label: l10n.qrMyCode,
+                              image: true,
+                              child: Container(
+                                width: 196,
+                                height: 196,
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(
+                                    WhisperRadius.m,
+                                  ),
+                                ),
+                                child: _qrImage(text),
+                              ),
+                            )
+                          else
+                            // Where the code would be, so that nothing else moves.
+                            ConstrainedBox(
+                              key: const ValueKey('connect-no-lan'),
+                              constraints: const BoxConstraints(minHeight: 196),
+                              child: Center(
+                                heightFactor: 1,
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      l10n.qrWifiUnavailable,
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        fontSize: type.note,
+                                        height: 1.5,
+                                        color: c.ink2,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    PhoneButton(
+                                      key: const ValueKey('connect-retry-lan'),
+                                      label: l10n.windowStreamRetry,
+                                      onTap: _reloading
+                                          ? null
+                                          : () => unawaited(_reloadInvite()),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
-                            const SizedBox(height: 12),
-                            PhoneButton(
-                              key: const ValueKey('connect-retry-lan'),
-                              label: l10n.windowStreamRetry,
-                              onTap: _reloading
-                                  ? null
-                                  : () => unawaited(_reloadInvite()),
+                        ],
+                        words: [
+                          Text(
+                            widget.localName,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: type.head,
+                              height: 1.4,
+                              fontWeight: FontWeight.w600,
+                              color: c.ink,
                             ),
-                          ],
-                        ),
+                          ),
+                          const SizedBox(height: 4),
+                          // Not without a code, with its room kept for when one comes.
+                        ],
                       ),
                     ),
-                ],
-                words: [
-                  Text(
-                    widget.localName,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: type.head,
-                      height: 1.4,
-                      fontWeight: FontWeight.w600,
-                      color: c.ink,
+                  ),
+                  const SizedBox(height: 16),
+                  ShellGroup(
+                    children: [
+                      PhoneInfoRow(
+                        label: l10n.shellSelfAddress,
+                        value: invite == null
+                            ? '—'
+                            : '${invite.host}:${invite.port}',
+                      ),
+                      PhoneInfoRow(
+                        label: l10n.shellSelfFingerprint,
+                        value: _shortFingerprint(fingerprint),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Center(
+                    child: Semantics(
+                      liveRegion: true,
+                      value: _copied || _copyFailed ? copyLabel : null,
+                      child: PhoneButton(
+                        key: const ValueKey('copy-pairing-invite'),
+                        large: true,
+                        glyph: _copied
+                            ? WhisperGlyph.check
+                            : _copyFailed
+                            ? WhisperGlyph.warn
+                            : WhisperGlyph.copy,
+                        label: copyLabel,
+                        onTap: text == null || _copying
+                            ? null
+                            : () => unawaited(_copyInvite(text)),
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  // Not without a code, with its room kept for when one comes.
+                  const SizedBox(height: 8),
+                  WebTransferEntry(
+                    touch: true,
+                    onTap: () => setState(() => _web = true),
+                  ),
                 ],
               ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          ShellGroup(
-            children: [
-              PhoneInfoRow(
-                label: l10n.shellSelfAddress,
-                value: invite == null ? '—' : '${invite.host}:${invite.port}',
-              ),
-              PhoneInfoRow(
-                label: l10n.shellSelfFingerprint,
-                value: _shortFingerprint(fingerprint),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Center(
-            child: Semantics(
-              liveRegion: true,
-              value: _copied || _copyFailed ? copyLabel : null,
-              child: PhoneButton(
-                key: const ValueKey('copy-pairing-invite'),
-                large: true,
-                glyph: _copied
-                    ? WhisperGlyph.check
-                    : _copyFailed
-                    ? WhisperGlyph.warn
-                    : WhisperGlyph.copy,
-                label: copyLabel,
-                onTap: text == null || _copying
-                    ? null
-                    : () => unawaited(_copyInvite(text)),
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

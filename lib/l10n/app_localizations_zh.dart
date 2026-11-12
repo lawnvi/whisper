@@ -3641,4 +3641,60 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get mediaPileCollapse => '收起';
+
+  @override
+  String get webTransferEntry => '对方没有 Whisper？用网页传输';
+
+  @override
+  String get webTransferTitle => '网页传输';
+
+  @override
+  String get webTransferHint => '同一网络里的手机或电脑，用相机扫码，或者在浏览器里打开：';
+
+  @override
+  String get webTransferPlain => '网页和这台之间不加密，别在公共网络里传私密文件';
+
+  @override
+  String get webTransferStarting => '正在打开…';
+
+  @override
+  String get webTransferUnavailable => '现在打不开网页传输，稍后会自动重试';
+
+  @override
+  String get webTransferCopyAddress => '拷贝地址';
+
+  @override
+  String webTransferAsk(String name) {
+    return '$name 想用网页传输连接';
+  }
+
+  @override
+  String webTransferAskAgain(String name) {
+    return '$name 想再次连接';
+  }
+
+  @override
+  String get webTransferCompare => '核对它显示的数字';
+
+  @override
+  String get webTransferAllow => '允许';
+
+  @override
+  String get webTransferConnected => '通过网页连接';
+
+  @override
+  String webTransferVia(String browser) {
+    return '通过网页连接 · $browser';
+  }
+
+  @override
+  String webTransferEnded(String device) {
+    return '$device 的网页已断开';
+  }
+
+  @override
+  String get webTransferAwaitingDownload => '等对方下载';
+
+  @override
+  String get webTransferNoFolders => '网页不能接收文件夹，可以先压缩成一个文件';
 }

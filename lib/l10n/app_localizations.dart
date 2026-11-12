@@ -6458,6 +6458,102 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'收起'**
   String get mediaPileCollapse;
+
+  /// No description provided for @webTransferEntry.
+  ///
+  /// In zh, this message translates to:
+  /// **'对方没有 Whisper？用网页传输'**
+  String get webTransferEntry;
+
+  /// No description provided for @webTransferTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'网页传输'**
+  String get webTransferTitle;
+
+  /// No description provided for @webTransferHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'同一网络里的手机或电脑，用相机扫码，或者在浏览器里打开：'**
+  String get webTransferHint;
+
+  /// No description provided for @webTransferPlain.
+  ///
+  /// In zh, this message translates to:
+  /// **'网页和这台之间不加密，别在公共网络里传私密文件'**
+  String get webTransferPlain;
+
+  /// No description provided for @webTransferStarting.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在打开…'**
+  String get webTransferStarting;
+
+  /// No description provided for @webTransferUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'现在打不开网页传输，稍后会自动重试'**
+  String get webTransferUnavailable;
+
+  /// No description provided for @webTransferCopyAddress.
+  ///
+  /// In zh, this message translates to:
+  /// **'拷贝地址'**
+  String get webTransferCopyAddress;
+
+  /// No description provided for @webTransferAsk.
+  ///
+  /// In zh, this message translates to:
+  /// **'{name} 想用网页传输连接'**
+  String webTransferAsk(String name);
+
+  /// No description provided for @webTransferAskAgain.
+  ///
+  /// In zh, this message translates to:
+  /// **'{name} 想再次连接'**
+  String webTransferAskAgain(String name);
+
+  /// No description provided for @webTransferCompare.
+  ///
+  /// In zh, this message translates to:
+  /// **'核对它显示的数字'**
+  String get webTransferCompare;
+
+  /// No description provided for @webTransferAllow.
+  ///
+  /// In zh, this message translates to:
+  /// **'允许'**
+  String get webTransferAllow;
+
+  /// No description provided for @webTransferConnected.
+  ///
+  /// In zh, this message translates to:
+  /// **'通过网页连接'**
+  String get webTransferConnected;
+
+  /// No description provided for @webTransferVia.
+  ///
+  /// In zh, this message translates to:
+  /// **'通过网页连接 · {browser}'**
+  String webTransferVia(String browser);
+
+  /// No description provided for @webTransferEnded.
+  ///
+  /// In zh, this message translates to:
+  /// **'{device} 的网页已断开'**
+  String webTransferEnded(String device);
+
+  /// No description provided for @webTransferAwaitingDownload.
+  ///
+  /// In zh, this message translates to:
+  /// **'等对方下载'**
+  String get webTransferAwaitingDownload;
+
+  /// No description provided for @webTransferNoFolders.
+  ///
+  /// In zh, this message translates to:
+  /// **'网页不能接收文件夹，可以先压缩成一个文件'**
+  String get webTransferNoFolders;
 }
 
 class _AppLocalizationsDelegate

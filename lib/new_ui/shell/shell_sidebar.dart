@@ -352,7 +352,7 @@ class _DeviceRow extends StatelessWidget {
     final device = session.device;
     final live = deviceRowLineIsLive(deviceRowLine(facts));
     final avatar = touch ? 48.0 : 38.0;
-    final state = session.isConnected || session.isSelf
+    final state = session.isConnected || session.isSelf || session.isWebOnline
         ? c.deviceOn
         : session.isNearby
         ? c.deviceNear

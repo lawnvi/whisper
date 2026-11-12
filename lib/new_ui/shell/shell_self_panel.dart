@@ -7,6 +7,7 @@ import 'package:whisper/helper/helper.dart';
 import 'package:whisper/helper/local.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/new_ui/shell/shell_parts.dart';
+import 'package:whisper/new_ui/shell/shell_web_transfer.dart';
 import 'package:whisper/socket/device_identity.dart';
 import 'package:whisper/socket/peer_socket_session.dart';
 import 'package:whisper/state/pairing_invite.dart';
@@ -33,6 +34,9 @@ class _ShellSelfPanelState extends State<ShellSelfPanel> {
   String? _fingerprint;
   bool _loaded = false;
   bool _copied = false;
+
+  /// Turned over to web transfer.
+  bool _web = false;
   Timer? _copiedReset;
 
   @override
@@ -97,73 +101,105 @@ class _ShellSelfPanelState extends State<ShellSelfPanel> {
         style: TextStyle(fontSize: 12, color: c.ink2),
       ),
     );
-    return ShellSheetBody(
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (self != null)
-            Center(
-              child: DeviceArt(
-                kind: selfKindOf(self),
-                os: deviceOsFor(self.platform),
-                wallpaper: DeviceWallpaper.self,
-                size: 96,
-              ),
+    if (_web) {
+      return ShellSheetBody(
+        content: const ShellFaceSwitch(
+          child: WebTransferFace(key: ValueKey('web')),
+        ),
+        actions: Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            ShellButton(
+              label: l10n.back,
+              onTap: () => setState(() => _web = false),
             ),
-          const SizedBox(height: 10),
-          Text(
-            self?.name ?? '',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: type.title,
-              height: 1.25,
-              fontWeight: FontWeight.w600,
-              color: c.ink,
-            ),
-          ),
-          const SizedBox(height: 14),
-          if (_loaded && invite == null)
-            Text(
-              l10n.shellSelfNoLan,
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: type.note, height: 1.5, color: c.warn),
-            )
-          else if (invite != null) ...[
-            Center(
-              child: Container(
-                width: 148,
-                height: 148,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(WhisperRadius.m),
-                  boxShadow: WhisperShadow.e1(Theme.of(context).brightness),
-                ),
-                child: QrImageView(
-                  data: invite.encode(),
-                  padding: const EdgeInsets.all(10),
-                  backgroundColor: Colors.transparent,
-                ),
-              ),
+            const SizedBox(width: 8),
+            ShellButton(
+              label: l10n.shellDone,
+              kind: ShellButtonKind.primary,
+              onTap: () => Navigator.of(context).pop(),
             ),
           ],
-          const SizedBox(height: 14),
-          ShellGroup(
-            flat: true,
-            children: [
-              ShellRow(
-                label: l10n.shellSelfAddress,
-                trailing: code(
-                  invite == null ? '—' : '${invite.host}:${invite.port}',
+        ),
+      );
+    }
+    return ShellSheetBody(
+      content: ShellFaceSwitch(
+        back: true,
+        child: Column(
+          key: const ValueKey('code'),
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (self != null)
+              Center(
+                child: DeviceArt(
+                  kind: selfKindOf(self),
+                  os: deviceOsFor(self.platform),
+                  wallpaper: DeviceWallpaper.self,
+                  size: 96,
                 ),
               ),
-              ShellRow(
-                label: l10n.shellSelfFingerprint,
-                trailing: code(fingerprint ?? '—'),
+            const SizedBox(height: 10),
+            Text(
+              self?.name ?? '',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: type.title,
+                height: 1.25,
+                fontWeight: FontWeight.w600,
+                color: c.ink,
+              ),
+            ),
+            const SizedBox(height: 14),
+            if (_loaded && invite == null)
+              Text(
+                l10n.shellSelfNoLan,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: type.note,
+                  height: 1.5,
+                  color: c.warn,
+                ),
+              )
+            else if (invite != null) ...[
+              Center(
+                child: Container(
+                  width: 148,
+                  height: 148,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(WhisperRadius.m),
+                    boxShadow: WhisperShadow.e1(Theme.of(context).brightness),
+                  ),
+                  child: QrImageView(
+                    data: invite.encode(),
+                    padding: const EdgeInsets.all(10),
+                    backgroundColor: Colors.transparent,
+                  ),
+                ),
               ),
             ],
-          ),
-        ],
+            const SizedBox(height: 14),
+            ShellGroup(
+              flat: true,
+              children: [
+                ShellRow(
+                  label: l10n.shellSelfAddress,
+                  trailing: code(
+                    invite == null ? '—' : '${invite.host}:${invite.port}',
+                  ),
+                ),
+                ShellRow(
+                  label: l10n.shellSelfFingerprint,
+                  trailing: code(fingerprint ?? '—'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            WebTransferEntry(onTap: () => setState(() => _web = true)),
+          ],
+        ),
       ),
       actions: Row(
         mainAxisAlignment: MainAxisAlignment.end,

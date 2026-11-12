@@ -2596,5 +2596,49 @@
       }
     }
   },
-  "mediaPileCollapse": "Collapse"
+  "mediaPileCollapse": "Collapse",
+  "webTransferEntry": "No Whisper on the other device? Use Web Transfer",
+  "webTransferTitle": "Web Transfer",
+  "webTransferHint": "On a phone or computer on the same network, scan the code with the camera, or open this in a browser:",
+  "webTransferPlain": "The page and this device talk unencrypted. Don't send private files on a public network.",
+  "webTransferStarting": "Starting…",
+  "webTransferUnavailable": "Web Transfer can't start right now. It will try again shortly.",
+  "webTransferCopyAddress": "Copy address",
+  "webTransferAsk": "{name} wants to connect with Web Transfer",
+  "@webTransferAsk": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "webTransferAskAgain": "{name} wants to connect again",
+  "@webTransferAskAgain": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "webTransferCompare": "Check that it shows this number",
+  "webTransferAllow": "Allow",
+  "webTransferConnected": "Connected through the web",
+  "webTransferVia": "Connected through the web · {browser}",
+  "@webTransferVia": {
+    "placeholders": {
+      "browser": {
+        "type": "String"
+      }
+    }
+  },
+  "webTransferEnded": "{device}'s page is disconnected",
+  "@webTransferEnded": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "webTransferAwaitingDownload": "Waiting to be downloaded",
+  "webTransferNoFolders": "A web page can't receive folders. Compress it into one file first."
 }

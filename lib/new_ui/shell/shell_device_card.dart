@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:whisper/web_transfer/web_transfer_coordinator.dart';
+import 'package:whisper/web_transfer/web_transfer_visitor.dart';
 import 'package:whisper/theme/whisper_device_art.dart';
 import 'package:whisper/helper/file.dart';
 import 'package:whisper/helper/toast.dart';
@@ -204,7 +206,11 @@ class _ShellDeviceCardState extends State<ShellDeviceCard> {
     final touch = widget.touch;
     final type = WhisperType(touch: touch);
     final device = _device;
-    final on = widget.connected;
+    // A browser (web transfer) has only a conversation: none of the switches.
+    final web = isWebVisitorUid(device.uid);
+    final webTransfer = WebTransferCoordinator.shared;
+    final on = widget.connected || webTransfer.isOnline(device.uid);
+    final browser = webTransfer.browserOf(device.uid);
     return Stack(
       children: [
         ColoredBox(
@@ -233,14 +239,20 @@ class _ShellDeviceCardState extends State<ShellDeviceCard> {
                 const SizedBox(height: 2),
                 Text(
                   [
-                    widget.statusLine,
+                    web && on
+                        ? browser == null
+                              ? l10n.webTransferConnected
+                              : l10n.webTransferVia(browser)
+                        : widget.statusLine,
                     ?deviceSystemName(device.platform),
                   ].join(' · '),
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: type.note, color: c.ink2),
                 ),
                 const SizedBox(height: 20),
-                if (touch) ...[
+                if (web)
+                  const SizedBox.shrink()
+                else if (touch) ...[
                   if (widget.entries.isNotEmpty)
                     Center(
                       child: ConstrainedBox(
@@ -336,34 +348,43 @@ class _ShellDeviceCardState extends State<ShellDeviceCard> {
                       ],
                     ),
                   ),
-                const SizedBox(height: 20),
-                ShellGroupLabel(l10n.shellCardCan(device.label), touch: touch),
-                ShellGroup(
-                  children: [
-                    _permission(
-                      l10n.shellCardTrust,
-                      device.auth,
-                      (v) => unawaited(_setTrust(v)),
-                    ),
-                    if (_browseAllowed case final browse?)
+                if (!web) ...[
+                  const SizedBox(height: 20),
+                  ShellGroupLabel(
+                    l10n.shellCardCan(device.label),
+                    touch: touch,
+                  ),
+                  ShellGroup(
+                    children: [
                       _permission(
-                        l10n.shellCardBrowse,
-                        browse,
-                        (v) => unawaited(_setBrowse(v)),
+                        l10n.shellCardTrust,
+                        device.auth,
+                        (v) => unawaited(_setTrust(v)),
                       ),
-                    if (_changesAllowed case final changes?)
-                      _permission(
-                        l10n.shellCardChange,
-                        // Depends on browsing: off and disabled without it.
-                        changes && _browseAllowed == true,
-                        _browseAllowed == true
-                            ? (v) => unawaited(_setChanges(v))
-                            : null,
-                      ),
-                  ],
+                      if (_browseAllowed case final browse?)
+                        _permission(
+                          l10n.shellCardBrowse,
+                          browse,
+                          (v) => unawaited(_setBrowse(v)),
+                        ),
+                      if (_changesAllowed case final changes?)
+                        _permission(
+                          l10n.shellCardChange,
+                          // Depends on browsing: off and disabled without it.
+                          changes && _browseAllowed == true,
+                          _browseAllowed == true
+                              ? (v) => unawaited(_setChanges(v))
+                              : null,
+                        ),
+                    ],
+                  ),
+                ],
+                SizedBox(height: web ? 0 : 20),
+                ShellDeviceAbout(
+                  device: device,
+                  connected: on && !web,
+                  touch: touch,
                 ),
-                const SizedBox(height: 20),
-                ShellDeviceAbout(device: device, connected: on, touch: touch),
                 if (widget.onSearchHistory != null) ...[
                   const SizedBox(height: 20),
                   ShellGroup(
@@ -377,7 +398,7 @@ class _ShellDeviceCardState extends State<ShellDeviceCard> {
                     ],
                   ),
                 ],
-                if (!on) ...[
+                if (!on && !web) ...[
                   const SizedBox(height: 20),
                   ShellGroup(
                     children: [

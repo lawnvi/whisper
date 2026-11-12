@@ -38,6 +38,7 @@
 - [键鼠共享的会话归属与退出](internals/remote-input-lifecycle.md)
 - [电视投屏（DLNA）](internals/cast-receiver.md)
 - [两台设备的手工验收](internals/manual-reliability-check.md)
+- [网页传输](internals/web-transfer.md)
 - 界面：[design/README.md](design/README.md)
 
 **记录**

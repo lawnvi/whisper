@@ -141,8 +141,38 @@ When someone opens the link:
 All links are listed under "Share Links" in the sidebar (on the "Files" home screen on a phone):
 
 - Each link shows its status, visits, downloads, and last visit, and can be copied, shown as a QR code, turned on or off, or deleted. Deleting a link leaves the files on this device alone.
-- "File Server" at the top shows this device's address and port (`10003` by default, or another one when that is taken). The server only runs while at least one link is on; turning it off keeps the links, which just cannot be opened for now.
+- "File Server" at the top shows this device's address and port (`10003` by default, or another one when that is taken). The server only runs while at least one link is on (or while Web Transfer is in use); turning it off keeps the links, which just cannot be opened for now.
 - Only devices on the local network are let in. Links use plain HTTP, so others on the same network may be able to see what is downloaded; the password only keeps people from opening the link casually.
+
+## Web Transfer
+
+When the other device has no Whisper (an iPhone, a borrowed computer), it can still exchange texts and files with this device in a browser. macOS, Windows, Linux, and Android can host it; the other side only needs a browser. This is new, and so far it has only been tried end to end between a Mac and a desktop browser.
+
+1. On a computer, click this device's name at the bottom left; on a phone, open "Connect a device". Under the QR code, tap "No Whisper on the other device? Use Web Transfer".
+2. The other person scans the QR code with the camera, or types the address below it into a browser (for example `http://192.168.1.5:10003/`). On a computer with several networks, the arrows next to the address switch it.
+3. A 4-digit number appears on their page, and a request appears on this device's island. If both show the same number, choose "Allow". A request nobody answers expires after 60 seconds, and they can try again.
+4. Once allowed, they appear in the device list, named after what their browser says it is (iPhone, Android, Windows…), and can be renamed. From then on it works like any other device: texts, files, screenshots and what is on the clipboard.
+
+On their page:
+
+- The "+" on the left picks files (on a phone, from the photo library too). On a computer, files can also be dragged in, or a screenshot pasted into the box. Pictures and videos sent to them show right away; other files have a download arrow. On an iPhone, to save a picture to Photos, open it and touch and hold.
+- The page is in Chinese or English, following the browser; the button at the top right (top left in the conversation) switches.
+- Links to the Whisper website and GitHub are at the bottom of the page.
+
+Ending and coming back:
+
+- Choosing "Disconnect" at the top of the conversation here or on the page, or the page being closed or offline for more than 10 minutes, ends the connection. Messages and received files stay, and the device's row shows it as offline.
+- Reloading the page, or switching apps on a phone and coming back, reconnects within 10 minutes without asking again. After the connection has ended, the same browser has to be allowed again.
+- Quitting Whisper on this device ends every web connection.
+- New requests are only taken while the panel is open; connections already made carry on.
+
+Limits:
+
+- **Not encrypted.** The page and this device talk over plain HTTP, so others on the same network may be able to see what is sent. Don't send private files on a public network.
+- Folders can't be sent either way; compress them into one file first.
+- Files sent from the page are not checked as a whole; the network itself keeps them intact, and an interrupted upload continues from where it stopped.
+- The page has no clipboard sync, notifications, or background connection, and has to stay open while files are sent.
+- At most 4 web visitors at once.
 
 ## Window flow
 

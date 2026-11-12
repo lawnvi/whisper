@@ -3894,4 +3894,65 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get mediaPileCollapse => 'Contraer';
+
+  @override
+  String get webTransferEntry =>
+      '¿El otro dispositivo no tiene Whisper? Usa la transferencia web';
+
+  @override
+  String get webTransferTitle => 'Transferencia web';
+
+  @override
+  String get webTransferHint =>
+      'En un teléfono u ordenador de la misma red, escanea el código con la cámara o abre esto en un navegador:';
+
+  @override
+  String get webTransferPlain =>
+      'La página y este dispositivo se comunican sin cifrar. No envíes archivos privados en una red pública.';
+
+  @override
+  String get webTransferStarting => 'Iniciando…';
+
+  @override
+  String get webTransferUnavailable =>
+      'La transferencia web no puede iniciarse ahora. Se volverá a intentar en breve.';
+
+  @override
+  String get webTransferCopyAddress => 'Copiar dirección';
+
+  @override
+  String webTransferAsk(String name) {
+    return '$name quiere conectarse con la transferencia web';
+  }
+
+  @override
+  String webTransferAskAgain(String name) {
+    return '$name quiere volver a conectarse';
+  }
+
+  @override
+  String get webTransferCompare => 'Comprueba que muestre este número';
+
+  @override
+  String get webTransferAllow => 'Permitir';
+
+  @override
+  String get webTransferConnected => 'Conectado por la web';
+
+  @override
+  String webTransferVia(String browser) {
+    return 'Conectado por la web · $browser';
+  }
+
+  @override
+  String webTransferEnded(String device) {
+    return 'La página de $device está desconectada';
+  }
+
+  @override
+  String get webTransferAwaitingDownload => 'Esperando la descarga';
+
+  @override
+  String get webTransferNoFolders =>
+      'Una página web no puede recibir carpetas. Comprímela antes en un archivo.';
 }

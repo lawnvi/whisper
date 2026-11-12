@@ -3853,4 +3853,65 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get mediaPileCollapse => 'Collapse';
+
+  @override
+  String get webTransferEntry =>
+      'No Whisper on the other device? Use Web Transfer';
+
+  @override
+  String get webTransferTitle => 'Web Transfer';
+
+  @override
+  String get webTransferHint =>
+      'On a phone or computer on the same network, scan the code with the camera, or open this in a browser:';
+
+  @override
+  String get webTransferPlain =>
+      'The page and this device talk unencrypted. Don\'t send private files on a public network.';
+
+  @override
+  String get webTransferStarting => 'Starting…';
+
+  @override
+  String get webTransferUnavailable =>
+      'Web Transfer can\'t start right now. It will try again shortly.';
+
+  @override
+  String get webTransferCopyAddress => 'Copy address';
+
+  @override
+  String webTransferAsk(String name) {
+    return '$name wants to connect with Web Transfer';
+  }
+
+  @override
+  String webTransferAskAgain(String name) {
+    return '$name wants to connect again';
+  }
+
+  @override
+  String get webTransferCompare => 'Check that it shows this number';
+
+  @override
+  String get webTransferAllow => 'Allow';
+
+  @override
+  String get webTransferConnected => 'Connected through the web';
+
+  @override
+  String webTransferVia(String browser) {
+    return 'Connected through the web · $browser';
+  }
+
+  @override
+  String webTransferEnded(String device) {
+    return '$device\'s page is disconnected';
+  }
+
+  @override
+  String get webTransferAwaitingDownload => 'Waiting to be downloaded';
+
+  @override
+  String get webTransferNoFolders =>
+      'A web page can\'t receive folders. Compress it into one file first.';
 }
