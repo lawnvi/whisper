@@ -2,11 +2,12 @@
 // the plate and the colour, for every size that has a word (those that are
 // only the ring are left alone). The icons have no other source.
 //
-//   FONT=NotoSans-Regular.ttf swift tool/icon_word.swift 'wɪspər' <png|ico>...
+//   FONT=NotoSans-Regular.ttf swift tool/icon_word.swift 'wɪspə' <png|ico>...
 //
 // Noto Sans Regular (OFL, notofonts.github.io) has the phonetic letters. The
-// x-height is 0.2214 of the ring's inner radius and the baseline 0.1013 of it
-// below the centre, as the old word on the 2363 px master; letters are set
+// x-height is 0.29 of the ring's inner radius (XHEIGHT; the old word's was
+// 0.2214), its middle where the old word's was, a little above the centre;
+// the colour is #33373D (INK; the old word's was #60646C). Letters are set
 // by their ink, the same gap apart. An .ico keeps its PNG or 32-bit BMP
 // entries as they were. Afterwards, files that had no alpha channel (iOS,
 // assets/app_icon.png) must be made opaque again: the App Store refuses the
@@ -23,6 +24,13 @@ let font = CTFontCreateWithFontDescriptor(descriptor, 100, nil)
 let xHeightPerPoint = CTFontGetXHeight(font) / 100
 /// Between the ink of two letters, of the x-height: as loose as the old word.
 let gapPerXHeight = 0.36
+let env = ProcessInfo.processInfo.environment
+/// Of the ring's inner radius: the x-height, and where the middle of the
+/// x-height sits above the centre (the old word's, kept as the word grows).
+let xHeightPerRadius = Double(env["XHEIGHT"] ?? "") ?? 0.29
+let xMiddlePerRadius = 0.0094
+/// The word's colour, as RRGGBB.
+let inkHex = UInt32(env["INK"] ?? "33373D", radix: 16)
 
 struct Report { var changed = false; var note = "" }
 
@@ -69,9 +77,12 @@ func process(_ image: CGImage) -> (CGImage?, String) {
   if Double(count) < Double(w * h) * 0.002 { return (nil, "ring only (r=\(Int(rIn)))") }
   // As on the 2363 px master, where the old word was measured: small sizes
   // are a few pixels and cannot be measured well.
-  let xHeight = rIn * 0.2214
-  let baseline = Double(cy) + rIn * 0.1013
-  let ink = inks > 0 ? (inkR / inks, inkG / inks, inkB / inks) : (0.376, 0.392, 0.424)
+  let xHeight = rIn * xHeightPerRadius
+  let baseline = Double(cy) + rIn * (xHeightPerRadius / 2 - xMiddlePerRadius)
+  let measured = inks > 0 ? (inkR / inks, inkG / inks, inkB / inks) : (0.376, 0.392, 0.424)
+  let ink = inkHex.map {
+    (Double($0 >> 16 & 0xff) / 255, Double($0 >> 8 & 0xff) / 255, Double($0 & 0xff) / 255)
+  } ?? measured
   let plate = px(cx, cy - Int(rIn * 0.75))
   // Clear inside the ring, leaving its antialiased inner edge.
   ctx.setFillColor(CGColor(colorSpace: space, components: [plate.0, plate.1, plate.2, 1])!)
