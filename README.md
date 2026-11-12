@@ -9,6 +9,7 @@
 LAN file transfer, software KVM, clipboard sync, audio and window streaming between your computers and phones. Free, open source and end-to-end encrypted.
 
 [![Release](https://img.shields.io/github/v/release/lawnvi/whisper?include_prereleases&label=release)](https://github.com/lawnvi/whisper/releases)
+[![Downloads](https://img.shields.io/github/downloads/lawnvi/whisper/total?label=downloads)](https://github.com/lawnvi/whisper/releases)
 ![Platform](https://img.shields.io/badge/platform-Android%20%7C%20macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)
 [![License](https://img.shields.io/badge/license-MIT-green)](./LICENSE)
 
@@ -18,7 +19,7 @@ LAN file transfer, software KVM, clipboard sync, audio and window streaming betw
 
 ![Whisper 文件传输](.github/image/file-share.png)
 
-Whisper 是一个局域网协作工具。设备配对后通过加密通道直接相连，数据不经过任何服务器；一台设备可以同时连接多台电脑和手机。
+Whisper 是一个局域网协作工具。设备配对后通过加密通道直接相连，数据不经过任何服务器，不用注册账号，断了外网也能用。一台设备可以同时连接多台电脑和手机。
 
 > 本项目与 OpenAI 的 Whisper 语音识别模型无关。
 
@@ -26,22 +27,17 @@ Whisper 是一个局域网协作工具。设备配对后通过加密通道直接
 
 | 功能 | 说明 |
 | --- | --- |
-| **文本与文件** | 像聊天一样发送；文件断线后可续传，接收时自动校验 |
-| **本机** | 和这台设备自己的会话，附近没有设备时也能存文字和文件，什么都不会发出去 |
-| **文件夹** | 桌面端可以直接发整个文件夹，不用先打包，对方收到同样的目录结构 |
-| **浏览文件** | 像在本机一样浏览对方的文件，可以拷贝、新建、重命名和删除，需对方允许 |
-| **挂载到本机** | 把对方的文件挂进访达、资源管理器或 Linux 文件管理器，像本机文件一样打开、修改、新建和删除 |
-| **共享链接** | 给没装 Whisper 的设备发一个链接，对方用浏览器就能下载本机的文件或文件夹，可以加密码 |
-| **窗口流转** | 电脑的窗口、安卓手机的应用，可以在另一台设备上打开并直接操作 |
-| **快捷发送** | Android 分享菜单、桌面右键菜单或全局快捷键，不用先打开会话 |
-| **剪贴板同步** | 在一台设备上复制，到另一台粘贴（默认关闭） |
-| **键鼠共享** | 软件 KVM：多台电脑共用一套键盘鼠标，指针移到屏幕边缘就切换过去 |
-| **网络唤醒** | 叫醒睡着的电脑；开始键鼠共享时，布局里睡着的电脑会自动醒来并连上 |
-| **手机控制电脑** | Android 手机充当体感鼠标、触控板和键盘 |
-| **系统音频共享** | 把电脑的声音送到一台或多台设备播放 |
-| **通知转发** | 把 Android 上选定 App 的通知（比如验证码）发到电脑 |
-| **桌面截图** | 点选窗口或框选区域，在选区旁直接标注（框、圈、箭头、画笔、文字、马赛克），再复制或存成文件 |
-| **电视投屏** | 在电脑上接收视频 App 的 DLNA 投屏（实验性） |
+| **文本与文件** | 像聊天一样发文字、文件和整个文件夹，断线可续传，收到后自动校验；也能从分享菜单、右键菜单或全局快捷键直接发 |
+| **对方的文件** | 浏览、拷贝和修改对方的文件，或者挂进访达、资源管理器和 Linux 文件管理器，当成本机的磁盘用 |
+| **共享链接** | 对方没装 Whisper 也能收：发一个链接，用浏览器下载，可以加密码 |
+| **键鼠共享** | 软件 KVM：一套键盘鼠标用多台电脑，指针移到屏幕边缘就过去；睡着的电脑会被自动唤醒 |
+| **手机控制电脑** | Android 手机当触控板、体感鼠标和键盘 |
+| **系统音频** | 把电脑的声音送到一台或多台设备播放 |
+| **窗口流转** | 电脑的窗口、安卓手机的应用，在另一台设备上打开并直接操作 |
+| **剪贴板同步** | 在一台设备上复制，到另一台粘贴 |
+| **通知转发** | 把 Android 上选定 App 的通知（比如验证码）送到电脑 |
+
+另外还有带标注的桌面截图，以及接收视频 App 的 DLNA 投屏（实验性）。
 
 | 音频共享 | 键鼠共享 |
 | --- | --- |
@@ -49,16 +45,17 @@ Whisper 是一个局域网协作工具。设备配对后通过加密通道直接
 
 ## 下载
 
-到 [Releases](https://github.com/lawnvi/whisper/releases) 页面下载对应平台的安装包。
+到 [Releases](https://github.com/lawnvi/whisper/releases) 下载对应平台的安装包，[官网](https://whisper-lan.github.io/zh)会按你的系统选好文件。
 
-| 平台 | 系统要求 | 选哪个文件 |
+| 平台 | 系统要求 | 安装包 |
 | --- | --- | --- |
 | Android | 7.0 及以上 | 多数手机选 `android-arm64-v8a.apk`，不确定就选 `android-universal.apk` |
 | macOS | 10.15 及以上 | Apple 芯片选 `macos-arm64.dmg`，Intel 选 `macos-x86_64.dmg` |
 | Windows | 10 / 11，64 位 | `windows-x86_64.exe` |
 | Linux | x86_64 | `.deb`、`.rpm` 或 `.AppImage` |
 
-iOS / iPadOS：项目没有付费的 Apple 开发者账号，所以不上架 App Store。每次发布附带一个未签名的 `ios-unsigned.ipa`，可以用 AltStore、Sideloadly 等工具以自己的 Apple ID 签名安装（免费 Apple ID 签的应用每 7 天要重签一次）。它没有经过完整的真机测试，不保证可用，遇到问题欢迎反馈。
+- 安装包没有代码签名。被系统或杀毒软件拦下时，按[排障指南](docs/troubleshooting.md#装不上打不开)里的步骤放行。
+- iOS / iPadOS 没有上架 App Store。每次发布附带一个未签名的 `ios-unsigned.ipa`，要用 AltStore、Sideloadly 等工具自己签名安装；它没有经过完整的真机测试。
 
 ## 快速开始
 
@@ -66,77 +63,49 @@ iOS / iPadOS：项目没有付费的 Apple 开发者账号，所以不上架 App
 2. 在设备列表里点击对方，双方核对并确认配对码。
 3. 进入会话开始发送。声音和键鼠的入口在桌面端侧栏顶部。
 
-> 列表里没有出现对方？桌面端点左下角这台设备的名字，手机点加号，可以扫二维码或输入对方的 IP 和端口（默认 `10002`）。
+列表里没有对方时，桌面端点左下角这台设备的名字，手机点加号，扫二维码或输入对方的 IP 和端口（默认 `10002`）。
 
-## 常用操作
+两个值得记住的快捷键：
 
-| 想做的事 | 怎么做 |
+| 快捷键 | 作用 |
 | --- | --- |
-| 发送剪贴板里的内容 | macOS 按 `Cmd+Option+V`，Windows / Linux 按 `Ctrl+Alt+V` |
-| 从其他 App 发送 | Android 用系统分享菜单，桌面用文件右键菜单 |
-| 发送文件夹 | 桌面端把文件夹拖进会话，或点输入框的 `+` 选「文件夹」 |
-| 浏览对方的文件 | 在会话顶部切到「文件」，可以把文件拖进访达或资源管理器 |
-| 挂载对方的文件 | 点会话右上角的信息按钮，打开「挂载」，之后连上就自动挂载，在系统里推出即关闭 |
-| 给没装 Whisper 的设备发文件 | 在「文件」里右键本机的文件或文件夹（手机上长按），选「创建共享链接…」 |
-| 操作对方的窗口或应用 | 在会话顶部切到「应用」，选一个窗口或应用打开 |
-| 把声音放到其他设备 | 点侧栏顶部的喇叭，勾选设备，再点设备图上的播放按钮 |
-| 开始键鼠共享 | 点侧栏顶部的键盘图标，把对方屏幕拖到本机屏幕旁边，打开右上角的开关 |
-| 退出键鼠共享 | 在主控端按 `Ctrl+Alt+Esc`（macOS 为 `Control+Option+Esc`） |
-| 唤醒睡着的电脑 | 在它的设备卡片上点「唤醒」；它最好插着网线，并在系统里打开网络唤醒，见[使用指南](docs/user-guide.md#唤醒睡眠中的电脑) |
-| 用手机控制电脑 | 在 Android 上打开这台电脑的设备页（会话右上角），点「控制电脑」，再点顶部的开始按钮 |
-| 截图 | 桌面端点输入框的截图按钮或按自定义快捷键，选好后在选区旁标注，按 `Esc` 取消 |
+| `Ctrl+Alt+V`（macOS 为 `Cmd+Option+V`） | 把剪贴板里的内容发给对方 |
+| `Ctrl+Alt+Esc`（macOS 为 `Control+Option+Esc`） | 退出键鼠共享，把指针拿回本机 |
 
-每项功能的完整说明见 [使用指南](docs/user-guide.md)。
+每项功能怎么用，见[使用指南](docs/user-guide.md)；装不上、连不上或卡顿，见[排障指南](docs/troubleshooting.md)。
 
 ## 平台支持
 
 | 功能 | Android | macOS | Windows | Linux |
 | --- | :---: | :---: | :---: | :---: |
 | 文本与文件 | ✅ | ✅ | ✅ | ✅ |
-| 文件夹 | 仅接收 | ✅ | ✅ | ✅ |
+| 发送文件夹 | 仅接收 | ✅ | ✅ | ✅ |
 | 浏览文件 | ✅ | ✅ | ✅ | ✅ |
-| 挂载到本机 | 只能被挂载 | ✅ | ✅ | 需要 fuse3 |
+| 挂载对方的文件 | 只能被挂载 | ✅ | ✅ | 需要 fuse3 |
 | 共享链接 | ✅ | ✅ | ✅ | ✅ |
-| 窗口流转：接收 | ✅ | ✅ | ✅ | ✅ |
-| 窗口流转：被流转 | Android 12+ 手机自己开启；Android 10、11 要电脑有 adb | ✅ | ✅ | GNOME 45+ 或 KDE Plasma 6 |
-| 剪贴板同步 | 仅文本，需在前台 | ✅ | ✅ | ✅ |
 | 键鼠共享 | — | ✅ | ✅ | X11、GNOME 或 KDE Plasma |
+| 手机控制电脑 | 控制端 | 被控端 | 被控端 | 被控端，要求同上 |
 | 网络唤醒 | — | ✅ | ✅ | ✅ |
-| 手机控制电脑 | 控制端 | 被控端 | 被控端 | 被控端，同上 |
-| 系统音频共享 | 仅播放 | ✅ | ✅ | ✅ |
+| 系统音频 | 仅播放 | ✅ | ✅ | ✅ |
+| 窗口流转：显示 | ✅ | ✅ | ✅ | ✅ |
+| 窗口流转：被流转 | Android 10 及以上 | ✅ | ✅ | GNOME 45+ 或 KDE Plasma 6 |
+| 剪贴板同步 | 仅文本，需在前台 | ✅ | ✅ | ✅ |
 | 通知转发 | 发送 | 接收 | 接收 | 接收 |
 | 桌面截图 | — | ✅ | ✅ | 取决于桌面环境 |
 | 电视投屏接收 | — | ✅ | ✅ | ✅ |
 
-Linux 的自动发现依赖 Avahi。视频预览和电视投屏需要系统装有 libmpv，窗口流转需要 FFmpeg（4 及以上），缺了这些其他功能照常可用。让别的设备流转本机窗口需要 Wayland 会话（X11 暂时只能接收），FFmpeg 还要带 H.264 编码器（x264 或 openh264，Fedora 默认没有），GNOME 上要先在设置里装一个 GNOME 组件，装完注销并重新登录一次；KDE Plasma 上什么都不用装，也不弹授权窗口。
+Linux 的自动发现依赖 Avahi；视频预览和电视投屏需要 libmpv，窗口流转需要 FFmpeg 4 及以上，缺了它们其他功能照常可用。各桌面环境在 Wayland 下的要求和授权方式，见使用指南的[键鼠共享](docs/user-guide.md#权限与平台限制)和[窗口流转](docs/user-guide.md#被流转的设备)。
 
-键鼠共享在 Wayland 下支持 GNOME 和 KDE Plasma。GNOME 不用额外授权；GNOME 46 以前的版本（如 Ubuntu 22.04）只能被控制，要用它控制别的电脑，请在登录界面选「Ubuntu on Xorg」；从手机输入中文等当前键盘布局打不出的字，需要装上面那个 GNOME 组件。KDE Plasma 第一次被控制时会弹出系统的授权窗口，勾选记住后不再弹；用它控制别的电脑时，每次开始都要授权一次（KDE 目前的限制）。其他 Wayland 桌面还没有验证过。
-
-## 常见问题
-
-| 问题 | 解决办法 |
-| --- | --- |
-| 设备列表里看不到对方 | 确认同一网络、都开着 Whisper；网络屏蔽 mDNS 时用二维码或 IP 连接 |
-| Android 复制的内容没同步 | Android 10 起后台应用读不到剪贴板，回到 Whisper 后会自动补发 |
-| 指针留在另一台设备上 | 在主控端按 `Ctrl+Alt+Esc`（macOS 为 `Control+Option+Esc`） |
-| Windows 上指针或传输卡顿 | 把「设置 → 系统 → 投影到此电脑」设为「始终关闭」 |
-| Wi-Fi 下指针或声音一卡一卡 | 两台电脑都更新到 0.0.60 或更新的版本，键鼠和声音会走 UDP；Windows 防火墙要放行 Whisper |
-| macOS 上键鼠共享没有反应 | 按提示在系统设置里授予辅助功能权限，然后重新打开 Whisper |
-| 提示 Whisper 没有正常运行 | 点提示上的「查看」或在设置里打开「诊断信息」，可以拷贝或反馈 |
-| Windows 锁屏或 UAC 时无法操作 | 需要安装包附带的系统服务，见[使用指南](docs/user-guide.md#windows-锁屏与-uac) |
-
-装不上、连不上等更多问题，见 [排障指南](docs/troubleshooting.md)。
-
-## 安全说明
+## 安全
 
 - 配对后的数据通过 X25519 和 XChaCha20-Poly1305 加密的直连通道传输。
 - 局域网发现和连接元数据不加密，本地数据库和收到的文件也不做静态加密。
 - 只在局域网内直连，没有公网中继。实现未经独立的密码学审计。
 - 键鼠共享面向身边的自有设备，不是无人值守的远程控制方案。
 
-## 从源码构建
+## 参与开发
 
-建议使用 Flutter 3.44.9（stable），并准备好目标平台的工具链。
+问题和建议请提 [Issue](https://github.com/lawnvi/whisper/issues/new/choose)，也欢迎 Pull Request。从源码运行需要 Flutter 3.44.9（stable）和目标平台的工具链：
 
 ```bash
 flutter pub get
@@ -144,7 +113,9 @@ flutter run
 flutter analyze && flutter test
 ```
 
-macOS 上请用 `./script/build_and_run.sh`，它会构建、签名并启动应用。Linux 还需要 Avahi、PulseAudio 或 PipeWire Pulse、GStreamer、libsecret、keybinder、jsoncpp、libmpv、libepoxy 和 libpipewire-0.3 的开发包。代码约定见 [AGENTS.md](AGENTS.md)，文档放在哪里见 [docs/README.md](docs/README.md)。
+- macOS 请用 `./script/build_and_run.sh`，它会构建、签名并启动应用。
+- Linux 还需要 Avahi、PulseAudio 或 PipeWire Pulse、GStreamer、libsecret、keybinder、jsoncpp、libmpv、libepoxy 和 libpipewire-0.3 的开发包。
+- 代码约定和提交格式见 [AGENTS.md](AGENTS.md)，各子系统的设计见[文档索引](docs/README.md)。
 
 ## License
 

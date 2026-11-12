@@ -7,6 +7,7 @@
 Move text, files, clipboard, audio, keyboard/mouse input, and app windows directly between your own computers and phones.
 
 [![Release](https://img.shields.io/github/v/release/lawnvi/whisper?include_prereleases&label=release)](https://github.com/lawnvi/whisper/releases)
+[![Downloads](https://img.shields.io/github/downloads/lawnvi/whisper/total?label=downloads)](https://github.com/lawnvi/whisper/releases)
 ![Platform](https://img.shields.io/badge/platform-Android%20%7C%20macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)
 [![License](https://img.shields.io/badge/license-MIT-green)](./LICENSE)
 
@@ -16,7 +17,7 @@ Move text, files, clipboard, audio, keyboard/mouse input, and app windows direct
 
 ![Whisper file transfer](.github/image/file-share.png)
 
-Whisper is a LAN collaboration app. Paired devices connect to each other directly over an encrypted channel, and your data never passes through a server. One device can stay connected to several computers and phones at once.
+Whisper is a LAN collaboration app. Paired devices connect to each other directly over an encrypted channel: no server in between, no account, and it keeps working without internet. One device can stay connected to several computers and phones at once.
 
 > This project is not related to OpenAI's Whisper speech recognition model.
 
@@ -24,22 +25,17 @@ Whisper is a LAN collaboration app. Paired devices connect to each other directl
 
 | Feature | What it does |
 | --- | --- |
-| **Text and files** | Send them like chat messages; transfers resume and are verified on arrival |
-| **This device** | A conversation with this device itself, for text and files when nobody else is around; nothing is sent anywhere |
-| **Folders** | Send a whole folder from a desktop, structure and all, without archiving |
-| **File browsing** | Browse, copy, rename or delete the other device's files, with its approval |
-| **Mount on this computer** | Open, edit, create and delete the other device's files in Finder, File Explorer or a Linux file manager |
-| **Share links** | Let a browser on a device without Whisper download your files |
-| **Window flow** | Use a computer's windows or an Android phone's apps on another device |
-| **Quick send** | Send from the Android share sheet, a context menu, or a global hotkey |
-| **Clipboard sync** | Copy on one device, paste on another (off by default) |
-| **Keyboard and mouse sharing** | A software KVM: one keyboard and mouse across several computers |
-| **Wake-on-LAN** | Wake a sleeping computer; starting keyboard and mouse sharing wakes the ones in the layout and reconnects them |
-| **Phone controller** | Turn an Android phone into an air mouse, touchpad, and keyboard |
-| **System audio sharing** | Play a computer's sound on one or more other devices |
-| **Notification forwarding** | Show chosen Android apps' notifications, like codes, on your computer |
-| **Desktop screenshots** | Click a window or drag a region, mark it up right beside the selection (box, circle, arrow, pen, text, mosaic), then copy or save it |
-| **TV casting** | Receive DLNA casts from video apps on your computer (experimental) |
+| **Text and files** | Send text, files and whole folders like chat messages; transfers resume and are verified on arrival. Also from the share sheet, a context menu or a global hotkey |
+| **The other device's files** | Browse, copy and edit them, or mount them in Finder, File Explorer or a Linux file manager and use them like a local disk |
+| **Share links** | For a device without Whisper: send a link and it downloads in a browser, with an optional password |
+| **Keyboard and mouse sharing** | A software KVM: one keyboard and mouse across several computers, switching when the pointer crosses a screen edge. Sleeping computers are woken automatically |
+| **Phone controller** | An Android phone as a touchpad, air mouse and keyboard |
+| **System audio** | Play a computer's sound on one or more other devices |
+| **Window flow** | Open and use a computer's windows or an Android phone's apps on another device |
+| **Clipboard sync** | Copy on one device, paste on another |
+| **Notification forwarding** | Send chosen Android apps' notifications, such as verification codes, to your computer |
+
+There are also desktop screenshots with markup, and receiving DLNA casts from video apps (experimental).
 
 | Audio sharing | Keyboard and mouse sharing |
 | --- | --- |
@@ -47,16 +43,17 @@ Whisper is a LAN collaboration app. Paired devices connect to each other directl
 
 ## Download
 
-Get the installer for your platform from the [Releases](https://github.com/lawnvi/whisper/releases) page.
+Get the installer for your platform from [Releases](https://github.com/lawnvi/whisper/releases); the [website](https://whisper-lan.github.io/en) picks the right file for your system.
 
-| Platform | Requirement | Which file |
+| Platform | Requirement | Installer |
 | --- | --- | --- |
 | Android | 7.0 or later | `android-arm64-v8a.apk` for most phones, `android-universal.apk` if unsure |
 | macOS | 10.15 or later | `macos-arm64.dmg` for Apple silicon, `macos-x86_64.dmg` for Intel |
 | Windows | 10 / 11, 64-bit | `windows-x86_64.exe` |
 | Linux | x86_64 | `.deb`, `.rpm`, or `.AppImage` |
 
-iOS / iPadOS: the project has no paid Apple Developer account, so the app is not on the App Store. Every release includes an unsigned `ios-unsigned.ipa` that you can sign with your own Apple ID using a tool such as AltStore or Sideloadly (apps signed with a free Apple ID must be re-signed every 7 days). It has not been fully tested on a real device and may not work, so please report any problems.
+- The installers are not code-signed. If your system or antivirus blocks one, follow the steps in [Troubleshooting](docs/troubleshooting_en.md#it-wont-install-or-open).
+- iOS / iPadOS is not on the App Store. Every release includes an unsigned `ios-unsigned.ipa` to sign and install yourself with a tool such as AltStore or Sideloadly; it has not been fully tested on a real device.
 
 ## Quick start
 
@@ -64,66 +61,38 @@ iOS / iPadOS: the project has no paid Apple Developer account, so the app is not
 2. Select the other device in the device list, then check and confirm the pairing code on both sides.
 3. Open the conversation and start sending. Sound and keyboard/mouse sharing are at the top of the sidebar on desktop.
 
-> The other device is not listed? On desktop select this device's name at the bottom left; on a phone select the plus button. Then scan a QR code or enter the other device's IP address and port (`10002` by default).
+If the other device is not listed, select this device's name at the bottom left on desktop, or the plus button on a phone, then scan a QR code or enter the other device's IP address and port (`10002` by default).
 
-## Everyday actions
+Two shortcuts worth remembering:
 
-| To do this | Do this |
+| Shortcut | What it does |
 | --- | --- |
-| Send what is on the clipboard | Press `Cmd+Option+V` on macOS, `Ctrl+Alt+V` on Windows / Linux |
-| Send from another app | Use the Android share sheet, or the file context menu on desktop |
-| Send a folder | Drop it into a conversation, or choose "Folder" from `+` in the message box |
-| Browse the other device's files | Switch to "Files" at the top of the conversation; drag files out to copy |
-| Mount the other device's files | Select the info button at the top right, then turn on "Mount"; eject to turn off |
-| Send to a device without Whisper | Right-click or long-press it in "Files", then "Create Share Link…" |
-| Use the other device's windows | Switch to "Apps" at the top of the conversation, then choose a window or app |
-| Play sound on other devices | Select the speaker at the top of the sidebar, check the devices, then press play on the device picture |
-| Start keyboard/mouse sharing | Select the keyboard at the top of the sidebar, place the other screen beside yours, then turn on the switch at the top right |
-| Leave keyboard/mouse sharing | Press `Ctrl+Alt+Esc` (`Control+Option+Esc` on macOS) |
-| Wake a sleeping computer | Select "Wake" on its device card; it is best on a cable, with Wake-on-LAN turned on, see the [user guide](docs/user-guide_en.md#wake-a-sleeping-computer) |
-| Control a computer from a phone | On Android, open that computer's device page (top right of the conversation), select "Control computer", then start |
-| Take a screenshot | Use the screenshot button in the message box or your shortcut on desktop, then mark it up beside the selection; `Esc` cancels |
+| `Ctrl+Alt+V` (`Cmd+Option+V` on macOS) | Sends what is on the clipboard to the other device |
+| `Ctrl+Alt+Esc` (`Control+Option+Esc` on macOS) | Leaves keyboard/mouse sharing and brings the pointer back |
 
-The [user guide](docs/user-guide_en.md) covers every feature in full.
+The [user guide](docs/user-guide_en.md) covers every feature; for install, connection or stutter problems, see [Troubleshooting](docs/troubleshooting_en.md).
 
 ## Platform support
 
 | Feature | Android | macOS | Windows | Linux |
 | --- | :---: | :---: | :---: | :---: |
 | Text and files | ✅ | ✅ | ✅ | ✅ |
-| Folders | Receive only | ✅ | ✅ | ✅ |
+| Sending folders | Receive only | ✅ | ✅ | ✅ |
 | File browsing | ✅ | ✅ | ✅ | ✅ |
-| Mounting | Can be mounted only | ✅ | ✅ | Needs fuse3 |
+| Mounting the other device's files | Can be mounted only | ✅ | ✅ | Needs fuse3 |
 | Share links | ✅ | ✅ | ✅ | ✅ |
-| Window flow: view | ✅ | ✅ | ✅ | ✅ |
-| Window flow: share | Android 12+ starts it itself; Android 10 and 11 need a computer with adb | ✅ | ✅ | GNOME 45+ or KDE Plasma 6 |
-| Clipboard sync | Text, foreground only | ✅ | ✅ | ✅ |
-| Keyboard & mouse | — | ✅ | ✅ | X11, GNOME or KDE Plasma |
+| Keyboard and mouse sharing | — | ✅ | ✅ | X11, GNOME or KDE Plasma |
+| Phone controller | Controls | Controlled | Controlled | Controlled, same as above |
 | Wake-on-LAN | — | ✅ | ✅ | ✅ |
-| Phone controller | Controls | Controlled | Controlled | Controlled, as above |
 | System audio | Playback only | ✅ | ✅ | ✅ |
-| Notifications | Sends | Receives | Receives | Receives |
-| Screenshots | — | ✅ | ✅ | Depends on desktop |
+| Window flow: view | ✅ | ✅ | ✅ | ✅ |
+| Window flow: share | Android 10 or later | ✅ | ✅ | GNOME 45+ or KDE Plasma 6 |
+| Clipboard sync | Text, foreground only | ✅ | ✅ | ✅ |
+| Notification forwarding | Sends | Receives | Receives | Receives |
+| Desktop screenshots | — | ✅ | ✅ | Depends on desktop |
 | TV casting receiver | — | ✅ | ✅ | ✅ |
 
-On Linux, discovery depends on Avahi. Video previews and TV casting need libmpv, and window flow needs FFmpeg 4 or later; everything else works without them. Showing this computer's windows on other devices needs a Wayland session (X11 can only view for now) and an H.264 encoder in FFmpeg (x264 or openh264; Fedora ships without one). On GNOME, also install the GNOME component from Settings, then log out and back in once; KDE Plasma needs nothing installed and asks for no permission.
-
-On Wayland, keyboard and mouse sharing supports GNOME and KDE Plasma. GNOME asks for no permission. GNOME before 46 (Ubuntu 22.04, for example) can only be controlled; to control other computers from one, choose "Ubuntu on Xorg" on the login screen. Typing text the current keyboard layout cannot produce, such as Chinese from a phone, needs the GNOME component above. KDE Plasma asks for permission the first time it is controlled, and not again once you tick "remember"; controlling other computers from it asks every time it starts (a current KDE limit). Other Wayland desktops have not been verified.
-
-## Troubleshooting
-
-| Problem | What to do |
-| --- | --- |
-| Device not in the list | Use the same network; if mDNS is blocked, connect by QR code or IP |
-| Android copy didn't sync | Android 10+ blocks this in the background; reopen Whisper to send it |
-| Pointer stuck on another device | Press `Ctrl+Alt+Esc` (`Control+Option+Esc` on macOS) |
-| Stutter on Windows | Set Settings → System → Projecting to this PC to "Always Off" |
-| Pointer or sound stutters on Wi-Fi | Update both computers to 0.0.60 or later, so the keyboard, mouse and sound go over UDP; Windows Firewall has to allow Whisper |
-| No keyboard/mouse on macOS | Grant Accessibility in System Settings, then reopen Whisper |
-| Whisper says it is not running properly | Select "View" on the notice or open "Diagnostics" in Settings to copy or report it |
-| Windows lock screen or UAC | Needs the system service from the installer; see the [user guide](docs/user-guide_en.md#windows-lock-screen-and-uac) |
-
-For install, connection and other problems, see [Troubleshooting](docs/troubleshooting_en.md).
+On Linux, discovery depends on Avahi; video previews and TV casting need libmpv, and window flow needs FFmpeg 4 or later. Everything else works without them. For what each desktop needs on Wayland and how it asks for permission, see the user guide on [keyboard and mouse sharing](docs/user-guide_en.md#permissions-and-platform-limits) and [window flow](docs/user-guide_en.md#the-device-being-shown).
 
 ## Security
 
@@ -132,9 +101,9 @@ For install, connection and other problems, see [Troubleshooting](docs/troublesh
 - Devices only connect directly on the local network; there is no public relay. The implementation has not had an independent cryptographic audit.
 - Keyboard and mouse sharing is meant for your own nearby devices, not for unattended remote control.
 
-## Build from source
+## Contributing
 
-Use Flutter 3.44.9 (stable) with the toolchain for your target platform.
+Report problems and ideas in an [issue](https://github.com/lawnvi/whisper/issues/new/choose); pull requests are welcome. To run from source you need Flutter 3.44.9 (stable) and the toolchain for your target platform:
 
 ```bash
 flutter pub get
@@ -142,7 +111,9 @@ flutter run
 flutter analyze && flutter test
 ```
 
-On macOS, use `./script/build_and_run.sh`, which builds, signs, and launches the app. Linux also needs the development packages for Avahi, PulseAudio or PipeWire Pulse, GStreamer, libsecret, keybinder, jsoncpp, libmpv, libepoxy, and libpipewire-0.3. See [AGENTS.md](AGENTS.md) for project conventions and [docs/README.md](docs/README.md) for where each document goes.
+- On macOS, use `./script/build_and_run.sh`, which builds, signs, and launches the app.
+- Linux also needs the development packages for Avahi, PulseAudio or PipeWire Pulse, GStreamer, libsecret, keybinder, jsoncpp, libmpv, libepoxy, and libpipewire-0.3.
+- See [AGENTS.md](AGENTS.md) for code conventions and commit format, and the [documentation index](docs/README.md) for how each subsystem works (in Chinese).
 
 ## License
 

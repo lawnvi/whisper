@@ -91,7 +91,7 @@ xattr -dr com.apple.quarantine /Applications/Whisper.app
 
 **On macOS, sound sharing fails, flowed windows stay black or screenshots don't work**: all of these need Screen Recording permission (Screen & System Audio Recording from macOS 15). Turn Whisper on under System Settings → Privacy & Security, then reopen Whisper.
 
-**On Linux, flowed windows stay black**: this needs a Wayland session and FFmpeg with an H.264 encoder, and GNOME also needs the component from Settings. See [Platform support](../README_en.md#platform-support) in the README.
+**On Linux, flowed windows stay black**: this needs a Wayland session and FFmpeg with an H.264 encoder, and GNOME also needs the component from Settings. See [The device being shown](user-guide_en.md#the-device-being-shown) in the user guide.
 
 ## Clipboard
 

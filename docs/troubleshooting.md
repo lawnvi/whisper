@@ -91,7 +91,7 @@ xattr -dr com.apple.quarantine /Applications/Whisper.app
 
 **macOS 上共享不了声音、流转窗口没有画面、截不了图**：这几项都要「屏幕录制」权限，macOS 15 起叫「屏幕与系统录音」。在「系统设置 → 隐私与安全性」里打开 Whisper，然后重新打开 Whisper。
 
-**Linux 上流转窗口没有画面**：需要 Wayland 会话和带 H.264 编码器的 FFmpeg，GNOME 还要装设置里的组件。详见 README 的 [平台支持](../README.md#平台支持)。
+**Linux 上流转窗口没有画面**：需要 Wayland 会话和带 H.264 编码器的 FFmpeg，GNOME 还要装设置里的组件。详见使用指南的 [被流转的设备](user-guide.md#被流转的设备)。
 
 ## 剪贴板
 
