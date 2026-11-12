@@ -532,9 +532,10 @@ class _DeviceArtPainter extends CustomPainter {
 /// round avatar, and in the device pickers. [size] is the square it sits
 /// in; the stroke scales with it, 2 in a viewBox of 32.
 ///
-/// With [os], the system drawn in the screen, as in the pictures: a Mac's
-/// menu bar and Dock, Windows' taskbar, a Linux prompt, Android's robot and
-/// punched-out camera, an iPhone's island and bar, an iPad's bar.
+/// Only the outline says what it is: a laptop, a monitor on its stand, a
+/// phone or a tablet, the last two by their proportions alone. With [os],
+/// the system's mark in the middle of the screen: an apple, the four panes
+/// of Windows, a prompt for Linux, Android's robot.
 class DeviceGlyph extends StatelessWidget {
   const DeviceGlyph({
     super.key,
@@ -577,171 +578,118 @@ class _DeviceGlyphPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     canvas.save();
     canvas.scale(size.width / 32, size.height / 32);
+    final line = _stroke(2);
     switch (kind) {
-      case DeviceKind.phone:
-        _phone(canvas);
-      case DeviceKind.tablet:
-        _tablet(canvas);
-      case DeviceKind.desktop:
-        _desktop(canvas);
       case DeviceKind.laptop:
-        _laptop(canvas);
+        canvas.drawRRect(_r(6, 7, 20, 14, 2), line);
+        canvas.drawLine(const Offset(3, 24.5), const Offset(29, 24.5), line);
+        _mark(canvas, const Offset(16, 14), 7.5);
+      case DeviceKind.desktop:
+        canvas.drawRRect(_r(3, 4.5, 26, 17.5, 2.5), line);
+        canvas.drawLine(const Offset(16, 22), const Offset(16, 26.5), line);
+        canvas.drawLine(const Offset(11, 26.5), const Offset(21, 26.5), line);
+        _mark(canvas, const Offset(16, 13.25), 8.5);
+      case DeviceKind.phone:
+        canvas.drawRRect(_r(10, 4, 12, 24, 3), line);
+        _mark(canvas, const Offset(16, 16), 7);
+      case DeviceKind.tablet:
+        canvas.drawRRect(_r(7, 5, 18, 22, 2.5), line);
+        _mark(canvas, const Offset(16, 16), 8);
     }
     canvas.restore();
   }
 
-  void _laptop(Canvas canvas) {
-    final line = _stroke(2);
-    canvas.drawRRect(_r(6, 7, 20, 14, 2), line);
-    canvas.drawLine(const Offset(3, 24.5), const Offset(29, 24.5), line);
-    _screen(canvas, const Rect.fromLTRB(6, 7, 26, 21));
-  }
-
-  /// An iMac has its chin under the screen; a PC monitor is screen to the
-  /// edge.
-  void _desktop(Canvas canvas) {
-    final line = _stroke(2);
-    canvas.drawRRect(_r(3, 4.5, 26, 17.5, 2.5), line);
-    canvas.drawLine(const Offset(13, 22), const Offset(12.2, 26.5), line);
-    canvas.drawLine(const Offset(19, 22), const Offset(19.8, 26.5), line);
-    canvas.drawLine(const Offset(10, 26.5), const Offset(22, 26.5), line);
-    if (os == DeviceOs.mac) {
-      canvas.drawLine(const Offset(4, 18), const Offset(28, 18), _stroke(1.5));
-      _screen(canvas, const Rect.fromLTRB(3, 4.5, 29, 18.5));
-    } else {
-      _screen(canvas, const Rect.fromLTRB(3, 4.5, 29, 22));
-    }
-  }
-
-  /// A computer's system, inside [screen]'s outline.
-  void _screen(Canvas canvas, Rect screen) {
+  /// The system's mark, [side] across, centred on [c].
+  void _mark(Canvas canvas, Offset c, double side) {
     final fill = Paint()..color = color;
-    final c = screen.center;
     switch (os) {
-      case DeviceOs.mac:
-        canvas.drawLine(
-          Offset(screen.left + 3.2, screen.top + 3.2),
-          Offset(screen.right - 3.2, screen.top + 3.2),
-          _stroke(1.5),
-        );
-        final dock = screen.width * .38;
-        canvas.drawRRect(
-          _r(c.dx - dock / 2, screen.bottom - 4.6, dock, 2, 1),
-          fill,
-        );
+      case DeviceOs.mac || DeviceOs.ios:
+        // A little taller than the panes: it is rounder and looks smaller.
+        final k = side * 1.15 / _appleHeight;
+        canvas.save();
+        canvas.translate(c.dx - 12 * k, c.dy - 12.4 * k);
+        canvas.scale(k);
+        canvas.drawPath(whisperSvgPath(_apple), fill);
+        canvas.restore();
       case DeviceOs.windows:
-        // Windows 11's taskbar: a few squares in the middle.
-        const side = 2.8, gap = 1.4;
-        const row = side * 3 + gap * 2;
-        for (var i = 0; i < 3; i++) {
-          canvas.drawRRect(
-            _r(
-              c.dx - row / 2 + i * (side + gap),
-              screen.bottom - 2.4 - side,
-              side,
-              side,
-              .6,
+        final gap = side * .1, pane = (side - gap) / 2;
+        for (final (x, y) in const [(0, 0), (1, 0), (0, 1), (1, 1)]) {
+          canvas.drawRect(
+            Rect.fromLTWH(
+              c.dx - side / 2 + x * (pane + gap),
+              c.dy - side / 2 + y * (pane + gap),
+              pane,
+              pane,
             ),
             fill,
           );
         }
       case DeviceOs.linux:
-        final x = c.dx - 4.6, y = c.dy;
-        final prompt = _stroke(1.7);
+        final prompt = _stroke(side * .2);
+        final x = c.dx - side * .45, h = side * .32;
         canvas.drawPath(
           Path()
-            ..moveTo(x, y - 2.8)
-            ..lineTo(x + 2.8, y)
-            ..lineTo(x, y + 2.8),
+            ..moveTo(x, c.dy - h)
+            ..lineTo(x + h, c.dy)
+            ..lineTo(x, c.dy + h),
           prompt,
         );
         canvas.drawLine(
-          Offset(x + 4.6, y + 2.8),
-          Offset(x + 8.8, y + 2.8),
+          Offset(c.dx + side * .05, c.dy + h),
+          Offset(c.dx + side * .45, c.dy + h),
           prompt,
         );
-      case DeviceOs.android || DeviceOs.ios || DeviceOs.other:
+      case DeviceOs.android:
+        _robot(canvas, c, side * 1.15);
+      case DeviceOs.other:
         break;
     }
   }
 
-  /// An Android phone a little squarer, as in the pictures.
-  void _phone(Canvas canvas) {
-    final android = os == DeviceOs.android;
-    canvas.drawRRect(_r(10, 3, 12, 26, android ? 2 : 3), _stroke(2));
-    final fill = Paint()..color = color;
-    switch (os) {
-      case DeviceOs.android:
-        canvas.drawCircle(const Offset(16, 6.6), 1, fill);
-        _robot(canvas, const Offset(16, 19), 8.4);
-      case DeviceOs.ios:
-        canvas.drawRRect(_r(14, 5.6, 4, 1.7, .85), fill);
-        canvas.drawLine(
-          const Offset(14, 25.6),
-          const Offset(18, 25.6),
-          _stroke(1.3),
-        );
-      case DeviceOs.mac || DeviceOs.windows || DeviceOs.linux || DeviceOs.other:
-        canvas.drawLine(
-          const Offset(14.5, 6),
-          const Offset(17.5, 6),
-          _stroke(2),
-        );
-    }
-  }
-
-  void _tablet(Canvas canvas) {
-    canvas.drawRRect(_r(6.5, 3, 19, 26, 2.5), _stroke(2));
-    final fill = Paint()..color = color;
-    switch (os) {
-      case DeviceOs.android:
-        canvas.drawCircle(const Offset(16, 6.2), .9, fill);
-        _robot(canvas, const Offset(16, 19), 10);
-      case DeviceOs.ios:
-        canvas.drawLine(
-          const Offset(13.5, 25.4),
-          const Offset(18.5, 25.4),
-          _stroke(1.3),
-        );
-      case DeviceOs.mac || DeviceOs.windows || DeviceOs.linux || DeviceOs.other:
-        break;
-    }
-  }
-
-  /// Android's robot, its head: [width] across, its chin at [base].
-  void _robot(Canvas canvas, Offset base, double width) {
+  /// Android's robot, its head: [width] across, centred on [c] with its
+  /// feelers.
+  void _robot(Canvas canvas, Offset c, double width) {
     final r = width / 2;
+    final chin = c + Offset(0, r * .55);
     canvas.drawPath(
       Path()
         ..fillType = PathFillType.evenOdd
-        ..addArc(Rect.fromCircle(center: base, radius: r), math.pi, math.pi)
+        ..addArc(Rect.fromCircle(center: chin, radius: r), math.pi, math.pi)
         ..close()
         ..addOval(
           Rect.fromCircle(
-            center: base + Offset(-r * .42, -r * .46),
-            radius: r * .15,
+            center: chin + Offset(-r * .42, -r * .45),
+            radius: r * .13,
           ),
         )
         ..addOval(
           Rect.fromCircle(
-            center: base + Offset(r * .42, -r * .46),
-            radius: r * .15,
+            center: chin + Offset(r * .42, -r * .45),
+            radius: r * .13,
           ),
         ),
       Paint()..color = color,
     );
-    final feeler = _stroke(r * .24);
-    canvas.drawLine(
-      base + Offset(-r * .5, -r * .84),
-      base + Offset(-r * .8, -r * 1.3),
-      feeler,
-    );
-    canvas.drawLine(
-      base + Offset(r * .5, -r * .84),
-      base + Offset(r * .8, -r * 1.3),
-      feeler,
-    );
+    final feeler = _stroke(r * .2);
+    for (final side in const [-1, 1]) {
+      canvas.drawLine(
+        chin + Offset(side * r * .5, -r * .86),
+        chin + Offset(side * r * .78, -r * 1.25),
+        feeler,
+      );
+    }
   }
+
+  /// An apple with its leaf and the bite, in a box of 24, centred on
+  /// (12, 12.4) and [_appleHeight] tall.
+  static const _appleHeight = 20.0;
+  static const _apple =
+      'M12 7.6C13.3 7.6 14.5 6.6 16.2 6.6C17.6 6.6 18.9 7.3 19.8 8.5'
+      'C17.6 9.8 17 13.6 20.4 15.3C19.6 17.7 18.2 20.4 16.6 21.6'
+      'C15.6 22.4 14.8 22.2 13.8 21.8C12.9 21.4 11.9 21.3 10.9 21.7'
+      'C9.8 22.1 8.9 22.4 7.9 21.6C5.6 19.8 3.6 15.6 3.9 12.1'
+      'C4.1 9 6.2 6.8 8.6 6.7C10 6.6 11 7.6 12 7.6Z'
+      'M12.1 6.2C12 4.3 13.6 2.6 15.6 2.4C15.8 4.4 14 6.2 12.1 6.2Z';
 
   @override
   bool shouldRepaint(_DeviceGlyphPainter old) =>

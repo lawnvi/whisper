@@ -65,7 +65,6 @@ ChatSessionItem _session(
   isConnected: connected,
   isNearby: nearby,
   hasHistory: true,
-  avatarLabel: device.name.substring(0, 1),
 );
 
 final _sessions = [

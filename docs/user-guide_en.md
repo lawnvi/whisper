@@ -35,7 +35,7 @@ Once connected, the "Network" row on the device card shows the link's quality an
 
 When there are too many devices to tell apart, give one a name in "Custom name" on its device card, such as "Study desktop". The sidebar, chats, the tray and every device picker use that name. It is kept on this device only: the device itself and others still see its own name. Empty the field to go back to it.
 
-In the device list, each device's round icon shows whether it is a laptop, desktop, phone or tablet, and which system it runs. Computers tell others whether they are a laptop or a desktop (from 0.0.61), and their icons are drawn that way.
+In the device list, each device's round icon shows whether it is a laptop, desktop, phone or tablet, and the mark on its screen is its system. Computers tell others whether they are a laptop or a desktop (from 0.0.61), and their icons are drawn that way.
 
 ### Wake a sleeping computer
 
