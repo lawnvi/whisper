@@ -317,6 +317,9 @@ abstract final class WindowStreamPacket {
   static const int maxVideoPayload = 8 * 1024 * 1024;
   static const int maxInputText = 4096;
 
+  /// Far beyond any screen or scroll, still exact as an integer.
+  static const double maxInputCoordinate = 1e7;
+
   static Uint8List video(
     Uint8List payload, {
     required int ptsUs,
@@ -509,15 +512,26 @@ abstract final class WindowStreamPacket {
         if (textLength > maxInputText || bytes.length != 57 + textLength) {
           throw const FormatException('bad input text length');
         }
+        // A key code is a 16-bit CGKeyCode on the Mac, and positions become
+        // integers there: out of range or not finite, the host app traps.
+        final code = data.getInt32(9);
+        final values = [
+          for (var at = 21; at < 53; at += 8) data.getFloat64(at),
+        ];
+        if (code < 0 ||
+            code > 0xffff ||
+            values.any((v) => !v.isFinite || v.abs() > maxInputCoordinate)) {
+          throw const FormatException('input values out of range');
+        }
         return WindowStreamInput(
           kind: data.getInt32(5),
-          code: data.getInt32(9),
+          code: code,
           modifiers: data.getInt32(13),
           phase: data.getInt32(17),
-          x: data.getFloat64(21),
-          y: data.getFloat64(29),
-          dx: data.getFloat64(37),
-          dy: data.getFloat64(45),
+          x: values[0],
+          y: values[1],
+          dx: values[2],
+          dy: values[3],
           text: textLength == 0
               ? null
               : utf8.decode(

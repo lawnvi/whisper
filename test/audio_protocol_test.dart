@@ -108,6 +108,27 @@ void main() {
       expect(decoded.format, format);
       expect(decoded.transport, AudioTransport.websocket);
       expect(decoded.path, '/audio');
+
+      // A peer's offer with channels -1 trapped the Mac player
+      // (AVAudioChannelCount), and a huge rate × frame length sized the
+      // buffers that conceal lost packets.
+      for (final bad in <Map<String, Object>>[
+        {'channels': -1},
+        {'channels': 0},
+        {'channels': 9},
+        {'sampleRate': 4000},
+        {'sampleRate': 1 << 30},
+        {'frameDurationMs': 0},
+        {'frameDurationMs': 100000},
+      ]) {
+        final json = message.toJson();
+        json['format'] = {...format.toJson(), ...bad};
+        expect(
+          () => AudioControlMessage.fromJson(json),
+          throwsFormatException,
+          reason: '$bad',
+        );
+      }
     });
 
     test('round-trips error messages without a format', () {

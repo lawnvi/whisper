@@ -79,23 +79,27 @@ bool _hasLinkBoundary(String text, int start) {
   return !_embeddedLinkPrefixPattern.hasMatch(previous);
 }
 
+// Counts once and walks back from the end: recounting the whole link for
+// every trailing `)` took minutes for a message of a million of them, on
+// the isolate that also runs every connection.
 String _trimLinkSuffix(String value) {
-  var result = value;
-  while (result.isNotEmpty) {
-    final trailing = result.substring(result.length - 1);
-    if (_trailingLinkPunctuation.contains(trailing)) {
-      result = result.substring(0, result.length - 1);
-      continue;
-    }
-    final opening = _closingLinkPairs[trailing];
-    if (opening != null &&
-        _countCharacter(result, trailing) > _countCharacter(result, opening)) {
-      result = result.substring(0, result.length - 1);
-      continue;
-    }
-    break;
+  final counts = <String, int>{};
+  for (final pair in _closingLinkPairs.entries) {
+    counts[pair.key] = _countCharacter(value, pair.key);
+    counts[pair.value] = _countCharacter(value, pair.value);
   }
-  return result;
+  var end = value.length;
+  while (end > 0) {
+    final trailing = value.substring(end - 1, end);
+    final opening = _closingLinkPairs[trailing];
+    if (!_trailingLinkPunctuation.contains(trailing) &&
+        (opening == null || counts[trailing]! <= counts[opening]!)) {
+      break;
+    }
+    counts.update(trailing, (count) => count - 1, ifAbsent: () => 0);
+    end -= 1;
+  }
+  return value.substring(0, end);
 }
 
 int _countCharacter(String value, String character) {

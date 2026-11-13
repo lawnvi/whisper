@@ -1847,7 +1847,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       postInjectedScrollEvent(data)
     case "key":
       let nativeKeyCode = nativeMacKeyCode(data)
-      let keyCode = CGKeyCode(nativeKeyCode)
+      guard let keyCode = CGKeyCode(exactly: nativeKeyCode) else { return }  // From the peer.
       let down = boolValue(data["down"])
       let semantic =
         data["modifierSemantic"] as? String ?? data["keySemantic"] as? String ?? ""
@@ -1996,7 +1996,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     _ delta: CGFloat,
     remainder: inout CGFloat
   ) -> Int {
-    remainder += delta
+    remainder += delta.isFinite ? min(max(delta, -1e6), 1e6) : 0  // Int() would trap.
     let integral = remainder.rounded(.towardZero)
     remainder -= integral
     return Int(integral)
@@ -4074,7 +4074,7 @@ final class AudioSharePlugin: NSObject, FlutterPlugin {
     playbackSessionId = sessionId
 
     let sampleRate = Double(format["sampleRate"] as? Int ?? 48000)
-    let channels = AVAudioChannelCount(format["channels"] as? Int ?? 2)
+    let channels = AVAudioChannelCount(clamping: min(max(format["channels"] as? Int ?? 2, 1), 8))
     guard let audioFormat = AVAudioFormat(
       commonFormat: .pcmFormatFloat32,
       sampleRate: sampleRate,

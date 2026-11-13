@@ -113,7 +113,7 @@ class NotificationHelper {
     await _notificationsPlugin.show(
       id: id,
       title: title,
-      body: body,
+      body: Platform.isLinux ? linuxNotificationBody(body) : body,
       notificationDetails: platformChannelSpecifics,
     );
   }
@@ -216,3 +216,10 @@ Future<String> appName(String? package) async {
   }
   return pkg2name(package);
 }
+
+/// Linux notification servers read the body as markup (`<a href>`, `<img>`),
+/// and the text comes from other devices and their apps: shown as written.
+String linuxNotificationBody(String body) => body
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;');

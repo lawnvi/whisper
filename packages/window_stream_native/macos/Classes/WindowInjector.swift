@@ -239,7 +239,7 @@ final class WindowInjector {
       scroll(x: x, y: y, dx: dx, dy: dy, precise: phase & (1 << 16) != 0)
     case WSNConst.inputKeyDown, WSNConst.inputKeyUp:
       guard let event = CGEvent(
-        keyboardEventSource: source, virtualKey: CGKeyCode(code), keyDown: kind == WSNConst.inputKeyDown)
+        keyboardEventSource: source, virtualKey: CGKeyCode(truncatingIfNeeded: code), keyDown: kind == WSNConst.inputKeyDown)
       else { return }
       event.flags = flags(modifiers)
       event.post(tap: .cghidEventTap)
@@ -314,13 +314,18 @@ final class WindowInjector {
     }
   }
 
+  /// The values come from the viewer; `Int32(_:)` traps on what doesn't fit.
+  private func wheelPixels(_ value: Double) -> Int32 {
+    value.isFinite ? Int32(min(max(value.rounded(), -1e6), 1e6)) : 0
+  }
+
   private func scroll(x: Double, y: Double, dx: Double, dy: Double, precise: Bool) {
     guard let location = point(x, y), let rect = bounds() else { return }
     let pixelsY = precise ? dy * Double(rect.height) : dy * 40
     let pixelsX = precise ? dx * Double(rect.width) : dx * 40
     guard let event = CGEvent(
       scrollWheelEvent2Source: source, units: .pixel, wheelCount: 2,
-      wheel1: Int32(pixelsY.rounded()), wheel2: Int32(pixelsX.rounded()), wheel3: 0)
+      wheel1: wheelPixels(pixelsY), wheel2: wheelPixels(pixelsX), wheel3: 0)
     else { return }
     event.location = location
     event.post(tap: .cghidEventTap)

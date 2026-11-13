@@ -143,6 +143,17 @@ void main() {
         () => WindowStreamPacket.input(kind: 7, text: 'x' * 5000),
         throwsArgumentError,
       );
+      // A viewer's key code or wheel delta that didn't fit made the Mac host
+      // trap in Swift (CGKeyCode, Int32) and quit.
+      for (final bad in [
+        WindowStreamPacket.input(kind: 1, code: 70000),
+        WindowStreamPacket.input(kind: 1, code: -1),
+        WindowStreamPacket.input(kind: 3, dx: double.nan),
+        WindowStreamPacket.input(kind: 3, dy: 1e300),
+        WindowStreamPacket.input(kind: 0, x: double.infinity),
+      ]) {
+        expect(() => WindowStreamPacket.decode(bad), throwsFormatException);
+      }
     });
 
     test('encoded input matches the native decoder', () {

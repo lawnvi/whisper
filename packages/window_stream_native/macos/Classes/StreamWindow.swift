@@ -114,7 +114,9 @@ final class StreamWindowController: NSObject, NSWindowDelegate {
   /// shows its file's icon, and as the window's tile in the Dock when it is
   /// minimized, so it reads as that app rather than as Whisper.
   func setIcon(_ png: Data) {
-    guard let image = NSImage(data: png) else { return }
+    // From the peer: NSImage would also open PDF, TIFF and more.
+    let signature: [UInt8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+    guard png.starts(with: signature), let image = NSImage(data: png) else { return }
     // The title icon belongs to a represented file; any folder will do, its
     // menu and dragging are turned off below.
     window.representedURL = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)

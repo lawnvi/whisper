@@ -81,8 +81,11 @@ class AudioStreamFormat {
         'bitRate': bitRate,
       };
 
+  /// From the other device. Out-of-range values are refused here: a channel
+  /// count below one traps in the Mac player, and rate times frame length
+  /// sizes the buffers that conceal lost packets.
   factory AudioStreamFormat.fromJson(Map<String, dynamic> json) {
-    return AudioStreamFormat(
+    final format = AudioStreamFormat(
       codec: enumByName(
         AudioCodecKind.values,
         json['codec'] as String?,
@@ -93,6 +96,15 @@ class AudioStreamFormat {
       frameDurationMs: json['frameDurationMs'] as int? ?? 20,
       bitRate: json['bitRate'] as int? ?? 128000,
     );
+    if (format.sampleRate < 8000 ||
+        format.sampleRate > 192000 ||
+        format.channels < 1 ||
+        format.channels > 8 ||
+        format.frameDurationMs < 2 ||
+        format.frameDurationMs > 120) {
+      throw const FormatException('audio format out of range');
+    }
+    return format;
   }
 
   @override

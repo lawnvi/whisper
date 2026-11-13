@@ -108,13 +108,12 @@ class WindowStreamViewer extends ChangeNotifier {
 
   void _addOffer(WindowOffer offer) {
     final now = DateTime.now();
-    offers.value = [
-      offer,
-      for (final existing in offers.value)
-        if (existing.window.id != offer.window.id &&
-            now.difference(existing.receivedAt) < WindowOffer.lifetime)
-          existing,
-    ];
+    final kept = offers.value.where(
+      (existing) =>
+          existing.window.id != offer.window.id &&
+          now.difference(existing.receivedAt) < WindowOffer.lifetime,
+    );
+    offers.value = [offer, ...kept.take(7)]; // Each holds a peer's picture.
   }
 
   /// The user opened or dismissed [offer].
@@ -790,15 +789,16 @@ class RemotePeerSource implements WindowSource, ClosesTasks, ConfirmsTaskClose {
       case WindowStreamControlAction.icon:
         final appId = payload['appId'];
         final png = payload['png'];
-        if (appId is String && png is String) {
-          final bytes = base64Decode(png);
-          _iconCache[appId] = bytes;
+        if (appId is String && png is String && _icons.containsKey(appId)) {
+          final bytes = _iconCache[appId] = base64Decode(png);
           _icons.remove(appId)?.complete(bytes);
         }
       case WindowStreamControlAction.thumbnail:
         final windowId = payload['windowId'];
         final jpeg = payload['jpeg'];
-        if (windowId is int && jpeg is String) {
+        if (windowId is int &&
+            jpeg is String &&
+            _thumbnails.containsKey(windowId)) {
           final bytes = base64Decode(jpeg);
           _snapshotCache[windowId] = (at: DateTime.now(), jpeg: bytes);
           _thumbnails.remove(windowId)?.complete(bytes);

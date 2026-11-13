@@ -300,20 +300,20 @@ void Surface::SetHud(std::string text) {
   QueueDraw();
 }
 
-void Surface::SetIcon(const uint8_t* png, int32_t length) {
-  if (png == nullptr || length <= 0) return;
-  GdkPixbufLoader* loader = gdk_pixbuf_loader_new();
+void Surface::SetIcon(const uint8_t* png, int32_t length) {  // From the peer: PNG only, no format sniffing.
+  if (png == nullptr || length < 8 || memcmp(png, "\x89PNG\r\n\x1a\n", 8) != 0) return;
   GError* error = nullptr;
+  GdkPixbufLoader* loader = gdk_pixbuf_loader_new_with_type("png", &error);
   GdkPixbuf* icon = nullptr;
-  if (gdk_pixbuf_loader_write(loader, png, static_cast<gsize>(length), &error) &&
+  if (loader != nullptr && gdk_pixbuf_loader_write(loader, png, static_cast<gsize>(length), &error) &&
       gdk_pixbuf_loader_close(loader, &error)) {
     icon = gdk_pixbuf_loader_get_pixbuf(loader);
     if (icon != nullptr) g_object_ref(icon);
-  } else {
+  } else if (loader != nullptr) {
     gdk_pixbuf_loader_close(loader, nullptr);
   }
   g_clear_error(&error);
-  g_object_unref(loader);
+  if (loader != nullptr) g_object_unref(loader);
   if (icon == nullptr) return;
   OnMain([self = shared_from_this(), icon] {
     if (self->icon_ != nullptr) g_object_unref(self->icon_);
