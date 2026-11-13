@@ -58,5 +58,7 @@
 - [2026-11-12 用户贴的日志：传文件时指针卡在哪](records/2026-11-12-transfer-pacing-user-logs.md)
 - [2026-11-12 传文件时按键鼠包排队的时间调速](records/2026-11-12-transfer-pacing-steered.md)
 - [2026-11-12 调速按来回算，文件反方向时速度只有一半](records/2026-11-12-transfer-pacing-direction.md)
+- [2026-11-13 安全审计与加固](records/2026-11-13-security-audit.md)
+- [2026-11-13 提权专项审计](records/2026-11-13-privilege-escalation-audit.md)
 
 各子系统的设计稿和计划在 [superpowers/specs](superpowers/specs) 和 [superpowers/plans](superpowers/plans)，按日期命名。它们记录的是当时的打算，代码和上面的开发文档以现在为准。
