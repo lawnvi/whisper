@@ -144,6 +144,8 @@ button:focus-visible, a:focus-visible, textarea:focus-visible, .media:focus-visi
 .gate-art { height: 112px; display: grid; place-items: end center; margin-bottom: 24px; transition: filter var(--smooth-dur) var(--smooth), opacity var(--smooth-dur) var(--smooth); }
 .gate-art svg { display: block; height: 100%; width: auto; filter: drop-shadow(0 10px 18px rgba(0,0,0,.14)); }
 .gate-art.off { filter: grayscale(1); opacity: .45; }
+/* keep-all: Chinese lines break at spaces and punctuation, not mid-phrase. */
+.gate h1, .gate p, .empty p { word-break: keep-all; overflow-wrap: anywhere; }
 .gate h1 { margin: 0; font-size: var(--title); line-height: 1.25; font-weight: 600; text-wrap: balance; }
 .gate p { margin: 8px 0 0; color: var(--ink2); font-size: var(--note); line-height: 1.5; text-wrap: balance; max-width: 300px; }
 .gate .actions { margin-top: 24px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
@@ -183,34 +185,49 @@ button:focus-visible, a:focus-visible, textarea:focus-visible, .media:focus-visi
 
 /* ---------- 对话 ---------- */
 .chat { min-height: 100vh; min-height: 100dvh; }
+/* 顶栏没有实底和分隔线：内容滚到下面时渐隐、变模糊，按钮是浮着的玻璃 */
 .bar {
-  position: fixed; inset: 0 0 auto; z-index: 20;
+  position: fixed; inset: 0 0 auto; z-index: 20; pointer-events: none;
   padding-top: env(safe-area-inset-top, 0px);
-  padding-left: max(8px, env(safe-area-inset-left, 0px)); padding-right: max(8px, env(safe-area-inset-right, 0px));
-  background: var(--glass-panel);
-  -webkit-backdrop-filter: blur(44px) saturate(1.9); backdrop-filter: blur(44px) saturate(1.9);
-  box-shadow: 0 .5px 0 var(--sep);
+  padding-left: max(10px, env(safe-area-inset-left, 0px)); padding-right: max(10px, env(safe-area-inset-right, 0px));
+}
+.bar::before {
+  content: ""; position: absolute; inset: 0 0 -18px;
+  background: linear-gradient(var(--content) 30%, transparent);
+  background: linear-gradient(var(--content) 25%, color-mix(in srgb, var(--content) 72%, transparent) 62%, transparent);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+  -webkit-mask-image: linear-gradient(#000 58%, transparent); mask-image: linear-gradient(#000 58%, transparent);
 }
 .bar-inner {
-  max-width: var(--column, 900px); margin: 0 auto; min-height: 52px;
+  position: relative; max-width: var(--column, 900px); margin: 0 auto; min-height: 56px;
   display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px;
 }
-.who { grid-column: 2; display: flex; align-items: center; gap: 10px; min-width: 0; padding: 8px 0; }
+.bar-inner > * { pointer-events: auto; }
+.who { grid-column: 2; display: flex; align-items: center; gap: 10px; min-width: 0; padding: 10px 0; }
 .who-name { font-size: var(--head); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 52vw; }
 @media (pointer: coarse) {
-  .bar-inner { min-height: 56px; }
-  .who { flex-direction: column; gap: 3px; padding: 6px 0 7px; }
-  .who-name { font-size: var(--tiny); font-weight: 500; color: var(--ink); }
+  .bar-inner { min-height: 60px; }
+  .who { flex-direction: column; gap: 0; padding: 8px 0; }
+  .who-name {
+    position: relative; margin-top: -5px; padding: 2px 10px; border-radius: 999px;
+    font-size: var(--note); font-weight: 600; line-height: 1.35;
+    background: var(--glass-control); box-shadow: var(--e1), var(--highlight);
+    -webkit-backdrop-filter: blur(30px) saturate(1.8); backdrop-filter: blur(30px) saturate(1.8);
+  }
 }
 .avatar {
   width: var(--avatar); height: var(--avatar); border-radius: 50%; flex: none;
-  display: grid; place-items: center; background: var(--device-on); color: #FFFFFF;
-  transition: background-color var(--smooth-dur) var(--smooth), color var(--smooth-dur) var(--smooth);
+  display: grid; place-items: center; color: #FFFFFF;
+  background: var(--ink3); box-shadow: var(--highlight);
+  transition: opacity var(--smooth-dur) var(--smooth), filter var(--smooth-dur) var(--smooth);
 }
-.avatar svg { width: 62%; height: 62%; }
-.avatar.off { background: var(--device-off); color: var(--device-off-mark); }
+.avatar svg { width: 58%; height: 58%; }
+.avatar.off { opacity: .45; }
 .bar-end { grid-column: 3; justify-self: end; display: flex; }
 .bar-start { grid-column: 1; justify-self: start; display: flex; }
+.bar-icon { width: var(--field); height: var(--field); border-radius: 50%; display: grid; place-items: center; color: var(--ink); }
+.bar-icon .i { width: 18px; height: 18px; }
+@media (pointer: coarse) { .bar-icon .i { width: 20px; height: 20px; } }
 .lang {
   display: inline-flex; align-items: center; gap: 5px; min-height: var(--target); padding: 0 10px;
   border-radius: 999px; color: var(--ink2); font-size: var(--note); font-weight: 500; white-space: nowrap;
@@ -218,14 +235,14 @@ button:focus-visible, a:focus-visible, textarea:focus-visible, .media:focus-visi
 .lang .i { width: 15px; height: 15px; }
 @media (hover: hover) { .lang:hover { background: var(--fill); color: var(--ink); } }
 .lang-corner { position: fixed; z-index: 30; top: calc(10px + env(safe-area-inset-top, 0px)); right: max(10px, env(safe-area-inset-right, 0px)); }
-.bar-btn { min-height: var(--target); padding: 0 10px; border-radius: 999px; color: var(--accent-text); font-size: var(--body); font-weight: 500; }
-@media (hover: hover) { .bar-btn:hover { background: var(--fill); } }
+.bar-btn { height: var(--field); padding: 0 16px; border-radius: 999px; color: var(--ink); font-size: var(--body); font-weight: 500; white-space: nowrap; }
+@media (hover: hover) { .bar-icon:hover, .bar-btn:hover { background: var(--glass-panel); } }
 
 /* 横过来的手机：高度不够，顶栏回到一行，输入框离底近一点 */
 @media (pointer: coarse) and (max-height: 500px) {
   .bar-inner { min-height: 48px; }
   .who { flex-direction: row; gap: 8px; padding: 6px 0; }
-  .who-name { font-size: var(--head); font-weight: 600; }
+  .who-name { margin: 0; padding: 0; background: none; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; font-size: var(--head); }
   :root { --avatar: 30px; }
   .dock { padding-bottom: calc(max(10px, env(safe-area-inset-bottom, 0px)) + var(--kb, 0px)); }
   .gate-art { height: 72px; margin-bottom: 14px; }
@@ -447,12 +464,12 @@ button:focus-visible, a:focus-visible, textarea:focus-visible, .media:focus-visi
 <div id="chat" class="chat" hidden>
   <header class="bar" id="bar">
     <div class="bar-inner">
-      <div class="bar-start"><button class="lang press" id="lang-chat" type="button"><svg class="i"><use href="#i-globe"/></svg><span></span></button></div>
+      <div class="bar-start"><button class="bar-icon glass press" id="lang-chat" type="button"><svg class="i"><use href="#i-globe"/></svg></button></div>
       <div class="who">
         <span class="avatar" id="avatar" aria-hidden="true"></span>
         <span class="who-name" id="who-name"></span>
       </div>
-      <div class="bar-end"><button class="bar-btn press" id="end" type="button"></button></div>
+      <div class="bar-end"><button class="bar-btn glass press" id="end" type="button"></button></div>
     </div>
   </header>
   <div class="status" id="status" role="status" hidden><span class="spinner" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><span id="status-text"></span></div>
@@ -545,6 +562,7 @@ button:focus-visible, a:focus-visible, textarea:focus-visible, .media:focus-visi
       save: '下载',
       holdToSave: '按住图片可以存到照片',
       noFolders: '不能发文件夹，可以先压缩成一个文件',
+      keepDownload: '{browser} 提示无法安全下载时，选「保留」',
       website: 'Whisper 官网',
       switchTo: 'English',
       switchLabel: '切换到英文',
@@ -598,6 +616,7 @@ button:focus-visible, a:focus-visible, textarea:focus-visible, .media:focus-visi
       save: 'Download',
       holdToSave: 'Touch and hold the image to save it to Photos',
       noFolders: 'Folders can’t be sent. Compress it into one file first',
+      keepDownload: 'If {browser} blocks the download, choose Keep',
       website: 'Whisper website',
       switchTo: '中文',
       switchLabel: 'Switch to Chinese',
@@ -1214,6 +1233,9 @@ button:focus-visible, a:focus-visible, textarea:focus-visible, .media:focus-visi
     a.download = item.name;
     a.rel = 'noopener';
     document.body.appendChild(a); a.click(); a.remove();
+    // Chromium warns about every download over http and drops it unless kept.
+    var me = describeSelf(), name = { chrome: 'Chrome', edge: 'Edge', opera: 'Opera' }[me.browser];
+    if (name && me.os !== 'ios') toast(t('keepDownload', { browser: name }), 5000);
     if (btn) {
       btn.classList.add('done');
       btn.replaceChild(icon('check'), btn.firstChild);
@@ -1425,13 +1447,15 @@ button:focus-visible, a:focus-visible, textarea:focus-visible, .media:focus-visi
     }
     if (!items.length) files = Array.prototype.slice.call(e.dataTransfer.files || []);
     if (files.length) sendFiles(files);
-    if (folder) toastFolder();
+    if (folder) toast(t('noFolders'), 2600);
   });
-  function toastFolder() {
-    $('status-text').textContent = t('noFolders');
+  var toastTimer = 0;
+  function toast(text, ms) {
+    $('status-text').textContent = text;
     var s = $('status'); s.hidden = false;
     s.querySelector('.spinner').hidden = true;
-    setTimeout(function () { s.querySelector('.spinner').hidden = false; renderLink(); }, 2600);
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { s.querySelector('.spinner').hidden = false; renderLink(); }, ms);
   }
 
   // ---------- 布局 ----------
@@ -1479,9 +1503,10 @@ button:focus-visible, a:focus-visible, textarea:focus-visible, .media:focus-visi
     renderMade();
     var other = lang === 'zh' ? 'en' : 'zh';
     ['lang-gate', 'lang-chat'].forEach(function (id) {
-      var b = $(id);
-      b.querySelector('span').textContent = t('switchTo');
+      var b = $(id), label = b.querySelector('span');
+      if (label) label.textContent = t('switchTo');
       b.setAttribute('aria-label', t('switchLabel'));
+      b.title = t('switchLabel');
       b.setAttribute('lang', other === 'zh' ? 'zh-CN' : 'en');
     });
     $('end').textContent = t('end');

@@ -37,7 +37,7 @@ Whisper is a LAN collaboration app. Paired devices connect to each other directl
 
 Also: quick send from the share sheet, a context menu or a hotkey, and desktop screenshots with markup.
 
-Experimental: Web Transfer, which lets a device without Whisper exchange texts and files with this one in a browser (not yet verified in phone browsers); receiving DLNA casts from video apps; waking a sleeping computer (it needs a cable, and has not been verified on real hardware yet).
+Experimental: Web Transfer, which lets a device without Whisper exchange texts and files with this one in a browser (on phones only tried in Chrome on Android; not yet verified on an iPhone); receiving DLNA casts from video apps; waking a sleeping computer (it needs a cable, and has not been verified on real hardware yet).
 
 <p align="center">
   <img src=".github/image/keyboard-share.png" width="49%" alt="Whisper keyboard and mouse sharing">

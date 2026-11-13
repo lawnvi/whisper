@@ -1,6 +1,6 @@
 # 网页传输
 
-2026-11-12 用户定下：名字叫「网页传输」；这台每次确认、核对 4 位数；网页关掉 10 分钟后结束；记录留着；不加密（本来就是临时用的）；不能影响 App 原有的能力；不改数据库结构；两个方向都不传文件夹；网页只有中文和英文，按打开网页的浏览器定，页面上能切换，和这台 App 的语言无关。界面规格见 [`docs/design/surfaces.md`「网页传输」](../design/surfaces.md#网页传输)，网页本身是 `assets/web_transfer/index.html`。验证情况见 [`docs/records/2026-11-12-web-transfer-trial.md`](../records/2026-11-12-web-transfer-trial.md)。
+2026-11-12 用户定下：名字叫「网页传输」；这台每次确认、核对 4 位数；网页关掉 10 分钟后结束；记录留着；不加密（本来就是临时用的）；不能影响 App 原有的能力；不改数据库结构；两个方向都不传文件夹；网页只有中文和英文，按打开网页的浏览器定，页面上能切换，和这台 App 的语言无关。界面规格见 [`docs/design/surfaces.md`「网页传输」](../design/surfaces.md#网页传输)，网页本身是 `assets/web_transfer/index.html`。验证情况见 [`docs/records/2026-11-12-web-transfer-trial.md`](../records/2026-11-12-web-transfer-trial.md) 和小米手机上的 [`docs/records/2026-11-12-web-transfer-xiaomi.md`](../records/2026-11-12-web-transfer-xiaomi.md)。
 
 没装 Whisper 的设备用浏览器打开这台的一个地址，这台确认之后，两边像两台 Whisper 设备一样互发文字和文件。对方可以是 iPhone、借来的电脑、Chromebook，有浏览器就行。它补的是 iOS 版没上架留下的缺口。
 
@@ -93,6 +93,8 @@
 - 只给这台发给这个访客的文件（按消息的 `uuid` 找，收件人必须是这个访客），包括以前的会话发过的。支持 `HEAD`、`Range`、`If-Range`、`If-None-Match`，沿用 `share_range.dart` 和 `share_http.dart`。Android 上选的文件是 `content://`，按块从系统读。
 - `?view=1` 给网页预览：图片（png、jpeg、gif、webp、heic、heif、avif）和视频（mp4、quicktime、webm）回 `inline`，其余按附件下载。
 - 每个文件响应都带 `X-Content-Type-Options: nosniff` 和 `Content-Security-Policy: sandbox; default-src 'none'`。
+
+Chromium 系的浏览器（Chrome、Edge、Opera）对 http 下载一律提示「无法安全下载」，局域网地址也不例外。不点「保留」，下载会在中途断掉，这台写「等待重连」。网页在这些浏览器上（iOS 除外）点下载后，提示 5 秒要选「保留」。换成 https 也绕不开：自签证书会变成更吓人的证书警告。
 
 这台的文件卡片：网页还没下载时没有传输记录，卡片写「等对方下载」；下载时按送出的字节画进度；一次响应把最后一个字节送完就是「已送达」；中途断了写「等待重连」，不上灵动岛。预览（列表里的图片、视频的第一帧）只在完整送完时算送达，不画进度。
 

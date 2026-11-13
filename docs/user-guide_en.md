@@ -146,7 +146,7 @@ All links are listed under "Share Links" in the sidebar (on the "Files" home scr
 
 ## Web Transfer
 
-When the other device has no Whisper (an iPhone, a borrowed computer), it can still exchange texts and files with this device in a browser. macOS, Windows, Linux, and Android can host it; the other side only needs a browser. This is new, and so far it has only been tried end to end between a Mac and a desktop browser.
+When the other device has no Whisper (an iPhone, a borrowed computer), it can still exchange texts and files with this device in a browser. macOS, Windows, Linux, and Android can host it; the other side only needs a browser. This is new, and so far it has only been tried with a Mac hosting it and a desktop browser or Chrome on an Android phone on the other side.
 
 1. On a computer, click this device's name at the bottom left; on a phone, open "Connect a device". Under the QR code, tap "No Whisper on the other device? Use Web Transfer".
 2. The other person scans the QR code with the camera, or types the address below it into a browser (for example `http://192.168.1.5:10003/`). On a computer with several networks, the arrows next to the address switch it.
@@ -155,8 +155,9 @@ When the other device has no Whisper (an iPhone, a borrowed computer), it can st
 
 On their page:
 
-- The "+" on the left picks files (on a phone, from the photo library too). On a computer, files can also be dragged in, or a screenshot pasted into the box. Pictures and videos sent to them show right away; other files have a download arrow. On an iPhone, to save a picture to Photos, open it and touch and hold.
-- The page is in Chinese or English, following the browser; the button at the top right (top left in the conversation) switches.
+- The "+" on the left picks files (on a phone, from the photo library too). On a computer, files can also be dragged in, or a screenshot pasted into the box. On Xiaomi phones the system calls its option "Photos and videos"; open it and switch to "Browse" to pick any file.
+- Pictures and videos sent to them show right away; other files have a download arrow. Chrome and Edge warn that the download is not secure (the page is plain http); choose "Keep" or it stops. On an iPhone, to save a picture to Photos, open it and touch and hold.
+- The page is in Chinese or English, following the browser; the button at the top right (the globe at the top left in the conversation) switches.
 - Links to the Whisper website and GitHub are at the bottom of the page.
 
 Ending and coming back:
