@@ -493,7 +493,10 @@ class _Page {
 
   final String before, after, scripts, styles;
 
-  factory _Page.parse(String html) {
+  factory _Page.parse(String source) {
+    // A Windows checkout has CRLF. Browsers hash inline blocks after turning
+    // line ends into LF, so hashes over CRLF would block the whole page.
+    final html = source.replaceAll(RegExp(r'\r\n?'), '\n');
     final open = html.indexOf(WebTransferRoutes._bootOpen);
     if (open < 0) {
       throw const FormatException('the page has no boot block');

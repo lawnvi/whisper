@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -83,7 +84,12 @@ class _Harness {
       self: () async => _self,
       selfName: () async => 'Host <Mac>',
       receiveDirectory: () async => received,
-      loadPage: () => File('assets/web_transfer/index.html').readAsString(),
+      // CRLF, as a Windows checkout has it (git's autocrlf). Regression: the
+      // page was blank there because its CSP hashes were taken over CRLF, but
+      // browsers hash inline blocks with LF line ends and refused them.
+      loadPage: () async => (await File(
+        'assets/web_transfer/index.html',
+      ).readAsString()).replaceAll('\n', '\r\n'),
       onMessage: messages.add,
       onTransfer: transfers.add,
       answerTimeout: answer,
@@ -257,6 +263,15 @@ void main() {
     expect(
       pageHtml.headers.value('content-security-policy'),
       allOf(contains("default-src 'none'"), contains("script-src 'sha256-")),
+    );
+    final script = RegExp(
+      r'<script>([\s\S]*?)</script>',
+    ).firstMatch(html.replaceAll('\r\n', '\n'))!.group(1)!;
+    expect(
+      pageHtml.headers.value('content-security-policy'),
+      contains(
+        "'sha256-${base64.encode(sha256.convert(utf8.encode(script)).bytes)}'",
+      ),
     );
 
     final page = await h.join(_key(1));

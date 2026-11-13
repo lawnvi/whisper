@@ -146,7 +146,7 @@ Chromium 系的浏览器（Chrome、Edge、Opera）对 http 下载一律提示�
 - **准入：** 只在面板开着时接新请求；每个会话都要这台点允许，并核对 4 位数。4 位数是这台随机生成的，只用来认人。
 - **会话 Cookie** 是 `HttpOnly`、`SameSite=Strict`。所有改状态的请求（WebSocket 升级、`PUT`、`POST`）都检查 `Origin` 等于 `http://` 加 `Host`，挡住同一网络里别的网页借访客的浏览器发请求。服务器沿用共享链接的局域网来源过滤、DNS 重绑定检查和连接数上限。
 - **访客能碰到的只有自己的会话：** 自己发过和收到的文件，不能列目录、不能下载这台没发给它的东西。`offer` 用到已有传输的 `id`（别人的）一律回 `failed`，不会覆盖别人的记录。
-- **页面：** 不加载任何外部资源。服务器第一次读页面时算出内联脚本和样式的 SHA-256，放进 `Content-Security-Policy`（`default-src 'none'`、`connect-src 'self' ws://<Host>`、`img-src 'self' blob: data:`、`media-src 'self' blob:`）。消息和文件名都用 `textContent` 放进页面。页脚的官网和 GitHub 是普通的新窗口链接，带 `noopener noreferrer`。
+- **页面：** 不加载任何外部资源。服务器第一次读页面时，先把换行统一成 LF（Windows 上检出的文件是 CRLF，浏览器按 LF 算哈希，对不上会拦掉整页，白屏），再算出内联脚本和样式的 SHA-256，放进 `Content-Security-Policy`（`default-src 'none'`、`connect-src 'self' ws://<Host>`、`img-src 'self' blob: data:`、`media-src 'self' blob:`）。消息和文件名都用 `textContent` 放进页面。页脚的官网和 GitHub 是普通的新窗口链接，带 `noopener noreferrer`。
 - **收到的文件**不自动打开。
 - **没挡住的：** dart:io 的 WebSocket 没有单帧大小上限，超过 128 KiB 的帧是收完整帧后才断开；局域网里一个还没被允许的访客能让这台分配一次大内存。面板开着才有这个窗口，没做更细的限制。
 - `AppLog` 只记事件和错误类型（打开、关闭、请求、允许、拒绝、结束、失败），不记 IP、文件名、User-Agent 和消息。
