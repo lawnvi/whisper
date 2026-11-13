@@ -155,7 +155,7 @@ When the other device has no Whisper (an iPhone, a borrowed computer), it can st
 
 On their page:
 
-- The "+" on the left picks files (on a phone, from the photo library too). On a computer, files can also be dragged in, or a screenshot pasted into the box. On Xiaomi phones the system calls its option "Photos and videos"; open it and switch to "Browse" to pick any file.
+- The "+" on the left picks files (on a phone, from the photo library too). On a computer, files can also be dragged in, or a screenshot pasted into the box. On an Android phone, "+" first asks for "Photos & Videos" or "Files". On Xiaomi phones, after "Files" the system still calls its option "Photos and videos"; open it and switch to "Browse" to pick any file.
 - Pictures and videos sent to them show right away; other files have a download arrow. Chrome and Edge warn that the download is not secure (the page is plain http); choose "Keep" or it stops. On an iPhone, to save a picture to Photos, open it and touch and hold.
 - The page is in Chinese or English, following the browser; the button at the top right (the globe at the top left in the conversation) switches.
 - Links to the Whisper website and GitHub are at the bottom of the page.
