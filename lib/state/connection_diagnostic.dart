@@ -32,10 +32,12 @@ final class ConnectionDiagnostic {
         ConnectionAttemptReason.identityUnpinned ||
         ConnectionAttemptReason.trustRevoked =>
           ConnectionDiagnosticStage.identity,
-        ConnectionAttemptReason.protocolMismatch =>
+        ConnectionAttemptReason.protocolMismatch ||
+        ConnectionAttemptReason.pairingNeedsUpdate =>
           ConnectionDiagnosticStage.version,
         ConnectionAttemptReason.peerRejected ||
         ConnectionAttemptReason.pairingExpired ||
+        ConnectionAttemptReason.pairingBusy ||
         ConnectionAttemptReason.automaticPairingRequired =>
           ConnectionDiagnosticStage.pairing,
         ConnectionAttemptReason.socketError ||

@@ -20,7 +20,7 @@
 
 ## Connect devices
 
-When two devices are on the same network with Whisper open, they usually appear in each other's device list. Select the other device and confirm the request on the receiving side; the first time, both sides check and confirm the same pairing code.
+When two devices are on the same network with Whisper open, they usually appear in each other's device list. Select the other device and confirm the request on the receiving side; the first time, both sides check and confirm the same pairing code. When you start a pairing that relies on the code alone, the other device needs the latest Whisper too, otherwise you are asked to update it; if it can't be updated yet, pair by scanning its QR code. Devices that are already paired keep connecting as before. After you decline a pairing request, that device can't send another one for a minute.
 
 If the other device is not listed, connect with a QR code or an address:
 

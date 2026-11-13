@@ -968,6 +968,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get pairingRejectedByPeer => '对方拒绝了连接请求';
 
   @override
+  String get pairingNeedsUpdate =>
+      '只靠配对码确认，需要两台设备都是最新版 Whisper。请先更新对方设备，或者扫描对方的二维码配对';
+
+  @override
   String get pairingEncryptionNotice => '配对后，文本、文件、剪贴板和控制数据均端到端加密';
 
   @override

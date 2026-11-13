@@ -13,9 +13,7 @@ final class SocketAdmissionResult {
   factory SocketAdmissionResult.allowed(AdmissionLease lease) =>
       SocketAdmissionResult._(lease: lease);
 
-  factory SocketAdmissionResult.rejected(
-    SocketAdmissionRejection rejection,
-  ) =>
+  factory SocketAdmissionResult.rejected(SocketAdmissionRejection rejection) =>
       SocketAdmissionResult._(rejection: rejection);
 
   final AdmissionLease? lease;
@@ -31,16 +29,32 @@ final class AdmissionLease {
   final String address;
   bool _authenticated = false;
   bool _closed = false;
+  void Function()? _evict;
+  bool Function()? _evictable;
 
   bool get isAuthenticated => _authenticated;
   bool get isClosed => _closed;
+
+  /// How to close the connection when a newer one takes this lease's slot.
+  /// Without it the lease is never evicted.
+  void evictWith(void Function() evict) => _evict = evict;
+
+  /// Limits eviction to while [evictable] says yes, such as before the peer
+  /// has proved who it is.
+  void evictableWhile(bool Function() evictable) => _evictable = evictable;
+
+  bool get _canEvict =>
+      !_closed &&
+      !_authenticated &&
+      _evict != null &&
+      (_evictable?.call() ?? true);
 
   void markAuthenticated() {
     if (_closed || _authenticated) {
       return;
     }
     _authenticated = true;
-    _owner._markAuthenticated(address);
+    _owner._markAuthenticated(this);
   }
 
   void close() {
@@ -48,7 +62,7 @@ final class AdmissionLease {
       return;
     }
     _closed = true;
-    _owner._release(address, wasAuthenticated: _authenticated);
+    _owner._release(this, wasAuthenticated: _authenticated);
   }
 }
 
@@ -82,6 +96,9 @@ final class SocketAdmissionController {
   final Duration globalCleanupInterval;
 
   final Map<String, int> _preAuthByIp = <String, int>{};
+
+  /// Unauthenticated leases, oldest first.
+  final List<AdmissionLease> _preAuthLeases = <AdmissionLease>[];
   final Map<String, List<int>> _upgradeAttemptsByIp = <String, List<int>>{};
   int _chatConnectionCount = 0;
   int _preAuthConnectionCount = 0;
@@ -127,26 +144,45 @@ final class SocketAdmissionController {
         SocketAdmissionRejection.chatCapacity,
       );
     }
-    if (_preAuthConnectionCount >= maxPreAuthConnections) {
+    // When full, the oldest handshake that can be evicted makes room: a real
+    // one finishes in moments, while one that only holds a slot sits there
+    // until it times out. Evicting from this address first keeps others' out.
+    final allFull = _preAuthConnectionCount >= maxPreAuthConnections;
+    final addressFull =
+        (_preAuthByIp[normalized] ?? 0) >= maxPreAuthConnectionsPerIp;
+    if ((allFull || addressFull) &&
+        !_evictOldest(addressFull ? normalized : null)) {
       return SocketAdmissionResult.rejected(
-        SocketAdmissionRejection.preAuthCapacity,
-      );
-    }
-    if ((_preAuthByIp[normalized] ?? 0) >= maxPreAuthConnectionsPerIp) {
-      return SocketAdmissionResult.rejected(
-        SocketAdmissionRejection.preAuthPerIpCapacity,
+        allFull
+            ? SocketAdmissionRejection.preAuthCapacity
+            : SocketAdmissionRejection.preAuthPerIpCapacity,
       );
     }
 
     _chatConnectionCount += 1;
     _preAuthConnectionCount += 1;
     _preAuthByIp.update(normalized, (count) => count + 1, ifAbsent: () => 1);
-    return SocketAdmissionResult.allowed(AdmissionLease._(this, normalized));
+    final lease = AdmissionLease._(this, normalized);
+    _preAuthLeases.add(lease);
+    return SocketAdmissionResult.allowed(lease);
+  }
+
+  bool _evictOldest(String? address) {
+    for (final lease in _preAuthLeases) {
+      if ((address == null || lease.address == address) && lease._canEvict) {
+        final evict = lease._evict!;
+        lease.close();
+        evict();
+        return true;
+      }
+    }
+    return false;
   }
 
   void _cleanupExpiredUpgradeAttempts(int nowMillis, int cutoff) {
     final lastCleanup = _lastGlobalCleanupMillis;
-    final shouldClean = lastCleanup == null ||
+    final shouldClean =
+        lastCleanup == null ||
         nowMillis < lastCleanup ||
         nowMillis - lastCleanup >= globalCleanupInterval.inMilliseconds;
     if (!shouldClean) {
@@ -159,20 +195,22 @@ final class SocketAdmissionController {
     });
   }
 
-  void _markAuthenticated(String address) {
-    _releasePreAuth(address);
+  void _markAuthenticated(AdmissionLease lease) {
+    _releasePreAuth(lease);
   }
 
-  void _release(String address, {required bool wasAuthenticated}) {
+  void _release(AdmissionLease lease, {required bool wasAuthenticated}) {
     if (_chatConnectionCount > 0) {
       _chatConnectionCount -= 1;
     }
     if (!wasAuthenticated) {
-      _releasePreAuth(address);
+      _releasePreAuth(lease);
     }
   }
 
-  void _releasePreAuth(String address) {
+  void _releasePreAuth(AdmissionLease lease) {
+    _preAuthLeases.remove(lease);
+    final address = lease.address;
     if (_preAuthConnectionCount > 0) {
       _preAuthConnectionCount -= 1;
     }

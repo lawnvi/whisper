@@ -1870,6 +1870,12 @@ abstract class AppLocalizations {
   /// **'对方拒绝了连接请求'**
   String get pairingRejectedByPeer;
 
+  /// No description provided for @pairingNeedsUpdate.
+  ///
+  /// In zh, this message translates to:
+  /// **'只靠配对码确认，需要两台设备都是最新版 Whisper。请先更新对方设备，或者扫描对方的二维码配对'**
+  String get pairingNeedsUpdate;
+
   /// No description provided for @pairingEncryptionNotice.
   ///
   /// In zh, this message translates to:

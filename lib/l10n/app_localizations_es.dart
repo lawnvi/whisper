@@ -1043,6 +1043,10 @@ class AppLocalizationsEs extends AppLocalizations {
       'El otro dispositivo rechazó la solicitud de conexión';
 
   @override
+  String get pairingNeedsUpdate =>
+      'Confirmar solo con el código de emparejamiento requiere la última versión de Whisper en ambos dispositivos. Actualiza el otro dispositivo o empareja escaneando su código QR';
+
+  @override
   String get pairingEncryptionNotice =>
       'Tras emparejar, el texto, los archivos, el portapapeles y los datos de control se cifran de extremo a extremo';
 

@@ -139,9 +139,15 @@ final class _WireControlSessionBinding {
 }
 
 final class WireControlSessionRegistry {
-  WireControlSessionRegistry({this.maxEntries = 4096}) : assert(maxEntries > 0);
+  WireControlSessionRegistry({this.maxEntries = 4096, this.maxPerPeer = 256})
+    : assert(maxEntries > 0 && maxPerPeer > 0);
 
   final int maxEntries;
+
+  /// One peer's share: past it, that peer's least recently used session
+  /// makes room, so a peer opening sessions without end can't fill the table
+  /// and get every other peer's new sessions refused.
+  final int maxPerPeer;
   final LinkedHashMap<String, _WireControlSessionBinding> _bindings =
       LinkedHashMap<String, _WireControlSessionBinding>();
 
@@ -223,6 +229,13 @@ final class WireControlSessionRegistry {
       return const WireInputValidationResult.rejected(
         WireInputReason.controlSessionMismatch,
       );
+    }
+    final own = <String>[
+      for (final entry in _bindings.entries)
+        if (entry.value.authenticatedPeerId == authenticatedPeerId) entry.key,
+    ];
+    if (own.length >= maxPerPeer) {
+      _bindings.remove(own.first);
     }
     if (_bindings.length >= maxEntries) {
       return const WireInputValidationResult.rejected(

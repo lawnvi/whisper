@@ -475,6 +475,7 @@
   "pairingUpgradeRequired": "The other device is out of date. Update Whisper and try again",
   "pairingExpired": "The pairing request expired",
   "pairingRejectedByPeer": "The other device declined the connection request",
+  "pairingNeedsUpdate": "Confirming with the pairing code alone needs the latest Whisper on both devices. Update the other device, or pair by scanning its QR code",
   "pairingEncryptionNotice": "After pairing, text, files, clipboard, and control data are end-to-end encrypted",
   "e2eeTrustedConnection": "End-to-end encrypted · Trusted device",
   "e2eeEncryptedConnection": "End-to-end encrypted connection",

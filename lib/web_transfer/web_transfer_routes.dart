@@ -117,7 +117,12 @@ class WebTransferRoutes implements ShareServerExtension {
       await _status(request, HttpStatus.forbidden);
       return;
     }
-    final socket = await WebSocketTransformer.upgrade(request);
+    // No permessage-deflate: inflating happens before any size check, so a
+    // small compressed message could unpack into memory without bound.
+    final socket = await WebSocketTransformer.upgrade(
+      request,
+      compression: CompressionOptions.compressionOff,
+    );
     _coordinator.accept(socket, client);
   }
 

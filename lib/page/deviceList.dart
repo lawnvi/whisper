@@ -124,6 +124,7 @@ import 'window_stream/flow_space_page.dart';
 import '../new_ui/shell/shell_web_transfer.dart';
 import '../web_transfer/web_transfer_coordinator.dart';
 import '../web_transfer/web_transfer_visitor.dart';
+import 'package:whisper/model/device_pruning.dart';
 
 enum DeviceListOperationKind {
   temporaryFileCleanup,
@@ -1574,9 +1575,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
             }
             final temp = await db.fetchDevice(uid);
             if (!mounted || !identical(_discovery, discovery)) return;
-            if (isLost && temp == null) {
-              return;
-            }
+            if (isLost && temp == null) return;
             final resolvedDevice = buildDevice(
               uid: uid,
               name: temp?.name ?? name ?? '',
@@ -1591,6 +1590,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
             );
             if (!isLost) {
               await db.upsertDevice(visibleDevice);
+              if (temp == null) await db.pruneStrangers();
             }
             await db.setDeviceDiscoveryPresence(uid, !isLost);
             await ConnectionCoordinator().updateDiscovery(
@@ -3261,18 +3261,8 @@ class _DeviceListScreen extends State<DeviceListScreen>
     await _refreshDevice();
   }
 
-  String _connectionDiagnosticDescription(ConnectionDiagnosticStage stage) {
-    final l10n = AppLocalizations.of(context)!;
-    return switch (stage) {
-      ConnectionDiagnosticStage.wifi => l10n.connectionDiagnosticWifi,
-      ConnectionDiagnosticStage.address => l10n.connectionDiagnosticAddress,
-      ConnectionDiagnosticStage.service => l10n.connectionDiagnosticService,
-      ConnectionDiagnosticStage.firewall => l10n.connectionDiagnosticFirewall,
-      ConnectionDiagnosticStage.identity => l10n.connectionDiagnosticIdentity,
-      ConnectionDiagnosticStage.version => l10n.connectionDiagnosticVersion,
-      ConnectionDiagnosticStage.pairing => l10n.connectionDiagnosticPairing,
-    };
-  }
+  String _connectionDiagnosticDescription(ConnectionDiagnosticStage stage) =>
+      connectionDiagnosticText(AppLocalizations.of(context)!, stage);
 
   void _showConnectionDiagnosticStage(
     ConnectionDiagnosticStage stage, {
@@ -3451,11 +3441,10 @@ class _DeviceListScreen extends State<DeviceListScreen>
         return;
       }
       final diagnostic = ConnectionDiagnostic.fromReason(result.reason);
-      final displayMessage =
-          result.reason == ConnectionAttemptReason.peerRejected &&
-              localizations != null
-          ? localizations.pairingRejectedByPeer
-          : _connectionDiagnosticDescription(diagnostic.stage);
+      final displayMessage = connectionFailureText(
+        localizations!,
+        result.reason,
+      );
       ConnectionCoordinator().markDisconnected(
         peerId: peerId,
         error: displayMessage,

@@ -7,11 +7,16 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/file_transfer.dart';
+import 'package:whisper/model/message.dart';
 import 'package:whisper/remote_input/remote_input_layout.dart';
 import 'package:whisper/socket/auth_protocol.dart';
+import 'package:whisper/socket/auth_transcript.dart';
 import 'package:whisper/socket/device_identity.dart';
 import 'package:whisper/socket/peer_socket_session.dart';
+import 'package:whisper/socket/pre_auth_byte_cap.dart';
 import 'package:whisper/socket/svrmanager.dart';
+import 'package:whisper/socket/whisper_frame_v3.dart';
+import 'package:whisper/socket/wire_message_codec.dart';
 import 'package:whisper/state/connection_attempt.dart';
 import 'package:whisper/state/pairing_request.dart';
 import 'package:whisper/state/peer_endpoint.dart';
@@ -20,28 +25,38 @@ import 'package:whisper/state/peer_reconnect_controller.dart';
 
 void main() {
   const newest = PeerSocketSession.protocolVersion;
-  for (final supportedVersion in [12, 11, 10, 9]) {
+  // A server before 15 rejects a 15 hello explicitly and just closes on the
+  // newer versions after it; a plain close at 15 is a dropped connection.
+  for (final (supportedVersion, rejectsAt15) in [
+    (14, true),
+    (12, true),
+    (11, true),
+    (10, true),
+    (9, true),
+    (14, false),
+  ]) {
     test(
-      'client retries from $newest to $supportedVersion when a legacy server closes newer versions',
+      'client retries from $newest to $supportedVersion when a legacy server '
+      '${rejectsAt15 ? 'rejects' : 'closes on'} $newest, and pairs there by QR code',
       () async {
         final harness = await _HandshakeHarness.start();
         final proxy = await _LegacyCloseThenProxy.start(
           harness.port,
           closeCount: newest - supportedVersion,
+          rejectFirst: rejectsAt15,
         );
         addTearDown(proxy.close);
 
-        final result = await harness.client
-            .connectToServer(
-              ConnectionAttemptRequest(
-                requestId: 'legacy-close-fallback',
-                endpoint: PeerEndpoint.loopbackForTesting(port: proxy.port),
-                expectedPeerId: 'server-peer',
-                mode: ConnectionAttemptMode.interactive,
-              ),
-            )
-            .timeout(const Duration(seconds: 5));
+        final result = await harness.connectVia(
+          proxy.port,
+          publicKeyHash: identityPublicKeyHash(await _publicKey(1)),
+        );
 
+        if (!rejectsAt15) {
+          expect(result.reason, ConnectionAttemptReason.transportClosed);
+          expect(proxy.acceptedConnections, 1);
+          return;
+        }
         expect(result.status, ConnectionAttemptStatus.authenticated);
         expect(proxy.acceptedConnections, newest + 1 - supportedVersion);
         expect(
@@ -51,6 +66,61 @@ void main() {
       },
     );
   }
+
+  // Before protocol 15 a device in the middle can choose the pairing code
+  // (see peer_socket_session_test), so there only a pinned key or a scanned
+  // QR code may vouch for the other device.
+  test(
+    'below protocol $nonceCommitmentProtocolVersion a client never pairs by code alone, a server still does',
+    () async {
+      final serverKey = await _publicKey(1);
+      final clientKey = await _publicKey(33);
+      Future<ConnectionAttemptResult> dialAt14(
+        _HandshakeHarness harness,
+      ) async {
+        final proxy = await _LegacyCloseThenProxy.start(
+          harness.port,
+          closeCount: newest - 14,
+        );
+        addTearDown(proxy.close);
+        return harness.connectVia(proxy.port);
+      }
+
+      // Like a server on 14, this one already trusts the client and asks for
+      // no pairing, so only the client's own refusal is in play.
+      final oldServer = await _HandshakeHarness.start();
+      await _trust(oldServer.database, 'client-peer', clientKey);
+      final refused = await dialAt14(oldServer);
+      expect(refused.status, ConnectionAttemptStatus.rejected);
+      expect(refused.reason, ConnectionAttemptReason.pairingNeedsUpdate);
+      expect(oldServer.clientEvents.pairingCount, 0);
+      expect(await oldServer.database.fetchDevice('server-peer'), isNull);
+
+      // A new server still pairs a client on 14 by code, as before: a client
+      // in the middle cannot steer the code, so only clients refuse.
+      final newServer = await _HandshakeHarness.start();
+      await _trust(newServer.database, 'server-peer', serverKey);
+      final paired = await dialAt14(newServer);
+      expect(paired.status, ConnectionAttemptStatus.authenticated);
+      expect(newServer.serverEvents.pairingCount, 1);
+      expect(
+        (await newServer.database.fetchDevice('client-peer'))?.auth,
+        isTrue,
+      );
+
+      final pinned = await _HandshakeHarness.start();
+      await _trust(pinned.database, 'server-peer', serverKey);
+      await _trust(pinned.database, 'client-peer', clientKey);
+      final reconnected = await dialAt14(pinned);
+      expect(reconnected.status, ConnectionAttemptStatus.authenticated);
+      expect(
+        pinned.client.remoteProfileFor('server-peer')?.protocolVersion,
+        14,
+      );
+      expect(pinned.clientEvents.pairingCount, 0);
+      expect(pinned.serverEvents.pairingCount, 0);
+    },
+  );
 
   test(
     'typed success waits for signed persistence and current registration',
@@ -82,6 +152,78 @@ void main() {
       expect(harness.client.receiver, 'server-peer');
     },
   );
+
+  // dart:io's WebSocket gathers a whole message before anything can check
+  // its size, so a peer that never authenticates could fill memory with one.
+  test(
+    'a peer that has not authenticated is cut off past the byte cap',
+    () async {
+      final harness = await _HandshakeHarness.start();
+      final socket = await Socket.connect(
+        InternetAddress.loopbackIPv4,
+        harness.port,
+      );
+      addTearDown(socket.destroy);
+      final closed = Completer<void>();
+      final response = StringBuffer();
+      socket.listen(
+        (data) => response.write(latin1.decode(data)),
+        onError: (Object _) {},
+        onDone: closed.complete,
+      );
+      socket.write(
+        'GET /chat HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: Upgrade\r\n'
+        'Upgrade: websocket\r\nSec-WebSocket-Version: 13\r\n'
+        'Sec-WebSocket-Key: ${base64.encode(List<int>.filled(16, 1))}\r\n\r\n',
+      );
+      await _waitUntil(() => response.toString().contains('\r\n\r\n'));
+      expect(response.toString(), startsWith('HTTP/1.1 101'));
+
+      // One masked binary frame announced as 64 MiB, never finished.
+      socket.add(<int>[0x82, 0xff, 0, 0, 0, 0, 4, 0, 0, 0, 1, 2, 3, 4]);
+      final chunk = Uint8List(64 * 1024);
+      try {
+        for (var sent = 0; sent < 2 * preAuthByteCap; sent += chunk.length) {
+          if (closed.isCompleted) break;
+          socket.add(chunk);
+          await socket.flush();
+        }
+      } on SocketException {
+        // The server hung up while we were still writing.
+      }
+      await closed.future.timeout(const Duration(seconds: 5));
+    },
+  );
+
+  test('a hello under a trusted id without a proof keeps nobody out', () async {
+    final harness = await _HandshakeHarness.start();
+    await _trust(harness.database, 'server-peer', await _publicKey(1));
+    await _trust(harness.database, 'client-peer', await _publicKey(33));
+    final impostor = await PeerSocketSession.create(
+      role: PeerSocketRole.client,
+      connectionGeneration: 1,
+      localIdentity: await _identityStore(99).loadOrCreate(),
+      localProfile: _profile('client-peer').toWireProfile(),
+    );
+    addTearDown(impostor.close);
+    final socket = await WebSocket.connect(
+      'ws://127.0.0.1:${harness.port}/chat',
+    );
+    addTearDown(socket.close);
+    final challenged = Completer<void>();
+    socket.listen((_) {
+      if (!challenged.isCompleted) challenged.complete();
+    });
+    final hello = await impostor.createHello();
+    socket.add(_authFrame('client-peer', hello.toJsonString()));
+    await challenged.future.timeout(const Duration(seconds: 2));
+
+    // The impostor got its challenge and sits on it; the real device, with
+    // the pinned key, still connects without a prompt.
+    final result = await harness.connect('impostor-holds-a-hello');
+    expect(result.status, ConnectionAttemptStatus.authenticated);
+    expect(harness.serverEvents.pairingCount, 0);
+  });
 
   test('incoming connection replaces a stale stored peer host', () async {
     final harness = await _HandshakeHarness.start();
@@ -1085,11 +1227,20 @@ void main() {
 }
 
 final class _LegacyCloseThenProxy {
-  _LegacyCloseThenProxy._(this._server, this._upstreamPort, this.closeCount);
+  _LegacyCloseThenProxy._(
+    this._server,
+    this._upstreamPort,
+    this.closeCount,
+    this.rejectFirst,
+  );
 
   final HttpServer _server;
   final int _upstreamPort;
   final int closeCount;
+
+  /// Answers the first hello with upgrade_required, as every server before
+  /// 15 does for a 15 hello it cannot parse, instead of closing.
+  final bool rejectFirst;
   final Set<WebSocket> _sockets = <WebSocket>{};
   int acceptedConnections = 0;
 
@@ -1098,9 +1249,15 @@ final class _LegacyCloseThenProxy {
   static Future<_LegacyCloseThenProxy> start(
     int upstreamPort, {
     required int closeCount,
+    bool rejectFirst = true,
   }) async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    final proxy = _LegacyCloseThenProxy._(server, upstreamPort, closeCount);
+    final proxy = _LegacyCloseThenProxy._(
+      server,
+      upstreamPort,
+      closeCount,
+      rejectFirst,
+    );
     server.listen(proxy._handleRequest);
     return proxy;
   }
@@ -1111,6 +1268,9 @@ final class _LegacyCloseThenProxy {
     acceptedConnections += 1;
     if (acceptedConnections <= closeCount) {
       await downstream.first;
+      if (acceptedConnections == 1 && rejectFirst) {
+        downstream.add(_upgradeRequiredFrame());
+      }
       await downstream.close();
       _sockets.remove(downstream);
       return;
@@ -1137,6 +1297,42 @@ final class _LegacyCloseThenProxy {
     await _server.close(force: true);
   }
 }
+
+/// The raw auth message a legacy server sends when it cannot parse a hello.
+Uint8List _upgradeRequiredFrame() => _authFrame(
+  'server-peer',
+  jsonEncode(<String, Object?>{'action': 'upgrade_required', 'version': 14}),
+);
+
+Uint8List _authFrame(String sender, String content) => WhisperFrameV3(
+  type: WhisperFrameType.message,
+  transferId: '',
+  offset: 0,
+  sequence: 0,
+  payload: Uint8List.fromList(
+    utf8.encode(
+      encodeWireMessage(
+        MessageData(
+          id: 0,
+          sender: sender,
+          receiver: '',
+          name: '',
+          clipboard: false,
+          size: 0,
+          type: MessageEnum.Auth,
+          content: content,
+          message: '',
+          timestamp: 0,
+          uuid: 'raw-auth-$sender',
+          acked: false,
+          path: '',
+          md5: '',
+          fileTimestamp: 0,
+        ),
+      ),
+    ),
+  ),
+).encode();
 
 final class _HandshakeHarness {
   const _HandshakeHarness({
@@ -1226,6 +1422,21 @@ final class _HandshakeHarness {
       )
       .timeout(const Duration(seconds: 5));
 
+  Future<ConnectionAttemptResult> connectVia(
+    int proxyPort, {
+    String publicKeyHash = '',
+  }) => client
+      .connectToServer(
+        ConnectionAttemptRequest(
+          requestId: 'legacy-via-$proxyPort',
+          endpoint: PeerEndpoint.loopbackForTesting(port: proxyPort),
+          expectedPeerId: 'server-peer',
+          expectedPublicKeyHash: publicKeyHash,
+          mode: ConnectionAttemptMode.interactive,
+        ),
+      )
+      .timeout(const Duration(seconds: 5));
+
   Future<ConnectionAttemptResult> connectBack(String requestId) async {
     final started = await client.startServer(0);
     expect(started.isSuccess, isTrue);
@@ -1240,6 +1451,16 @@ final class _HandshakeHarness {
         )
         .timeout(const Duration(seconds: 5));
   }
+}
+
+Future<String> _publicKey(int seedStart) async =>
+    (await _identityStore(seedStart).loadOrCreate()).publicKeyBase64Url;
+
+/// A device paired earlier: trusted, with its identity key pinned.
+Future<void> _trust(LocalDatabase database, String uid, String key) async {
+  await database.upsertDevice(_profile(uid).device);
+  await database.pinDeviceIdentity(uid, key);
+  await database.authDevice(uid, true);
 }
 
 DeviceIdentityStore _identityStore(int seedStart) => DeviceIdentityStore(

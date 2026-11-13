@@ -14,9 +14,11 @@ final class AuthEnvelope {
     required this.peerId,
     required this.nonce,
     required this.profileDigest,
+    this.nonceCommitment,
     this.identityPublicKey,
     this.ephemeralPublicKey,
     this.peerNonce,
+    this.peerNonceCommitment,
     this.signature,
     this.intendedPeerId,
     this.intendedPublicKeyHash,
@@ -26,12 +28,15 @@ final class AuthEnvelope {
     this.reason,
   });
 
+  /// Carries [nonce] before protocol 15 and [nonceCommitment] from then on;
+  /// the session checks which one the version calls for.
   factory AuthEnvelope.hello({
     required int protocolVersion,
     required String peerId,
     required String identityPublicKey,
     required String ephemeralPublicKey,
-    required String nonce,
+    String? nonce,
+    String? nonceCommitment,
     required String profileDigest,
     String? intendedPeerId,
     String? intendedPublicKeyHash,
@@ -44,6 +49,7 @@ final class AuthEnvelope {
       identityPublicKey: identityPublicKey,
       ephemeralPublicKey: ephemeralPublicKey,
       nonce: nonce,
+      nonceCommitment: nonceCommitment,
       profileDigest: profileDigest,
       intendedPeerId: intendedPeerId,
       intendedPublicKeyHash: intendedPublicKeyHash,
@@ -51,13 +57,15 @@ final class AuthEnvelope {
     );
   }
 
+  /// Echoes whichever of the hello's nonce or nonce commitment it carried.
   factory AuthEnvelope.challenge({
     required int protocolVersion,
     required String peerId,
     required String identityPublicKey,
     required String ephemeralPublicKey,
     required String nonce,
-    required String peerNonce,
+    String? peerNonce,
+    String? peerNonceCommitment,
     required String profileDigest,
     required String signature,
     bool pairingRequired = false,
@@ -71,6 +79,7 @@ final class AuthEnvelope {
       ephemeralPublicKey: ephemeralPublicKey,
       nonce: nonce,
       peerNonce: peerNonce,
+      peerNonceCommitment: peerNonceCommitment,
       profileDigest: profileDigest,
       signature: signature,
       pairingRequired: pairingRequired,
@@ -150,8 +159,12 @@ final class AuthEnvelope {
   final String peerId;
   final String? identityPublicKey;
   final String? ephemeralPublicKey;
-  final String nonce;
+
+  /// Missing only from a hello that carries [nonceCommitment] instead.
+  final String? nonce;
+  final String? nonceCommitment;
   final String? peerNonce;
+  final String? peerNonceCommitment;
   final String profileDigest;
   final String? signature;
   final String? intendedPeerId;
@@ -198,7 +211,6 @@ final class AuthEnvelope {
     final common = (
       protocolVersion: _requiredInt(json, 'version'),
       peerId: _requiredString(json, 'peerId'),
-      nonce: _requiredString(json, 'nonce'),
       profileDigest: _requiredString(json, 'profileDigest'),
     );
     switch (action) {
@@ -208,7 +220,8 @@ final class AuthEnvelope {
           peerId: common.peerId,
           identityPublicKey: _requiredString(json, 'identityKey'),
           ephemeralPublicKey: _requiredString(json, 'ephemeralKey'),
-          nonce: common.nonce,
+          nonce: _optionalString(json, 'nonce'),
+          nonceCommitment: _optionalString(json, 'nonceCommitment'),
           profileDigest: common.profileDigest,
           intendedPeerId: _optionalString(json, 'intendedPeerId'),
           intendedPublicKeyHash: _optionalString(json, 'intendedPkh'),
@@ -220,8 +233,9 @@ final class AuthEnvelope {
           peerId: common.peerId,
           identityPublicKey: _requiredString(json, 'identityKey'),
           ephemeralPublicKey: _requiredString(json, 'ephemeralKey'),
-          nonce: common.nonce,
-          peerNonce: _requiredString(json, 'peerNonce'),
+          nonce: _requiredString(json, 'nonce'),
+          peerNonce: _optionalString(json, 'peerNonce'),
+          peerNonceCommitment: _optionalString(json, 'peerNonceCommitment'),
           profileDigest: common.profileDigest,
           signature: _requiredString(json, 'signature'),
           pairingRequired: _requiredBool(json, 'pairingRequired'),
@@ -231,7 +245,7 @@ final class AuthEnvelope {
         return AuthEnvelope.proof(
           protocolVersion: common.protocolVersion,
           peerId: common.peerId,
-          nonce: common.nonce,
+          nonce: _requiredString(json, 'nonce'),
           peerNonce: _requiredString(json, 'peerNonce'),
           profileDigest: common.profileDigest,
           signature: _requiredString(json, 'signature'),
@@ -241,7 +255,7 @@ final class AuthEnvelope {
         return AuthEnvelope.approval(
           protocolVersion: common.protocolVersion,
           peerId: common.peerId,
-          nonce: common.nonce,
+          nonce: _requiredString(json, 'nonce'),
           peerNonce: _requiredString(json, 'peerNonce'),
           profileDigest: common.profileDigest,
           signature: _requiredString(json, 'signature'),
@@ -252,7 +266,7 @@ final class AuthEnvelope {
         return AuthEnvelope.result(
           protocolVersion: common.protocolVersion,
           peerId: common.peerId,
-          nonce: common.nonce,
+          nonce: _requiredString(json, 'nonce'),
           peerNonce: _requiredString(json, 'peerNonce'),
           profileDigest: common.profileDigest,
           signature: _requiredString(json, 'signature'),
@@ -269,8 +283,11 @@ final class AuthEnvelope {
       'peerId': peerId,
       if (identityPublicKey != null) 'identityKey': identityPublicKey,
       if (ephemeralPublicKey != null) 'ephemeralKey': ephemeralPublicKey,
-      'nonce': nonce,
+      if (nonce != null) 'nonce': nonce,
+      if (nonceCommitment != null) 'nonceCommitment': nonceCommitment,
       if (peerNonce != null) 'peerNonce': peerNonce,
+      if (peerNonceCommitment != null)
+        'peerNonceCommitment': peerNonceCommitment,
       'profileDigest': profileDigest,
       if (signature != null) 'signature': signature,
       if (intendedPeerId != null) 'intendedPeerId': intendedPeerId,
@@ -293,7 +310,9 @@ final class AuthEnvelope {
         other.identityPublicKey == identityPublicKey &&
         other.ephemeralPublicKey == ephemeralPublicKey &&
         other.nonce == nonce &&
+        other.nonceCommitment == nonceCommitment &&
         other.peerNonce == peerNonce &&
+        other.peerNonceCommitment == peerNonceCommitment &&
         other.profileDigest == profileDigest &&
         other.signature == signature &&
         other.intendedPeerId == intendedPeerId &&
@@ -306,33 +325,37 @@ final class AuthEnvelope {
 
   @override
   int get hashCode => Object.hash(
-        action,
-        protocolVersion,
-        peerId,
-        identityPublicKey,
-        ephemeralPublicKey,
-        nonce,
-        peerNonce,
-        profileDigest,
-        signature,
-        intendedPeerId,
-        intendedPublicKeyHash,
-        jsonEncode(profile),
-        pairingRequired,
-        allow,
-        reason,
-      );
+    action,
+    protocolVersion,
+    peerId,
+    identityPublicKey,
+    ephemeralPublicKey,
+    nonce,
+    nonceCommitment,
+    peerNonce,
+    peerNonceCommitment,
+    profileDigest,
+    signature,
+    intendedPeerId,
+    intendedPublicKeyHash,
+    jsonEncode(profile),
+    pairingRequired,
+    allow,
+    reason,
+  );
 }
 
 AuthEnvelope _validated({
   required AuthAction action,
   required int protocolVersion,
   required String peerId,
-  required String nonce,
+  required String? nonce,
   required String profileDigest,
+  String? nonceCommitment,
   String? identityPublicKey,
   String? ephemeralPublicKey,
   String? peerNonce,
+  String? peerNonceCommitment,
   String? signature,
   String? intendedPeerId,
   String? intendedPublicKeyHash,
@@ -355,16 +378,31 @@ AuthEnvelope _validated({
   if (intendedPublicKeyHash != null) {
     decodeAuthBase64Url(intendedPublicKeyHash, expectedLength: 32);
   }
-  decodeAuthBase64Url(nonce, expectedLength: 32);
+  // A hello carries its nonce or, from protocol 15, only a commitment to it;
+  // a challenge echoes whichever of the two it got.
+  if ((nonce == null) == (nonceCommitment == null)) {
+    throw const FormatException('Need a nonce or its commitment');
+  }
+  if (action == AuthAction.challenge &&
+      (peerNonce == null) == (peerNonceCommitment == null)) {
+    throw const FormatException('Need a peer nonce or its commitment');
+  }
+  for (final value in <String?>[
+    nonce,
+    nonceCommitment,
+    peerNonce,
+    peerNonceCommitment,
+  ]) {
+    if (value != null) {
+      decodeAuthBase64Url(value, expectedLength: 32);
+    }
+  }
   decodeAuthBase64Url(profileDigest, expectedLength: 32);
   if (identityPublicKey != null) {
     decodeAuthBase64Url(identityPublicKey, expectedLength: 32);
   }
   if (ephemeralPublicKey != null) {
     decodeAuthBase64Url(ephemeralPublicKey, expectedLength: 32);
-  }
-  if (peerNonce != null) {
-    decodeAuthBase64Url(peerNonce, expectedLength: 32);
   }
   if (signature != null) {
     decodeAuthBase64Url(signature, expectedLength: 64);
@@ -379,7 +417,9 @@ AuthEnvelope _validated({
     identityPublicKey: identityPublicKey,
     ephemeralPublicKey: ephemeralPublicKey,
     nonce: nonce,
+    nonceCommitment: nonceCommitment,
     peerNonce: peerNonce,
+    peerNonceCommitment: peerNonceCommitment,
     profileDigest: profileDigest,
     signature: signature,
     intendedPeerId: intendedPeerId,
@@ -394,19 +434,13 @@ AuthEnvelope _validated({
 String encodeAuthBase64Url(List<int> bytes) =>
     base64Url.encode(bytes).replaceAll('=', '');
 
-Uint8List decodeAuthBase64Url(
-  String value, {
-  required int expectedLength,
-}) {
+Uint8List decodeAuthBase64Url(String value, {required int expectedLength}) {
   if (value.isEmpty ||
       value.contains('=') ||
       !RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(value)) {
     throw const FormatException('Invalid base64url value');
   }
-  final padding = List<String>.filled(
-    (4 - value.length % 4) % 4,
-    '=',
-  ).join();
+  final padding = List<String>.filled((4 - value.length % 4) % 4, '=').join();
   final Uint8List decoded;
   try {
     decoded = Uint8List.fromList(base64Url.decode('$value$padding'));
@@ -428,6 +462,7 @@ const Map<AuthAction, Set<String>> _allowedKeys = <AuthAction, Set<String>>{
     'identityKey',
     'ephemeralKey',
     'nonce',
+    'nonceCommitment',
     'profileDigest',
     'intendedPeerId',
     'intendedPkh',
@@ -441,6 +476,7 @@ const Map<AuthAction, Set<String>> _allowedKeys = <AuthAction, Set<String>>{
     'ephemeralKey',
     'nonce',
     'peerNonce',
+    'peerNonceCommitment',
     'profileDigest',
     'signature',
     'pairingRequired',
@@ -525,10 +561,7 @@ bool _requiredBool(Map<String, Object?> json, String key) {
   return value;
 }
 
-Map<String, Object?>? _optionalProfile(
-  Map<String, Object?> json,
-  String key,
-) {
+Map<String, Object?>? _optionalProfile(Map<String, Object?> json, String key) {
   final value = json[key];
   if (value == null) {
     return null;

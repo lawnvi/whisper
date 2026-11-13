@@ -473,6 +473,7 @@
   "pairingUpgradeRequired": "El otro dispositivo está desactualizado. Actualiza Whisper e inténtalo de nuevo",
   "pairingExpired": "La solicitud de emparejamiento ha caducado",
   "pairingRejectedByPeer": "El otro dispositivo rechazó la solicitud de conexión",
+  "pairingNeedsUpdate": "Confirmar solo con el código de emparejamiento requiere la última versión de Whisper en ambos dispositivos. Actualiza el otro dispositivo o empareja escaneando su código QR",
   "pairingEncryptionNotice": "Tras emparejar, el texto, los archivos, el portapapeles y los datos de control se cifran de extremo a extremo",
   "e2eeTrustedConnection": "Cifrado de extremo a extremo · Dispositivo de confianza",
   "e2eeEncryptedConnection": "Conexión cifrada de extremo a extremo",

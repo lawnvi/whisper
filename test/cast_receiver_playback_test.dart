@@ -63,6 +63,13 @@ void main() {
     await denied;
     expect(engine.volume, 1);
     expect(engine.disposed, isFalse);
+    // Get* needs no approval, so it used to hand anyone the playing URL.
+    for (final action in ['GetMediaInfo', 'GetPositionInfo']) {
+      final info = await receiver.control('AVTransport', action, {
+        'InstanceID': '0',
+      }, senderAddress: '192.168.1.10');
+      expect(info.values, isNot(contains('https://example.com/video.mp4')));
+    }
   });
 
   test('late engine creation is released when reception is disabled', () async {

@@ -283,6 +283,14 @@ class DlnaReceiver {
         throw const ControlError(606, 'Action not authorized');
       }
     }
+    // What is playing (signed CDN links, titles) only goes to a sender this
+    // device allowed; anyone on the network can ask the Get* actions.
+    final mayRead =
+        senderAddress == null ||
+        requests == null ||
+        requests!.allows(senderAddress);
+    final uri = mayRead ? player.uri : '';
+    final metadata = mayRead ? player.metadata : '';
     final status = player.status;
     final duration = timeText(status['duration'] as num);
     final position = timeText(status['position'] as num);
@@ -332,8 +340,8 @@ class DlnaReceiver {
         return {
           'Track': player.uri.isEmpty ? 0 : 1,
           'TrackDuration': duration,
-          'TrackMetaData': player.metadata,
-          'TrackURI': player.uri,
+          'TrackMetaData': metadata,
+          'TrackURI': uri,
           'RelTime': position,
           'AbsTime': position,
           'RelCount': -1,
@@ -343,8 +351,8 @@ class DlnaReceiver {
         return {
           'NrTracks': player.uri.isEmpty ? 0 : 1,
           'MediaDuration': duration,
-          'CurrentURI': player.uri,
-          'CurrentURIMetaData': player.metadata,
+          'CurrentURI': uri,
+          'CurrentURIMetaData': metadata,
           'NextURI': '',
           'NextURIMetaData': '',
           'PlayMedium': 'NETWORK',

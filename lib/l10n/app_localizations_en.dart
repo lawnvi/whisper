@@ -1028,6 +1028,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'The other device declined the connection request';
 
   @override
+  String get pairingNeedsUpdate =>
+      'Confirming with the pairing code alone needs the latest Whisper on both devices. Update the other device, or pair by scanning its QR code';
+
+  @override
   String get pairingEncryptionNotice =>
       'After pairing, text, files, clipboard, and control data are end-to-end encrypted';
 

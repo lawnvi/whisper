@@ -13,6 +13,7 @@ import 'package:whisper/socket/bounded_outbound_queue.dart';
 import 'package:whisper/socket/bounded_receive_queue.dart';
 import 'package:whisper/socket/device_identity.dart';
 import 'package:whisper/socket/socket_admission.dart';
+import 'package:whisper/state/pairing_request.dart';
 import 'package:whisper/state/peer_profile.dart';
 
 enum PeerSocketRole { server, client }
@@ -65,7 +66,7 @@ final class PeerSocketSession {
     });
   }
 
-  static const int protocolVersion = 14;
+  static const int protocolVersion = 15;
   static const int minimumProtocolVersion = 9;
 
   static bool _supportsProtocolVersion(int version) =>
@@ -156,7 +157,11 @@ final class PeerSocketSession {
   WirePeerProfile? get remoteProfile => _remoteProfile;
   String get remotePeerId => _remoteProfile?.uid ?? '';
   String get remoteIdentityPublicKey => _remoteIdentityPublicKey ?? '';
-  String get pairingCode => _transcript?.pairingCode() ?? '';
+
+  /// Empty until both nonces are known; from protocol 15 the server learns
+  /// the client's from its proof.
+  String get pairingCode =>
+      _transcript?.hasClientNonce == true ? _transcript!.pairingCode() : '';
   AuthenticatedFrameCodec? get codec => _codec;
   bool get isAuthenticated =>
       !_closed && phase == PeerSocketPhase.authenticated;
@@ -383,6 +388,23 @@ final class PeerSocketSession {
     return _continueAfter(_codec!.decode(frame), PeerSocketPhase.authenticated);
   }
 
+  bool get _commitsNonce => usesNonceCommitment(_negotiatedProtocolVersion);
+
+  /// Before protocol 15 a server in the middle can choose the pairing code,
+  /// so a client there refuses pairing that rests on the code alone. Only the
+  /// client checks: a client in the middle cannot steer the code anyway.
+  void refuseCodeOnlyPairing(PairingReason? reason, String pinnedPublicKey) {
+    if (!_commitsNonce &&
+        pairingRestsOnCodeAlone(
+          reason: reason,
+          pinnedPublicKey: pinnedPublicKey,
+          presentedPublicKey: remoteIdentityPublicKey,
+          intendedPublicKeyHash: intendedPublicKeyHash,
+        )) {
+      _fail<void>('pairing_requires_update');
+    }
+  }
+
   Future<AuthEnvelope> createHello() async {
     _require(PeerSocketRole.client, PeerSocketPhase.awaitingChallenge);
     final publicKey = await _continueAfter(
@@ -394,7 +416,10 @@ final class PeerSocketSession {
       peerId: localProfile.uid,
       identityPublicKey: localIdentity.publicKeyBase64Url,
       ephemeralPublicKey: publicKey,
-      nonce: encodeAuthBase64Url(_localNonce),
+      nonce: _commitsNonce ? null : encodeAuthBase64Url(_localNonce),
+      nonceCommitment: _commitsNonce
+          ? encodeAuthBase64Url(commitClientNonce(_localNonce))
+          : null,
       profileDigest: encodeAuthBase64Url(localProfile.canonicalDigest()),
       intendedPeerId: intendedPeerId.isEmpty ? null : intendedPeerId,
       intendedPublicKeyHash: intendedPublicKeyHash.isEmpty
@@ -412,6 +437,9 @@ final class PeerSocketSession {
     try {
       _selectIncomingProtocol(hello.protocolVersion);
       _requireEnvelope(hello, AuthAction.hello);
+      if (_commitsNonce != (hello.nonceCommitment != null)) {
+        return _fail('invalid_hello');
+      }
       if (hello.intendedPeerId != null &&
           hello.intendedPeerId!.isNotEmpty &&
           hello.intendedPeerId != localProfile.uid) {
@@ -431,25 +459,24 @@ final class PeerSocketSession {
       final remoteEphemeralPublicKey = AuthSessionKeys.parseEphemeralPublicKey(
         hello.ephemeralPublicKey!,
       );
-      final remoteNonce = decodeAuthBase64Url(hello.nonce, expectedLength: 32);
+      final remoteNonce = _decodeOptional32(hello.nonce);
       final localEphemeralPublicKey = await _continueAfter(
         AuthSessionKeys.publicKeyBase64Url(_localEphemeralKeyPair),
         PeerSocketPhase.awaitingHello,
       );
-      final transcript = await _continueAfter(
-        _buildTranscript(
-          clientProfile: remoteProfile,
-          serverProfile: localProfile,
-          clientIdentityKey: remoteIdentityPublicKey,
-          serverIdentityKey: localIdentity.publicKeyBase64Url,
-          clientEphemeralKey: hello.ephemeralPublicKey!,
-          serverEphemeralKey: localEphemeralPublicKey,
-          clientNonce: remoteNonce,
-          serverNonce: _localNonce,
-          intendedPkh: hello.intendedPublicKeyHash ?? '',
-          serverPairingRequired: pairingRequired,
-        ),
-        PeerSocketPhase.awaitingHello,
+      final transcript = AuthTranscript.fromWire(
+        protocolVersion: _negotiatedProtocolVersion,
+        clientProfile: remoteProfile,
+        serverProfile: localProfile,
+        clientIdentityKey: remoteIdentityPublicKey,
+        serverIdentityKey: localIdentity.publicKeyBase64Url,
+        clientEphemeralKey: hello.ephemeralPublicKey!,
+        serverEphemeralKey: localEphemeralPublicKey,
+        clientNonce: remoteNonce,
+        clientNonceCommitment: _decodeOptional32(hello.nonceCommitment),
+        serverNonce: _localNonce,
+        intendedPkh: hello.intendedPublicKeyHash ?? '',
+        serverPairingRequired: pairingRequired,
       );
       final signature = await _continueAfter(
         localIdentity.sign(transcript.challengeBytes()),
@@ -468,6 +495,7 @@ final class PeerSocketSession {
         ephemeralPublicKey: localEphemeralPublicKey,
         nonce: encodeAuthBase64Url(_localNonce),
         peerNonce: hello.nonce,
+        peerNonceCommitment: hello.nonceCommitment,
         profileDigest: encodeAuthBase64Url(localProfile.canonicalDigest()),
         signature: signature,
         pairingRequired: pairingRequired,
@@ -484,10 +512,13 @@ final class PeerSocketSession {
     _require(PeerSocketRole.client, PeerSocketPhase.awaitingChallenge);
     try {
       _requireEnvelope(challenge, AuthAction.challenge);
-      if (!_sameBytes(
-        decodeAuthBase64Url(challenge.peerNonce!, expectedLength: 32),
-        _localNonce,
-      )) {
+      final commitment = _commitsNonce ? commitClientNonce(_localNonce) : null;
+      final echoed = _decodeOptional32(
+        commitment == null
+            ? challenge.peerNonce
+            : challenge.peerNonceCommitment,
+      );
+      if (echoed == null || !_sameBytes(echoed, commitment ?? _localNonce)) {
         _fail<void>('nonce_mismatch');
       }
       final remoteProfile = _decodeProfile(challenge);
@@ -507,27 +538,26 @@ final class PeerSocketSession {
         challenge.ephemeralPublicKey!,
       );
       final remoteNonce = decodeAuthBase64Url(
-        challenge.nonce,
+        challenge.nonce!,
         expectedLength: 32,
       );
       final localEphemeralPublicKey = await _continueAfter(
         AuthSessionKeys.publicKeyBase64Url(_localEphemeralKeyPair),
         PeerSocketPhase.awaitingChallenge,
       );
-      final transcript = await _continueAfter(
-        _buildTranscript(
-          clientProfile: localProfile,
-          serverProfile: remoteProfile,
-          clientIdentityKey: localIdentity.publicKeyBase64Url,
-          serverIdentityKey: remoteIdentityPublicKey,
-          clientEphemeralKey: localEphemeralPublicKey,
-          serverEphemeralKey: challenge.ephemeralPublicKey!,
-          clientNonce: _localNonce,
-          serverNonce: remoteNonce,
-          intendedPkh: intendedPublicKeyHash,
-          serverPairingRequired: challenge.pairingRequired!,
-        ),
-        PeerSocketPhase.awaitingChallenge,
+      final transcript = AuthTranscript.fromWire(
+        protocolVersion: _negotiatedProtocolVersion,
+        clientProfile: localProfile,
+        serverProfile: remoteProfile,
+        clientIdentityKey: localIdentity.publicKeyBase64Url,
+        serverIdentityKey: remoteIdentityPublicKey,
+        clientEphemeralKey: localEphemeralPublicKey,
+        serverEphemeralKey: challenge.ephemeralPublicKey!,
+        clientNonce: _localNonce,
+        clientNonceCommitment: commitment,
+        serverNonce: remoteNonce,
+        intendedPkh: intendedPublicKeyHash,
+        serverPairingRequired: challenge.pairingRequired!,
       );
       final valid = await _continueAfter(
         verifyDeviceSignature(
@@ -589,11 +619,16 @@ final class PeerSocketSession {
     _require(PeerSocketRole.server, PeerSocketPhase.awaitingProof);
     try {
       _requireEnvelope(proof, AuthAction.proof);
+      // The revealed nonce is checked against the hello before anything is
+      // computed from it.
+      final revealed = decodeAuthBase64Url(proof.nonce!, expectedLength: 32);
+      final transcript = _transcript!.revealClientNonce(revealed);
+      if (transcript == null) {
+        _fail<void>(
+          _commitsNonce ? 'nonce_commitment_mismatch' : 'proof_mismatch',
+        );
+      }
       if (proof.peerId != remotePeerId ||
-          !_sameBytes(
-            decodeAuthBase64Url(proof.nonce, expectedLength: 32),
-            _remoteNonce!,
-          ) ||
           !_sameBytes(
             decodeAuthBase64Url(proof.peerNonce!, expectedLength: 32),
             _localNonce,
@@ -607,7 +642,7 @@ final class PeerSocketSession {
       final valid = await _continueAfter(
         verifyDeviceSignature(
           publicKeyBase64Url: remoteIdentityPublicKey,
-          message: _transcript!.proofBytes(reason: proof.reason!),
+          message: transcript.proofBytes(reason: proof.reason!),
           signatureBase64Url: proof.signature!,
         ),
         PeerSocketPhase.awaitingProof,
@@ -615,6 +650,8 @@ final class PeerSocketSession {
       if (!valid) {
         _fail<void>('invalid_proof_signature');
       }
+      _transcript = transcript;
+      _remoteNonce ??= revealed;
       _remoteProofReason = proof.reason!;
       _transition(
         PeerSocketPhase.awaitingProof,
@@ -668,7 +705,7 @@ final class PeerSocketSession {
       }
       if (approval.peerId != remotePeerId ||
           !_sameBytes(
-            decodeAuthBase64Url(approval.nonce, expectedLength: 32),
+            decodeAuthBase64Url(approval.nonce!, expectedLength: 32),
             _remoteNonce!,
           ) ||
           !_sameBytes(
@@ -785,7 +822,7 @@ final class PeerSocketSession {
       _requireEnvelope(result, AuthAction.result);
       if (result.peerId != remotePeerId ||
           !_sameBytes(
-            decodeAuthBase64Url(result.nonce, expectedLength: 32),
+            decodeAuthBase64Url(result.nonce!, expectedLength: 32),
             _remoteNonce!,
           ) ||
           !_sameBytes(
@@ -992,47 +1029,6 @@ final class PeerSocketSession {
     return profile;
   }
 
-  Future<AuthTranscript> _buildTranscript({
-    required WirePeerProfile clientProfile,
-    required WirePeerProfile serverProfile,
-    required String clientIdentityKey,
-    required String serverIdentityKey,
-    required String clientEphemeralKey,
-    required String serverEphemeralKey,
-    required Uint8List clientNonce,
-    required Uint8List serverNonce,
-    required String intendedPkh,
-    required bool serverPairingRequired,
-  }) async {
-    return AuthTranscript(
-      protocolVersion: _negotiatedProtocolVersion,
-      clientPeerId: clientProfile.uid,
-      serverPeerId: serverProfile.uid,
-      clientIdentityPublicKey: decodeAuthBase64Url(
-        clientIdentityKey,
-        expectedLength: 32,
-      ),
-      serverIdentityPublicKey: decodeAuthBase64Url(
-        serverIdentityKey,
-        expectedLength: 32,
-      ),
-      clientEphemeralPublicKey: decodeAuthBase64Url(
-        clientEphemeralKey,
-        expectedLength: 32,
-      ),
-      serverEphemeralPublicKey: decodeAuthBase64Url(
-        serverEphemeralKey,
-        expectedLength: 32,
-      ),
-      intendedPublicKeyHash: intendedPkh,
-      serverPairingRequired: serverPairingRequired,
-      clientNonce: clientNonce,
-      serverNonce: serverNonce,
-      clientProfileDigest: clientProfile.canonicalDigest(),
-      serverProfileDigest: serverProfile.canonicalDigest(),
-    );
-  }
-
   void _require(PeerSocketRole expectedRole, PeerSocketPhase expectedPhase) {
     if (role != expectedRole) {
       _fail<void>('unexpected_phase');
@@ -1094,6 +1090,9 @@ String identityPublicKeyHash(String publicKeyBase64Url) {
       .encode(hashes.sha256.convert(publicKey).bytes)
       .replaceAll('=', '');
 }
+
+Uint8List? _decodeOptional32(String? value) =>
+    value == null ? null : decodeAuthBase64Url(value, expectedLength: 32);
 
 Uint8List _secureNonce() {
   final random = Random.secure();

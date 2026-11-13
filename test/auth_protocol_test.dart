@@ -10,9 +10,11 @@ String _b64(int length, int start) => base64Url
     .encode(List<int>.generate(length, (index) => (start + index) & 0xff))
     .replaceAll('=', '');
 
-AuthTranscript _transcript() {
+AuthTranscript _transcript({int protocolVersion = 6}) {
+  final clientNonce =
+      Uint8List.fromList(List<int>.generate(32, (index) => index + 128));
   return AuthTranscript(
-    protocolVersion: 6,
+    protocolVersion: protocolVersion,
     clientPeerId: 'client-a',
     serverPeerId: 'server-b',
     clientIdentityPublicKey:
@@ -24,8 +26,10 @@ AuthTranscript _transcript() {
     serverEphemeralPublicKey:
         Uint8List.fromList(List<int>.generate(32, (index) => index + 96)),
     intendedPublicKeyHash: 'discover-pkh',
-    clientNonce:
-        Uint8List.fromList(List<int>.generate(32, (index) => index + 128)),
+    clientNonce: clientNonce,
+    clientNonceCommitment: usesNonceCommitment(protocolVersion)
+        ? commitClientNonce(clientNonce)
+        : null,
     serverNonce:
         Uint8List.fromList(List<int>.generate(32, (index) => index + 160)),
     clientProfileDigest:
@@ -103,6 +107,7 @@ void main() {
 
     test('pairing code has a stable six-digit golden value', () {
       expect(_transcript().pairingCode(), '886773');
+      expect(_transcript(protocolVersion: 15).pairingCode(), '772570');
     });
 
     test('both peers get the same pairing code from the canonical transcript',
@@ -184,7 +189,7 @@ void main() {
       final transcript = _transcript();
       final originalHash = transcript.transcriptHash();
 
-      transcript.clientNonce[0] ^= 0xff;
+      transcript.clientNonce![0] ^= 0xff;
       transcript.serverProfileDigest[0] ^= 0xff;
 
       expect(transcript.transcriptHash(), orderedEquals(originalHash));
@@ -243,9 +248,30 @@ void main() {
         reason: 'approved',
       );
 
+      final committedHello = AuthEnvelope.hello(
+        protocolVersion: 15,
+        peerId: 'client-a',
+        identityPublicKey: _b64(32, 0),
+        ephemeralPublicKey: _b64(32, 32),
+        nonceCommitment: _b64(32, 66),
+        profileDigest: _b64(32, 96),
+      );
+      final committedChallenge = AuthEnvelope.challenge(
+        protocolVersion: 15,
+        peerId: 'server-b',
+        identityPublicKey: _b64(32, 1),
+        ephemeralPublicKey: _b64(32, 33),
+        nonce: _b64(32, 65),
+        peerNonceCommitment: _b64(32, 66),
+        profileDigest: _b64(32, 97),
+        signature: _b64(64, 2),
+      );
+
       for (final envelope in <AuthEnvelope>[
         hello,
         challenge,
+        committedHello,
+        committedChallenge,
         proof,
         approval,
         result,
@@ -280,6 +306,14 @@ void main() {
       );
       final missing = Map<String, Object?>.from(valid)..remove('nonce');
       expect(() => AuthEnvelope.fromJson(missing), throwsFormatException);
+      // A hello carries its nonce or a commitment to it, never both.
+      expect(
+        () => AuthEnvelope.fromJson(<String, Object?>{
+          ...valid,
+          'nonceCommitment': _b64(32, 66),
+        }),
+        throwsFormatException,
+      );
       expect(
         () => AuthEnvelope.fromJson(<String, Object?>{
           ...valid,

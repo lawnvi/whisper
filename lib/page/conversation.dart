@@ -2025,6 +2025,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
         final displayMessage = switch (result.reason) {
           ConnectionAttemptReason.protocolMismatch =>
             l10n.pairingUpgradeRequired,
+          ConnectionAttemptReason.pairingNeedsUpdate => l10n.pairingNeedsUpdate,
           ConnectionAttemptReason.pairingExpired => l10n.pairingExpired,
           ConnectionAttemptReason.peerRejected => l10n.pairingRejectedByPeer,
           _ => l10n.connectFailed,
@@ -2032,9 +2033,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
         unawaited(
           app_dialogs.showLoadingDialog(
             context,
-            title:
-                AppLocalizations.of(context)?.connectFailed ??
-                'Connection Failed',
+            title: l10n.connectFailed,
             // The title says it already when there is nothing more to say.
             description: displayMessage == l10n.connectFailed
                 ? ''

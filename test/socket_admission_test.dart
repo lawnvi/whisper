@@ -26,6 +26,43 @@ void main() {
       expect(admission.tryOpen('192.168.1.4', now).isAllowed, isTrue);
     });
 
+    // Four addresses used to fill the pool and keep everyone out for 30 s.
+    test('a full pre-auth pool evicts the oldest handshake that may go', () {
+      final admission = SocketAdmissionController(
+        maxChatConnections: 16,
+        maxPreAuthConnections: 4,
+        maxPreAuthConnectionsPerIp: 2,
+      );
+      final evicted = <String>[];
+      AdmissionLease open(String address, String name, {bool may = true}) =>
+          admission.tryOpenChat(address).lease!
+            ..evictWith(() => evicted.add(name))
+            ..evictableWhile(() => may);
+
+      // A prompt waiting on the user is never evicted, nor is a lease that
+      // gave no way to close it.
+      open('10.0.0.1', 'prompt', may: false);
+      admission.tryOpenChat('10.0.0.2');
+      final oldest = open('10.0.0.3', 'oldest');
+      open('10.0.0.4', 'newer');
+
+      final fifth = admission.tryOpenChat('10.0.0.5').lease!;
+      expect(evicted, <String>['oldest']);
+      expect(oldest.isClosed, isTrue);
+
+      // An address at its own limit evicts only its own oldest.
+      fifth.close();
+      open('10.0.0.4', 'same address');
+      final last = admission.tryOpenChat('10.0.0.4').lease!;
+      expect(evicted, <String>['oldest', 'newer']);
+
+      // Authenticated leases have left the pool and are never evicted.
+      last.markAuthenticated();
+      expect(admission.preAuthConnectionCount, 3);
+      expect(admission.tryOpenChat('10.0.0.7').isAllowed, isTrue);
+      expect(evicted, <String>['oldest', 'newer']);
+    });
+
     test('markAuthenticated only releases pre-auth and per-IP slots', () {
       final admission = SocketAdmissionController(
         maxChatConnections: 4,

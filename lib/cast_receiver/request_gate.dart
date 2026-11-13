@@ -30,6 +30,9 @@ class CastRequestGate extends ChangeNotifier {
     _open = true;
   }
 
+  /// Whether [address] was allowed while reception is on, without asking.
+  bool allows(String address) => _open && _allowed.contains(address);
+
   Future<bool> authorize(String address) {
     if (!_open || _denied.contains(address)) return Future.value(false);
     if (_allowed.contains(address)) return Future.value(true);

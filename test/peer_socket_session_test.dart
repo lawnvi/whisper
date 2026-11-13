@@ -160,6 +160,7 @@ void main() {
       identityPublicKey: hello.identityPublicKey!,
       ephemeralPublicKey: hello.ephemeralPublicKey!,
       nonce: hello.nonce,
+      nonceCommitment: hello.nonceCommitment,
       profileDigest: hello.profileDigest,
       intendedPeerId: hello.intendedPeerId,
       intendedPublicKeyHash: hello.intendedPublicKeyHash,
@@ -224,8 +225,9 @@ void main() {
 
     expect(pair.client.phase, PeerSocketPhase.awaitingLocalApproval);
     expect(pair.server.phase, PeerSocketPhase.awaitingProof);
-    expect(pair.client.pairingCode, pair.server.pairingCode);
     expect(pair.client.pairingCode, matches(RegExp(r'^\d{6}$')));
+    // The server has no code before the proof reveals the client's nonce.
+    expect(pair.server.pairingCode, isEmpty);
 
     expect(
       pair.server.resolveLocalApproval(
@@ -243,6 +245,7 @@ void main() {
     );
     final proof = await pair.client.createProof();
     await pair.server.receiveProof(proof);
+    expect(pair.server.pairingCode, pair.client.pairingCode);
     expect(pair.client.phase, PeerSocketPhase.awaitingResult);
     expect(pair.server.phase, PeerSocketPhase.awaitingLocalApproval);
     expect(
@@ -305,6 +308,56 @@ void main() {
       await pair.server.codec!.decode(encoded),
       orderedEquals(<int>[1, 2, 3]),
     );
+  });
+
+  // The pairing code once was SHA-256 of a transcript whose client nonce came
+  // in the clear in the hello, and the server picked its own nonce after it:
+  // a server in the middle tried nonces until its code matched the one on the
+  // real peer's screen. The hello now only commits to the nonce.
+  test('the server learns the client nonce only from a proof matching the '
+      'hello commitment', () async {
+    final server = await _session(
+      role: PeerSocketRole.server,
+      generation: 1,
+      seedStart: 32,
+    );
+    final client = await _session(
+      role: PeerSocketRole.client,
+      generation: 2,
+      seedStart: 0,
+    );
+    addTearDown(client.close);
+    addTearDown(server.close);
+    final hello = await client.createHello();
+    expect(hello.nonce, isNull);
+    expect(hello.nonceCommitment, isNotNull);
+    expect(hello.toJson(), isNot(contains('nonce')));
+
+    await client.receiveChallenge(await server.receiveHello(hello));
+    final proof = await client.createProof();
+    final otherNonce = Uint8List.fromList(List<int>.filled(32, 7));
+    final substituted = AuthEnvelope.proof(
+      protocolVersion: proof.protocolVersion,
+      peerId: proof.peerId,
+      nonce: encodeAuthBase64Url(otherNonce),
+      peerNonce: proof.peerNonce!,
+      profileDigest: proof.profileDigest,
+      signature: proof.signature!,
+      reason: proof.reason!,
+    );
+
+    await expectLater(
+      server.receiveProof(substituted),
+      throwsA(
+        isA<AuthHandshakeException>().having(
+          (error) => error.code,
+          'code',
+          'nonce_commitment_mismatch',
+        ),
+      ),
+    );
+    expect(server.isClosed, isTrue);
+    expect(server.pairingCode, isEmpty);
   });
 
   test('client proof does not grant local approval', () async {

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:whisper/socket/pre_auth_byte_cap.dart';
 
 /// Sends small writes at once instead of waiting for the previous one to be
 /// acknowledged (Nagle's algorithm). Input, control and audio packets are
@@ -47,7 +48,8 @@ const _soRcvBuf = 0x1002;
 const _transferBufferBytes = 16 * 1024 * 1024;
 
 /// A listening socket whose accepted connections have TCP_NODELAY set, for
-/// [HttpServer.listenOn] (shelf's own `serve` gives no way to set it).
+/// [HttpServer.listenOn] (shelf's own `serve` gives no way to set it). Each
+/// connection is a [PreAuthCappedSocket] until a route lifts its cap.
 class NoDelayServerSocket extends Stream<Socket> implements ServerSocket {
   NoDelayServerSocket(this._inner);
 
@@ -55,13 +57,20 @@ class NoDelayServerSocket extends Stream<Socket> implements ServerSocket {
 
   /// Accepted connections no route has claimed yet, by the other end's
   /// address and port.
-  final _unclaimed = <String, Socket>{};
+  final _unclaimed = <String, PreAuthCappedSocket>{};
 
   /// The accepted socket an HTTP request came in on, for a route that tunes
   /// it once it knows what the connection is for. Each is handed out once.
-  Socket? claim(HttpConnectionInfo connection) => _unclaimed.remove(
-    _keyOf(connection.remoteAddress, connection.remotePort),
-  );
+  PreAuthCappedSocket? claim(HttpConnectionInfo connection) => _unclaimed
+      .remove(_keyOf(connection.remoteAddress, connection.remotePort));
+
+  /// Lifts the byte cap of the connection behind [connectionInfo] (shelf's
+  /// `shelf.io.connection_info`), whose peer has proved itself already.
+  void trust(Object? connectionInfo) {
+    if (connectionInfo is HttpConnectionInfo) {
+      claim(connectionInfo)?.liftWhen(() => true);
+    }
+  }
 
   static String _keyOf(InternetAddress address, int port) =>
       '${address.address}:$port';
@@ -104,19 +113,20 @@ class NoDelayServerSocket extends Stream<Socket> implements ServerSocket {
         } on SocketException {
           // Already closed: nothing to tune later.
         }
-        if (key != null) {
-          final remembered = key;
-          _unclaimed[remembered] = socket;
+        late final PreAuthCappedSocket capped;
+        capped = PreAuthCappedSocket(
+          socket,
           // Forgotten with the connection, claimed or not.
-          socket.done.then<void>((_) {}, onError: (Object _) {}).whenComplete(
-            () {
-              if (identical(_unclaimed[remembered], socket)) {
-                _unclaimed.remove(remembered);
-              }
-            },
-          );
+          onEnd: () {
+            if (key != null && identical(_unclaimed[key], capped)) {
+              _unclaimed.remove(key);
+            }
+          },
+        );
+        if (key != null) {
+          _unclaimed[key] = capped;
         }
-        controller.add(socket);
+        controller.add(capped);
       },
       onError: controller.addError,
       onDone: controller.close,
@@ -138,17 +148,10 @@ Future<WebSocket> connectNoDelayWebSocket(
   Duration timeout = const Duration(seconds: 6),
 }) async {
   final http = uri.replace(scheme: uri.scheme == 'wss' ? 'https' : 'http');
-  final nonce = base64.encode(
-    List<int>.generate(16, (_) => Random.secure().nextInt(256)),
-  );
+  final nonce = newWebSocketKey();
   final request = await client.openUrl('GET', http).timeout(timeout);
   request.followRedirects = false;
-  request.headers
-    ..set(HttpHeaders.connectionHeader, 'Upgrade')
-    ..set(HttpHeaders.upgradeHeader, 'websocket')
-    ..set('Sec-WebSocket-Key', nonce)
-    ..set(HttpHeaders.cacheControlHeader, 'no-cache')
-    ..set('Sec-WebSocket-Version', '13');
+  setWebSocketUpgradeHeaders(request.headers, nonce);
   final response = await request.close().timeout(timeout);
   final socket = await response.detachSocket();
   final upgrade = response.headers.value(HttpHeaders.upgradeHeader);
@@ -166,4 +169,18 @@ Future<WebSocket> connectNoDelayWebSocket(
     serverSide: false,
     compression: CompressionOptions.compressionOff,
   );
+}
+
+/// A fresh Sec-WebSocket-Key for a client's upgrade request.
+String newWebSocketKey() =>
+    base64.encode(List<int>.generate(16, (_) => Random.secure().nextInt(256)));
+
+/// The headers of a client's request to upgrade to a WebSocket.
+void setWebSocketUpgradeHeaders(HttpHeaders headers, String key) {
+  headers
+    ..set(HttpHeaders.connectionHeader, 'Upgrade')
+    ..set(HttpHeaders.upgradeHeader, 'websocket')
+    ..set('Sec-WebSocket-Key', key)
+    ..set(HttpHeaders.cacheControlHeader, 'no-cache')
+    ..set('Sec-WebSocket-Version', '13');
 }

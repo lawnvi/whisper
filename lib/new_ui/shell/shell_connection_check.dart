@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/new_ui/shell/shell_parts.dart';
+import 'package:whisper/state/connection_attempt.dart';
 import 'package:whisper/state/connection_check.dart';
 import 'package:whisper/state/connection_diagnostic.dart';
 import 'package:whisper/theme/whisper_icons.dart';
@@ -28,6 +29,34 @@ Future<void> showConnectionCheck(
     probe: probe ?? ConnectionProbe.live(),
   ),
 );
+
+/// What a diagnostic stage tells the user to check.
+String connectionDiagnosticText(
+  AppLocalizations l10n,
+  ConnectionDiagnosticStage stage,
+) => switch (stage) {
+  ConnectionDiagnosticStage.wifi => l10n.connectionDiagnosticWifi,
+  ConnectionDiagnosticStage.address => l10n.connectionDiagnosticAddress,
+  ConnectionDiagnosticStage.service => l10n.connectionDiagnosticService,
+  ConnectionDiagnosticStage.firewall => l10n.connectionDiagnosticFirewall,
+  ConnectionDiagnosticStage.identity => l10n.connectionDiagnosticIdentity,
+  ConnectionDiagnosticStage.version => l10n.connectionDiagnosticVersion,
+  ConnectionDiagnosticStage.pairing => l10n.connectionDiagnosticPairing,
+};
+
+/// Why a connection attempt failed: its stage's text, or the reason's own
+/// when that says more.
+String connectionFailureText(
+  AppLocalizations l10n,
+  ConnectionAttemptReason reason,
+) => switch (reason) {
+  ConnectionAttemptReason.peerRejected => l10n.pairingRejectedByPeer,
+  ConnectionAttemptReason.pairingNeedsUpdate => l10n.pairingNeedsUpdate,
+  _ => connectionDiagnosticText(
+    l10n,
+    ConnectionDiagnostic.fromReason(reason).stage,
+  ),
+};
 
 class ConnectionCheckSheet extends StatefulWidget {
   const ConnectionCheckSheet({
@@ -78,17 +107,6 @@ class _ConnectionCheckSheetState extends State<ConnectionCheckSheet> {
         });
   }
 
-  String _problemText(AppLocalizations l10n, ConnectionDiagnosticStage stage) =>
-      switch (stage) {
-        ConnectionDiagnosticStage.wifi => l10n.connectionDiagnosticWifi,
-        ConnectionDiagnosticStage.address => l10n.connectionDiagnosticAddress,
-        ConnectionDiagnosticStage.service => l10n.connectionDiagnosticService,
-        ConnectionDiagnosticStage.firewall => l10n.connectionDiagnosticFirewall,
-        ConnectionDiagnosticStage.identity => l10n.connectionDiagnosticIdentity,
-        ConnectionDiagnosticStage.version => l10n.connectionDiagnosticVersion,
-        ConnectionDiagnosticStage.pairing => l10n.connectionDiagnosticPairing,
-      };
-
   @override
   Widget build(BuildContext context) {
     final c = context.wc;
@@ -105,7 +123,7 @@ class _ConnectionCheckSheetState extends State<ConnectionCheckSheet> {
         : report.connected
         ? l10n.connectionCheckConnected
         : report.problem != null
-        ? _problemText(l10n, report.problem!)
+        ? connectionDiagnosticText(l10n, report.problem!)
         : l10n.connectionCheckReady;
     final bad = finished && !report!.connected && report.problem != null;
     final labels = {

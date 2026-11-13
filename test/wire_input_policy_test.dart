@@ -376,6 +376,32 @@ void main() {
       );
     });
 
+    // One trusted peer opening sessions without end filled the shared
+    // table, and every other peer's next offer was refused and its
+    // connection closed.
+    test('a peer past its share makes room from its own sessions', () {
+      final registry = WireControlSessionRegistry(maxEntries: 3, maxPerPeer: 2);
+      String id(int n) => '${n}1234567-89ab-4cde-8fab-0123456789ab';
+      bool offer(String peer, String sessionId) => registry
+          .validateAndRemember(
+            namespace: 'browse',
+            sessionId: sessionId,
+            sourcePeerId: peer,
+            sinkPeerId: 'local',
+            authenticatedPeerId: peer,
+            localPeerId: 'local',
+            isInitialOffer: true,
+            isIncoming: true,
+          )
+          .isAccepted;
+      for (var n = 1; n <= 4; n++) {
+        expect(offer('peer-a', id(n)), isTrue);
+      }
+      expect(registry.knows(namespace: 'browse', sessionId: id(1)), isFalse);
+      expect(registry.knows(namespace: 'browse', sessionId: id(4)), isTrue);
+      expect(offer('peer-b', id(5)), isTrue);
+    });
+
     test('capacity exhaustion never evicts an existing peer binding', () {
       final registry = WireControlSessionRegistry(maxEntries: 1);
       expect(

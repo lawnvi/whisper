@@ -26,6 +26,8 @@ import 'package:whisper/model/message.dart';
 import 'package:whisper/socket/auth_request_gate.dart';
 import 'package:whisper/socket/auth_handshake_lifecycle.dart';
 import 'package:whisper/socket/auth_protocol.dart';
+import 'package:whisper/socket/auth_failure_result.dart';
+import 'package:whisper/socket/auth_transcript.dart';
 import 'package:whisper/socket/authenticated_frame.dart';
 import 'package:whisper/socket/device_identity.dart';
 import 'package:whisper/socket/dial_tiebreaker.dart';
@@ -33,6 +35,8 @@ import 'package:whisper/socket/file_transfer_engine.dart';
 import 'package:whisper/socket/file_transfer_v3.dart';
 import 'package:whisper/socket/media_upgrade_proof.dart';
 import 'package:whisper/socket/outgoing_text_retry.dart';
+import 'package:whisper/socket/pairing_attempt_limiter.dart';
+import 'package:whisper/socket/pre_auth_byte_cap.dart';
 import 'package:whisper/socket/peer_connection.dart';
 import 'package:whisper/socket/peer_socket_session.dart';
 import 'package:whisper/socket/quick_send_identity_gate.dart';
@@ -442,6 +446,7 @@ class WsSvrManager {
   final AuthEnvelopeObserver? _authEnvelopeObserver;
   int _nextConnectionGeneration = 0;
   final AuthRequestGate _authRequestGate = AuthRequestGate();
+  final PairingAttemptLimiter _pairingAttempts = PairingAttemptLimiter();
   final Map<WebSocketSink, String> _outgoingAuthKeysBySink =
       <WebSocketSink, String>{};
   final Map<WebSocketSink, String> _incomingAuthPeerIdsBySink =
@@ -1239,6 +1244,7 @@ class WsSvrManager {
         sink: sink,
         role: PeerSocketRole.server,
       );
+      admissionLease.evictableWhile(() => serverAwaitsProof(session));
       _attachSocketTransport(
         webSocket,
         session,
@@ -1399,6 +1405,8 @@ class WsSvrManager {
         return shelf.Response(429, body: 'Too Many Requests');
       }
       _provisionalMediaSocketCount += 1;
+      // Its token comes from a peer that already authenticated.
+      _acceptedSockets?.trust(request.context['shelf.io.connection_info']);
       var provisionalReleased = false;
       final pendingUpgrade = Completer<void>();
       _pendingSocketAttachments.add(pendingUpgrade.future);
@@ -1651,6 +1659,7 @@ class WsSvrManager {
           : _acceptedSockets?.claim(connectionInfo);
       if (accepted != null) {
         widenTransferBuffers(accepted);
+        lease.bind(accepted);
       }
       final pendingUpgrade = Completer<void>();
       _pendingSocketAttachments.add(pendingUpgrade.future);
@@ -2668,9 +2677,11 @@ class WsSvrManager {
       version--
     ) {
       final result = await _connectToServerVersion(attempt, version);
+      // Older servers reject a 15 hello explicitly; a close there is a drop.
       final retry =
           result.reason == ConnectionAttemptReason.protocolMismatch ||
-          (result.reason == ConnectionAttemptReason.transportClosed &&
+          (version != nonceCommitmentProtocolVersion &&
+              result.reason == ConnectionAttemptReason.transportClosed &&
               attempt.session?.remoteProfile == null);
       if (!retry ||
           attempt.isCancelled ||
@@ -2751,7 +2762,7 @@ class WsSvrManager {
       if (!authResult.allow) {
         await _closeSocketSink(channelSink);
         await _handlePeerSocketDoneQueued(channelSink);
-        return _connectionFailureResult(request, authResult.message);
+        return authFailureResult(request, authResult.message);
       }
       final peerId = session.remotePeerId;
       final generation = session.connectionGeneration;
@@ -2868,37 +2879,6 @@ class WsSvrManager {
     Object error,
   ) => _connectionExceptionResult(request, error);
 
-  ConnectionAttemptResult _connectionFailureResult(
-    ConnectionAttemptRequest request,
-    String message,
-  ) {
-    final reason = switch (message) {
-      'pairing_expired' => ConnectionAttemptReason.pairingExpired,
-      'upgrade_required' => ConnectionAttemptReason.protocolMismatch,
-      'wrong_intended_peer' ||
-      'wrong_intended_pkh' ||
-      'identity_pin_conflict' => ConnectionAttemptReason.identityMismatch,
-      'automatic_pairing_required' =>
-        ConnectionAttemptReason.automaticPairingRequired,
-      'rejected' || 'pairing_rejected' => ConnectionAttemptReason.peerRejected,
-      'socket_error' => ConnectionAttemptReason.socketError,
-      'connection_closed' ||
-      'connection_failed' => ConnectionAttemptReason.transportClosed,
-      _ => ConnectionAttemptReason.authenticationFailed,
-    };
-    if (reason == ConnectionAttemptReason.socketError ||
-        reason == ConnectionAttemptReason.transportClosed) {
-      return ConnectionAttemptResult.networkFailure(
-        requestId: request.requestId,
-        reason: reason,
-      );
-    }
-    return ConnectionAttemptResult.rejected(
-      requestId: request.requestId,
-      reason: reason,
-    );
-  }
-
   Future<WebSocket> _connectOutgoingWebSocket(
     Uri webSocketUri,
     _PendingOutgoingConnection attempt,
@@ -2906,10 +2886,7 @@ class WsSvrManager {
     final requestUri = webSocketUri.replace(
       scheme: webSocketUri.scheme == 'wss' ? 'https' : 'http',
     );
-    final random = math.Random.secure();
-    final nonce = base64.encode(
-      List<int>.generate(16, (_) => random.nextInt(256)),
-    );
+    final nonce = newWebSocketKey();
     final request = await attempt.httpClient
         .openUrl('GET', requestUri)
         .timeout(_outgoingConnectionTimeout);
@@ -2919,12 +2896,7 @@ class WsSvrManager {
       request.abort(const _OutgoingConnectionCancelled());
       throw const _OutgoingConnectionCancelled();
     }
-    request.headers
-      ..set(HttpHeaders.connectionHeader, 'Upgrade')
-      ..set(HttpHeaders.upgradeHeader, 'websocket')
-      ..set('Sec-WebSocket-Key', nonce)
-      ..set(HttpHeaders.cacheControlHeader, 'no-cache')
-      ..set('Sec-WebSocket-Version', '13');
+    setWebSocketUpgradeHeaders(request.headers, nonce);
     final response = await request.close().timeout(_outgoingConnectionTimeout);
     attempt.transportRequest = null;
     if (attempt.isCancelled) {
@@ -2963,7 +2935,7 @@ class WsSvrManager {
     }
     setTcpNoDelay(socket);
     widenTransferBuffers(socket);
-    return WebSocket.fromUpgradedSocket(socket, serverSide: false);
+    return cappedClientWebSocket(socket, () => attempt.session);
   }
 
   void _cancelPendingOutgoingConnections() {
@@ -3725,11 +3697,13 @@ class WsSvrManager {
       if (session.role == PeerSocketRole.server) {
         await _sendUpgradeRequired(sink, session);
       }
-      await _failSocketSession(session, sink, 'upgrade_required');
+      final code = rawAuthFailureCode(message.content);
+      await _failSocketSession(session, sink, code);
     } on AuthHandshakeException catch (error) {
-      if (error.code == 'upgrade_required' &&
+      if ((error.code == 'upgrade_required' ||
+              error.code == pairingBusyAction) &&
           session.role == PeerSocketRole.server) {
-        await _sendUpgradeRequired(sink, session);
+        await _sendUpgradeRequired(sink, session, action: error.code);
       }
       await _failSocketSession(session, sink, error.code);
     }
@@ -3751,21 +3725,16 @@ class WsSvrManager {
       hello,
       pairingRequired: pinPlan.reason != null,
     );
-    final peerId = session.remotePeerId;
+    final from = _endpointsBySink[sink]?.host ?? '';
+    final codeOnly = _pairingAttempts.admit(hello, pinPlan, from: from);
     if (!_isSessionPeerPolicyCurrent(session)) {
       throw const AuthHandshakeException('session_expired');
     }
-    if (!_authRequestGate.tryClaimIncoming(peerId)) {
-      session.close();
-      await _closeSocketSink(sink);
-      return;
-    }
-    _incomingAuthPeerIdsBySink[sink] = peerId;
-
     _requirePairingForPolicyRepair(session.remotePeerId, pinPlan.reason);
     _identityPinPlansBySink[sink] = pinPlan;
     final generation = session.connectionGeneration;
     await _sendAuthEnvelope(sink, challenge);
+    if (codeOnly) _pairingAttempts.watch(session);
     if (!_isCurrentSession(session, sink, generation)) {
       return;
     }
@@ -3800,6 +3769,7 @@ class WsSvrManager {
       await _closeSocketSink(sink);
       return;
     }
+    session.refuseCodeOnlyPairing(pairingReason, pinPlan.expectedPublicKey);
     final generation = session.connectionGeneration;
     _identityPinPlansBySink[sink] = pinPlan;
 
@@ -3813,7 +3783,7 @@ class WsSvrManager {
       }
       final approval = await session.createApproval(
         allow: true,
-        reason: _approvalReasonForPairing(pairingReason),
+        reason: approvalReasonForPairing(pairingReason),
       );
       if (!_isSameSession(session, sink, generation)) {
         return;
@@ -3836,7 +3806,7 @@ class WsSvrManager {
     }
 
     final proof = await session.createProof(
-      reason: _approvalReasonForPairing(pairingReason),
+      reason: approvalReasonForPairing(pairingReason),
     );
     if (!_isCurrentSession(session, sink, generation)) {
       return;
@@ -3894,6 +3864,19 @@ class WsSvrManager {
     if (!_isSessionPeerPolicyCurrent(session)) {
       throw const AuthHandshakeException('session_expired');
     }
+    // Claimed only now: a hello alone, which anyone can send under a known
+    // id, must not keep the real device out.
+    final gateKey = _authRequestGate.tryClaimProven(
+      session.remotePeerId,
+      pinnedPublicKey: _identityPinPlansBySink[sink]?.expectedPublicKey ?? '',
+      presentedPublicKey: session.remoteIdentityPublicKey,
+    );
+    if (gateKey == null) {
+      session.close();
+      await _closeSocketSink(sink);
+      return;
+    }
+    _incomingAuthPeerIdsBySink[sink] = gateKey;
     final outgoingKey = _authRequestKey(
       peerId: session.remotePeerId,
       host: '',
@@ -3939,7 +3922,7 @@ class WsSvrManager {
     }
     final pairingReason =
         pinPlan.reason ??
-        _pairingReasonFromApproval(session.remotePairingReason);
+        pairingReasonFromApproval(session.remotePairingReason);
 
     Future<void> resolve(bool allow) async {
       final accepted = session.resolveLocalApproval(
@@ -3949,6 +3932,7 @@ class WsSvrManager {
       if (!accepted || !_isCurrentSession(session, sink, generation)) {
         return;
       }
+      _pairingAttempts.noteDecision(allow, _endpointsBySink[sink]?.host);
       await _tryCompleteServerPairing(session, sink);
     }
 
@@ -3967,20 +3951,6 @@ class WsSvrManager {
       resolve,
     );
   }
-
-  String _approvalReasonForPairing(PairingReason? reason) => switch (reason) {
-    null => 'approved',
-    PairingReason.newDevice => 'pairing_new_device',
-    PairingReason.identityChanged => 'pairing_identity_changed',
-    PairingReason.legacyTrustWithoutPin => 'pairing_legacy_trust',
-  };
-
-  PairingReason? _pairingReasonFromApproval(String reason) => switch (reason) {
-    'pairing_identity_changed' => PairingReason.identityChanged,
-    'pairing_legacy_trust' => PairingReason.legacyTrustWithoutPin,
-    'pairing_new_device' => PairingReason.newDevice,
-    _ => null,
-  };
 
   Future<void> _tryCompleteServerPairing(
     PeerSocketSession session,
@@ -4501,16 +4471,17 @@ class WsSvrManager {
 
   Future<void> _sendUpgradeRequired(
     WebSocketSink sink,
-    PeerSocketSession session,
-  ) async {
+    PeerSocketSession session, {
+    String action = 'upgrade_required',
+  }) async {
     final payload = jsonEncode(<String, Object?>{
-      'action': 'upgrade_required',
+      'action': action,
       'version': PeerSocketSession.protocolVersion,
     });
     final message = _buildMessage(
       MessageEnum.Auth,
       payload,
-      'upgrade_required',
+      action,
       '',
       0,
       false,

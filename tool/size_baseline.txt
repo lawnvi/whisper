@@ -9,8 +9,8 @@
 2160 lib/new_ui/settings/settings_controls.dart
 1086 lib/new_ui/settings/settings_layout.dart
 1034 lib/new_ui/tray/tray_panel.dart
-2988 lib/page/conversation.dart
-4184 lib/page/deviceList.dart
+2987 lib/page/conversation.dart
+4173 lib/page/deviceList.dart
 2211 lib/page/remote_files/files_desktop.dart
 1495 lib/page/remote_files/files_model.dart
 1380 lib/page/settings.dart
@@ -24,8 +24,8 @@
 1112 lib/share_links/share_server.dart
 4897 lib/socket/file_transfer_engine.dart
 1282 lib/socket/folder_transfer_sink.dart
-1112 lib/socket/peer_socket_session.dart
-6933 lib/socket/svrmanager.dart
+1111 lib/socket/peer_socket_session.dart
+6904 lib/socket/svrmanager.dart
 1303 lib/state/desktop_quick_send_inbox.dart
 2286 lib/theme/whisper_ui.dart
 1989 lib/widget/media_message_preview.dart

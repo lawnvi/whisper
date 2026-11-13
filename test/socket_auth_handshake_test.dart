@@ -4,6 +4,7 @@ import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/socket/auth_protocol.dart';
 import 'package:whisper/socket/device_identity.dart';
+import 'package:whisper/socket/pairing_attempt_limiter.dart';
 import 'package:whisper/socket/peer_socket_session.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/state/pairing_request.dart';
@@ -126,6 +127,91 @@ void main() {
       pairingReasonForIdentity(stored(auth: true, pin: 'key'), 'key'),
       isNull,
     );
+
+    // Below protocol 15 only pairing that a pinned key or a scanned QR code
+    // vouches for may go ahead.
+    bool codeAlone(PairingReason? reason, String pin, {String qr = ''}) =>
+        pairingRestsOnCodeAlone(
+          reason: reason,
+          pinnedPublicKey: pin,
+          presentedPublicKey: 'key',
+          intendedPublicKeyHash: qr,
+        );
+    expect(codeAlone(null, 'key'), isFalse);
+    expect(codeAlone(PairingReason.newDevice, ''), isTrue);
+    expect(codeAlone(PairingReason.newDevice, '', qr: 'pkh'), isFalse);
+    expect(codeAlone(PairingReason.newDevice, 'key'), isFalse);
+    expect(codeAlone(PairingReason.identityChanged, 'old'), isTrue);
+    expect(codeAlone(PairingReason.identityChanged, 'old', qr: 'pkh'), isFalse);
+    expect(codeAlone(PairingReason.legacyTrustWithoutPin, ''), isTrue);
+  });
+
+  // A client that leaves after our challenge already knows the code we would
+  // show, so retrying it could wait for one matching another screen.
+  test('unpinned pairing pauses after over five abandoned tries a minute',
+      () async {
+    var now = DateTime(2026);
+    final limiter = PairingAttemptLimiter(clock: () => now);
+    final key = encodeAuthBase64Url(List<int>.filled(32, 1));
+    final qr = encodeAuthBase64Url(List<int>.filled(32, 2));
+    AuthEnvelope hello({String? pkh}) => AuthEnvelope.hello(
+          protocolVersion: PeerSocketSession.protocolVersion,
+          peerId: 'peer',
+          identityPublicKey: key,
+          ephemeralPublicKey: key,
+          nonceCommitment: key,
+          profileDigest: key,
+          intendedPublicKeyHash: pkh,
+        );
+    const unknown = (reason: PairingReason.newDevice, expectedPublicKey: '');
+    final pinned = (reason: PairingReason.newDevice, expectedPublicKey: key);
+    final busy = throwsA(isA<AuthHandshakeException>()
+        .having((error) => error.code, 'code', pairingBusyAction));
+
+    // Our own key hash in a hello is public, so it exempts nothing here.
+    expect(limiter.admit(hello(), unknown), isTrue);
+    expect(limiter.admit(hello(), pinned), isFalse);
+    expect(limiter.admit(hello(pkh: qr), unknown), isTrue);
+    for (var i = 0; i < 5; i++) {
+      limiter.recordAbandoned();
+    }
+    now = now.add(const Duration(seconds: 60));
+    for (var i = 0; i < 5; i++) {
+      limiter.recordAbandoned();
+    }
+    expect(limiter.admit(hello(), unknown), isTrue);
+    limiter.recordAbandoned();
+    expect(() => limiter.admit(hello(), unknown), busy);
+    expect(() => limiter.admit(hello(pkh: qr), unknown), busy);
+    expect(limiter.admit(hello(pkh: qr), pinned), isFalse);
+    now = now.add(const Duration(seconds: 60));
+    expect(limiter.admit(hello(), unknown), isTrue);
+
+    // After the user rejects a pairing, its address may not ask again soon.
+    const reconnect = (reason: null, expectedPublicKey: '');
+    limiter.noteDecision(false, '10.0.0.9');
+    expect(() => limiter.admit(hello(), pinned, from: '10.0.0.9'), busy);
+    expect(limiter.admit(hello(), pinned, from: '10.0.0.8'), isFalse);
+    expect(limiter.admit(hello(), reconnect, from: '10.0.0.9'), isFalse);
+    now = now.add(const Duration(seconds: 60));
+    expect(limiter.admit(hello(), pinned, from: '10.0.0.9'), isFalse);
+
+    // Only a session that ends before a valid proof counts.
+    final strict = PairingAttemptLimiter(clock: () => now, maxAbandoned: 0);
+    final proved = await _completedServerHandshake();
+    strict.watch(proved.server);
+    proved.server.close();
+    proved.client.close();
+    await pumpEventQueue();
+    expect(strict.admit(hello(), unknown), isTrue);
+    final client = await _makeSession(PeerSocketRole.client, 1);
+    final left = await _makeSession(PeerSocketRole.server, 32);
+    addTearDown(client.close);
+    await left.receiveHello(await client.createHello());
+    strict.watch(left);
+    left.close();
+    await pumpEventQueue();
+    expect(() => strict.admit(hello(), unknown), busy);
   });
 
   test('profile digest binds both profiles and rejects profile tampering',
@@ -145,6 +231,7 @@ void main() {
       identityPublicKey: hello.identityPublicKey!,
       ephemeralPublicKey: hello.ephemeralPublicKey!,
       nonce: hello.nonce,
+      nonceCommitment: hello.nonceCommitment,
       profileDigest: hello.profileDigest,
       intendedPeerId: hello.intendedPeerId,
       intendedPublicKeyHash: hello.intendedPublicKeyHash,
@@ -169,8 +256,9 @@ void main() {
       peerId: challenge.peerId,
       identityPublicKey: challenge.identityPublicKey!,
       ephemeralPublicKey: challenge.ephemeralPublicKey!,
-      nonce: challenge.nonce,
-      peerNonce: challenge.peerNonce!,
+      nonce: challenge.nonce!,
+      peerNonce: challenge.peerNonce,
+      peerNonceCommitment: challenge.peerNonceCommitment,
       profileDigest: challenge.profileDigest,
       signature: challenge.signature!,
       profile: <String, Object?>{
@@ -201,8 +289,9 @@ void main() {
       peerId: challenge.peerId,
       identityPublicKey: challenge.identityPublicKey!,
       ephemeralPublicKey: challenge.ephemeralPublicKey!,
-      nonce: challenge.nonce,
-      peerNonce: challenge.peerNonce!,
+      nonce: challenge.nonce!,
+      peerNonce: challenge.peerNonce,
+      peerNonceCommitment: challenge.peerNonceCommitment,
       profileDigest: challenge.profileDigest,
       signature: challenge.signature!,
       pairingRequired: false,
@@ -227,7 +316,7 @@ void main() {
     final tampered = AuthEnvelope.result(
       protocolVersion: flow.result.protocolVersion,
       peerId: flow.result.peerId,
-      nonce: flow.result.nonce,
+      nonce: flow.result.nonce!,
       peerNonce: flow.result.peerNonce!,
       profileDigest: flow.result.profileDigest,
       signature: encodeAuthBase64Url(signatureBytes),
@@ -276,7 +365,7 @@ void main() {
     final tampered = AuthEnvelope.approval(
       protocolVersion: approval.protocolVersion,
       peerId: approval.peerId,
-      nonce: approval.nonce,
+      nonce: approval.nonce!,
       peerNonce: approval.peerNonce!,
       profileDigest: approval.profileDigest,
       signature: encodeAuthBase64Url(signatureBytes),

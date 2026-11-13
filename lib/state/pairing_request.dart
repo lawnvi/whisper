@@ -2,11 +2,7 @@ import 'dart:async';
 
 import 'package:whisper/model/LocalDatabase.dart';
 
-enum PairingReason {
-  newDevice,
-  identityChanged,
-  legacyTrustWithoutPin,
-}
+enum PairingReason { newDevice, identityChanged, legacyTrustWithoutPin }
 
 enum PairingPromptMode { initiator, responder }
 
@@ -97,3 +93,32 @@ PairingReason? pairingReasonForIdentity(
   }
   return PairingReason.newDevice;
 }
+
+/// Whether only the six-digit code keeps a device in the middle out: no key
+/// pinned at an earlier pairing matches the one presented, and the client did
+/// not dial with the key hash from a scanned QR code (which the session has
+/// already checked against the server's key, so nobody can sit in between).
+bool pairingRestsOnCodeAlone({
+  required PairingReason? reason,
+  required String pinnedPublicKey,
+  required String presentedPublicKey,
+  required String intendedPublicKeyHash,
+}) =>
+    reason != null &&
+    intendedPublicKeyHash.isEmpty &&
+    (pinnedPublicKey.isEmpty || pinnedPublicKey != presentedPublicKey);
+
+/// The reason a client signs into its proof and approval.
+String approvalReasonForPairing(PairingReason? reason) => switch (reason) {
+  null => 'approved',
+  PairingReason.newDevice => 'pairing_new_device',
+  PairingReason.identityChanged => 'pairing_identity_changed',
+  PairingReason.legacyTrustWithoutPin => 'pairing_legacy_trust',
+};
+
+PairingReason? pairingReasonFromApproval(String reason) => switch (reason) {
+  'pairing_identity_changed' => PairingReason.identityChanged,
+  'pairing_legacy_trust' => PairingReason.legacyTrustWithoutPin,
+  'pairing_new_device' => PairingReason.newDevice,
+  _ => null,
+};
