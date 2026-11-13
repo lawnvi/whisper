@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
 
+import 'mount_names.dart';
 import 'mount_tree.dart';
 
 /// A [MountTree] as a Cloud Files sync root (windows/cloud_files): a
@@ -348,11 +349,9 @@ class CloudFilesMount {
   ) async {
     for (final MapEntry(key: name, value: was) in before.entries) {
       final after = now[name];
-      final itemPath = '$folder\\$name';
-      if (await _changedHere(itemPath)) {
-        // Changed here and not sent yet: it is sent, not undone.
-        continue;
-      }
+      final itemPath = windowsChildPath(folder, name);
+      // Kept: not a plain name, or changed here and not sent yet (it is sent).
+      if (itemPath == null || await _changedHere(itemPath)) continue;
       if (after == null || after.isDir != was.isDir) {
         if (was.isDir) {
           try {
@@ -442,11 +441,10 @@ class CloudFilesMount {
       final now = _snapshot(children);
       final added = <MountNode>[];
       for (final child in children) {
-        // Not over what was made here and is not sent yet.
-        if (!listed.items.containsKey(child.name) &&
-            await _state('${listed.path}\\${child.name}') < 0) {
-          added.add(child);
-        }
+        final itemPath = windowsChildPath(listed.path, child.name);
+        // Plain names only; not over what was made here and is not sent yet.
+        if (itemPath == null || listed.items.containsKey(child.name)) continue;
+        if (await _state(itemPath) < 0) added.add(child);
       }
       if (added.isNotEmpty) {
         _withEntries(added, (entries, count) {

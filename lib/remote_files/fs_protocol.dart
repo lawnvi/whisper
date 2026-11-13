@@ -125,6 +125,13 @@ class FileBrowseMessage {
   };
 }
 
+/// Folder listings ([FileBrowseAction.list]), a page at a time.
+abstract final class FileBrowseList {
+  /// The most entries one folder's listing may have: past it the listing
+  /// fails, rather than a host's pages filling this device's memory.
+  static const maxEntries = 200000;
+}
+
 /// Ranged reads ([FileBrowseAction.read]).
 abstract final class FileBrowseRead {
   /// What `opened` carries when the host answers reads.

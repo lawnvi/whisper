@@ -37,7 +37,7 @@ class RemoteMountSource extends MountSource {
       if (!page.hasMore || page.entries.isEmpty) {
         return entries;
       }
-      offset = page.offset + page.entries.length;
+      offset += page.entries.length;
     }
   }
 

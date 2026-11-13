@@ -25,6 +25,7 @@ import '../../remote_files/files_log.dart';
 import '../../remote_files/fs_copies.dart' show FilesOutside;
 import '../../remote_files/fs_placement.dart' show TransferPlacements;
 import 'files_model.dart';
+import 'package:whisper/remote_files/mount/mount_names.dart';
 
 /// What is dragged around inside the file manager.
 class FilesDragData {
@@ -70,7 +71,7 @@ Future<bool> writeFetchedToClipboard(
   try {
     await clipboard.write([
       for (final item in items)
-        DataWriterItem(suggestedName: item.name)..addVirtualFile(
+        DataWriterItem(suggestedName: localFileName(item.name))..addVirtualFile(
           format: _anyFile,
           storageSuggestion: VirtualFileStorage.temporaryFile,
           provider: (sinkProvider, progress) => unawaited(
@@ -441,7 +442,7 @@ Future<DragItem> filesDragItem(
   FilesItem item,
 ) async {
   final dragItem = DragItem(
-    suggestedName: item.name,
+    suggestedName: localFileName(item.name),
     localData: <String, Object?>{
       _localDataKey: 1,
       'device': item.location.deviceId,
@@ -486,7 +487,8 @@ Future<DragItem> filesDragItem(
 abstract final class FilesFolderPromises {
   static const _channel = MethodChannel('com.vireen.whisper/folder_promises');
 
-  /// The folders in drags so far, by name (what Finder asks for).
+  /// The folders in drags so far, by the name they were offered under
+  /// (what Finder asks for).
   static final _offered =
       <String, ({FilesController controller, FilesItem item})>{};
 
@@ -500,7 +502,7 @@ abstract final class FilesFolderPromises {
       _listening = true;
       _channel.setMethodCallHandler(_handle);
     }
-    _offered[item.name] = (controller: controller, item: item);
+    _offered[localFileName(item.name)] = (controller: controller, item: item);
   }
 
   static Future<Object?> _handle(MethodCall call) async {

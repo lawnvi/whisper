@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import 'package:uuid/uuid.dart';
 
+import '../socket/wire_input_policy.dart' show isCanonicalTransferId;
 import 'files_log.dart';
 import 'fs_host.dart';
 import 'fs_host_files.dart';
@@ -112,7 +113,7 @@ class RemoteFilesClient {
   final String sessionId;
   int _nextRequest = 1;
   final _pending = <int, Completer<Map<String, Object?>>>{};
-  final _reads = <int, Completer<Uint8List>>{};
+  final _reads = <int, ({Completer<Uint8List> done, int length})>{};
   Completer<RemoteFsInfo>? _opening;
   RemoteFsInfo? info;
   int _thumbsRunning = 0;
@@ -146,7 +147,16 @@ class RemoteFilesClient {
     if (client == null || client.peerId != remotePeerId) {
       return;
     }
-    client._reads.remove(requestId)?.complete(data);
+    final read = client._reads.remove(requestId);
+    if (read == null) {
+      return;
+    }
+    // More than asked for would not fit where a mount puts it.
+    if (data.length > read.length) {
+      read.done.completeError(const RemoteFsException(FileBrowseError.io));
+    } else {
+      read.done.complete(data);
+    }
   }
 
   /// The browsed device disconnected.
@@ -304,7 +314,7 @@ class RemoteFilesClient {
           reason is String ? reason : FileBrowseError.io,
         );
         _pending.remove(message.requestId)?.completeError(error);
-        _reads.remove(message.requestId)?.completeError(error);
+        _reads.remove(message.requestId)?.done.completeError(error);
       default:
         break;
     }
@@ -316,7 +326,10 @@ class RemoteFilesClient {
     if (opening != null && !opening.isCompleted) {
       opening.completeError(error);
     }
-    for (final completer in [..._pending.values, ..._reads.values]) {
+    for (final completer in [
+      ..._pending.values,
+      for (final read in _reads.values) read.done,
+    ]) {
       if (!completer.isCompleted) {
         completer.completeError(error);
       }
@@ -342,13 +355,26 @@ class RemoteFilesClient {
       'offset': offset,
       if (showHidden) 'hidden': true,
     });
+    final entries = result['entries'] ?? const [];
+    final total = result['total'] ?? 0;
+    final at = result['offset'] ?? offset;
+    // The page asked for, of a listing this device can hold: pages that
+    // start elsewhere or never end would fill its memory.
+    if (entries is! List ||
+        total is! int ||
+        at is! int ||
+        at != offset ||
+        total > FileBrowseList.maxEntries ||
+        entries.length > total - offset) {
+      throw const RemoteFsException(FileBrowseError.io);
+    }
     return FsPage(
       entries: [
-        for (final entry in (result['entries'] as List? ?? const []))
+        for (final entry in entries)
           if (entry is Map) FsEntry.fromJson(entry.cast<String, Object?>()),
       ],
-      total: (result['total'] as num?)?.toInt() ?? 0,
-      offset: (result['offset'] as num?)?.toInt() ?? offset,
+      total: total,
+      offset: offset,
     );
   }
 
@@ -365,7 +391,7 @@ class RemoteFilesClient {
   }) async {
     final id = _nextRequest++;
     final completer = Completer<Uint8List>();
-    _reads[id] = completer;
+    _reads[id] = (done: completer, length: length);
     _clients[sessionId] = this;
     final sent = await sender?.call(
       peerId,
@@ -586,15 +612,16 @@ class RemoteFilesClient {
         for (final item in items) {'root': item.root, 'path': item.path},
       ],
     });
-    final ids = <String>[];
+    // One new transfer per item at most: each id is placed and listed here.
+    final ids = <String>{};
     for (final transfer in (result['transfers'] as List? ?? const [])) {
-      if (transfer is Map && transfer['id'] is String) {
-        final id = transfer['id'] as String;
+      final id = transfer is Map ? transfer['id'] : null;
+      if (id is String && isCanonicalTransferId(id) && ids.add(id)) {
         TransferPlacements.shared.expect(id, localFolder);
-        ids.add(id);
+        if (ids.length == items.length) break;
       }
     }
-    return ids;
+    return ids.toList();
   }
 
   /// Copies local files and folders into [folder] on the other device.

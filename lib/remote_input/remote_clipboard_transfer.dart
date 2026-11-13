@@ -11,8 +11,12 @@ import 'package:whisper/helper/helper.dart' show getClipboardText;
 import 'package:whisper/helper/privacy_log.dart';
 import 'package:whisper/model/file_transfer.dart';
 import 'package:whisper/remote_files/fs_placement.dart';
+import 'package:whisper/remote_files/mount/mount_names.dart';
 import 'package:whisper/socket/peer_connection.dart';
 import 'package:whisper/socket/whisper_frame_v3.dart';
+import 'package:whisper/socket/wire_input_policy.dart'
+    show isCanonicalTransferId;
+import 'package:whisper/remote_input/remote_clipboard_paths.dart';
 
 // Files sent as clipboard frames, held in memory along the way: what older
 // devices take, and what a screenshot uses.
@@ -606,10 +610,7 @@ final class RemoteClipboardTransferEngine {
       existing.complete(RemoteClipboardPasteResult.failed);
       await existing.dispose(deleteDirectory: true);
     }
-    final base = await _directoryProvider();
-    final directory = Directory(
-      p.join(base.path, 'whisper_remote_clipboard', sessionId, offer.offerId),
-    );
+    final directory = await _offerDirectory(offer);
     await directory.create(recursive: true);
     final request = await _IncomingRequest.create(offer, directory);
     // A local copy, new offer or disconnect can supersede this download while
@@ -790,9 +791,10 @@ final class RemoteClipboardTransferEngine {
     final rawItems = json['items'];
     if (json['protocolVersion'] != protocolVersion ||
         sessionId is! String ||
-        sessionId.isEmpty ||
+        !isSafeClipboardName(sessionId) ||
         rawItems is! List ||
-        frame.transferId.isEmpty ||
+        // Names the folder the files are written to (and later deleted).
+        !isCanonicalTransferId(frame.transferId) ||
         frame.offset != 0 ||
         frame.sequence != 0 ||
         !_sessionValidator(
@@ -815,7 +817,7 @@ final class RemoteClipboardTransferEngine {
       final size = item['size'];
       final kind = item['kind'];
       if (name is! String ||
-          !_isSafeName(name) ||
+          !isSafeClipboardName(name) ||
           size is! int ||
           (kind != 'file' && kind != 'image') ||
           size < 0 ||
@@ -1121,7 +1123,9 @@ final class RemoteClipboardTransferEngine {
     }
     var total = 0;
     for (final item in items) {
-      if (!_isSafeName(item.name) || item.size < 0 || item.size > limits.file) {
+      if (!isSafeClipboardName(item.name) ||
+          item.size < 0 ||
+          item.size > limits.file) {
         return null;
       }
       total += item.size;
@@ -1185,10 +1189,7 @@ final class RemoteClipboardTransferEngine {
     if (!_isCurrentRemoteOffer(offer)) {
       return RemoteClipboardPasteResult.notAvailable;
     }
-    final base = await _directoryProvider();
-    final directory = Directory(
-      p.join(base.path, 'whisper_remote_clipboard', sessionId, offer.offerId),
-    );
+    final directory = await _offerDirectory(offer);
     await directory.create(recursive: true);
     if (!_isCurrentRemoteOffer(offer) ||
         _transferRequests.containsKey(offer.offerId)) {
@@ -1492,14 +1493,12 @@ final class RemoteClipboardTransferEngine {
     return Uint8List.fromList(utf8.encode(jsonEncode(value)));
   }
 
-  static bool _isSafeName(String value) {
-    return value.isNotEmpty &&
-        value.length <= 255 &&
-        value != '.' &&
-        value != '..' &&
-        p.basename(value) == value &&
-        !value.contains('\u0000');
-  }
+  Future<Directory> _offerDirectory(_RemoteOffer offer) async =>
+      remoteClipboardOfferDirectory(
+        (await _directoryProvider()).path,
+        offer.sessionId,
+        offer.offerId,
+      );
 
   static Future<Directory> _defaultDirectory() async => Directory.systemTemp;
 }
@@ -1538,11 +1537,9 @@ final class _RemoteOffer {
 }
 
 final class _RemoteItem {
-  const _RemoteItem({
-    required this.name,
-    required this.size,
-    required this.isImage,
-  });
+  /// Written here, and shown, under a name this system can hold.
+  _RemoteItem({required String name, required this.size, required this.isImage})
+    : name = localFileName(name);
 
   final String name;
   final int size;

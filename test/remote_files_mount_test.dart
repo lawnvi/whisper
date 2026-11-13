@@ -15,6 +15,7 @@ import 'package:whisper/remote_files/fs_protocol.dart';
 import 'package:whisper/remote_files/mount/fuse_linux.dart';
 import 'package:whisper/remote_files/mount/kde_places.dart';
 import 'package:whisper/remote_files/mount/mount_macos.dart';
+import 'package:whisper/remote_files/mount/mount_names.dart';
 import 'package:whisper/remote_files/mount/mount_tree.dart';
 import 'package:whisper/remote_files/mount/nfs_server.dart';
 import 'package:whisper/remote_files/mount/remote_mounts.dart';
@@ -267,6 +268,38 @@ const _nfs = 100003;
 const _mountd = 100005;
 
 void main() {
+  // Names in the other device's listings were only cleared of `/`. On a
+  // Windows mount `..\..\OneDrive\a.docx` pointed outside the sync root,
+  // and the next refresh deleted whatever placeholder was there (OneDrive's
+  // too); a dragged-out file with such a name could land in another folder.
+  test('names from the other device stay single names here', () {
+    for (final (name, windows, local) in [
+      ('report.txt', true, 'report.txt'),
+      (r'..\..\OneDrive\a.docx', true, '.._.._OneDrive_a.docx'),
+      ('..', true, '_'),
+      ('..', false, '_'),
+      ('.', false, '_'),
+      ('a/b', false, 'a∕b'),
+      (r'a\b', false, r'a\b'),
+      ('C:', true, 'C_'),
+      ('NUL.txt', true, '_NUL.txt'),
+      ('name. ', true, 'name'),
+      ('a:stream', true, 'a_stream'),
+      // Bidi controls passed through: IMG\u202egpj.scr showed as IMGrcs.jpg.
+      ('IMG\u202egpj.scr', false, 'IMG_gpj.scr'),
+      ('IMG\u202egpj.scr', true, 'IMG_gpj.scr'),
+      ('a\u2066b\u2069', false, 'a_b_'),
+      ('a\u0000b\u0007c\u0085d\u007f', false, 'a_b_c_d_'),
+      ('\u202e', false, '_'),
+    ]) {
+      expect(localFileName(name, windows: windows), local, reason: name);
+    }
+    expect(windowsChildPath(r'C:\m', 'ok.txt'), r'C:\m\ok.txt');
+    for (final name in [r'..\x', '..', 'a:b', 'CON', 'x.', 'a\u202eb']) {
+      expect(windowsChildPath(r'C:\m', name), isNull, reason: name);
+    }
+  });
+
   group('reads through the browse session', () {
     late Directory sandbox;
     late FileBrowseHost host;
@@ -399,6 +432,65 @@ void main() {
           ),
         ),
       );
+      await client.close();
+    });
+
+    // A host's replies were taken as they came: list pages could start
+    // anywhere and never end (filling memory), a read could bring more than
+    // asked (a mount's block overflowed and its NFS call went unanswered),
+    // and a copy any number of transfer ids, each placed and listed here.
+    test('a host\'s replies stay within what was asked', () async {
+      final client = RemoteFilesClient('host');
+      await client.open();
+      final honest = host.sender!;
+      Map<String, Object?> Function(Map<String, Object?>)? change;
+      host.sender = (peerId, message) {
+        final tamper = change;
+        return honest(
+          peerId,
+          tamper == null
+              ? message
+              : message.reply(message.action, tamper(message.payload)),
+        );
+      };
+      final fails = throwsA(
+        isA<RemoteFsException>().having(
+          (e) => e.reason,
+          'reason',
+          FileBrowseError.io,
+        ),
+      );
+      for (final page in <Map<String, Object?> Function(Map<String, Object?>)>[
+        (page) => {...page, 'offset': 1},
+        (page) => {...page, 'total': -1},
+        (page) => {...page, 'total': '2'},
+        (page) => {...page, 'total': 1}, // more entries than it has
+        (page) => {...page, 'total': FileBrowseList.maxEntries + 1},
+      ]) {
+        change = page;
+        await expectLater(client.list('home', ''), fails);
+      }
+      const id = '00000000-0000-4000-8000-00000000000a';
+      change = (_) => {
+        'transfers': [
+          {'id': 'not-an-id'},
+          {'id': id},
+          {'id': id},
+          {'id': '00000000-0000-4000-8000-00000000000b'},
+        ],
+      };
+      final copy = [(root: 'home', path: 'big.bin')];
+      expect(await client.fetch(copy, sandbox.path), [id]);
+      change = null;
+      final send = host.sendData!;
+      host.sendData = (peerId, sessionId, requestId, offset, data) => send(
+        peerId,
+        sessionId,
+        requestId,
+        offset,
+        Uint8List.fromList([...data, 0]),
+      );
+      await expectLater(client.read('home', 'big.bin', 0, 4), fails);
       await client.close();
     });
 

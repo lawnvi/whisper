@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:whisper/helper/desktop_clipboard_image.dart';
 import 'package:whisper/model/file_transfer.dart';
 import 'package:whisper/remote_files/fs_placement.dart';
@@ -13,8 +14,74 @@ import 'package:whisper/socket/bounded_receive_queue.dart';
 import 'package:whisper/socket/peer_connection.dart';
 import 'package:whisper/socket/whisper_frame_v3.dart';
 
+// Offer ids are UUIDs: the sink makes a folder named after them.
+const _oldOffer = '0d9f6a52-7c1e-4b5a-9f3e-2a4b6c8d0e11';
+const _newOffer = '5b2e8c71-3d4f-4a6b-8c9d-0e1f2a3b4c5d';
+const _offer = '9a8b7c6d-5e4f-4321-8fed-cba987654321';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  // The offer id named the folder pasted files go to, and it was taken from
+  // the peer as is: `../../..` made a paired device's offer write into, and
+  // on the first failed write recursively delete, any folder of this user.
+  test('a peer cannot name a folder outside the clipboard folder', () async {
+    final temp = await Directory.systemTemp.createTemp('whisper-escape');
+    addTearDown(() => temp.delete(recursive: true));
+    final root = await Directory(p.join(temp.path, 'base')).create();
+    final victim = await Directory(p.join(temp.path, 'victim')).create();
+    // A folder where the image would go makes the write fail, which is what
+    // used to trigger the recursive delete.
+    await Directory(p.join(victim.path, 'image.png')).create();
+    final keep = await File(p.join(victim.path, 'keep.txt')).create();
+    const binding = TransferConnectionBinding(peerId: 'source', generation: 1);
+    final engine = RemoteClipboardTransferEngine(
+      currentBinding: (_) => binding,
+      sessionValidator:
+          ({required peerId, required sessionId, required sourceIsLocal}) =>
+              true,
+      directoryProvider: () async => root,
+      sendFrame: (_, _) async => true,
+    );
+    addTearDown(() => engine.clearSession('session'));
+    WhisperFrameV3 offer(String transferId, String sessionId) => WhisperFrameV3(
+      type: WhisperFrameType.clipboardOffer,
+      transferId: transferId,
+      offset: 0,
+      sequence: 0,
+      payload: Uint8List.fromList(
+        utf8.encode(
+          jsonEncode({
+            'protocolVersion': 1,
+            'sessionId': sessionId,
+            'items': [
+              {'name': 'image.png', 'size': 1, 'kind': 'image'},
+            ],
+          }),
+        ),
+      ),
+    );
+    for (final (transferId, sessionId) in [
+      ('../../../victim', 'session'),
+      (_offer, '..'),
+      (_offer, '../../victim'),
+    ]) {
+      await expectLater(
+        engine.handleFrame(
+          binding,
+          offer(transferId, sessionId),
+          prepareImages: true,
+        ),
+        throwsFormatException,
+      );
+      expect(
+        await engine.preparePaste(peerId: 'source', sessionId: sessionId),
+        RemoteClipboardPasteResult.notAvailable,
+      );
+    }
+    expect(await keep.exists(), isTrue);
+    expect(await victim.list().length, 2);
+  });
 
   test('a failed old request cannot remove its replacement', () async {
     final root = await Directory.systemTemp.createTemp('whisper-replaced');
@@ -32,7 +99,7 @@ void main() {
       directoryProvider: () async => root,
       writer: const DesktopClipboardFileWriter(channel: channel),
       sendFrame: (_, frame) async {
-        if (frame.transferId == 'old') {
+        if (frame.transferId == _oldOffer) {
           oldStarted.complete();
           return oldSend.future;
         }
@@ -66,7 +133,7 @@ void main() {
     );
     await engine.handleFrame(
       binding,
-      frame('old', WhisperFrameType.clipboardOffer),
+      frame(_oldOffer, WhisperFrameType.clipboardOffer),
     );
     final oldPaste = engine.preparePaste(
       peerId: 'source',
@@ -75,7 +142,7 @@ void main() {
     await oldStarted.future;
     await engine.handleFrame(
       binding,
-      frame('new', WhisperFrameType.clipboardOffer),
+      frame(_newOffer, WhisperFrameType.clipboardOffer),
     );
     final newPaste = engine.preparePaste(
       peerId: 'source',
@@ -86,7 +153,7 @@ void main() {
     await oldPaste;
     await engine.handleFrame(
       binding,
-      frame('new', WhisperFrameType.clipboardComplete),
+      frame(_newOffer, WhisperFrameType.clipboardComplete),
     );
     expect(
       await newPaste.timeout(const Duration(seconds: 1)),
@@ -238,7 +305,7 @@ void main() {
         binding,
         WhisperFrameV3(
           type: WhisperFrameType.clipboardOffer,
-          transferId: 'offer',
+          transferId: _offer,
           offset: 0,
           sequence: 0,
           payload: Uint8List.fromList(
@@ -264,7 +331,7 @@ void main() {
         binding,
         WhisperFrameV3(
           type: WhisperFrameType.clipboardComplete,
-          transferId: 'offer',
+          transferId: _offer,
           offset: 4,
           sequence: 1,
           payload: Uint8List.fromList(

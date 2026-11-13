@@ -631,7 +631,7 @@ class FilesController extends ChangeNotifier {
         here.path,
         showHidden: showHidden,
       );
-      var all = page.entries;
+      final all = [...page.entries];
       while (all.length < page.total && generation == _generation) {
         page = await browser.list(
           here.root,
@@ -642,7 +642,7 @@ class FilesController extends ChangeNotifier {
         if (page.entries.isEmpty) {
           break;
         }
-        all = [...all, ...page.entries];
+        all.addAll(page.entries);
       }
       if (generation != _generation) {
         return;

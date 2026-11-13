@@ -4,6 +4,7 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import '../fs_host_files.dart';
+import 'package:whisper/remote_files/mount/mount_names.dart';
 
 /// Where mount code logs: the app's files log, also from a worker isolate
 /// (see MountWorker).
@@ -209,7 +210,7 @@ class MountTree {
           _add(
             _nextIno++,
             rootIno,
-            _safeName(root.name),
+            localFileName(root.name),
             root.id,
             '',
             isDir: true,
@@ -402,7 +403,7 @@ class MountTree {
       if (keepHere?.call(entry.name) ?? false) {
         continue;
       }
-      final name = _safeName(entry.name);
+      final name = localFileName(entry.name);
       if (name != entry.name) {
         // Not a name the system can show; its real name is not ours to
         // change.
@@ -521,6 +522,10 @@ class MountTree {
     }
     _changed(folder);
     final entry = await _guard(source.create(folder.root, folder.path, name));
+    // HFS+ stores names decomposed; a different name must still be plain.
+    if (entry.name != name && localFileName(entry.name) != entry.name) {
+      throw const MountException(MountError.io);
+    }
     final node = _place(folder, entry);
     _madeHere.add(node.ino);
     return node;
@@ -1175,10 +1180,6 @@ class MountTree {
       throw const MountException(MountError.io);
     }
   }
-
-  /// Folder names can't hold `/`, and NUL ends a name everywhere.
-  static String _safeName(String name) =>
-      name.replaceAll('/', '∕').replaceAll('\u0000', '');
 }
 
 /// File contents in [blockSize] blocks: each read asks the other device
@@ -1301,11 +1302,8 @@ class MountReader {
       // phone's shared storage returns early): ask on for the rest, or
       // the rest of the block would be served as nothing.
       final whole = (node.size - start).clamp(0, blockSize);
-      if (first.isEmpty || first.length >= whole) {
-        return first;
-      }
       final block = BytesBuilder(copy: false)..add(first);
-      while (block.length < whole) {
+      while (first.isNotEmpty && block.length < whole) {
         final more = await tree.source.read(
           node.root,
           node.path,
@@ -1317,7 +1315,9 @@ class MountReader {
         }
         block.add(more);
       }
-      return block.takeBytes();
+      // Never more than the block holds: a read would not fit it.
+      final data = block.takeBytes();
+      return data.length > whole ? Uint8List.sublistView(data, 0, whole) : data;
     } on MountException {
       rethrow;
     } catch (_) {

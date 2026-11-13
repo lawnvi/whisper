@@ -28,15 +28,23 @@ bool validateIncomingFileName(String fileName) {
     return false;
   }
   for (final rune in fileName.runes) {
-    if (rune <= 0x1f ||
-        (rune >= 0x7f && rune <= 0x9f) ||
-        _windowsInvalidCharacters.contains(rune)) {
+    if (isFileNameControl(rune) || _windowsInvalidCharacters.contains(rune)) {
       return false;
     }
   }
   final portableStem = fileName.split('.').first;
   return !_windowsReservedName.hasMatch(portableStem);
 }
+
+/// C0 and C1 controls, and the bidi embeddings, overrides and isolates
+/// (U+202A–U+202E, U+2066–U+2069): those make `Invoice\u202excod.exe` show
+/// as `Invoiceexe.docx`, in the chat and in the file manager, for a program
+/// that opens with a click. Never part of a name from another device.
+bool isFileNameControl(int rune) =>
+    rune <= 0x1f ||
+    (rune >= 0x7f && rune <= 0x9f) ||
+    (rune >= 0x202a && rune <= 0x202e) ||
+    (rune >= 0x2066 && rune <= 0x2069);
 
 bool _hasWellFormedUtf16(String value) {
   final units = value.codeUnits;

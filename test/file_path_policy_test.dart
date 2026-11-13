@@ -49,6 +49,8 @@ void main() {
         'lpt9.log',
         'a' * 241,
         '文' * 81,
+        'Invoice\u202excod.exe',
+        'a\u2066b\u2069.txt',
       ];
 
       for (final name in invalidNames) {
