@@ -9,6 +9,8 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import 'update_signature.dart';
+
 const whisperUpdateChannel = String.fromEnvironment(
   'WHISPER_UPDATE_CHANNEL',
   defaultValue: 'preview',
@@ -43,6 +45,21 @@ enum AppUpdateInstallDisposition { keepRunning, exitApplication, installed }
 /// (`windows/installer.nsi`).
 const windowsUpdateInstallerArgument = '/UPDATE';
 
+/// Run as root through pkexec to install a Linux package: `$1` is the
+/// package, `$2` its SHA-256. The package was checked where it was
+/// downloaded, but any program of the user can replace it there while the
+/// password is asked for, and apt runs its scripts as root. So root copies
+/// it somewhere only root can change and checks it again there.
+const linuxDebInstallScript = r'''set -eu
+dir=$(mktemp -d /var/tmp/whisper-update.XXXXXX)
+trap 'rm -rf "$dir"' EXIT
+chmod 755 "$dir"
+cp -- "$1" "$dir/whisper.deb"
+chmod 644 "$dir/whisper.deb"
+echo "$2  $dir/whisper.deb" | sha256sum -c - >/dev/null
+apt-get -y install -- "$dir/whisper.deb"
+''';
+
 class AppUpdateException implements Exception {
   const AppUpdateException(this.message);
 
@@ -58,12 +75,24 @@ class AppUpdateAsset {
     required this.downloadUrl,
     required this.size,
     this.sha256,
+    this.signatureUrl,
   });
 
   final String name;
   final Uri downloadUrl;
   final int size;
   final String? sha256;
+
+  /// The `<name>.sig` asset of the same release; null when it has none.
+  final Uri? signatureUrl;
+
+  AppUpdateAsset withSignatureUrl(Uri? url) => AppUpdateAsset(
+    name: name,
+    downloadUrl: downloadUrl,
+    size: size,
+    sha256: sha256,
+    signatureUrl: url,
+  );
 }
 
 class AppUpdateRelease {
@@ -101,10 +130,17 @@ class AppUpdateCheckResult {
 }
 
 class AppUpdateDownload {
-  const AppUpdateDownload({required this.release, required this.file});
+  const AppUpdateDownload({
+    required this.release,
+    required this.file,
+    this.signature,
+  });
 
   final AppUpdateRelease release;
   final File file;
+
+  /// The package's signature as downloaded; checked again before installing.
+  final String? signature;
 }
 
 abstract interface class AppUpdateManager {
@@ -133,6 +169,7 @@ class AppUpdateService implements AppUpdateManager {
     Duration headStart = _defaultHeadStart,
     Duration slowDownloadWindow = _defaultSlowWindow,
     int minBytesInSlowWindow = _defaultMinWindowBytes,
+    List<String> signingKeys = whisperUpdateSigningKeys,
   }) : platform = platform ?? currentAppUpdatePlatform(),
        architecture = architecture ?? Abi.current().toString().toLowerCase(),
        channel = channel ?? configuredAppUpdateChannel(),
@@ -148,7 +185,8 @@ class AppUpdateService implements AppUpdateManager {
        _installerStarter = installerStarter ?? _startDetached,
        _headStart = headStart,
        _slowDownloadWindow = slowDownloadWindow,
-       _minBytesInSlowWindow = minBytesInSlowWindow;
+       _minBytesInSlowWindow = minBytesInSlowWindow,
+       _signingKeys = signingKeys;
 
   static final AppUpdateService shared = AppUpdateService();
 
@@ -162,6 +200,7 @@ class AppUpdateService implements AppUpdateManager {
   final Duration _headStart;
   final Duration _slowDownloadWindow;
   final int _minBytesInSlowWindow;
+  final List<String> _signingKeys;
 
   bool? _githubReachable;
   AppUpdateCheckResult? _cachedResult;
@@ -314,6 +353,18 @@ class AppUpdateService implements AppUpdateManager {
     if (!_isTrustedDownloadUri(asset.downloadUrl)) {
       throw const AppUpdateException('Untrusted update download URL');
     }
+    // The digest comes from whichever listing answered first, the mirror's
+    // included; only the release workflow can sign it.
+    final signature = await _fetchSignature(asset);
+    if (!await verifyUpdateSignature(
+      tag: release.tagName,
+      assetName: asset.name,
+      sha256Hex: asset.sha256!,
+      signature: signature,
+      trustedKeys: _signingKeys,
+    )) {
+      throw const AppUpdateException('Update package signature is invalid');
+    }
 
     final temporaryDirectory = await _temporaryDirectoryProvider();
     final updateDirectory = Directory(
@@ -329,18 +380,15 @@ class AppUpdateService implements AppUpdateManager {
     if (await destination.exists() &&
         await _isDownloadedAssetValid(destination, asset)) {
       onProgress?.call(1);
-      return AppUpdateDownload(release: release, file: destination);
+      return AppUpdateDownload(
+        release: release,
+        file: destination,
+        signature: signature,
+      );
     }
 
     final primary = asset.downloadUrl;
-    final mirror =
-        primary.host.toLowerCase() == _githubDownloadHost &&
-            primary.path.startsWith(_githubDownloadPrefix)
-        ? Uri.https(
-            _mirrorHost,
-            '/download/${primary.path.substring(_githubDownloadPrefix.length)}',
-          )
-        : null;
+    final mirror = _mirrorFor(primary);
     final preferMirror = _githubReachable == false && mirror != null;
     final urls = preferMirror
         ? [mirror, primary]
@@ -406,7 +454,11 @@ class AppUpdateService implements AppUpdateManager {
         if (await destination.exists()) await destination.delete();
         await partial.rename(destination.path);
         onProgress?.call(1);
-        return AppUpdateDownload(release: release, file: destination);
+        return AppUpdateDownload(
+          release: release,
+          file: destination,
+          signature: signature,
+        );
       } catch (error) {
         if (url == primary) _githubReachable = false;
         lastError = error;
@@ -417,6 +469,85 @@ class AppUpdateService implements AppUpdateManager {
     }
     if (lastError is AppUpdateException) throw lastError;
     throw AppUpdateException('Unable to download update: $lastError');
+  }
+
+  Uri? _mirrorFor(Uri primary) =>
+      primary.host.toLowerCase() == _githubDownloadHost &&
+          primary.path.startsWith(_githubDownloadPrefix)
+      ? Uri.https(
+          _mirrorHost,
+          '/download/${primary.path.substring(_githubDownloadPrefix.length)}',
+        )
+      : null;
+
+  /// Fetches the package's `.sig` asset, trying sources in the order the
+  /// package itself would be downloaded.
+  Future<String> _fetchSignature(AppUpdateAsset asset) async {
+    final primary = asset.signatureUrl;
+    if (primary == null || !_isTrustedDownloadUri(primary)) {
+      throw const AppUpdateException('Update package is not signed');
+    }
+    final mirror = _mirrorFor(primary);
+    final preferMirror = _githubReachable == false && mirror != null;
+    final urls = preferMirror
+        ? [mirror, primary]
+        : [primary, if (mirror != null) mirror];
+    Object? lastError;
+    for (var i = 0; i < urls.length; i += 1) {
+      final timeout = i == 0 && !preferMirror && mirror != null
+          ? _primaryTimeout
+          : _requestTimeout;
+      final client = _httpClientFactory()
+        ..connectionTimeout = timeout
+        ..idleTimeout = const Duration(seconds: 30);
+      try {
+        final request = await client.getUrl(urls[i]).timeout(timeout);
+        request.headers
+          ..set(HttpHeaders.acceptHeader, 'application/octet-stream')
+          ..set(HttpHeaders.userAgentHeader, 'Whisper updater');
+        final response = await request.close().timeout(timeout);
+        if (response.statusCode != HttpStatus.ok) {
+          throw AppUpdateException(
+            'Update signature download failed (${response.statusCode})',
+          );
+        }
+        final bytes = <int>[];
+        await for (final chunk in response.timeout(timeout)) {
+          bytes.addAll(chunk);
+          if (bytes.length > maxUpdateSignatureBytes) {
+            throw const AppUpdateException('Update signature is too large');
+          }
+        }
+        return utf8.decode(bytes, allowMalformed: true);
+      } catch (error) {
+        lastError = error;
+      } finally {
+        client.close(force: true);
+      }
+    }
+    if (lastError is AppUpdateException) throw lastError;
+    throw AppUpdateException('Unable to download update signature: $lastError');
+  }
+
+  /// Right before anything opens or installs the package: the signature is
+  /// checked again against its digest, and the file against that digest.
+  Future<void> _checkBeforeInstall(AppUpdateDownload download) async {
+    final asset = download.release.asset;
+    final digest = asset?.sha256;
+    if (asset == null ||
+        digest == null ||
+        !await verifyUpdateSignature(
+          tag: download.release.tagName,
+          assetName: asset.name,
+          sha256Hex: digest,
+          signature: download.signature,
+          trustedKeys: _signingKeys,
+        )) {
+      throw const AppUpdateException('Update package signature is invalid');
+    }
+    if (!await _isDownloadedAssetValid(download.file, asset)) {
+      throw const AppUpdateException('Downloaded update checksum mismatch');
+    }
   }
 
   Future<bool> _isDownloadedAssetValid(File file, AppUpdateAsset asset) async {
@@ -438,6 +569,7 @@ class AppUpdateService implements AppUpdateManager {
   Future<AppUpdateInstallDisposition> openInstaller(
     AppUpdateDownload download,
   ) async {
+    await _checkBeforeInstall(download);
     if (platform == AppUpdatePlatform.android) {
       var permission = await Permission.requestInstallPackages.status;
       if (!permission.isGranted) {
@@ -450,19 +582,15 @@ class AppUpdateService implements AppUpdateManager {
 
     if (platform == AppUpdatePlatform.linux &&
         download.file.path.toLowerCase().endsWith('.deb')) {
-      final asset = download.release.asset;
-      if (asset == null ||
-          !await _isDownloadedAssetValid(download.file, asset)) {
-        throw const AppUpdateException('Downloaded update checksum mismatch');
-      }
       // App Center may open successfully without accepting a local package.
       // Let polkit request authorization, and wait for the package manager's result.
       final result = await _processRunner('/usr/bin/pkexec', <String>[
-        '/usr/bin/apt-get',
-        '-y',
-        'install',
-        '--',
+        '/bin/sh',
+        '-c',
+        linuxDebInstallScript,
+        'sh',
         download.file.absolute.path,
+        download.release.asset!.sha256!.toLowerCase(),
       ]);
       await File(
         p.join(download.file.parent.path, 'install.log'),
@@ -490,13 +618,7 @@ class AppUpdateService implements AppUpdateManager {
 
     if (platform == AppUpdatePlatform.windows) {
       // Nothing opens to click through: the installer runs by itself, and
-      // Whisper only has to get out of its way. What it runs was checked
-      // when it was downloaded; checked once more, as nobody sees it now.
-      final asset = download.release.asset;
-      if (asset == null ||
-          !await _isDownloadedAssetValid(download.file, asset)) {
-        throw const AppUpdateException('Downloaded update checksum mismatch');
-      }
+      // Whisper only has to get out of its way.
       await _installerStarter(download.file.path, const <String>[
         windowsUpdateInstallerArgument,
       ]);
@@ -644,11 +766,36 @@ AppUpdateAsset? selectUpdateAsset(
       platform == AppUpdatePlatform.unsupported) {
     return null;
   }
-  final assets = rawAssets
-      .whereType<Map<String, dynamic>>()
+  final raw = rawAssets.whereType<Map<String, dynamic>>();
+  final signatures = <String, Uri>{
+    for (final item in raw)
+      if (item['name'] case final String name
+          when name.endsWith(updateSignatureSuffix))
+        if (item['browser_download_url'] case final String url)
+          if (Uri.tryParse(url) case final Uri uri
+              when _isTrustedDownloadUri(uri))
+            p.basename(name): uri,
+  };
+  final assets = raw
+      .where((item) => !'${item['name']}'.endsWith(updateSignatureSuffix))
       .map(_parseAsset)
       .whereType<AppUpdateAsset>()
       .toList(growable: false);
+  final chosen = _selectPackage(
+    assets,
+    platform: platform,
+    architecture: architecture,
+  );
+  return chosen?.withSignatureUrl(
+    signatures['${chosen.name}$updateSignatureSuffix'],
+  );
+}
+
+AppUpdateAsset? _selectPackage(
+  List<AppUpdateAsset> assets, {
+  required AppUpdatePlatform platform,
+  required String architecture,
+}) {
   final arch = architecture.toLowerCase();
 
   bool hasName(AppUpdateAsset asset, String value) =>

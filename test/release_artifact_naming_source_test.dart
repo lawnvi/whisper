@@ -41,7 +41,7 @@ void main() {
   test('release assets are published once for each release trigger', () {
     final workflow = File('.github/workflows/release.yml').readAsStringSync();
     final releaseActions = RegExp(
-      'uses: softprops/action-gh-release@v2',
+      'uses: softprops/action-gh-release@',
     ).allMatches(workflow);
 
     expect(workflow, contains('publish-release:'));

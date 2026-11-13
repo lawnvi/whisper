@@ -7,7 +7,7 @@ void main() {
     final workflow = File('.github/workflows/release.yml').readAsStringSync();
     final releaseSteps = _stepsUsing(
       workflow,
-      'softprops/action-gh-release@v2',
+      'softprops/action-gh-release@',
     );
     final taggedRelease = releaseSteps.singleWhere(
       (step) => step.contains("startsWith(github.ref, 'refs/tags/')"),

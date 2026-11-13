@@ -2,9 +2,29 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
+import 'package:cryptography/cryptography.dart' show Ed25519, SimpleKeyPair;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/helper/app_update.dart';
+import 'package:whisper/helper/update_signature.dart';
+
+late SimpleKeyPair _releaseKey;
+late List<String> _trustedKeys;
+
+Future<String> _sign(
+  String tag,
+  String name,
+  String sha256Hex, {
+  SimpleKeyPair? key,
+}) async {
+  final signature = await Ed25519().sign(
+    utf8.encode(
+      updateSignatureStatement(tag: tag, assetName: name, sha256Hex: sha256Hex),
+    ),
+    keyPair: key ?? _releaseKey,
+  );
+  return base64.encode(signature.bytes);
+}
 
 const _digest =
     'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -33,19 +53,32 @@ Map<String, Object?> _release({
 }
 
 void main() {
+  setUpAll(() async {
+    _releaseKey = await Ed25519().newKeyPair();
+    final publicKey = await _releaseKey.extractPublicKey();
+    _trustedKeys = [base64.encode(publicKey.bytes)];
+  });
+
   group('installing a downloaded update', () {
     late Directory directory;
     late AppUpdateDownload download;
+
+    AppUpdateDownload withSignature(String? signature) => AppUpdateDownload(
+      file: download.file,
+      release: download.release,
+      signature: signature,
+    );
 
     setUp(() async {
       directory = await Directory.systemTemp.createTemp('whisper-update-test-');
       final file = File('${directory.path}/package with spaces.deb');
       await file.writeAsString('test package');
+      final digest = (await sha256.bind(file.openRead()).first).toString();
       final asset = AppUpdateAsset(
         name: 'package with spaces.deb',
         downloadUrl: Uri.parse('https://github.com/lawnvi/whisper/update.deb'),
         size: await file.length(),
-        sha256: (await sha256.bind(file.openRead()).first).toString(),
+        sha256: digest,
       );
       download = AppUpdateDownload(
         file: file,
@@ -58,6 +91,51 @@ void main() {
           publishedAt: null,
           asset: asset,
         ),
+        signature: await _sign('dev-v0.0.52', asset.name, digest),
+      );
+    });
+
+    // Before signatures, a package matching the digest of whichever listing
+    // answered first (GitHub or the mirror) was installed, as root or SYSTEM.
+    test('installs nothing that the release key did not sign for this '
+        'release, this package and these bytes', () async {
+      final otherKey = await Ed25519().newKeyPair();
+      final asset = download.release.asset!;
+      final digest = asset.sha256!;
+      final cases = <String, String?>{
+        'no signature': null,
+        'not base64': 'not a signature',
+        'another key': await _sign(
+          'dev-v0.0.52',
+          asset.name,
+          digest,
+          key: otherKey,
+        ),
+        'an older release': await _sign('dev-v0.0.51', asset.name, digest),
+        'another package': await _sign('dev-v0.0.52', 'other.deb', digest),
+        'other bytes': await _sign('dev-v0.0.52', asset.name, _digest),
+      };
+      for (final MapEntry(key: reason, value: signature) in cases.entries) {
+        for (final platform in [
+          AppUpdatePlatform.windows,
+          AppUpdatePlatform.linux,
+        ]) {
+          final service = AppUpdateService(
+            platform: platform,
+            signingKeys: _trustedKeys,
+            installerStarter: (_, _) async => fail('ran: $reason'),
+            processRunner: (_, _) async => fail('ran: $reason'),
+          );
+          await expectLater(
+            service.openInstaller(withSignature(signature)),
+            throwsA(isA<AppUpdateException>()),
+            reason: reason,
+          );
+        }
+      }
+      await expectLater(
+        AppUpdateService(signingKeys: const []).openInstaller(download),
+        throwsA(isA<AppUpdateException>()),
       );
     });
 
@@ -67,15 +145,19 @@ void main() {
       var invoked = false;
       final service = AppUpdateService(
         platform: AppUpdatePlatform.linux,
+        signingKeys: _trustedKeys,
         processRunner: (executable, arguments) async {
           invoked = true;
           expect(executable, '/usr/bin/pkexec');
+          // Root installs its own copy, checked again: the download can
+          // be swapped while the password is asked for.
           expect(arguments, [
-            '/usr/bin/apt-get',
-            '-y',
-            'install',
-            '--',
+            '/bin/sh',
+            '-c',
+            linuxDebInstallScript,
+            'sh',
             download.file.absolute.path,
+            download.release.asset!.sha256,
           ]);
           return ProcessResult(1, 0, 'installed', '');
         },
@@ -94,6 +176,7 @@ void main() {
       final started = <(String, List<String>)>[];
       final service = AppUpdateService(
         platform: AppUpdatePlatform.windows,
+        signingKeys: _trustedKeys,
         installerStarter: (executable, arguments) async =>
             started.add((executable, arguments)),
       );
@@ -118,6 +201,7 @@ void main() {
         for (final exitCode in [126, 127, 100]) {
           final service = AppUpdateService(
             platform: AppUpdatePlatform.linux,
+            signingKeys: _trustedKeys,
             processRunner: (_, _) async =>
                 ProcessResult(1, exitCode, '', 'failed'),
           );
@@ -140,6 +224,7 @@ void main() {
         await download.file.writeAsString('changed package');
         final service = AppUpdateService(
           platform: AppUpdatePlatform.linux,
+          signingKeys: _trustedKeys,
           processRunner: (_, _) async => throw StateError('must not execute'),
         );
         await expectLater(
@@ -196,6 +281,28 @@ void main() {
     );
   });
 
+  test('a signature goes with its package and is never taken for one', () {
+    final linux = <Map<String, Object?>>[
+      _asset('whisper-0.0.48-linux-x86_64.AppImage.sig'),
+      _asset('whisper-0.0.48-linux-x86_64.AppImage'),
+    ];
+    final chosen = selectUpdateAsset(
+      linux,
+      platform: AppUpdatePlatform.linux,
+      architecture: 'linux_x64',
+    );
+    expect(chosen?.name, 'whisper-0.0.48-linux-x86_64.AppImage');
+    expect(chosen?.signatureUrl?.path, endsWith('.AppImage.sig'));
+    expect(
+      selectUpdateAsset(
+        linux.sublist(0, 1),
+        platform: AppUpdatePlatform.linux,
+        architecture: 'linux_x64',
+      ),
+      isNull,
+    );
+  });
+
   test('untrusted download URLs are ignored', () {
     final asset = selectUpdateAsset(
       <Map<String, Object?>>[
@@ -241,6 +348,11 @@ void main() {
     addTearDown(() => tempDir.delete(recursive: true));
     final payload = List<int>.generate(1024, (i) => i & 0xff);
     final digest = sha256.convert(payload).toString();
+    final signature = await _sign(
+      'dev-v0.0.60',
+      'whisper-0.0.60-macos-arm64.dmg',
+      digest,
+    );
     final body = jsonEncode([
       _release(
         tag: 'dev-v0.0.60',
@@ -251,6 +363,13 @@ void main() {
             'digest': 'sha256:$digest',
             'browser_download_url':
                 'https://github.com/lawnvi/whisper/releases/download/dev-v0.0.60/whisper-0.0.60-macos-arm64.dmg',
+          },
+          {
+            'name': 'whisper-0.0.60-macos-arm64.dmg.sig',
+            'size': signature.length,
+            'digest': 'sha256:${sha256.convert(utf8.encode(signature))}',
+            'browser_download_url':
+                'https://github.com/lawnvi/whisper/releases/download/dev-v0.0.60/whisper-0.0.60-macos-arm64.dmg.sig',
           },
         ],
       ),
@@ -269,6 +388,8 @@ void main() {
       }
       if (req.uri.path.endsWith('/releases')) {
         req.response.write(body);
+      } else if (req.uri.path.endsWith('.sig')) {
+        req.response.write(signature);
       } else if (host == 'github.com' && throttleGithubDownload) {
         req.response.bufferOutput = false;
         req.response.add(payload.sublist(0, 64));
@@ -290,6 +411,7 @@ void main() {
       minBytesInSlowWindow: 512,
       httpClientFactory: () => _LocalRewriteClient(server.port),
       temporaryDirectoryProvider: () async => Directory('${tempDir.path}/$sub'),
+      signingKeys: _trustedKeys,
     );
 
     // 1) Fast GitHub (VPN / overseas): mirror is never contacted; Chinese site opens github.io.
