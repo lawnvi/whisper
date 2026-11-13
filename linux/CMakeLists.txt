@@ -89,6 +89,7 @@ add_executable(${BINARY_NAME}
   "file_manager_plugin.cc"
   "main.cc"
   "my_application.cc"
+  "private_tmpdir.cc"
   "remote_input_plugin.cc"
   "screenshot_plugin.cc"
   "${FLUTTER_MANAGED_DIR}/generated_plugin_registrant.cc"

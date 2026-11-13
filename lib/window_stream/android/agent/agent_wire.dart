@@ -30,7 +30,9 @@ abstract final class AgentWire {
   static const int roleAudio = 3;
   static const int roleInput = 4;
 
-  /// The persistent agent's abstract socket (also its single-instance lock).
+  /// The fixed socket of persistent agents before 2.0.3, for a state file
+  /// that names none. Newer agents take a random name at every start (an app
+  /// could bind a fixed one first) and the state file always carries it.
   static const String daemonSocket = 'whisper_agent';
 
   static const String mainClass = 'com.vireen.whisper.agent.AgentMain';

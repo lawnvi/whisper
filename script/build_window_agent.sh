@@ -81,12 +81,15 @@ javac -encoding UTF-8 -source 8 -target 8 -nowarn -Xlint:-options -d "$WORK/host
   "$AGENT/src/com/vireen/whisper/agent/Wire.java" \
   "$AGENT/src/com/vireen/whisper/agent/TouchGuardParser.java" \
   "$AGENT/src/com/vireen/whisper/agent/ProcNetParser.java" \
+  "$AGENT/src/com/vireen/whisper/agent/Shell.java" \
   "$AGENT/test/com/vireen/whisper/agent/WireTest.java" \
   "$AGENT/test/com/vireen/whisper/agent/TouchGuardParserTest.java" \
-  "$AGENT/test/com/vireen/whisper/agent/ProcNetParserTest.java"
+  "$AGENT/test/com/vireen/whisper/agent/ProcNetParserTest.java" \
+  "$AGENT/test/com/vireen/whisper/agent/ShellTest.java"
 java -ea -cp "$WORK/host" com.vireen.whisper.agent.WireTest
 java -ea -cp "$WORK/host" com.vireen.whisper.agent.TouchGuardParserTest
 java -ea -cp "$WORK/host" com.vireen.whisper.agent.ProcNetParserTest
+java -ea -cp "$WORK/host" com.vireen.whisper.agent.ShellTest
 
 echo "AIDL..."
 (

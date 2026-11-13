@@ -236,6 +236,9 @@ class AndroidSystemSharePlugin :
         sourceUri: Uri,
         fallbackMimeType: String
     ): JSONObject {
+        if (SharePrivateFiles.isPrivate(context, sourceUri)) {
+            throw ShareRejectionException(FAILURE_INVALID_CONTENT)
+        }
         val metadata = sourceMetadata(sourceUri, fallbackMimeType)
         if (metadata.size != null && metadata.size > MAX_STAGED_ITEM_BYTES) {
             throw ShareRejectionException(FAILURE_ITEM_TOO_LARGE)

@@ -1,9 +1,9 @@
 {
-  "agentVersion": "2.0.2",
+  "agentVersion": "2.0.3",
   "protocol": 2,
   "scrcpyVersion": "5.0.1",
   "platform": "android-36",
   "buildTools": "36.1.0",
-  "sourceSha256": "75b5353813526701af9fb8769f78233d95b19d72a62c27eaa4bdbce4ae4d2f8f",
-  "jarSha256": "815c33b8bdecf2f141ff56b923b51b8b101d6bb6b57fbd08b9eb759edf866121"
+  "sourceSha256": "37db94f563fe7638e792b7bb900f9f70d6ebe55d6760c3c5a8582be0ef240de0",
+  "jarSha256": "db404169adc49bea3fcc3e776286b7de5972a626b7001f286c3dbf1b2bce8f7d"
 }

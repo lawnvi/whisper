@@ -207,7 +207,8 @@ final class TaskBridge {
             if (previous == null || previous.home || previous.taskId == streamedTask) {
                 Shell.run("am start -a android.intent.action.MAIN -c android.intent.category.HOME -f 0x10000000");
             } else if (!startFromRecents(previous.taskId) && previous.component != null) {
-                Shell.run("am start -n " + previous.component + " -f 0x10200000");
+                // The app in front named this activity; never let sh read it.
+                Shell.exec("am", "start", "-n", previous.component, "-f", "0x10200000");
             }
             return;
         }

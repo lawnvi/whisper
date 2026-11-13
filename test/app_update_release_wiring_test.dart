@@ -22,6 +22,31 @@ void main() {
     );
   });
 
+  // Without the hardened runtime any program of the user could load its own
+  // library into the released app (DYLD_INSERT_LIBRARIES through `open --env`
+  // or the login item's plist) and act with Whisper's Accessibility and
+  // Screen Recording grants. Only the packaged build shows it.
+  test('macOS releases are signed with the hardened runtime', () {
+    final macosScript = File('script/build_and_run.sh').readAsStringSync();
+    expect(macosScript, contains('runtime=(--options runtime)'));
+    expect(
+      RegExp(
+        r'sign_app "\$\w+" "\$\w+" release$',
+        multiLine: true,
+      ).allMatches(macosScript).length,
+      2,
+    );
+    for (final path in <String>[
+      'macos/Runner/Release.entitlements',
+      'macos/Runner/IntelVirtualHID.entitlements',
+    ]) {
+      expect(
+        File(path).readAsStringSync(),
+        isNot(contains('allow-dyld-environment-variables')),
+      );
+    }
+  });
+
   test('platform installers support in-app update handoff', () {
     final installer = File('windows/installer.nsi').readAsStringSync();
     final androidManifest = File(

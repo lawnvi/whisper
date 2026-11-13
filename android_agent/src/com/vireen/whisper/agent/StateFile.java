@@ -10,6 +10,8 @@ import org.json.JSONObject;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.RandomAccessFile;
+import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 
 /**
@@ -22,18 +24,31 @@ final class StateFile {
 
     static final String DIR = "/data/local/tmp/whisper-agent";
     static final String PATH = DIR + "/state.json";
+    private static final String LOCK = DIR + "/lock";
 
     private StateFile() {
     }
 
-    static void write(JSONObject state) throws IOException {
-        File dir = new File(DIR);
-        if (!dir.isDirectory() && !dir.mkdirs()) {
-            throw new IOException("cannot create " + DIR);
+    /**
+     * One persistent agent per phone: the lock on a file in this folder,
+     * which no app can reach, held until the process exits (the system drops
+     * it then, however the process ends). Null when another agent holds it.
+     * Keep the returned channel referenced: closing it releases the lock.
+     */
+    static FileChannel lockInstance() throws IOException {
+        makeDir();
+        FileChannel channel = new RandomAccessFile(LOCK, "rw").getChannel();
+        if (channel.tryLock() == null) {
+            channel.close();
+            return null;
         }
+        return channel;
+    }
+
+    static void write(JSONObject state) throws IOException {
+        makeDir();
         File temp = new File(DIR, "state.json.tmp");
         try {
-            Os.chmod(DIR, 0700);
             try (FileOutputStream out = new FileOutputStream(temp)) {
                 // Private before anything secret is in it.
                 Os.chmod(temp.getPath(), 0600);
@@ -41,6 +56,18 @@ final class StateFile {
                 out.getFD().sync();
             }
             Os.rename(temp.getPath(), PATH);
+        } catch (ErrnoException e) {
+            throw new IOException(e);
+        }
+    }
+
+    private static void makeDir() throws IOException {
+        File dir = new File(DIR);
+        if (!dir.isDirectory() && !dir.mkdirs()) {
+            throw new IOException("cannot create " + DIR);
+        }
+        try {
+            Os.chmod(DIR, 0700);
         } catch (ErrnoException e) {
             throw new IOException(e);
         }

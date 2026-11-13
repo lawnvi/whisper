@@ -214,8 +214,18 @@ ensure_signing_identity() {
 sign_app() {
   local app_bundle="$1"
   local entitlements="$2"
+  # Releases run with the hardened runtime. Without it any process of the
+  # user can load its own code into Whisper (DYLD_INSERT_LIBRARIES, say in the
+  # login item's plist) and use Whisper's Accessibility and Screen Recording
+  # grants. Its library check wants a team ID, which this identity lacks, so
+  # the entitlements turn that check off; DYLD_ variables stay ignored.
+  # Debug builds keep the Dart JIT and stay without it.
+  local runtime=()
+  if [[ "${3:-}" == "release" ]]; then
+    runtime=(--options runtime)
+  fi
   ensure_signing_identity
-  /usr/bin/codesign --force --deep \
+  /usr/bin/codesign --force --deep ${runtime[@]+"${runtime[@]}"} \
     --sign "$RESOLVED_SIGN_IDENTITY" \
     --keychain "$KEYCHAIN" \
     --entitlements "$entitlements" \
@@ -252,7 +262,7 @@ build_release_app() {
     "$RELEASE_APP_BUNDLE/Contents/Frameworks/App.framework/Versions/A/Resources/flutter_assets"
   thin_bundle_to_architecture "$RELEASE_APP_BUNDLE" "$host_arch"
   verify_bundle_architecture "$RELEASE_APP_BUNDLE" "$host_arch"
-  sign_app "$RELEASE_APP_BUNDLE" "$entitlements"
+  sign_app "$RELEASE_APP_BUNDLE" "$entitlements" release
 }
 
 # `flutter build macos` produces both architectures on any host, but each package
@@ -315,7 +325,7 @@ build_release_x64_app() {
     "$X64_RELEASE_APP_BUNDLE/Contents/Frameworks/App.framework/Versions/A/Resources/flutter_assets"
   thin_bundle_to_architecture "$X64_RELEASE_APP_BUNDLE" x86_64
   verify_bundle_architecture "$X64_RELEASE_APP_BUNDLE" x86_64
-  sign_app "$X64_RELEASE_APP_BUNDLE" "$INTEL_VIRTUAL_HID_ENTITLEMENTS"
+  sign_app "$X64_RELEASE_APP_BUNDLE" "$INTEL_VIRTUAL_HID_ENTITLEMENTS" release
 }
 
 package_release_dmg() {

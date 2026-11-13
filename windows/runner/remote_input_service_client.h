@@ -145,7 +145,7 @@ class RemoteInputServiceClient {
     // still serves the rest (a user may not have updated it yet).
     request->version =
         request->command == whisper_input_service::kCommandAllowForeground
-            ? whisper_input_service::kVersion
+            ? whisper_input_service::kAllowForegroundVersion
             : whisper_input_service::kOldestClientVersion;
     // The agent is replaced whenever the console session changes, so one
     // reconnect covers a pipe that went stale since the last call.

@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:whisper/window_stream/adb/adb_host_client.dart';
 import 'package:whisper/window_stream/android/android_device_props.dart';
 import 'package:whisper/window_stream/android/android_task_list.dart';
 import 'package:whisper/window_stream/android/scrcpy/scrcpy_compat_source.dart';
@@ -80,5 +81,60 @@ Display #0 (activities from top to bottom):
       isTrue,
     );
     expect(apps.firstWhere((a) => a.id == 'com.kylin.read').label, '红果免费漫剧');
+  });
+
+  // Bug: a label of 30 or more characters puts the package on the next line,
+  // and its last word ("x;reboot;.y") became the id that `am force-stop` ran.
+  test('scrcpy list_apps output: labels never become ids', () {
+    final next = ' ' * 34;
+    final cases = <String, Map<String, String>>{
+      ' - A label long enough to wrap, ending x;reboot;.y\n'
+          '${next}com.example.real\n'
+          ' - whisper                        com.vireen.whisper\n': {
+        'com.example.real': 'A label long enough to wrap, ending x;reboot;.y',
+        'com.vireen.whisper': 'whisper',
+      },
+      ' * Thirty or more characters, then com.fake.app\n'
+          '${next}com.example.real\n': {
+        'com.example.real': 'Thirty or more characters, then com.fake.app',
+      },
+      ' - Evil                           x;reboot;.y\n'
+              ' - Bare                           nodots\n':
+          {},
+    };
+    for (final MapEntry(key: output, value: expected) in cases.entries) {
+      final apps = ScrcpyCompatSource.parseAppList(output);
+      expect({for (final app in apps) app.id: app.label}, expected);
+    }
+  });
+
+  // Bug: the activity in front (named by whichever app it is) and app ids
+  // went into `adb shell` as they were, running commands as the shell user.
+  test('only components and package names reach the phone shell, quoted', () {
+    final home = ScrcpyCompatSource.restoreFrontCommand(null);
+    expect(home, contains('android.intent.category.HOME'));
+    final restore = <String, String>{
+      'com.kylin.read/com.dragon.read.pages.splash.SplashActivity':
+          "am start -n 'com.kylin.read/com.dragon.read.pages.splash.SplashActivity' -f 0x10200000",
+      r'com.miui.home/.launcher.Launcher$Alias':
+          r"am start -n 'com.miui.home/.launcher.Launcher$Alias' -f 0x10200000",
+      r'com.evil/com.evil.A;echo${IFS}hi|sh;': home,
+      "com.evil/.A'x": home,
+      'com.evil': home,
+    };
+    for (final MapEntry(key: component, value: command) in restore.entries) {
+      expect(ScrcpyCompatSource.restoreFrontCommand(component), command);
+    }
+    final stop = <String, String?>{
+      'com.kylin.read': "am force-stop 'com.kylin.read'",
+      'x;reboot;.y': null,
+      'com.evil;reboot': null,
+      r'com.evil$(reboot)': null,
+      '': null,
+    };
+    for (final MapEntry(key: appId, value: command) in stop.entries) {
+      expect(ScrcpyCompatSource.forceStopCommand(appId), command);
+    }
+    expect(shellQuote("it's"), r"'it'\''s'");
   });
 }

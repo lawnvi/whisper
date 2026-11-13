@@ -172,7 +172,15 @@ class Agent {
     if (!MayInject(desktop)) {
       return whisper_input_service::kStatusRefused;
     }
+    // A screen saver only has to be woken. Any program of the user may start
+    // on a desktop of that name, an elevated one included, so there the agent
+    // moves the pointer and does nothing else.
+    const bool wake_only = IsDesktop(desktop, kScreenSaverDesktop) &&
+                           !whisper_input_service::ElevatedInputAllowed();
     if (request.command == whisper_input_service::kCommandAllowForeground) {
+      if (wake_only) {
+        return whisper_input_service::kStatusRefused;
+      }
       return AllowForeground(request.count);
     }
     if (request.command == whisper_input_service::kCommandCursorPos) {
@@ -189,6 +197,9 @@ class Agent {
     for (DWORD i = 0; i < request.count; ++i) {
       if (!CopyInput(request.inputs[i], &inputs[i])) {
         return whisper_input_service::kStatusBadRequest;
+      }
+      if (wake_only && !IsPointerMotion(inputs[i])) {
+        return whisper_input_service::kStatusRefused;
       }
     }
     response->sent = SendInput(request.count, inputs, sizeof(INPUT));
@@ -252,6 +263,15 @@ class Agent {
     }
     return allowed ? whisper_input_service::kStatusOk
                    : whisper_input_service::kStatusFailed;
+  }
+
+  static bool IsPointerMotion(const INPUT& input) {
+    constexpr DWORD kMotionFlags = MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE |
+                                   MOUSEEVENTF_VIRTUALDESK |
+                                   MOUSEEVENTF_MOVE_NOCOALESCE;
+    return input.type == INPUT_MOUSE &&
+           (input.mi.dwFlags & MOUSEEVENTF_MOVE) != 0 &&
+           (input.mi.dwFlags & ~kMotionFlags) == 0;
   }
 
   // Only plain keyboard and mouse events are forwarded, without the caller's

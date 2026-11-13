@@ -8,6 +8,7 @@ import android.os.Looper;
 
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.nio.channels.FileChannel;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
@@ -17,11 +18,12 @@ import java.security.SecureRandom;
  * <ul>
  *   <li>{@code CLASSPATH=<jar> app_process / com.vireen.whisper.agent.AgentMain --daemon}:
  *   the persistent agent, started detached ({@code setsid}, no terminal) so
- *   it outlives adb. One per phone: the abstract socket
- *   {@value AgentServer#DAEMON_SOCKET} is its lock, and a second one exits
- *   at once (status {@link #ALREADY_RUNNING}). It makes its own tokens and
- *   publishes how to reach it in {@link StateFile} (for adb) and to the
- *   phone's Whisper ({@link PhoneApp#link}).</li>
+ *   it outlives adb. One per phone: it holds a lock file in the shell
+ *   user's {@link StateFile#DIR}, and a second one exits at once (status
+ *   {@link #ALREADY_RUNNING}). It makes its own tokens and a new socket name
+ *   ({@link AgentServer#daemonSocketName}), and publishes how to reach it in
+ *   {@link StateFile} (for adb) and to the phone's Whisper
+ *   ({@link PhoneApp#link}).</li>
  *   <li>{@code WHISPER_AGENT_TOKEN=<hex> CLASSPATH=<jar> app_process / com.vireen.whisper.agent.AgentMain <socket name>}:
  *   a desktop's own agent, ending with its last session (older desktops).
  *   The token travels in the environment, which only the shell user can
@@ -31,10 +33,13 @@ import java.security.SecureRandom;
  */
 public final class AgentMain {
 
-    public static final String VERSION = "2.0.2";
+    public static final String VERSION = "2.0.3";
 
     /** Exit status of a second persistent agent. */
     static final int ALREADY_RUNNING = 3;
+
+    /** Holds the persistent agent's lock for the life of the process. */
+    private static FileChannel instanceLock;
 
     private AgentMain() {
     }
@@ -60,9 +65,13 @@ public final class AgentMain {
         byte[] token;
         String socketName;
         if (persistent) {
+            instanceLock = StateFile.lockInstance();
+            if (instanceLock == null) {
+                return alreadyRunning();
+            }
             token = new byte[Wire.TOKEN_BYTES];
             new SecureRandom().nextBytes(token);
-            socketName = AgentServer.DAEMON_SOCKET;
+            socketName = AgentServer.daemonSocketName();
         } else {
             token = Wire.parseHex(System.getenv("WHISPER_AGENT_TOKEN"));
             if (token == null || token.length != Wire.TOKEN_BYTES) {
@@ -77,15 +86,17 @@ public final class AgentMain {
         ServiceManager.getClipboardManager();
 
         AgentServer server = new AgentServer(socketName, token, persistent, persistent ? jarSha() : "");
-        if (!server.start()) {
-            System.out.println("whisper-agent already running");
-            System.out.flush();
-            return ALREADY_RUNNING;
-        }
+        server.start();
         System.out.println("whisper-agent ready " + Wire.PROTOCOL_VERSION);
         System.out.flush();
         Looper.loop();
         return 0;
+    }
+
+    private static int alreadyRunning() {
+        System.out.println("whisper-agent already running");
+        System.out.flush();
+        return ALREADY_RUNNING;
     }
 
     /** SHA-256 of the jar this process runs, so clients can tell builds apart. */

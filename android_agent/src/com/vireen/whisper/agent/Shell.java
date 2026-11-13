@@ -10,9 +10,19 @@ final class Shell {
     private Shell() {
     }
 
+    /** A command line through {@code sh -c}: fixed text and numbers only. */
     static String run(String command) {
+        return exec("sh", "-c", command);
+    }
+
+    /**
+     * A program and its arguments, with no shell in between, for anything
+     * named by someone else (an app's activity, a request's app id): such a
+     * name stays one argument whatever characters it holds.
+     */
+    static String exec(String... argv) {
         try {
-            Process process = new ProcessBuilder("sh", "-c", command).redirectErrorStream(true).start();
+            Process process = new ProcessBuilder(argv).redirectErrorStream(true).start();
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             try (InputStream in = process.getInputStream()) {
                 byte[] buffer = new byte[8192];

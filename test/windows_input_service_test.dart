@@ -125,6 +125,18 @@ void main() {
         handle,
         contains('request.count > whisper_input_service::kMaxInputs'),
       );
+      // Any program of the user can start on a desktop named Screen-saver,
+      // an elevated one included; the screen saver only needs waking.
+      expect(handle, contains('wake_only && !IsPointerMotion(inputs[i])'));
+      expect(
+        handle.indexOf('IsPointerMotion(inputs[i])'),
+        lessThan(handle.indexOf('SendInput(')),
+      );
+      final motion = RegExp(
+        r'static bool IsPointerMotion\([\s\S]*?\n  }',
+      ).firstMatch(service)!.group(0)!;
+      expect(motion, contains('input.type == INPUT_MOUSE'));
+      expect(motion, contains('(input.mi.dwFlags & ~kMotionFlags) == 0'));
 
       final copyInput = RegExp(
         r'static bool CopyInput\([\s\S]*?\n  }',

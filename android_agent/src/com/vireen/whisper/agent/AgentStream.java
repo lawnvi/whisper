@@ -303,7 +303,7 @@ final class AgentStream {
             }
             if (terminate) {
                 if (appId != null) {
-                    Shell.run("am force-stop " + appId);
+                    Shell.exec("am", "force-stop", appId);
                 }
             } else {
                 server.tasks().keepInBackground(task, front);

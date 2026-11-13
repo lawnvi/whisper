@@ -136,25 +136,45 @@ class ScrcpyCompatSource implements WindowSource {
   }
 
   /// Parses scrcpy's `list_apps` output: `* label   package` for system apps,
-  /// `- label   package` for user apps.
+  /// `- label   package` for user apps. A label of 30 or more characters
+  /// fills its line and the package follows alone on the next one (scrcpy's
+  /// `LogUtils`). Apps choose their labels, so only a package name ever
+  /// becomes an id.
   static List<AppEntry> parseAppList(String output) {
-    final line = RegExp(r'^\s*([*-])\s+(.*?)\s+(\S+)\s*$');
+    final entry = RegExp(r'^\s*([*-]) (.*)$');
+    final packageOnly = RegExp(r'^\s+(\S+)\s*$');
+    final labelThenPackage = RegExp(r'^(.*?)\s+(\S+)\s*$');
+    final lines = const LineSplitter().convert(output);
     final apps = <AppEntry>[];
-    for (final raw in const LineSplitter().convert(output)) {
-      final match = line.firstMatch(raw);
+    for (var i = 0; i < lines.length; i++) {
+      final match = entry.firstMatch(lines[i]);
       if (match == null) {
         continue;
       }
-      final package = match.group(3)!;
-      if (!package.contains('.')) {
+      var label = match.group(2)!;
+      final String package;
+      final wrapped = i + 1 < lines.length
+          ? packageOnly.firstMatch(lines[i + 1])
+          : null;
+      if (wrapped != null) {
+        package = wrapped.group(1)!;
+        i++;
+      } else {
+        final split = labelThenPackage.firstMatch(label);
+        if (split == null) {
+          continue;
+        }
+        label = split.group(1)!;
+        package = split.group(2)!;
+      }
+      if (!_packageName.hasMatch(package)) {
         continue;
       }
+      label = label.trim();
       apps.add(
         AppEntry(
           id: package,
-          label: match.group(2)!.trim().isEmpty
-              ? package
-              : match.group(2)!.trim(),
+          label: label.isEmpty ? package : label,
           system: match.group(1) == '*',
         ),
       );
@@ -162,6 +182,27 @@ class ScrcpyCompatSource implements WindowSource {
     apps.sort((a, b) => a.label.compareTo(b.label));
     return apps;
   }
+
+  static final _packageName = RegExp(
+    r'^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$',
+  );
+  static final _component = RegExp(r'^[A-Za-z0-9_.]+/[A-Za-z0-9_.$]+$');
+
+  /// Brings [component] (`package/activity`) back in front, or the home
+  /// screen. Apps name their own activities, so a name with anything else
+  /// in it goes nowhere near the phone's shell.
+  @visibleForTesting
+  static String restoreFrontCommand(String? component) =>
+      component == null || !_component.hasMatch(component)
+      ? 'am start -a android.intent.action.MAIN -c android.intent.category.HOME -f 0x10000000'
+      : 'am start -n ${shellQuote(component)} -f 0x10200000';
+
+  /// Ends [appId], or null when it is not a package name (ids also arrive
+  /// in requests).
+  @visibleForTesting
+  static String? forceStopCommand(String appId) => _packageName.hasMatch(appId)
+      ? 'am force-stop ${shellQuote(appId)}'
+      : null;
 
   @override
   Future<List<TaskEntry>> tasks() async {
@@ -344,13 +385,12 @@ class ScrcpyCompatSource implements WindowSource {
         continue;
       }
       final previous = previousFront;
-      final command =
-          previous == null ||
-              previous.front.isHome ||
-              previous.component == null
-          ? 'am start -a android.intent.action.MAIN -c android.intent.category.HOME -f 0x10000000'
-          : 'am start -n ${previous.component} -f 0x10200000';
-      await adb.shell(serial, command);
+      await adb.shell(
+        serial,
+        restoreFrontCommand(
+          previous == null || previous.front.isHome ? null : previous.component,
+        ),
+      );
       return;
     }
   }
@@ -536,7 +576,10 @@ class ScrcpyStreamHandle implements StreamHandle {
     );
     await source._killForward(_localPort);
     if (mode == CloseMode.terminate) {
-      await source.adb.shell(source.serial, 'am force-stop ${target.appId}');
+      final stop = ScrcpyCompatSource.forceStopCommand(target.appId);
+      if (stop != null) {
+        await source.adb.shell(source.serial, stop);
+      }
     } else {
       await source._keepInBackground(streamedTask, previousFront: front);
     }

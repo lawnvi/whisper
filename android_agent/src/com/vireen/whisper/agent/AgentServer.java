@@ -12,6 +12,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.IOException;
+import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -51,7 +52,6 @@ import java.util.concurrent.TimeUnit;
 final class AgentServer {
 
     static final long GRACE_MS = 20_000;
-    static final String DAEMON_SOCKET = "whisper_agent";
     private static final long LINK_RETRY_MS = 5_000;
     private static final long LINK_RETRY_MAX_MS = 5 * 60_000;
     /** Only where the system won't say that Whisper was removed. */
@@ -117,17 +117,20 @@ final class AgentServer {
         return uid;
     }
 
-    /** Binds the socket; false when another persistent agent holds it. */
-    boolean start() throws IOException {
-        final LocalServerSocket server;
-        try {
-            server = new LocalServerSocket(socketName);
-        } catch (IOException e) {
-            if (persistent) {
-                return false;
-            }
-            throw e;
-        }
+    /**
+     * A new abstract socket name for each persistent agent. Any app may bind
+     * an abstract name, so a fixed one could be taken before the agent starts;
+     * clients read this one from {@link StateFile}.
+     */
+    static String daemonSocketName() {
+        byte[] random = new byte[16];
+        new SecureRandom().nextBytes(random);
+        return "whisper_agent_" + Wire.hex(random);
+    }
+
+    /** Binds the socket and, for the persistent agent, publishes the state file. */
+    void start() throws IOException {
+        final LocalServerSocket server = new LocalServerSocket(socketName);
         Thread accept = new Thread(() -> {
             while (true) {
                 try {
@@ -162,7 +165,6 @@ final class AgentServer {
             timer.execute(this::pushLink);
         }
         scheduleExit();
-        return true;
     }
 
     // ------------------------------------------------------------ app link

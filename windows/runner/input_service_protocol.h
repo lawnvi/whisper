@@ -13,8 +13,12 @@ namespace whisper_input_service {
 // Bump whenever the service's behaviour changes; the app reports any other
 // installed version as outdated. The agent still serves apps as old as
 // kOldestClientVersion: what they ask for has not changed.
-constexpr DWORD kVersion = 3;
+constexpr DWORD kVersion = 4;
 constexpr DWORD kOldestClientVersion = 2;
+// The version that added kCommandAllowForeground, which requests of that
+// command carry so that an agent from then on still serves them. Version 4
+// only wakes the screen saver with pointer motion.
+constexpr DWORD kAllowForegroundVersion = 3;
 constexpr wchar_t kServiceName[] = L"WhisperInputService";
 // What the copy under Program Files is called, so that it can be told apart
 // from the app in a process list.

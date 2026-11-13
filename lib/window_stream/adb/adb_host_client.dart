@@ -365,6 +365,10 @@ String shellProcessPattern(String text) {
   return "'[${text[0]}]${text.substring(1)}'";
 }
 
+/// [text] as one word for the phone's `sh -c` (adb shell), inside single
+/// quotes, where nothing is expanded; a quote in it becomes `'\''`.
+String shellQuote(String text) => "'${text.replaceAll("'", r"'\''")}'";
+
 class AdbShellResult {
   const AdbShellResult({
     required this.exitCode,
