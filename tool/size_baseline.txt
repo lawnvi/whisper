@@ -6,7 +6,6 @@
 2148 lib/model/LocalDatabase.dart
 1769 lib/new_ui/files/phone_files.dart
 1237 lib/new_ui/input/shell_input_page.dart
-2160 lib/new_ui/settings/settings_controls.dart
 1002 lib/new_ui/settings/settings_layout.dart
 1034 lib/new_ui/tray/tray_panel.dart
 2987 lib/page/conversation.dart

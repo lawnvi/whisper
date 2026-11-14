@@ -15,7 +15,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:whisper/l10n/app_localizations.dart';
-import 'package:whisper/new_ui/settings/settings_controls.dart';
+import 'package:whisper/new_ui/settings/settings_rows.dart';
 import 'package:whisper/new_ui/settings/settings_panel.dart';
 import 'package:whisper/new_ui/settings/settings_shared_folders.dart';
 import 'package:whisper/remote_files/fs_paths.dart';
