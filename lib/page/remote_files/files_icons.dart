@@ -28,7 +28,7 @@ String fsPlaceLabel(AppLocalizations l10n, FsPlace place) =>
               : place.removable
               ? l10n.remoteFilesPlaceRemovableDisk(place.drive)
               : l10n.remoteFilesPlaceLocalDisk(place.drive),
-        'volume' || 'folder' when place.label.isNotEmpty => place.label,
+        'volume' when place.label.isNotEmpty => place.label,
         _ =>
           place.root == 'storage'
               ? l10n.remoteFilesPlaceStorage
@@ -41,8 +41,6 @@ String fsPlaceLabel(AppLocalizations l10n, FsPlace place) =>
       'camera' => l10n.remoteFilesPlaceCamera,
       'movies' => l10n.remoteFilesPlaceMovies,
       'music' => l10n.remoteFilesPlaceMusic,
-      // A shared folder that is none of the above (newer computers).
-      'folder' => p.posix.basename(place.path),
       _ => place.path,
     };
 
@@ -107,7 +105,7 @@ IconData fsPlaceGlyph(FsPlace place) => place.kind != 'root'
         'drive' when place.removable => Icons.usb_rounded,
         'drive' => Icons.storage_rounded,
         'volume' => Icons.usb_rounded,
-        'documents' || 'folder' => CupertinoIcons.folder,
+        'documents' => CupertinoIcons.folder,
         'storage' => CupertinoIcons.device_phone_portrait,
         _ => CupertinoIcons.house,
       };

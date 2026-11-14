@@ -12,7 +12,6 @@ import 'package:whisper/page/remote_files/files_icons.dart';
 import 'package:whisper/remote_files/fs_browser.dart';
 import 'package:whisper/remote_files/fs_host_files.dart';
 import 'package:whisper/remote_files/fs_paths.dart';
-import 'package:whisper/remote_files/fs_share_places.dart';
 import 'package:whisper/remote_files/fs_shared_folders.dart';
 import 'package:whisper/theme/whisper_icons.dart';
 import 'package:whisper/theme/whisper_ui.dart';
@@ -77,8 +76,8 @@ class SharedFoldersPage extends StatefulWidget {
 }
 
 class _SharedFoldersPageState extends State<SharedFoldersPage> {
-  FsDisk? _system;
-  List<FsDisk> _disks = const [];
+  FsRoot? _system;
+  List<FsRoot> _disks = const [];
 
   /// Folders left out that are not there now, such as on a USB stick taken
   /// out.
@@ -154,17 +153,17 @@ class _SharedFoldersPageState extends State<SharedFoldersPage> {
     );
   }
 
-  Widget _diskRow(AppLocalizations l10n, FsDisk disk, {required bool system}) {
+  Widget _diskRow(AppLocalizations l10n, FsRoot disk, {required bool system}) {
     final folders = widget.folders;
     final name = disk.label.isEmpty && disk.drive.isEmpty
         ? l10n.sharedFoldersSystemDisk
         : diskName(l10n, disk);
     return _SwitchRow(
-      key: ValueKey(disk.path),
+      key: ValueKey(disk.directory),
       icon: _DiskIcon(removable: disk.removable),
       name: name,
       // Sharing it shares the home folder on it, not the system's.
-      path: system ? l10n.sharedFoldersSystemDiskNote : disk.path,
+      path: system ? l10n.sharedFoldersSystemDiskNote : disk.directory,
       value: folders.isDiskShared(disk, system: system),
       onChanged: (on) => unawaited(folders.shareDisk(disk, on, system: system)),
     );
@@ -228,7 +227,7 @@ class _SharedFoldersPageState extends State<SharedFoldersPage> {
 
 /// A disk as Explorer names it (「Data (D:)」「本地磁盘 (D:)」), else by its
 /// volume's or folder's name.
-String diskName(AppLocalizations l10n, FsDisk disk) => disk.drive.isEmpty
+String diskName(AppLocalizations l10n, FsRoot disk) => disk.drive.isEmpty
     ? disk.label
     : fsPlaceLabel(
         l10n,

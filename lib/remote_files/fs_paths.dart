@@ -5,13 +5,13 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import 'fs_platform.dart';
+import 'fs_share_places.dart';
 import 'fs_share_policy.dart';
 
 /// A place another device may browse: the home folder on desktops, shared
 /// storage on Android, the app's Documents on iOS, Windows drives and Linux
 /// mounted volumes, plus well-known folders inside it as shortcuts. A
-/// computer offers only the ones that hold its shared folders (see
-/// `sharedFsRoots`).
+/// computer offers only the shared ones (see `offeredFsRoots`).
 class FsRoot {
   const FsRoot({
     required this.id,
@@ -43,13 +43,9 @@ class FsRoot {
   final bool removable;
 
   /// Wire description (without shortcuts, which the host checks first).
-  /// A device that does not know [FsRootKind.folder] ([folders] false) gets
-  /// a volume by the folder's name instead, which it shows as such.
-  Map<String, Object?> toJson({bool folders = true}) => {
+  Map<String, Object?> toJson() => {
     'id': id,
-    'kind': kind == FsRootKind.folder && !folders
-        ? FsRootKind.volume.name
-        : kind.name,
+    'kind': kind.name,
     if (label.isNotEmpty) 'name': label,
     if (drive.isNotEmpty) 'drive': drive,
     if (removable) 'removable': true,
@@ -73,18 +69,12 @@ enum FsRootKind {
   /// another partition), an SD card or USB drive on Android, a disk in
   /// /Volumes on macOS.
   volume,
-
-  /// A shared folder of a computer that is in none of the above, such as
-  /// one outside the home folder on macOS. Only sent to devices whose `open`
-  /// says they know it (`FileBrowseRoots`).
-  folder,
 }
 
 class FsShortcut {
   const FsShortcut({required this.kind, required this.path});
 
-  /// desktop, documents, downloads, pictures, camera, movies, music; or
-  /// folder, for a shared folder that is none of these.
+  /// desktop, documents, downloads, pictures, camera, movies, music.
   final String kind;
 
   /// Relative to the root, '/'-separated.
@@ -189,14 +179,7 @@ Future<List<FsRoot>> platformFsRoots() async {
     return [...roots, ...await FsPlatform.windowsDrives()];
   }
   if (Platform.isLinux) {
-    final user =
-        Platform.environment['USER'] ?? Platform.environment['LOGNAME'] ?? '';
-    try {
-      final mounts = await File('/proc/self/mounts').readAsString();
-      return [...roots, ...linuxVolumeRoots(mounts, user)];
-    } catch (_) {
-      return roots;
-    }
+    return [...roots, ...await fsOtherDisks()];
   }
   return roots;
 }
@@ -300,48 +283,33 @@ List<FsShortcut> linuxUserDirShortcuts(String home, String? userDirs) {
   return shortcuts;
 }
 
-/// Volumes mounted for [user] under /media/‹user› or /run/media/‹user›
-/// (udisks), from the text of /proc/self/mounts.
-List<FsRoot> linuxVolumeRoots(String mounts, String user) {
-  if (user.isEmpty) {
-    return const [];
-  }
-  final bases = ['/media/$user/', '/run/media/$user/'];
-  final roots = <FsRoot>[];
+/// A mounted volume as the system lists it. [label] is empty when it is
+/// named after its folder.
+typedef FsVolume = ({String path, String label, bool removable});
+
+/// [volumes] as roots, each with an id of its own by its folder's name:
+/// `vol:KINGSTON`, then `vol:KINGSTON 2`.
+List<FsRoot> volumeRoots(Iterable<FsVolume> volumes) {
   final ids = <String>{};
-  for (final line in const LineSplitter().convert(mounts)) {
-    final fields = line.split(' ');
-    if (fields.length < 3) {
-      continue;
-    }
-    // Spaces and other bytes in mount points are octal escapes (\040).
-    final point = fields[1].replaceAllMapped(
-      RegExp(r'\\([0-7]{3})'),
-      (m) => String.fromCharCode(int.parse(m.group(1)!, radix: 8)),
-    );
-    final base = bases.where(point.startsWith).firstOrNull;
-    if (base == null) {
-      continue;
-    }
-    final name = point.substring(base.length);
-    if (name.isEmpty || name.contains('/')) {
-      continue;
-    }
-    var id = 'vol:$name';
-    for (var n = 2; !ids.add(id); n++) {
-      id = 'vol:$name $n';
-    }
-    roots.add(
-      FsRoot(
-        id: id,
-        directory: point,
-        kind: FsRootKind.volume,
-        label: name,
-        removable: true,
-      ),
-    );
+  return [
+    for (final volume in volumes)
+      if (p.basename(volume.path) case final name when name.isNotEmpty)
+        FsRoot(
+          id: _unused(ids, 'vol:$name'),
+          directory: volume.path,
+          kind: FsRootKind.volume,
+          label: volume.label.isEmpty ? name : volume.label,
+          removable: volume.removable,
+        ),
+  ];
+}
+
+String _unused(Set<String> ids, String id) {
+  var unique = id;
+  for (var n = 2; !ids.add(unique); n++) {
+    unique = '$id $n';
   }
-  return roots;
+  return unique;
 }
 
 /// Maps wire paths (root id + relative path) to real paths and back, and
@@ -482,8 +450,7 @@ class FsPathResolver {
     // A link to somewhere not shared (listings hide it) stays where it is:
     // put in place of a file being read, between the check and the open,
     // it would be what is opened.
-    if (type == FileSystemEntityType.link &&
-        !await _linkShared(path, policy)) {
+    if (type == FileSystemEntityType.link && !await _linkShared(path, policy)) {
       throw const FsPathException('not shared');
     }
   }

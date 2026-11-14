@@ -279,19 +279,12 @@ class FsHostFiles {
     String relative, {
     required bool showHidden,
   }) async {
-    final folder = await resolver.resolveExisting(
-      rootId,
-      relative,
-      use: FsUse.browse,
-    );
+    final folder = await resolver.resolveExisting(rootId, relative);
     final dir = Directory(folder);
     if (!await dir.exists()) {
       throw const FsPathException('not a folder');
     }
     final policy = resolver.policy?.call();
-    if (policy != null && !policy.allows(folder, FsUse.read)) {
-      return _waysOn(policy, folder, showHidden: showHidden);
-    }
     final entries = <FsEntry>[];
     final skip = {
       for (final path in excluded())
@@ -314,7 +307,7 @@ class FsHostFiles {
           name.startsWith('.') ||
           (Platform.isWindows && FsPlatform.isHiddenWindows(entity.path));
       if ((hidden && !showHidden) ||
-          policy?.allows(entity.path, FsUse.browse) == false) {
+          policy?.allows(entity.path, FsUse.read) == false) {
         continue;
       }
       try {
@@ -328,7 +321,7 @@ class FsHostFiles {
             resolver.rootOf(rootId).directory,
           ).resolveSymbolicLinks();
           if (!FsPathResolver.isInside(base, target) ||
-              policy?.allows(target, FsUse.browse) == false) {
+              policy?.allows(target, FsUse.read) == false) {
             continue;
           }
           stat = await FileStat.stat(target);
@@ -346,36 +339,6 @@ class FsHostFiles {
         );
       } on FileSystemException {
         // Unreadable entries (permissions, races) are skipped.
-      }
-    }
-    entries.sort(compareEntries);
-    return entries;
-  }
-
-  /// A folder that only leads to shared folders lists the folders on the
-  /// way to them, nothing else.
-  Future<List<FsEntry>> _waysOn(
-    FsSharePolicy policy,
-    String folder, {
-    required bool showHidden,
-  }) async {
-    final entries = <FsEntry>[];
-    for (final name in policy.waysOn(folder)) {
-      final hidden = name.startsWith('.');
-      if (hidden && !showHidden) {
-        continue;
-      }
-      final stat = await FileStat.stat(p.join(folder, name));
-      if (stat.type == FileSystemEntityType.directory) {
-        entries.add(
-          FsEntry(
-            name: name,
-            isDir: true,
-            size: 0,
-            modifiedMs: stat.modified.millisecondsSinceEpoch,
-            hidden: hidden,
-          ),
-        );
       }
     }
     entries.sort(compareEntries);

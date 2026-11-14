@@ -515,12 +515,10 @@ class FileBrowseHost {
     final readOnly = await permissions.isReadOnly(peerId);
     // Drives, volumes and shared folders come and go; list what is there now.
     await files.refreshRoots();
-    final rootKinds = message.payload['roots'];
-    final folders = rootKinds is int && rootKinds >= FileBrowseRoots.version;
     final roots = <Map<String, Object?>>[];
     for (final root in files.resolver.roots) {
       roots.add({
-        ...root.toJson(folders: folders),
+        ...root.toJson(),
         'shortcuts': [
           for (final shortcut in root.shortcuts)
             if (await Directory('${root.directory}/${shortcut.path}').exists())

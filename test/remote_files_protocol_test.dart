@@ -12,7 +12,6 @@ import 'package:whisper/remote_files/fs_host_files.dart';
 import 'package:whisper/remote_files/fs_paths.dart';
 import 'package:whisper/remote_files/fs_placement.dart';
 import 'package:whisper/remote_files/fs_protocol.dart';
-import 'package:whisper/remote_files/fs_share_places.dart';
 import 'package:whisper/remote_files/fs_share_policy.dart';
 import 'package:whisper/remote_files/fs_shared_folders.dart';
 
@@ -262,7 +261,7 @@ void main() {
   });
 
   test('a computer shares whole disks less the system\'s folders and the '
-      'ones left out, and older devices can still browse them', () async {
+      'ones left out', () async {
     final disk = await sandbox.resolveSymbolicLinks();
     final homeDir = p.join(disk, 'Users', 'me');
     for (final path in [
@@ -280,10 +279,13 @@ void main() {
     final data = await Directory.systemTemp.createTemp('whisper-rf-data-');
     addTearDown(() => data.delete(recursive: true));
     await File(p.join(data.path, 'b.txt')).writeAsString('b');
-    final dataDisk = FsDisk(
-      path: await data.resolveSymbolicLinks(),
+    final dataDisk = FsRoot(
+      id: 'vol:Data',
+      directory: await data.resolveSymbolicLinks(),
+      kind: FsRootKind.volume,
       label: 'Data',
     );
+    final systemDisk = FsRoot(id: 'system', directory: disk, label: 'Disk');
     final homeRoot = FsRoot(
       id: 'home',
       directory: homeDir,
@@ -295,17 +297,16 @@ void main() {
     final folders = FsSharedFolders(
       protectedAreas: () async => FsProtectedAreas(home: homeDir),
       defaultRoots: () => [homeRoot],
-      // The system disk is a place too, as Windows' C: is.
-      places: () async => [
-        homeRoot,
-        FsRoot(id: 'drive:c', directory: disk, kind: FsRootKind.drive),
-      ],
       commonFolders: () async => const [],
-      systemDisk: () async => FsDisk(path: disk, label: 'Disk'),
+      systemDisk: () async => systemDisk,
       // A partition mounted in the home folder, switched off (Linux).
       disks: () async => [
         dataDisk,
-        FsDisk(path: p.join(homeDir, 'Projects'), label: 'Projects'),
+        FsRoot(
+          id: 'vol:Projects',
+          directory: p.join(homeDir, 'Projects'),
+          kind: FsRootKind.volume,
+        ),
       ],
     );
     final sender = host.sender;
@@ -370,30 +371,9 @@ void main() {
     info = await reopen();
     expect([for (final root in info.roots) root.id], ['home', 'vol:Data']);
     expect(await names('vol:Data', ''), ['b.txt']);
-    await folders.shareDisk(FsDisk(path: disk), false, system: true);
+    await folders.shareDisk(systemDisk, false, system: true);
     await expectLater(client.list('home', ''), refused);
     await client.close();
-
-    // A device that does not say it knows folder roots (older) sees the
-    // disk as the volume it has always shown.
-    final replies = <FileBrowseMessage>[];
-    host.sender = (peerId, message) async {
-      replies.add(message);
-      return true;
-    };
-    await host.handle(
-      const FileBrowseMessage(
-        action: FileBrowseAction.open,
-        sessionId: '5a4f1f0e-1c2b-4d3e-8f9a-0b1c2d3e4f51',
-        clientPeerId: 'client',
-        hostPeerId: 'host',
-      ),
-      remotePeerId: 'client',
-      deviceName: 'Mac',
-    );
-    final roots = replies.single.payload['roots']! as List;
-    expect(roots.single, containsPair('kind', 'volume'));
-    expect(roots.single, containsPair('name', 'Data'));
 
     // Leaving out a whole disk switches it off.
     expect(await folders.exclude(data.path), FsExcluded.disk);

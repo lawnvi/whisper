@@ -8,10 +8,7 @@ import '../helper/app_private_paths.dart';
 /// What a path is resolved for. On a computer that decides how much of it
 /// another device may have (see [FsSharePolicy]).
 enum FsUse {
-  /// A listing. A folder on the way to a shared one lists only that way.
-  browse,
-
-  /// Opening, reading, a thumbnail.
+  /// Listing, opening, reading, a thumbnail.
   read,
 
   /// Copying out whole: a folder takes everything in it along.
@@ -189,8 +186,8 @@ class FsProtectedAreas {
 
 /// What other devices may do where on a computer: inside a shared folder
 /// (a whole disk, as the settings share them) what [FsProtectedAreas]
-/// allows, less [excluded]; in a folder that leads to one, only see the way
-/// there; elsewhere nothing. Paths are real ones, symlinks followed.
+/// allows, less [excluded]; elsewhere nothing. Paths are real ones, symlinks
+/// followed.
 class FsSharePolicy {
   FsSharePolicy({
     required Iterable<String> shared,
@@ -224,9 +221,6 @@ class FsSharePolicy {
     final folded = fsFold(path);
     return _folded.any((folder) => p.equals(folder, folded));
   }
-
-  bool _leadsToShared(String path) =>
-      shared.any((folder) => p.isWithin(path, folder));
 
   /// The shared folder nearest to [path] (folded), the innermost of those
   /// holding it.
@@ -266,9 +260,6 @@ class FsSharePolicy {
   }
 
   bool allows(String path, FsUse use) => switch (use) {
-    FsUse.browse =>
-      allows(path, FsUse.read) ||
-          (_leadsToShared(path) && !protected.blocksRead(path)),
     FsUse.read =>
       _inShared(path) && !_isExcluded(path) && !protected.blocksRead(path),
     FsUse.copy =>
@@ -285,12 +276,4 @@ class FsSharePolicy {
           !protected.holdsAny(path) &&
           !_holdsExcluded(path),
   };
-
-  /// What [folder] lists when it only leads to shared folders: the names of
-  /// the folders in it on the way to them.
-  List<String> waysOn(String folder) => {
-    for (final target in shared)
-      if (p.isWithin(folder, target))
-        p.split(p.relative(target, from: folder)).first,
-  }.toList();
 }

@@ -32,19 +32,17 @@ class FsSharedFolders extends ChangeNotifier {
     Iterable<String> Function()? mounts,
     Future<FsProtectedAreas> Function()? protectedAreas,
     List<FsRoot> Function()? defaultRoots,
-    Future<List<FsRoot>> Function()? places,
     Future<List<FsCommonFolder>> Function()? commonFolders,
-    Future<FsDisk> Function()? systemDisk,
-    Future<List<FsDisk>> Function()? disks,
+    Future<FsRoot> Function()? systemDisk,
+    Future<List<FsRoot>> Function()? disks,
     Future<List<String>> Function(List<String> roots)? systemFolders,
   }) : _protectedAreas =
            protectedAreas ??
            (() => FsProtectedAreas.forThisDevice(mounts: mounts)),
        _defaultRoots = defaultRoots ?? defaultFsRoots,
-       _places = places ?? platformFsRoots,
        _commonFolders = commonFolders,
        _systemDisk = systemDisk ?? fsSystemDisk,
-       _disks = disks ?? (() => fsOtherDisks(excluded: mounts)),
+       _disks = disks ?? fsOtherDisks,
        _systemFolders = systemFolders;
 
   /// Only computers limit browsing; phones offer what a USB cable shows.
@@ -57,10 +55,9 @@ class FsSharedFolders extends ChangeNotifier {
 
   final Future<FsProtectedAreas> Function() _protectedAreas;
   final List<FsRoot> Function() _defaultRoots;
-  final Future<List<FsRoot>> Function() _places;
   final Future<List<FsCommonFolder>> Function()? _commonFolders;
-  final Future<FsDisk> Function() _systemDisk;
-  final Future<List<FsDisk>> Function() _disks;
+  final Future<FsRoot> Function() _systemDisk;
+  final Future<List<FsRoot>> Function() _disks;
   final Future<List<String>> Function(List<String> roots)? _systemFolders;
 
   bool _systemShared = true;
@@ -113,33 +110,38 @@ class FsSharedFolders extends ChangeNotifier {
       _commonFolders?.call() ?? fsCommonFolders(home);
 
   /// The disk the system runs from.
-  Future<FsDisk> systemDisk() => _systemDisk();
+  Future<FsRoot> systemDisk() => _systemDisk();
 
   /// The disks and partitions other than the system's that are here now.
-  Future<List<FsDisk>> otherDisks() => _disks();
+  Future<List<FsRoot>> otherDisks() => _disks();
 
-  /// Whether the disk at [path] is shared, the system disk included.
-  bool isDiskShared(FsDisk disk, {required bool system}) => system
+  /// Whether [disk] is shared, the system disk included.
+  bool isDiskShared(FsRoot disk, {required bool system}) => system
       ? _systemShared
-      : _sharedDisks.any((shared) => p.equals(shared, disk.path));
+      : _sharedDisks.any((shared) => p.equals(shared, disk.directory));
 
-  Future<void> shareDisk(FsDisk disk, bool on, {required bool system}) =>
+  Future<void> shareDisk(FsRoot disk, bool on, {required bool system}) =>
       _serially(() async {
         if (!_loaded) await _reload();
-        final prefs = await SharedPreferences.getInstance();
-        if (system) {
-          _systemShared = on;
-          await prefs.setBool(_systemKey, on);
-        } else {
-          _sharedDisks = List.unmodifiable([
-            for (final shared in _sharedDisks)
-              if (!p.equals(shared, disk.path)) shared,
-            if (on) disk.path,
-          ]);
-          await prefs.setStringList(_disksKey, _sharedDisks);
-        }
-        await _changed();
+        await _setDisk(system ? null : disk.directory, on);
       });
+
+  /// Switches the disk at [path] on or off, the system disk when null.
+  Future<void> _setDisk(String? path, bool on) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (path == null) {
+      _systemShared = on;
+      await prefs.setBool(_systemKey, on);
+    } else {
+      _sharedDisks = List.unmodifiable([
+        for (final shared in _sharedDisks)
+          if (!p.equals(shared, path)) shared,
+        if (on) path,
+      ]);
+      await prefs.setStringList(_disksKey, _sharedDisks);
+    }
+    await _changed();
+  }
 
   /// Leaves [folder] out, with everything in it. One already left out, or
   /// in a folder that is, is [FsExcluded.already]; folders left out inside
@@ -149,26 +151,18 @@ class FsSharedFolders extends ChangeNotifier {
     final real = await fsCanonical(folder);
     final system = await _systemDisk();
     final share = _systemShare;
-    if (p.equals(real, await fsCanonical(system.path)) ||
+    if (p.equals(real, await fsCanonical(system.directory)) ||
         (share != null && p.equals(real, await fsCanonical(share)))) {
-      await _setSystem(false);
+      await _setDisk(null, false);
       return FsExcluded.disk;
     }
     for (final disk in _sharedDisks) {
       if (p.equals(real, await fsCanonical(disk))) {
-        _sharedDisks = List.unmodifiable([
-          for (final shared in _sharedDisks)
-            if (shared != disk) shared,
-        ]);
-        await (await SharedPreferences.getInstance()).setStringList(
-          _disksKey,
-          _sharedDisks,
-        );
-        await _changed();
+        await _setDisk(disk, false);
         return FsExcluded.disk;
       }
     }
-    if (_policy.shared.any((root) => _within(root, real)) &&
+    if (_policy.shared.any((root) => FsPathResolver.isInside(root, real)) &&
         !_policy.allows(real, FsUse.read)) {
       return FsExcluded.already;
     }
@@ -176,19 +170,20 @@ class FsSharedFolders extends ChangeNotifier {
     var onOtherDisk = false;
     for (final disk in [
       ..._sharedDisks,
-      for (final disk in await _disks()) disk.path,
+      for (final disk in await _disks()) disk.directory,
     ]) {
-      onOtherDisk = onOtherDisk || _within(await fsCanonical(disk), real);
+      onOtherDisk =
+          onOtherDisk || FsPathResolver.isInside(await fsCanonical(disk), real);
     }
     if (!onOtherDisk &&
         share != null &&
-        !_within(await fsCanonical(share), real)) {
+        !FsPathResolver.isInside(await fsCanonical(share), real)) {
       return FsExcluded.already;
     }
     final kept = <String>[];
     for (final other in _excluded) {
       final otherReal = await fsCanonical(other);
-      if (_within(otherReal, real)) {
+      if (FsPathResolver.isInside(otherReal, real)) {
         return FsExcluded.already;
       }
       if (!p.isWithin(real, otherReal)) {
@@ -218,19 +213,10 @@ class FsSharedFolders extends ChangeNotifier {
     await _changed();
   });
 
-  Future<void> _setSystem(bool on) async {
-    _systemShared = on;
-    await (await SharedPreferences.getInstance()).setBool(_systemKey, on);
-    await _changed();
-  }
-
   Future<void> _changed() async {
     _policy = await _policyFor();
     notifyListeners();
   }
-
-  static bool _within(String base, String path) =>
-      p.equals(base, path) || p.isWithin(base, path);
 
   /// What sharing the system disk shares: the home folder on it. The rest
   /// of it is the system's and installed programs', which no rule tells
@@ -239,7 +225,6 @@ class FsSharedFolders extends ChangeNotifier {
 
   Future<FsSharePolicy> _policyFor() async {
     final protected = await _protectedAreas();
-    final system = await _systemDisk();
     final roots = <String>[];
     for (final disk in [
       if (_systemShared && _systemShare != null) _systemShare!,
@@ -256,7 +241,7 @@ class FsSharedFolders extends ChangeNotifier {
     // mounts partitions in the home folder too (~/data).
     final offInside = <String>[];
     for (final disk in await _disks()) {
-      final real = await _real(disk.path);
+      final real = await _real(disk.directory);
       if (real != null &&
           !roots.any((root) => p.equals(root, real)) &&
           roots.any((root) => p.isWithin(root, real))) {
@@ -271,7 +256,6 @@ class FsSharedFolders extends ChangeNotifier {
           ? await systemFolders(roots)
           : await fsSystemFolders(
               roots: roots,
-              systemDisk: await _real(system.path) ?? system.path,
               home: homeDirectory == null
                   ? ''
                   : await _real(homeDirectory) ?? homeDirectory,
@@ -311,48 +295,31 @@ class FsSharedFolders extends ChangeNotifier {
         if (await _real(folder.path) case final real?)
           FsCommonFolder(kind: folder.kind, path: real),
     ];
-    // Windows drives are places already.
-    final disks = <FsDisk>[];
-    if (!Platform.isWindows) {
-      for (final disk in await _disks()) {
-        if (await _real(disk.path) case final real?) {
-          disks.add(
-            FsDisk(path: real, label: disk.label, removable: disk.removable),
-          );
-        }
-      }
-    }
-    return offeredFsRoots(
-      policy,
-      await _places(),
-      common: common,
-      disks: disks,
-    );
+    return offeredFsRoots(policy, [
+      ..._defaultRoots(),
+      ...await _disks(),
+    ], common: common);
   }
 }
 
 /// The roots that reach what [policy] shares: each of this computer's
-/// [places] (home, drives, volumes) and [disks] (macOS and Linux disks and
-/// partitions not among them) that may be read. The system disk is shared
-/// as the home folder, so its drive (C:) is never one. A place's usual folders are shortcuts, unless the user
-/// left them out; a usual folder kept elsewhere ([common], real paths, such
-/// as Documents moved into OneDrive or onto D:) is one of the innermost
-/// place holding it.
+/// [places] (the home folder, the other disks) that may be read. A place's
+/// usual folders are shortcuts, unless the user left them out; a usual
+/// folder kept elsewhere ([common], real paths, such as Documents moved
+/// into OneDrive or onto D:) is one of the innermost place holding it.
 Future<List<FsRoot>> offeredFsRoots(
   FsSharePolicy policy,
   List<FsRoot> places, {
   List<FsCommonFolder> common = const [],
-  List<FsDisk> disks = const [],
 }) async {
   final bases = [
     for (final place in places) await fsCanonical(place.directory),
   ];
   final byKind = {for (final folder in common) folder.kind: folder.path};
   final roots = <FsRoot>[];
-  final ids = <String>{};
   for (final (i, place) in places.indexed) {
     final base = bases[i];
-    if (!policy.allows(base, FsUse.read) || !ids.add(place.id)) {
+    if (!policy.allows(base, FsUse.read)) {
       continue;
     }
     String at(String relative) => p.joinAll([base, ...relative.split('/')]);
@@ -393,30 +360,6 @@ Future<List<FsRoot>> offeredFsRoots(
         label: place.label,
         drive: place.drive,
         removable: place.removable,
-      ),
-    );
-  }
-  String idFor(String prefix, String name) {
-    var id = '$prefix:$name';
-    for (var n = 2; !ids.add(id); n++) {
-      id = '$prefix:$name $n';
-    }
-    return id;
-  }
-
-  for (final disk in disks) {
-    if (bases.any((base) => p.equals(base, disk.path)) ||
-        !policy.allows(disk.path, FsUse.read)) {
-      continue;
-    }
-    final name = disk.label.isEmpty ? p.basename(disk.path) : disk.label;
-    roots.add(
-      FsRoot(
-        id: idFor('vol', name),
-        directory: disk.path,
-        kind: FsRootKind.volume,
-        label: name,
-        removable: disk.removable,
       ),
     );
   }

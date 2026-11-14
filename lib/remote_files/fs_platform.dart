@@ -307,31 +307,15 @@ abstract final class FsPlatform {
     try {
       final found =
           await _channel.invokeListMethod<Object?>('volumes') ?? const [];
-      final roots = <FsRoot>[];
-      final ids = <String>{};
-      for (final volume in found) {
-        if (volume case {
-          'path': final String path,
-          'label': final String label,
-          'removable': final bool removable,
-        } when p.isAbsolute(path) && p.basename(path).isNotEmpty) {
-          final name = p.basename(path);
-          var id = 'vol:$name';
-          for (var n = 2; !ids.add(id); n++) {
-            id = 'vol:$name $n';
-          }
-          roots.add(
-            FsRoot(
-              id: id,
-              directory: path,
-              kind: FsRootKind.volume,
-              label: label.isEmpty ? name : label,
-              removable: removable,
-            ),
-          );
-        }
-      }
-      return roots;
+      return volumeRoots([
+        for (final volume in found)
+          if (volume case {
+            'path': final String path,
+            'label': final String label,
+            'removable': final bool removable,
+          } when p.isAbsolute(path))
+            (path: path, label: label, removable: removable),
+      ]);
     } catch (_) {
       // A runner without it: shared storage only.
       return const [];

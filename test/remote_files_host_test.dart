@@ -304,7 +304,7 @@ void main() {
       }
     });
 
-    test('list only the way to shared folders, and never the floor', () async {
+    test('list only what is shared, and never the floor', () async {
       Future<List<String>> names(FsHostFiles files, String path) async => [
         for (final entry in (await files.list(
           'home',
@@ -313,28 +313,12 @@ void main() {
         )).entries)
           entry.name,
       ];
-      final folders = sharing(['Documents', 'Projects/app']);
-      expect(await names(folders, ''), ['Documents', 'Projects']);
-      expect(await names(folders, 'Projects'), ['app']);
-      expect(await names(folders, 'Documents'), isNot(contains('keys')));
-      expect(await names(folders, 'Documents'), isNot(contains('db')));
-      final leftOut = sharing(
-        ['', 'Projects/app'],
-        excluded: ['Projects', 'Music'],
-      );
-      expect(await names(leftOut, ''), ['Documents', 'Projects']);
-      expect(await names(leftOut, 'Projects'), ['app']);
-      final everything = sharing(['']);
-      expect(
-        await names(everything, ''),
-        [
-          'Documents',
-          'Music',
-          'Projects',
-          'secret',
-          'escape',
-        ].where((name) => name != 'secret' && name != 'escape').toList(),
-      );
+      final whole = sharing(['']);
+      expect(await names(whole, ''), ['Documents', 'Music', 'Projects']);
+      expect(await names(whole, 'Documents'), isNot(contains('keys')));
+      expect(await names(whole, 'Documents'), isNot(contains('db')));
+      final leftOut = sharing([''], excluded: ['Projects', 'Music']);
+      expect(await names(leftOut, ''), ['Documents']);
     });
   });
 }

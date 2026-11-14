@@ -9,14 +9,14 @@ Android 和插数据线时看到的一样：内部存储，加上插着的 SD �
 | 文件 | 做什么 |
 | --- | --- |
 | `lib/remote_files/fs_shared_folders.dart` | `FsSharedFolders`：设置存在 SharedPreferences（`remote_files.share_system_disk`、`remote_files.shared_disks`、`remote_files.excluded_folders`）；算出 `FsSharePolicy`；`exclude` 处理包含关系；`offeredFsRoots` 生成要发给对方的根 |
-| `lib/remote_files/fs_share_places.dart` | `fsSystemDisk`、`fsOtherDisks`（Windows 非系统盘符、macOS `mount` 里 `/Volumes` 下本地且不隐藏的卷、Linux `/proc/self/mounts` 里的块设备，去掉系统目录和装着主目录的那块）、`fsSystemFolders`（系统相关的目录）、`fsCommonFolders`（常用目录在哪，给对方的快捷方式用） |
+| `lib/remote_files/fs_share_places.dart` | `fsSystemDisk`、`fsOtherDisks`（都返回 `FsRoot`；Windows 非系统盘符、macOS `mount` 里 `/Volumes` 下本地且不隐藏的卷、Linux `/proc/self/mounts` 里的块设备，去掉系统目录和装着主目录的那块）、`fsSystemFolders`（系统相关的目录）、`fsCommonFolders`（常用目录在哪，给对方的快捷方式用） |
 | `lib/remote_files/fs_share_policy.dart` | `FsSharePolicy`（每种用途能不能做，含排除）和 `FsProtectedAreas`（无论怎么设都不给的底线） |
 | `lib/remote_files/fs_paths.dart` | `FsPathResolver` 带上 policy：`resolveExisting(use:)`、`resolveEntry`、`resolveNewChild`、`checkChange` |
 | `lib/remote_files/fs_host*.dart`、`fs_placement.dart` | 每个请求按用途解析路径；拷进来的文件落地前再查（`FsHostFiles.mayPlace`） |
 | `lib/socket/folder_transfer_scan.dart` | `scanFolderInBackground`：文件夹发出去时留下 Whisper 自己的文件（`AppPrivatePaths`，现在是数据库） |
 | `lib/new_ui/settings/settings_shared_folders.dart` | 设置里「共享与权限 → 共享的目录」：磁盘和分区的开关、不共享的目录 |
 
-只有主机这一侧受限：`FileBrowseHost.shared` 的 `FsHostFiles(sharing: FileBrowseHost.sharedFolders)`。本机自己的文件页（`LocalFsBrowser`）和调试钩子用不带 policy 的 `FsHostFiles`，照旧看全部。
+只有主机这一侧受限：`FileBrowseHost.shared` 的 `FsHostFiles(sharing: FileBrowseHost.sharedFolders)`。本机自己的文件页（`LocalFsBrowser`）和调试钩子用不带 policy 的 `FsHostFiles`，照旧看全部；Linux 上它列的盘也来自 `fsOtherDisks`，和设置里的一样。
 
 ## 共享什么
 
@@ -25,14 +25,12 @@ Android 和插数据线时看到的一样：内部存储，加上插着的 SD �
 - **系统相关的**（`fsSystemFolders`，每次算 policy 时现查）：
   - 每块共享的盘最上层：以 `.` 开头的（`.Spotlight-V100`、`.Trashes`…）、Windows 上以 `$` 开头的（`$Recycle.Bin`）和带系统属性的（`System Volume Information`、`pagefile.sys`）、`lost+found`。
   - Windows 每块盘最上层：`Windows`、`Program Files`、`Program Files (x86)`、`ProgramData`、`PerfLogs`、`Recovery`、`Windows.old`、`Config.Msi`、`MSOCache`、`Boot`、`Documents and Settings`、`OneDriveTemp`、`inetpub`。装在 D 盘的 `Program Files` 也算。
-  - macOS `/` 最上层：`Applications`、`Library`、`System`、`Volumes`、`bin`、`usr`、`etc`、`var`、`private`、`opt`、`cores`、`dev`、`tmp`、`sbin`、`home`、`Network`、`net`。
-  - Linux `/` 最上层：`bin`、`boot`、`dev`、`efi`、`etc`、`lib*`、`media`、`mnt`、`nix`、`gnu`、`opt`、`proc`、`root`、`run`、`sbin`、`snap`、`srv`、`sys`、`tmp`、`usr`、`var`、`swapfile`、`swap.img`。
   - 主目录旁边别的用户的目录（`C:\Users`、`/Users`、`/home` 里除了自己和 `Public`、`Shared` 的），主目录里 Windows 带系统属性的（`NTUSER.DAT`、旧的 `Application Data` 这类联接）、macOS 的 `~/Applications`、Linux 的 `~/snap`。
 - **用户排除的**（`remote_files.excluded_folders`）。
 
 排除只在离它最近的共享根里算（`FsSharePolicy._counts`）：一块盘挂在另一块共享的盘下面时，外面那块的排除管不到它。反过来，没打开的盘挂在共享的目录里（Linux 把分区挂在 `~/data`）也算排除，开关关着就真的不共享。
 
-系统盘只共享主目录：盘的最上层除了系统目录还常有装上去的程序（`C:\Python311`、`C:\xampp`、这台 Mac 的 `/pkg`），认不出是不是用户的；放在那里的东西要共享，就得放进主目录或单独的分区。系统盘上主目录以外的目录不能加进「不共享的目录」（本来就不共享，回 `FsExcluded.already`），排除主目录本身等于关掉系统盘。上面那份「系统相关的」名单对系统盘只剩主目录里那几项还用得上，留着给另外打开的盘（D 盘上的 `Program Files`、Linux 分区的 `lost+found`）和以后。
+系统盘只共享主目录：盘的最上层除了系统目录还常有装上去的程序（`C:\Python311`、`C:\xampp`、这台 Mac 的 `/pkg`），认不出是不是用户的；放在那里的东西要共享，就得放进主目录或单独的分区。系统盘上主目录以外的目录不能加进「不共享的目录」（本来就不共享，回 `FsExcluded.already`），排除主目录本身等于关掉系统盘。所以 macOS 和 Linux 的 `/` 不需要系统目录名单，Windows 那份只对另外打开的盘有用（D 盘上的 `Program Files`）。
 
 ### 排除和包含关系（`FsSharedFolders.exclude`）
 
@@ -47,8 +45,7 @@ Android 和插数据线时看到的一样：内部存储，加上插着的 SD �
 
 | 用途（`FsUse`） | 哪些请求 | 要求 |
 | --- | --- | --- |
-| `browse` | `list` | 能读；或者在通往共享根的路上，这时只列出路上的文件夹，没有文件 |
-| `read` | `read`、`thumb`、`stat`、改动的父文件夹 | 在共享的盘里，不在排除的目录里，不在底线里 |
+| `read` | `list`、`read`、`thumb`、`stat`、改动的父文件夹 | 在共享的盘里，不在排除的目录里，不在底线里 |
 | `copy` | `fetch` | 能读，并且里面不含底线里的地方（主目录本身或它的上层、私有目录、挂载），也不含排除的目录；数据库这类 Whisper 自己的文件由扫描留下 |
 | `fill` | `incoming`、新建和移动的目标文件夹 | 能读，不是 git 的控制项 |
 | `change` | 写入、新建、重命名、移动（两头）、删除、改时间 | 能读，不是共享的盘根本身，不是 git 的控制项，里面不含排除的目录、底线里的地方、Whisper 自己的文件和挂载（这些都按路径认，上层一改名就脱离规则，一删就跟着没了）；指向不共享地方的符号链接（列表里本来就藏着）也不能动，否则对方能在检查和打开之间把它换到要读的文件的位置上。已经存在的条目再按它的真实路径查一次，换个大小写或 Windows 短名（`GIT~1`）绕不过去 |
@@ -61,11 +58,11 @@ Android 和插数据线时看到的一样：内部存储，加上插着的 SD �
 
 拷进来的文件（`incoming`）先落在下载目录，完成后才搬进选的文件夹。搬之前 `mayPlace` 再按当时的 policy 查一遍目标和整棵树：树里有 `.git` 就不搬，留在下载目录（`TransferPlacements.unplaced`）。
 
-## 根和老设备
+## 发给对方的根
 
-`offeredFsRoots` 发能读的那些地方：主目录（`home`）、打开了的 Windows 盘符和 Linux 的 `/media` 卷，macOS 和 Linux 另外的盘（`volume`，名字用卷名或挂载目录名）。系统盘的盘符（C:）不发，它只共享主目录。主目录的常用文件夹是快捷方式，排除了的不发；常用目录被挪到别处的（`fsCommonFolders`：Windows 用 `SHGetKnownFolderPath`，OneDrive 里或 D 盘上的文档；Linux 用 `user-dirs.dirs`）按它的种类挂在最里层含它的根上。
+`offeredFsRoots` 发能读的那些地方：主目录（`home`），加上打开了的其他盘，就是设置里列的那些（`fsOtherDisks`：Windows 的盘符是 `drive`，macOS 和 Linux 的是 `volume`，名字用卷名或挂载目录名，同名的编号区分）。系统盘的盘符（C:）不发，它只共享主目录。主目录的常用文件夹是快捷方式，排除了的不发；常用目录被挪到别处的（`fsCommonFolders`：Windows 用 `SHGetKnownFolderPath`，OneDrive 里或 D 盘上的文档；Linux 用 `user-dirs.dirs`）按它的种类挂在最里层含它的根上。
 
-协议：新版的 `open` 带 `roots: 1`（`FileBrowseRoots.version`）。主机只对带了它的设备发 `kind: folder`，对没带的（旧版）发 `kind: volume` 加 `name`，旧版本来就显示成以名字命名的 U 盘。第二版的主机不再发 `folder` 根（第一版给主目录以外单独共享的文件夹用），这个约定和客户端的显示留着。旧版的主机不认识 `open` 里多的字段，照旧忽略。拒绝都回 `notAllowed`，没有新的错误码。测试：`test/remote_files_protocol_test.dart`「a computer shares whole disks…」和 `test/remote_files_host_test.dart` 的「shared folders」。
+协议没有变：根的种类都是旧版认识的，拒绝都回 `notAllowed`，没有新的错误码。测试：`test/remote_files_protocol_test.dart`「a computer shares whole disks…」和 `test/remote_files_host_test.dart` 的「shared folders」。
 
 ## 什么时候生效
 

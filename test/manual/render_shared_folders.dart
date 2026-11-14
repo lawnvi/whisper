@@ -19,7 +19,6 @@ import 'package:whisper/new_ui/settings/settings_controls.dart';
 import 'package:whisper/new_ui/settings/settings_panel.dart';
 import 'package:whisper/new_ui/settings/settings_shared_folders.dart';
 import 'package:whisper/remote_files/fs_paths.dart';
-import 'package:whisper/remote_files/fs_share_places.dart';
 import 'package:whisper/remote_files/fs_share_policy.dart';
 import 'package:whisper/remote_files/fs_shared_folders.dart';
 import 'package:whisper/theme/app_theme.dart';
@@ -82,13 +81,17 @@ void main() {
       final folders = FsSharedFolders(
         protectedAreas: () async => FsProtectedAreas(home: home.path),
         defaultRoots: () => [homeRoot],
-        places: () async => [homeRoot],
-        systemDisk: () async => const FsDisk(path: '/', label: 'Macintosh HD'),
+        systemDisk: () async => const FsRoot(
+          id: 'system',
+          directory: '/',
+          kind: FsRootKind.volume,
+          label: 'Macintosh HD',
+        ),
         systemFolders: (_) async => const [],
-        disks: () async => const [
-          FsDisk(path: '/Volumes/Data', label: 'Data'),
-          FsDisk(path: '/Volumes/KINGSTON', label: 'KINGSTON', removable: true),
-        ],
+        disks: () async => volumeRoots(const [
+          (path: '/Volumes/Data', label: '', removable: false),
+          (path: '/Volumes/KINGSTON', label: '', removable: true),
+        ]),
       );
       await tester.runAsync(folders.refresh);
 
