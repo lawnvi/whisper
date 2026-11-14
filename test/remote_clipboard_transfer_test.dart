@@ -721,6 +721,17 @@ void main() {
       );
     }
 
+    // Until the source has started sending [count] files. The request goes
+    // through real file I/O on both sides, which a fixed number of event loop
+    // turns does not always cover: CI's runners took more than 20.
+    Future<void> untilSent(List<String> sentAsFiles, int count) async {
+      final deadline = DateTime.now().add(const Duration(seconds: 5));
+      while (sentAsFiles.length < count && DateTime.now().isBefore(deadline)) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+      expect(sentAsFiles, hasLength(count));
+    }
+
     test(
       'copied over while its files come, the paste still gets them',
       () async {
@@ -740,8 +751,7 @@ void main() {
           peerId: 'source',
           sessionId: 's',
         );
-        await pumpEventQueue();
-        expect(link.sentAsFiles, hasLength(1));
+        await untilSent(link.sentAsFiles, 1);
         // Something else copied on both sides while the file is on its way.
         await link.sink.clearSession('s');
         await link.source.clearSession('s', notifyPeer: true, peerId: 'sink');
@@ -777,7 +787,7 @@ void main() {
         peerId: 'source',
         sessionId: 's',
       );
-      await pumpEventQueue();
+      await untilSent(link.sentAsFiles, 1);
       // Something else copied, and pasted, before the first came.
       final second = await file('second.bin', 2000);
       await link.source.publish(
@@ -789,8 +799,7 @@ void main() {
         peerId: 'source',
         sessionId: 's',
       );
-      await pumpEventQueue();
-      expect(link.sentAsFiles, hasLength(2));
+      await untilSent(link.sentAsFiles, 2);
       land.complete();
       expect(await pastingFirst, RemoteClipboardPasteResult.prepared);
       expect(await pastingSecond, RemoteClipboardPasteResult.prepared);
@@ -806,7 +815,7 @@ void main() {
       final item = await file('report.pdf', 3000);
       await link.source.publish(peerId: 'sink', sessionId: 's', items: [item]);
       final pasting = link.sink.preparePaste(peerId: 'source', sessionId: 's');
-      await pumpEventQueue();
+      await untilSent(link.sentAsFiles, 1);
       await link.sink.clearSession('s', endsPaste: true);
       land.complete();
       expect(await pasting, isNot(RemoteClipboardPasteResult.prepared));
