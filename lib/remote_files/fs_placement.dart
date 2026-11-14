@@ -16,6 +16,9 @@ class PlacedTransfer {
   final String path;
 }
 
+/// Whether a copy that arrived, now at the first path, may go to the second.
+typedef PlacementGuard = Future<bool> Function(String source, String target);
+
 /// Copies through the file manager are ordinary resumable transfers into
 /// the downloads folder; this moves each one into the folder the user
 /// chose as soon as it completes, and keeps the history pointing at it.
@@ -24,7 +27,8 @@ class TransferPlacements extends ChangeNotifier {
 
   static final TransferPlacements shared = TransferPlacements();
 
-  final _pending = <String, ({String directory, DateTime until})>{};
+  final _pending =
+      <String, ({String directory, DateTime until, PlacementGuard? guard})>{};
   final _placed = StreamController<PlacedTransfer>.broadcast();
 
   /// Copies made in the file manager, sent or received. Like clipboard
@@ -85,18 +89,21 @@ class TransferPlacements extends ChangeNotifier {
 
   bool isExpected(String transferId) => _pending.containsKey(transferId);
 
-  /// The next incoming transfer [transferId] goes into [directory].
+  /// The next incoming transfer [transferId] goes into [directory], if
+  /// [guard] says it may once it is there; else it stays where it landed.
   void expect(
     String transferId,
     String directory, {
     Duration lifetime = const Duration(days: 2),
     bool ephemeral = false,
+    PlacementGuard? guard,
   }) {
     _quiet.add(transferId);
     if (ephemeral) _ephemeral.add(transferId);
     _pending[transferId] = (
       directory: directory,
       until: DateTime.now().add(lifetime),
+      guard: guard,
     );
     _pending.removeWhere((_, value) => value.until.isBefore(DateTime.now()));
   }
@@ -108,7 +115,11 @@ class TransferPlacements extends ChangeNotifier {
     if (pending == null) {
       return false;
     }
-    _pending[transferId] = (directory: directory, until: pending.until);
+    _pending[transferId] = (
+      directory: directory,
+      until: pending.until,
+      guard: pending.guard,
+    );
     FilesLog.write('transfer ${FilesLog.id(transferId)} sent elsewhere');
     return true;
   }
@@ -184,6 +195,20 @@ class TransferPlacements extends ChangeNotifier {
         _pending.remove(snapshot.transferId);
         final from = snapshot.finalPath;
         if (from.isEmpty) {
+          return;
+        }
+        final guard = pending.guard;
+        if (guard != null &&
+            !await guard(
+              from,
+              await freeName(pending.directory, p.basename(from)),
+            )) {
+          // Somewhere that is not, or no longer, shared with the sender.
+          FilesLog.write(
+            'transfer ${FilesLog.id(snapshot.transferId)} not placed '
+            '(not shared)',
+          );
+          _unplaced.add(snapshot.transferId);
           return;
         }
         final String to;

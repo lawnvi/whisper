@@ -12,6 +12,9 @@ import 'package:whisper/remote_files/fs_host_files.dart';
 import 'package:whisper/remote_files/fs_paths.dart';
 import 'package:whisper/remote_files/fs_placement.dart';
 import 'package:whisper/remote_files/fs_protocol.dart';
+import 'package:whisper/remote_files/fs_share_places.dart';
+import 'package:whisper/remote_files/fs_share_policy.dart';
+import 'package:whisper/remote_files/fs_shared_folders.dart';
 
 /// Answers prompts with [decision] as soon as they appear.
 class _AutoGate extends FileBrowseGate {
@@ -258,4 +261,136 @@ void main() {
     );
   });
 
+  test('a computer shares whole disks less the system\'s folders and the '
+      'ones left out, and older devices can still browse them', () async {
+    final disk = await sandbox.resolveSymbolicLinks();
+    final homeDir = p.join(disk, 'Users', 'me');
+    for (final path in [
+      'Users/me/Documents/a.txt',
+      'Users/me/Music/song.mp3',
+      'Users/me/Private/p.txt',
+      'Users/other/o.txt',
+      'usr/bin/sh',
+    ]) {
+      final file = File(p.join(disk, path));
+      await file.parent.create(recursive: true);
+      await file.writeAsString(path);
+    }
+    final data = await Directory.systemTemp.createTemp('whisper-rf-data-');
+    addTearDown(() => data.delete(recursive: true));
+    await File(p.join(data.path, 'b.txt')).writeAsString('b');
+    final dataDisk = FsDisk(
+      path: await data.resolveSymbolicLinks(),
+      label: 'Data',
+    );
+    final homeRoot = FsRoot(
+      id: 'home',
+      directory: homeDir,
+      shortcuts: const [
+        FsShortcut(kind: 'documents', path: 'Documents'),
+        FsShortcut(kind: 'music', path: 'Music'),
+      ],
+    );
+    final folders = FsSharedFolders(
+      protectedAreas: () async => FsProtectedAreas(home: homeDir),
+      defaultRoots: () => [homeRoot],
+      // The system disk is a place too, as Windows' C: is.
+      places: () async => [
+        homeRoot,
+        FsRoot(id: 'drive:c', directory: disk, kind: FsRootKind.drive),
+      ],
+      commonFolders: () async => const [],
+      systemDisk: () async => FsDisk(path: disk, label: 'Disk'),
+      disks: () async => [dataDisk],
+    );
+    final sender = host.sender;
+    host = FileBrowseHost(
+      files: FsHostFiles(sharing: folders),
+      gate: gate,
+    )..sender = sender;
+    var client = RemoteFilesClient('host');
+    // A new session: an open one keeps the roots it was given.
+    Future<RemoteFsInfo> reopen() async {
+      await client.close();
+      client = RemoteFilesClient('host');
+      return client.open();
+    }
+
+    Future<List<String>> names(String root, String path) async => [
+      for (final entry in (await client.list(root, path)).entries) entry.name,
+    ];
+    Matcher refused = throwsA(
+      isA<RemoteFsException>().having(
+        (e) => e.reason,
+        'reason',
+        FileBrowseError.notAllowed,
+      ),
+    );
+
+    // The system disk at first, as its home folder alone: not the drive as
+    // well (the same files twice), never the system's folders or other
+    // users'.
+    var info = await client.open();
+    expect([for (final root in info.roots) root.id], ['home']);
+    expect(await names('home', ''), ['Documents', 'Music', 'Private']);
+    final policy = folders.policy;
+    expect(
+      policy.allows(p.join(disk, 'usr', 'bin', 'sh'), FsUse.read),
+      isFalse,
+    );
+    expect(policy.allows(p.join(disk, 'Users', 'other'), FsUse.read), isFalse);
+
+    // Left out: gone with all in it, from the next request on.
+    final private = p.join(homeDir, 'Private');
+    expect(await folders.exclude(private), FsExcluded.added);
+    expect(await names('home', ''), ['Documents', 'Music']);
+    await expectLater(client.list('home', 'Private'), refused);
+    await expectLater(client.read('home', 'Private/p.txt', 0, 1), refused);
+    // Already not shared: in a folder left out, or the system's.
+    expect(await folders.exclude(p.join(private, 'sub')), FsExcluded.already);
+    expect(await folders.exclude(p.join(disk, 'usr')), FsExcluded.already);
+    // A folder holding ones left out takes them in.
+    final music = p.join(homeDir, 'Music');
+    expect(await folders.exclude(p.join(music, 'Live')), FsExcluded.added);
+    expect(await folders.exclude(music), FsExcluded.added);
+    expect(folders.excluded, [private, music]);
+    info = await reopen();
+    expect(info.roots.single.shortcuts.single.kind, 'documents');
+    await folders.include(music);
+    expect(await names('home', ''), ['Documents', 'Music']);
+
+    // Another disk, once switched on; then the system disk off.
+    await folders.shareDisk(dataDisk, true, system: false);
+    info = await reopen();
+    expect([for (final root in info.roots) root.id], ['home', 'vol:Data']);
+    expect(await names('vol:Data', ''), ['b.txt']);
+    await folders.shareDisk(FsDisk(path: disk), false, system: true);
+    await expectLater(client.list('home', ''), refused);
+    await client.close();
+
+    // A device that does not say it knows folder roots (older) sees the
+    // disk as the volume it has always shown.
+    final replies = <FileBrowseMessage>[];
+    host.sender = (peerId, message) async {
+      replies.add(message);
+      return true;
+    };
+    await host.handle(
+      const FileBrowseMessage(
+        action: FileBrowseAction.open,
+        sessionId: '5a4f1f0e-1c2b-4d3e-8f9a-0b1c2d3e4f51',
+        clientPeerId: 'client',
+        hostPeerId: 'host',
+      ),
+      remotePeerId: 'client',
+      deviceName: 'Mac',
+    );
+    final roots = replies.single.payload['roots']! as List;
+    expect(roots.single, containsPair('kind', 'volume'));
+    expect(roots.single, containsPair('name', 'Data'));
+
+    // Leaving out a whole disk switches it off.
+    expect(await folders.exclude(data.path), FsExcluded.disk);
+    expect(folders.sharedDisks, isEmpty);
+  });
 }

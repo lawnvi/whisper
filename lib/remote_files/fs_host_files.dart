@@ -6,6 +6,8 @@ import 'package:path/path.dart' as p;
 import 'fs_host_uploads.dart';
 import 'fs_paths.dart';
 import 'fs_platform.dart';
+import 'fs_share_policy.dart';
+import 'fs_shared_folders.dart';
 
 /// One entry of a folder listing, as sent to the browsing device.
 class FsEntry {
@@ -165,10 +167,19 @@ class FsPage {
 
 /// The hosting side's file operations, all through [FsPathResolver].
 class FsHostFiles {
+  /// With [sharing], what a computer serves other devices: its shared
+  /// folders and the way to them, under their policy. Without, every root
+  /// whole: this device's own browsing, and phones.
   FsHostFiles({
     FsPathResolver? resolver,
     Duration listingLifetime = const Duration(seconds: 20),
-  }) : resolver = resolver ?? FsPathResolver(defaultFsRoots()),
+    this.sharing,
+  }) : resolver =
+           resolver ??
+           FsPathResolver(
+             sharing == null ? defaultFsRoots() : const [],
+             policy: sharing == null ? null : () => sharing.policy,
+           ),
        _platformRoots = resolver == null,
        _listingLifetime = listingLifetime {
     if (_platformRoots) {
@@ -178,19 +189,24 @@ class FsHostFiles {
   }
 
   final FsPathResolver resolver;
+  final FsSharedFolders? sharing;
   final bool _platformRoots;
   final Duration _listingLifetime;
   Future<void>? _refreshing;
 
-  /// Reads this device's roots again (a USB stick came or went). Only for
-  /// the platform's own roots, not ones a caller passed in.
+  /// Reads this device's roots again (a USB stick came or went, a folder was
+  /// shared). Only for the platform's own roots, not ones a caller passed
+  /// in.
   Future<void> refreshRoots() {
     if (!_platformRoots) {
       return Future.value();
     }
     return _refreshing ??= () async {
       try {
-        resolver.setRoots(await platformFsRoots());
+        final sharing = this.sharing;
+        resolver.setRoots(
+          sharing == null ? await platformFsRoots() : await sharing.roots(),
+        );
       } catch (_) {
         // Keep the roots we had.
       } finally {
@@ -200,6 +216,9 @@ class FsHostFiles {
   }
 
   final _listings = <String, ({DateTime at, List<FsEntry> entries})>{};
+
+  /// The policy [_listings] were made under: another one lists afresh.
+  FsSharePolicy? _listedUnder;
 
   static const int pageSize = 500;
 
@@ -214,6 +233,11 @@ class FsHostFiles {
     int limit = pageSize,
     bool showHidden = false,
   }) async {
+    final policy = resolver.policy?.call();
+    if (!identical(policy, _listedUnder)) {
+      _listings.clear();
+      _listedUnder = policy;
+    }
     final key = '$rootId\u0000$relative\u0000$showHidden';
     final cached = _listings[key];
     List<FsEntry> entries;
@@ -255,10 +279,18 @@ class FsHostFiles {
     String relative, {
     required bool showHidden,
   }) async {
-    final folder = await resolver.resolveExisting(rootId, relative);
+    final folder = await resolver.resolveExisting(
+      rootId,
+      relative,
+      use: FsUse.browse,
+    );
     final dir = Directory(folder);
     if (!await dir.exists()) {
       throw const FsPathException('not a folder');
+    }
+    final policy = resolver.policy?.call();
+    if (policy != null && !policy.allows(folder, FsUse.read)) {
+      return _waysOn(policy, folder, showHidden: showHidden);
     }
     final entries = <FsEntry>[];
     final skip = {
@@ -281,7 +313,8 @@ class FsHostFiles {
       final hidden =
           name.startsWith('.') ||
           (Platform.isWindows && FsPlatform.isHiddenWindows(entity.path));
-      if (hidden && !showHidden) {
+      if ((hidden && !showHidden) ||
+          policy?.allows(entity.path, FsUse.browse) == false) {
         continue;
       }
       try {
@@ -294,7 +327,8 @@ class FsHostFiles {
           final base = await Directory(
             resolver.rootOf(rootId).directory,
           ).resolveSymbolicLinks();
-          if (!FsPathResolver.isInside(base, target)) {
+          if (!FsPathResolver.isInside(base, target) ||
+              policy?.allows(target, FsUse.browse) == false) {
             continue;
           }
           stat = await FileStat.stat(target);
@@ -316,6 +350,68 @@ class FsHostFiles {
     }
     entries.sort(compareEntries);
     return entries;
+  }
+
+  /// A folder that only leads to shared folders lists the folders on the
+  /// way to them, nothing else.
+  Future<List<FsEntry>> _waysOn(
+    FsSharePolicy policy,
+    String folder, {
+    required bool showHidden,
+  }) async {
+    final entries = <FsEntry>[];
+    for (final name in policy.waysOn(folder)) {
+      final hidden = name.startsWith('.');
+      if (hidden && !showHidden) {
+        continue;
+      }
+      final stat = await FileStat.stat(p.join(folder, name));
+      if (stat.type == FileSystemEntityType.directory) {
+        entries.add(
+          FsEntry(
+            name: name,
+            isDir: true,
+            size: 0,
+            modifiedMs: stat.modified.millisecondsSinceEpoch,
+            hidden: hidden,
+          ),
+        );
+      }
+    }
+    entries.sort(compareEntries);
+    return entries;
+  }
+
+  /// Whether a copy that arrived for a folder here, now at [source], may be
+  /// put at [target]. Under a policy only into a shared folder, and never
+  /// bringing along what may not be changed there, such as a `.git`.
+  Future<bool> mayPlace(String source, String target) async {
+    final policy = resolver.policy?.call();
+    if (policy == null) {
+      return true;
+    }
+    try {
+      final folder = await Directory(p.dirname(target)).resolveSymbolicLinks();
+      final placed = p.join(folder, p.basename(target));
+      if (!policy.allows(folder, FsUse.fill) ||
+          !policy.allows(placed, FsUse.change)) {
+        return false;
+      }
+      if (await FileSystemEntity.type(source, followLinks: false) ==
+          FileSystemEntityType.directory) {
+        await for (final entity in Directory(
+          source,
+        ).list(recursive: true, followLinks: false)) {
+          final there = p.join(placed, p.relative(entity.path, from: source));
+          if (!policy.allows(there, FsUse.change)) {
+            return false;
+          }
+        }
+      }
+      return true;
+    } on FileSystemException {
+      return false;
+    }
   }
 
   static int compareEntries(FsEntry a, FsEntry b) {
@@ -462,7 +558,11 @@ class FsHostFiles {
 
   /// Sets a file's modification time (folders keep theirs).
   Future<void> touch(String rootId, String relative, int modifiedMs) async {
-    final real = await resolver.resolveExisting(rootId, relative);
+    final real = await resolver.resolveExisting(
+      rootId,
+      relative,
+      use: FsUse.change,
+    );
     if (await FileSystemEntity.type(real) == FileSystemEntityType.file) {
       await File(
         real,
@@ -486,9 +586,13 @@ class FsHostFiles {
   }
 
   Future<String> rename(String rootId, String relative, String newName) async {
-    FsPathResolver.checkName(newName);
     final real = await resolver.resolveEntry(rootId, relative);
-    final target = p.join(p.dirname(real), newName);
+    final parent = p.posix.dirname(relative);
+    final target = await resolver.resolveNewChild(
+      rootId,
+      parent == '.' ? '' : parent,
+      newName,
+    );
     if (await FileSystemEntity.type(target, followLinks: false) !=
         FileSystemEntityType.notFound) {
       throw const FsPathException('exists');

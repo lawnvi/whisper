@@ -763,7 +763,7 @@
       }
     }
   },
-  "remoteFilesUnsupported": "Whisper on {device} needs updating to browse its files",
+  "remoteFilesUnsupported": "Whisper on {device} needs updating to browse its shared folders",
   "@remoteFilesUnsupported": {
     "placeholders": {
       "device": {
@@ -807,7 +807,7 @@
   "remoteFilesPlaceCamera": "Camera",
   "remoteFilesPlaceMovies": "Movies",
   "remoteFilesPlaceMusic": "Music",
-  "remoteFilesPromptTitle": "{device} wants to browse your files",
+  "remoteFilesPromptTitle": "{device} wants to browse your shared folders",
   "@remoteFilesPromptTitle": {
     "placeholders": {
       "device": {
@@ -886,7 +886,7 @@
   "remoteFilesRefresh": "Refresh",
   "remoteFilesSameDevice": "Already on this device",
   "remoteFilesBetweenOthers": "Copies go between this device and another one",
-  "remoteFilesOpenFirst": "Open {device}’s files first",
+  "remoteFilesOpenFirst": "Open {device}’s shared folders first",
   "@remoteFilesOpenFirst": {
     "placeholders": {
       "device": {
@@ -980,18 +980,15 @@
   "@remoteFilesFileManager": {
     "description": "A Linux desktop's file manager, where a copy dragged or pasted out of Whisper goes"
   },
-  "remoteFilesMountTooOld": "Whisper on {device} needs updating to open its files in {app}",
+  "remoteFilesMountTooOld": "Whisper on {device} needs updating before you can mount its shared folders",
   "@remoteFilesMountTooOld": {
     "placeholders": {
       "device": {
         "type": "String"
-      },
-      "app": {
-        "type": "String"
       }
     }
   },
-  "remoteFilesMountDenied": "{device} didn't allow access to its files",
+  "remoteFilesMountDenied": "{device} didn't allow mounting its shared folders",
   "@remoteFilesMountDenied": {
     "placeholders": {
       "device": {
@@ -999,7 +996,7 @@
       }
     }
   },
-  "remoteFilesMountFailed": "{app} couldn't open the files on {device}",
+  "remoteFilesMountFailed": "{app} couldn't mount {device}'s shared folders",
   "@remoteFilesMountFailed": {
     "placeholders": {
       "app": {
@@ -1010,14 +1007,7 @@
       }
     }
   },
-  "remoteFilesMountNeedsFuse": "Install fuse3 to open other devices' files in {app}",
-  "@remoteFilesMountNeedsFuse": {
-    "placeholders": {
-      "app": {
-        "type": "String"
-      }
-    }
-  },
+  "remoteFilesMountNeedsFuse": "Install fuse3 to mount other devices' shared folders",
   "remoteFilesCopyFromDevice": "From {device} to “{folder}”",
   "@remoteFilesCopyFromDevice": {
     "placeholders": {
@@ -1673,13 +1663,18 @@
   "@windowStreamShareSetting": {
     "description": "Settings switch: whether trusted devices may open and control this computer's windows (window flow source)"
   },
-  "deviceFilesAlwaysAllowed": "Always Allow Browsing My Files",
+  "deviceFilesAlwaysAllowed": "Always Allow Browsing My Shared Folders",
   "@deviceFilesAlwaysAllowed": {
     "description": "Device page switch: this device may browse my files without asking each time. Turning it off takes back an earlier \"Always allow\"."
   },
-  "deviceMountHere": "Mount on this computer",
+  "deviceMountHere": "Mount {device}'s shared folders",
   "@deviceMountHere": {
-    "description": "Keeps the device's files in this computer's file manager whenever it is connected"
+    "description": "Keeps the device's shared folders in this computer's file manager whenever it is connected",
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
   },
   "windowStreamCloseStillOpen": "“{app}” is still open — it may be asking whether to save.",
   "@windowStreamCloseStillOpen": {
@@ -1870,7 +1865,7 @@
   "@remoteFilesNoAnswerDetail": {
     "description": "File browser: under remoteFilesNoAnswer."
   },
-  "remoteFilesNotAsked": "{device} Needs to Allow Browsing",
+  "remoteFilesNotAsked": "{device} Needs to Allow Browsing Its Shared Folders",
   "@remoteFilesNotAsked": {
     "description": "File browser: shown after the user stopped waiting for the other device to allow browsing; a button asks again.",
     "placeholders": {
@@ -1879,11 +1874,11 @@
       }
     }
   },
-  "deviceFilesAllowChanges": "Allow Changes to My Files",
+  "deviceFilesAllowChanges": "Allow Changes to My Shared Folders",
   "@deviceFilesAllowChanges": {
     "description": "Device page switch under 'Always allow browsing my files'. Off, this device may open and copy my files but not create, rename, delete or change them, in its file browser or where it mounts them."
   },
-  "remoteFilesReadOnlyHost": "{device} only allows reading its files",
+  "remoteFilesReadOnlyHost": "{device} doesn't allow changes to its shared folders",
   "@remoteFilesReadOnlyHost": {
     "description": "Toast when trying to change files on a device whose user allows reading only.",
     "placeholders": {
@@ -2012,8 +2007,8 @@
     }
   },
   "shellCardTrust": "Accept connections automatically",
-  "shellCardBrowse": "Browse my files",
-  "shellCardChange": "Change my files",
+  "shellCardBrowse": "Browse my shared folders",
+  "shellCardChange": "Change my shared folders",
   "shellCardDiagnostics": "Connection diagnostics",
   "shellCardWake": "Wake",
   "shellCardAlias": "Custom name",
@@ -2641,5 +2636,17 @@
     }
   },
   "webTransferAwaitingDownload": "Waiting to be downloaded",
-  "webTransferNoFolders": "A web page can't receive folders. Compress it into one file first."
+  "webTransferNoFolders": "A web page can't receive folders. Compress it into one file first.",
+  "sharedFolders": "Shared Folders",
+  "sharedFoldersCount": "{count, plural, =0{None} =1{1 disk} other{{count} disks}}",
+  "sharedFoldersDisks": "Disks and Partitions",
+  "sharedFoldersSystemDisk": "System Disk",
+  "sharedFoldersSystemDiskNote": "System disk, home folder only",
+  "sharedFoldersExcluded": "Folders Not Shared",
+  "sharedFoldersExclude": "Add a Folder Not to Share…",
+  "sharedFoldersReveal": "Show in {app}",
+  "sharedFoldersInclude": "Share Again",
+  "sharedFoldersMissing": "Not found",
+  "sharedFoldersAlready": "This folder is already not shared",
+  "sharedFoldersFooter": "Other devices can browse only what is shared here. System folders, app data and keys are never shared."
 }

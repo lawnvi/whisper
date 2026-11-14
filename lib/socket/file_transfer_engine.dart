@@ -3,7 +3,6 @@ export 'package:whisper/socket/transfer_outcomes.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:isolate';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
@@ -67,7 +66,7 @@ enum _IncomingReadyResult { retained, sendFailed, unavailable }
 const int _folderEntryStorageOverhead = 4096;
 
 Future<FolderScanResult> _scanFolderInBackground(String path) =>
-    Isolate.run(() => scanFolderForTransfer(path));
+    scanFolderInBackground(path);
 
 Future<void> _setFileLastModified(File file, int timestamp) {
   return file.setLastModified(DateTime.fromMillisecondsSinceEpoch(timestamp));

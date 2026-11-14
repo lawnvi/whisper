@@ -27,8 +27,8 @@ class RemoteFsRoot {
   final String id;
   final List<FsShortcut> shortcuts;
 
-  /// home, storage, documents, drive or volume (older hosts: home or
-  /// storage, by id).
+  /// home, storage, documents, drive, volume or folder (older hosts: home
+  /// or storage, by id).
   final String kind;
 
   /// The volume's own name, when it has one.
@@ -191,7 +191,13 @@ class RemoteFilesClient {
     }
     final opening = _opening ??= Completer<RemoteFsInfo>();
     _clients[sessionId] = this;
-    final sent = await sender?.call(peerId, _message(FileBrowseAction.open));
+    final sent = await sender?.call(
+      peerId,
+      _message(
+        FileBrowseAction.open,
+        payload: const {'roots': FileBrowseRoots.version},
+      ),
+    );
     if (sent != true) {
       _opening = null;
       _clients.remove(sessionId);

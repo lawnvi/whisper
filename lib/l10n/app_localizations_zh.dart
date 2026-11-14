@@ -1625,7 +1625,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String remoteFilesUnsupported(String device) {
-    return '$device 上的 Whisper 需要更新到最新版才能浏览文件';
+    return '$device 上的 Whisper 需要更新到最新版，才能浏览它共享的目录';
   }
 
   @override
@@ -1700,7 +1700,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String remoteFilesPromptTitle(String device) {
-    return '$device 请求访问你的文件';
+    return '$device 想浏览你共享的目录';
   }
 
   @override
@@ -1814,7 +1814,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String remoteFilesOpenFirst(String device) {
-    return '先打开 $device 的文件';
+    return '先打开 $device 共享的目录';
   }
 
   @override
@@ -1945,24 +1945,22 @@ class AppLocalizationsZh extends AppLocalizations {
   String get remoteFilesFileManager => '文件管理器';
 
   @override
-  String remoteFilesMountTooOld(String device, String app) {
-    return '$device 上的 Whisper 需要更新，才能在$app中打开文件';
+  String remoteFilesMountTooOld(String device) {
+    return '$device 上的 Whisper 需要更新，才能挂载它共享的目录';
   }
 
   @override
   String remoteFilesMountDenied(String device) {
-    return '$device 未允许访问文件';
+    return '$device 未允许挂载它共享的目录';
   }
 
   @override
   String remoteFilesMountFailed(String app, String device) {
-    return '$app无法打开 $device 的文件';
+    return '$app没能挂载 $device 共享的目录';
   }
 
   @override
-  String remoteFilesMountNeedsFuse(String app) {
-    return '要在$app中打开其他设备的文件，需要先安装 fuse3';
-  }
+  String get remoteFilesMountNeedsFuse => '要挂载其他设备共享的目录，需要先安装 fuse3';
 
   @override
   String remoteFilesCopyFromDevice(String device, String folder) {
@@ -2466,10 +2464,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get windowStreamShareSetting => '允许查看和操作本机窗口';
 
   @override
-  String get deviceFilesAlwaysAllowed => '始终允许浏览我的文件';
+  String get deviceFilesAlwaysAllowed => '始终允许浏览我共享的目录';
 
   @override
-  String get deviceMountHere => '挂载到本机';
+  String deviceMountHere(String device) {
+    return '挂载 $device 共享的目录';
+  }
 
   @override
   String windowStreamCloseStillOpen(String app) {
@@ -2610,15 +2610,15 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String remoteFilesNotAsked(String device) {
-    return '浏览 $device 的文件需要对方允许';
+    return '浏览 $device 共享的目录需要对方允许';
   }
 
   @override
-  String get deviceFilesAllowChanges => '允许修改我的文件';
+  String get deviceFilesAllowChanges => '允许修改我共享的目录';
 
   @override
   String remoteFilesReadOnlyHost(String device) {
-    return '$device 只允许读取文件';
+    return '$device 不允许修改它共享的目录';
   }
 
   @override
@@ -2779,10 +2779,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get shellCardTrust => '自动接受连接';
 
   @override
-  String get shellCardBrowse => '浏览我的文件';
+  String get shellCardBrowse => '浏览我共享的目录';
 
   @override
-  String get shellCardChange => '修改我的文件';
+  String get shellCardChange => '修改我共享的目录';
 
   @override
   String get shellCardDiagnostics => '连接诊断';
@@ -3701,4 +3701,50 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get webTransferNoFolders => '网页不能接收文件夹，可以先压缩成一个文件';
+
+  @override
+  String get sharedFolders => '共享的目录';
+
+  @override
+  String sharedFoldersCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个磁盘',
+      zero: '无',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get sharedFoldersDisks => '磁盘和分区';
+
+  @override
+  String get sharedFoldersSystemDisk => '系统盘';
+
+  @override
+  String get sharedFoldersSystemDiskNote => '系统盘，只共享主目录';
+
+  @override
+  String get sharedFoldersExcluded => '不共享的目录';
+
+  @override
+  String get sharedFoldersExclude => '添加不共享的目录…';
+
+  @override
+  String sharedFoldersReveal(String app) {
+    return '在$app中显示';
+  }
+
+  @override
+  String get sharedFoldersInclude => '恢复共享';
+
+  @override
+  String get sharedFoldersMissing => '找不到';
+
+  @override
+  String get sharedFoldersAlready => '这个目录已经不共享了';
+
+  @override
+  String get sharedFoldersFooter => '其他设备只能浏览这里共享的目录，系统目录、应用数据和密钥始终不共享。';
 }

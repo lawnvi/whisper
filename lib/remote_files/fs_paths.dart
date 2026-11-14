@@ -5,10 +5,13 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import 'fs_platform.dart';
+import 'fs_share_policy.dart';
 
 /// A place another device may browse: the home folder on desktops, shared
 /// storage on Android, the app's Documents on iOS, Windows drives and Linux
-/// mounted volumes, plus well-known folders inside it as shortcuts.
+/// mounted volumes, plus well-known folders inside it as shortcuts. A
+/// computer offers only the ones that hold its shared folders (see
+/// `sharedFsRoots`).
 class FsRoot {
   const FsRoot({
     required this.id,
@@ -40,9 +43,13 @@ class FsRoot {
   final bool removable;
 
   /// Wire description (without shortcuts, which the host checks first).
-  Map<String, Object?> toJson() => {
+  /// A device that does not know [FsRootKind.folder] ([folders] false) gets
+  /// a volume by the folder's name instead, which it shows as such.
+  Map<String, Object?> toJson({bool folders = true}) => {
     'id': id,
-    'kind': kind.name,
+    'kind': kind == FsRootKind.folder && !folders
+        ? FsRootKind.volume.name
+        : kind.name,
     if (label.isNotEmpty) 'name': label,
     if (drive.isNotEmpty) 'drive': drive,
     if (removable) 'removable': true,
@@ -62,14 +69,22 @@ enum FsRootKind {
   /// A Windows drive (C:, D:…).
   drive,
 
-  /// A mounted volume on Linux (/media/‹user›/…, /run/media/‹user›/…).
+  /// A mounted volume: on Linux (/media/‹user›/…, /run/media/‹user›/…,
+  /// another partition), an SD card or USB drive on Android, a disk in
+  /// /Volumes on macOS.
   volume,
+
+  /// A shared folder of a computer that is in none of the above, such as
+  /// one outside the home folder on macOS. Only sent to devices whose `open`
+  /// says they know it (`FileBrowseRoots`).
+  folder,
 }
 
 class FsShortcut {
   const FsShortcut({required this.kind, required this.path});
 
-  /// desktop, documents, downloads, pictures, camera, movies, music.
+  /// desktop, documents, downloads, pictures, camera, movies, music; or
+  /// folder, for a shared folder that is none of these.
   final String kind;
 
   /// Relative to the root, '/'-separated.
@@ -131,7 +146,7 @@ List<FsRoot> defaultFsRoots() {
       id: 'home',
       directory: home,
       shortcuts: Platform.isLinux
-          ? linuxUserDirShortcuts(home, _readXdgUserDirs(home))
+          ? linuxUserDirShortcuts(home, readXdgUserDirs(home))
           : _homeShortcuts(movies: Platform.isMacOS ? 'Movies' : 'Videos'),
     ),
   ];
@@ -147,9 +162,9 @@ List<FsShortcut> _homeShortcuts({required String movies}) => [
 ];
 
 /// Every root this device offers now: [defaultFsRoots] plus what only the
-/// system can tell (Windows drives, Linux mounted volumes, the real iOS
-/// Documents folder). Drives and volumes come and go; call it again when
-/// someone starts browsing.
+/// system can tell (Windows drives, Linux mounted volumes, Android SD cards
+/// and USB drives, the real iOS Documents folder). Drives and volumes come
+/// and go; call it again when someone starts browsing.
 Future<List<FsRoot>> platformFsRoots() async {
   final roots = defaultFsRoots();
   if (Platform.isIOS) {
@@ -165,6 +180,10 @@ Future<List<FsRoot>> platformFsRoots() async {
     } catch (_) {
       return roots;
     }
+  }
+  if (Platform.isAndroid) {
+    // What a USB cable shows: shared storage, then SD cards and USB drives.
+    return [...roots, ...await FsPlatform.androidVolumes()];
   }
   if (Platform.isWindows) {
     return [...roots, ...await FsPlatform.windowsDrives()];
@@ -199,7 +218,8 @@ FsRoot windowsDriveRoot({
   );
 }
 
-String? _readXdgUserDirs(String home) {
+/// The text of the user's `user-dirs.dirs`, or null.
+String? readXdgUserDirs(String home) {
   final config =
       Platform.environment['XDG_CONFIG_HOME'] ?? p.join(home, '.config');
   try {
@@ -209,22 +229,18 @@ String? _readXdgUserDirs(String home) {
   }
 }
 
-/// Shortcuts for a Linux home: the XDG user folders as the desktop names
-/// them (`~/.config/user-dirs.dirs`, localized: "桌面", "下载"…), else the
-/// English defaults. Folders outside the home or equal to it are left out.
-List<FsShortcut> linuxUserDirShortcuts(String home, String? userDirs) {
-  const keys = {
-    'desktop': 'XDG_DESKTOP_DIR',
-    'documents': 'XDG_DOCUMENTS_DIR',
-    'downloads': 'XDG_DOWNLOAD_DIR',
-    'pictures': 'XDG_PICTURES_DIR',
-    'movies': 'XDG_VIDEOS_DIR',
-    'music': 'XDG_MUSIC_DIR',
-  };
-  final defaults = {
-    for (final shortcut in _homeShortcuts(movies: 'Videos'))
-      shortcut.kind: shortcut.path,
-  };
+const _xdgKeys = {
+  'desktop': 'XDG_DESKTOP_DIR',
+  'documents': 'XDG_DOCUMENTS_DIR',
+  'downloads': 'XDG_DOWNLOAD_DIR',
+  'pictures': 'XDG_PICTURES_DIR',
+  'movies': 'XDG_VIDEOS_DIR',
+  'music': 'XDG_MUSIC_DIR',
+};
+
+/// The folders `user-dirs.dirs` ([userDirs]) sets, by its keys, as
+/// absolute paths. One set to the home itself is switched off.
+Map<String, String> _xdgConfigured(String home, String? userDirs) {
   final configured = <String, String>{};
   for (final line in const LineSplitter().convert(userDirs ?? '')) {
     final match = RegExp(
@@ -243,8 +259,32 @@ List<FsShortcut> linuxUserDirShortcuts(String home, String? userDirs) {
     }
     configured[match.group(1)!] = p.normalize(value);
   }
+  return configured;
+}
+
+/// Where the XDG user folders are by kind (desktop, documents…), as
+/// absolute paths: the localized names ("桌面", "下载"…), and folders on
+/// another partition too. Ones not set or switched off are left out.
+Map<String, String> linuxUserDirs(String home, String? userDirs) {
+  final configured = _xdgConfigured(home, userDirs);
+  return {
+    for (final MapEntry(key: kind, value: key) in _xdgKeys.entries)
+      if (configured[key] case final path? when !p.equals(path, home))
+        kind: path,
+  };
+}
+
+/// Shortcuts for a Linux home: the XDG user folders as the desktop names
+/// them (`~/.config/user-dirs.dirs`, localized: "桌面", "下载"…), else the
+/// English defaults. Folders outside the home or equal to it are left out.
+List<FsShortcut> linuxUserDirShortcuts(String home, String? userDirs) {
+  final defaults = {
+    for (final shortcut in _homeShortcuts(movies: 'Videos'))
+      shortcut.kind: shortcut.path,
+  };
+  final configured = _xdgConfigured(home, userDirs);
   final shortcuts = <FsShortcut>[];
-  for (final MapEntry(key: kind, value: key) in keys.entries) {
+  for (final MapEntry(key: kind, value: key) in _xdgKeys.entries) {
     final path = configured[key];
     if (path == null) {
       shortcuts.add(FsShortcut(kind: kind, path: defaults[kind]!));
@@ -305,13 +345,18 @@ List<FsRoot> linuxVolumeRoots(String mounts, String user) {
 }
 
 /// Maps wire paths (root id + relative path) to real paths and back, and
-/// refuses anything that would leave the root.
+/// refuses anything that would leave the root or, under a [policy], what it
+/// does not allow.
 class FsPathResolver {
-  FsPathResolver(List<FsRoot> roots, {bool? windows})
+  FsPathResolver(List<FsRoot> roots, {bool? windows, this.policy})
     : _roots = {for (final root in roots) root.id: root},
       _windows = windows ?? Platform.isWindows;
 
   final Map<String, FsRoot> _roots;
+
+  /// What other devices may reach, on a computer that serves them; null
+  /// leaves every root whole (this device's own browsing, phones).
+  final FsSharePolicy Function()? policy;
   final _canonicalRoots = <String, String>{};
 
   /// Apply Windows name rules (reserved device names, `:`, trailing dots).
@@ -389,8 +434,12 @@ class FsPathResolver {
   }
 
   /// The real path for an existing entry, after following symlinks, which
-  /// must still be inside the root.
-  Future<String> resolveExisting(String rootId, String relative) async {
+  /// must still be inside the root and allowed for [use].
+  Future<String> resolveExisting(
+    String rootId,
+    String relative, {
+    FsUse use = FsUse.read,
+  }) async {
     final root = rootOf(rootId);
     final base = await _canonicalRoot(root);
     final joined = p.joinAll([base, ..._segments(relative)]);
@@ -406,12 +455,35 @@ class FsPathResolver {
     if (!isInside(base, real)) {
       throw const FsPathException('outside root');
     }
+    if (policy?.call().allows(real, use) == false) {
+      throw const FsPathException('not shared');
+    }
     return real;
   }
 
-  /// The entry itself (a symlink stays a symlink, so renaming or deleting
-  /// it never touches what it points to); its folder must resolve inside
-  /// the root. The root itself is refused.
+  /// Refuses a change to [path] (a real path, or a new entry in a real
+  /// folder) that the [policy] does not allow. An entry that is there is
+  /// also checked as its real self, which another spelling of its name may
+  /// hide (case, a Windows short name).
+  Future<void> checkChange(String path) async {
+    final policy = this.policy?.call();
+    if (policy == null) {
+      return;
+    }
+    if (!policy.allows(path, FsUse.change)) {
+      throw const FsPathException('not shared');
+    }
+    final type = await FileSystemEntity.type(path, followLinks: false);
+    if ((type == FileSystemEntityType.file ||
+            type == FileSystemEntityType.directory) &&
+        !policy.allows(await File(path).resolveSymbolicLinks(), FsUse.change)) {
+      throw const FsPathException('not shared');
+    }
+  }
+
+  /// The entry itself, to change (a symlink stays a symlink, so renaming or
+  /// deleting it never touches what it points to); its folder must resolve
+  /// inside the root. The root itself is refused.
   Future<String> resolveEntry(String rootId, String relative) async {
     final parts = _segments(relative);
     if (parts.isEmpty) {
@@ -426,21 +498,25 @@ class FsPathResolver {
         FileSystemEntityType.notFound) {
       throw const FsPathException('not found');
     }
+    await checkChange(path);
     return path;
   }
 
-  /// The real path for a new child [name] of an existing folder.
+  /// The real path for a new child [name] of an existing folder (or one to
+  /// replace there).
   Future<String> resolveNewChild(
     String rootId,
     String parent,
     String name,
   ) async {
     checkName(name, windows: _windows);
-    final folder = await resolveExisting(rootId, parent);
+    final folder = await resolveExisting(rootId, parent, use: FsUse.fill);
     if (await FileSystemEntity.type(folder) != FileSystemEntityType.directory) {
       throw const FsPathException('not a folder');
     }
-    return p.join(folder, name);
+    final path = p.join(folder, name);
+    await checkChange(path);
+    return path;
   }
 
   /// [real] relative to the root, '/'-separated, for the wire.

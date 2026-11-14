@@ -1,10 +1,12 @@
 import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
+import 'package:whisper/helper/app_private_paths.dart';
 import 'package:whisper/socket/folder_transfer_manifest.dart';
 import 'package:whisper/socket/transfer_file_name.dart';
 
@@ -59,8 +61,16 @@ final class FolderScanResult {
       manifest.length + totalBytes + fileCount * folderTrailerLength;
 }
 
-/// Walks [rootPath] and writes the manifest for sending it. Blocking: meant
-/// to run off the UI isolate.
+/// [scanFolderForTransfer] in a worker isolate. Whisper's own files
+/// ([AppPrivatePaths], such as its database in Documents on Linux and
+/// Windows) are left out like the system's: they never leave in a folder.
+Future<FolderScanResult> scanFolderInBackground(String path) {
+  final leaveOut = AppPrivatePaths.all.toList();
+  return Isolate.run(() => scanFolderForTransfer(path, leaveOut: leaveOut));
+}
+
+/// Walks [rootPath] and writes the manifest for sending it, without the
+/// files of [leaveOut] in it. Blocking: meant to run off the UI isolate.
 ///
 /// Links are never followed, so nothing outside the folder can be pulled in
 /// and a link loop cannot hang the walk.
@@ -68,8 +78,10 @@ FolderScanResult scanFolderForTransfer(
   String rootPath, {
   int maxEntries = folderManifestMaxEntries,
   int maxStreamSize = folderStreamMaxSize,
+  Iterable<String> leaveOut = const [],
 }) {
   final root = Directory(_listablePath(rootPath));
+  final leftOut = _leftOut(rootPath, leaveOut);
   final builder = FolderManifestBuilder();
   final skipped = <FolderSkippedEntry>[];
   var skippedCount = 0;
@@ -107,10 +119,12 @@ FolderScanResult scanFolderForTransfer(
     final items = <_ScannedItem>[];
     for (final child in children) {
       final name = p.basename(child.path);
-      if (_ignoredNames.contains(name)) continue;
       final portablePath = current.portablePath.isEmpty
           ? name
           : '${current.portablePath}/$name';
+      if (_ignoredNames.contains(name) || leftOut.contains(portablePath)) {
+        continue;
+      }
       if (child is Link) {
         skip(portablePath, FolderSkipReason.symlink);
         continue;
@@ -216,6 +230,26 @@ FolderScanResult scanFolderForTransfer(
     skipped: skipped,
     rootModifiedMs: rootModifiedMs,
   );
+}
+
+/// The paths of [leaveOut] that are in the folder at [rootPath], relative to
+/// it and '/'-separated, both with their symlinks followed.
+Set<String> _leftOut(String rootPath, Iterable<String> leaveOut) {
+  if (leaveOut.isEmpty) return const {};
+  String real(String path) {
+    try {
+      return File(path).resolveSymbolicLinksSync();
+    } on FileSystemException {
+      return p.normalize(p.absolute(path));
+    }
+  }
+
+  final root = real(rootPath);
+  return {
+    for (final path in leaveOut.map(real))
+      if (p.isWithin(root, path))
+        p.split(p.relative(path, from: root)).join('/'),
+  };
 }
 
 /// Windows refuses to list a directory whose path has passed 260 characters

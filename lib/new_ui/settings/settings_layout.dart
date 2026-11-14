@@ -4,9 +4,6 @@ part of '../../page/settings.dart';
 /// laid out as the panel or the phone's page. What a row does lives in
 /// _SettingsScreenState; here is only which rows there are, and where.
 extension _RedesignedSettings on _SettingsScreenState {
-  static const _panelWidth = 780.0, _panelHeight = 560.0;
-  static const _navWidth = 224.0;
-
   bool get _isPage => widget.layout == SettingsLayout.page;
 
   ShareLinkStore get _shareLinks => widget.shareLinks ?? ShareLinkStore.shared;
@@ -32,130 +29,43 @@ extension _RedesignedSettings on _SettingsScreenState {
   // ---------------------------------------------------------------- panel
 
   Widget _buildPanel(BuildContext context) {
-    final c = context.wc;
     final l10n = AppLocalizations.of(context)!;
-    final window = MediaQuery.sizeOf(context);
     final sections = _panelSections(l10n);
     final index = _panelSection.clamp(0, sections.length - 1);
     final section = sections[index];
-    final type = WhisperType(touch: _isMobilePlatform);
-    final shape = RoundedSuperellipseBorder(
-      borderRadius: BorderRadius.circular(WhisperRadius.l),
+    final nav = SettingsPanelNav(
+      title: l10n.setting,
+      entries: [
+        for (final item in sections)
+          (title: item.title, glyph: item.glyph, color: item.color),
+      ],
+      selected: index,
+      onSelect: (i) => _update(() {
+        _panelSection = i;
+        _sharedFoldersOpen = false;
+      }),
     );
-    final titleStyle = TextStyle(
-      fontSize: type.title,
-      height: 1.4,
-      fontWeight: FontWeight.w600,
-      color: c.ink,
-    );
-    final nav = WhisperGlass(
-      kind: GlassKind.sidebar,
-      blur: false,
-      shape: const RoundedRectangleBorder(),
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(12, 24, 12, 16),
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(10, 0, 10, 16),
-            child: Text(l10n.setting, style: titleStyle),
-          ),
-          for (final (i, item) in sections.indexed)
-            SettingsNavItem(
-              title: item.title,
-              glyph: item.glyph,
-              color: item.color,
-              selected: i == index,
-              onTap: () => _update(() => _panelSection = i),
-            ),
-        ],
-      ),
-    );
+    final folders = widget.sharedFolders ?? FileBrowseHost.sharedFolders;
     final body = _isLoading || _loadFailed
         ? _loadState(l10n)
-        : ListView(
+        // The page under 共享与权限, in place of the section, with a way back.
+        : _sharedFoldersOpen && folders != null
+        ? SharedFoldersPage(
+            folders: folders,
+            backLabel: section.title,
+            back: () => _update(() => _sharedFoldersOpen = false),
+          )
+        : SettingsPanelPage(
             key: PageStorageKey(section.title),
-            padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 28),
-            children: [
-              Text(section.title, style: titleStyle),
-              const SizedBox(height: 16),
-              SettingsGroup(children: section.rows),
-            ],
+            title: section.title,
+            children: [SettingsGroup(children: section.rows)],
           );
-    return Center(
-      child: SizedBox(
-        width: math.min(_panelWidth, window.width - 32),
-        height: math.min(_panelHeight, window.height - WhisperWindow.sheetGap),
-        child: DecoratedBox(
-          decoration: ShapeDecoration(
-            color: c.canvas,
-            shape: shape,
-            shadows: WhisperShadow.e3(Theme.of(context).brightness),
-          ),
-          child: ClipPath(
-            clipper: ShapeBorderClipper(shape: shape),
-            child: Material(
-              type: MaterialType.transparency,
-              child: SettingsTextStyle(
-                child: Stack(
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        SizedBox(
-                          width: _navWidth,
-                          // Inside its width: the content starts at exactly 224.
-                          child: DecoratedBox(
-                            position: DecorationPosition.foreground,
-                            decoration: BoxDecoration(
-                              border: Border(
-                                right: BorderSide(
-                                  color: c.sep,
-                                  width:
-                                      1 /
-                                      MediaQuery.devicePixelRatioOf(context),
-                                ),
-                              ),
-                            ),
-                            child: nav,
-                          ),
-                        ),
-                        Expanded(
-                          // Not a page turn: no direction, up from just below.
-                          child: SpringBuilder(
-                            key: ValueKey(_isLoading ? -1 : index),
-                            from: 0,
-                            value: 1,
-                            animateWhenReduced: true,
-                            child: body,
-                            builder: (context, t, child) => Opacity(
-                              opacity: t.clamp(0.0, 1.0),
-                              child: Transform.translate(
-                                offset: MediaQuery.disableAnimationsOf(context)
-                                    ? Offset.zero
-                                    : Offset(0, 5 * (1 - t)),
-                                child: child,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    // On the title's line, at the right edge of the groups.
-                    Positioned(
-                      top: 26,
-                      right: 21,
-                      child: SettingsCloseButton(
-                        label: l10n.close,
-                        onTap: () => Navigator.of(context).maybePop(),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
+    return SettingsPanelFrame(
+      nav: nav,
+      body: body,
+      bodyKey: ValueKey((_isLoading, index, _sharedFoldersOpen)),
+      closeLabel: l10n.close,
+      onClose: () => Navigator.of(context).maybePop(),
     );
   }
 
@@ -246,6 +156,12 @@ extension _RedesignedSettings on _SettingsScreenState {
               title: l10n.windowStreamShareSetting,
               value: WindowStreamHost.shared.sharingAllowed,
               onChanged: _setWindowSharing,
+            ),
+          if (widget.sharedFolders ?? FileBrowseHost.sharedFolders
+              case final folders?)
+            SharedFoldersRow(
+              folders: folders,
+              onTap: () => _update(() => _sharedFoldersOpen = true),
             ),
           _clipboardRow(l10n),
           _gainRow(l10n),

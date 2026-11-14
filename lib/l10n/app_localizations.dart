@@ -3013,7 +3013,7 @@ abstract class AppLocalizations {
   /// No description provided for @remoteFilesUnsupported.
   ///
   /// In zh, this message translates to:
-  /// **'{device} 上的 Whisper 需要更新到最新版才能浏览文件'**
+  /// **'{device} 上的 Whisper 需要更新到最新版，才能浏览它共享的目录'**
   String remoteFilesUnsupported(String device);
 
   /// No description provided for @remoteFilesEmptyFolder.
@@ -3151,7 +3151,7 @@ abstract class AppLocalizations {
   /// No description provided for @remoteFilesPromptTitle.
   ///
   /// In zh, this message translates to:
-  /// **'{device} 请求访问你的文件'**
+  /// **'{device} 想浏览你共享的目录'**
   String remoteFilesPromptTitle(String device);
 
   /// No description provided for @remoteFilesDeny.
@@ -3355,7 +3355,7 @@ abstract class AppLocalizations {
   /// No description provided for @remoteFilesOpenFirst.
   ///
   /// In zh, this message translates to:
-  /// **'先打开 {device} 的文件'**
+  /// **'先打开 {device} 共享的目录'**
   String remoteFilesOpenFirst(String device);
 
   /// No description provided for @remoteFilesUntitledFolder.
@@ -3595,26 +3595,26 @@ abstract class AppLocalizations {
   /// No description provided for @remoteFilesMountTooOld.
   ///
   /// In zh, this message translates to:
-  /// **'{device} 上的 Whisper 需要更新，才能在{app}中打开文件'**
-  String remoteFilesMountTooOld(String device, String app);
+  /// **'{device} 上的 Whisper 需要更新，才能挂载它共享的目录'**
+  String remoteFilesMountTooOld(String device);
 
   /// No description provided for @remoteFilesMountDenied.
   ///
   /// In zh, this message translates to:
-  /// **'{device} 未允许访问文件'**
+  /// **'{device} 未允许挂载它共享的目录'**
   String remoteFilesMountDenied(String device);
 
   /// No description provided for @remoteFilesMountFailed.
   ///
   /// In zh, this message translates to:
-  /// **'{app}无法打开 {device} 的文件'**
+  /// **'{app}没能挂载 {device} 共享的目录'**
   String remoteFilesMountFailed(String app, String device);
 
   /// No description provided for @remoteFilesMountNeedsFuse.
   ///
   /// In zh, this message translates to:
-  /// **'要在{app}中打开其他设备的文件，需要先安装 fuse3'**
-  String remoteFilesMountNeedsFuse(String app);
+  /// **'要挂载其他设备共享的目录，需要先安装 fuse3'**
+  String get remoteFilesMountNeedsFuse;
 
   /// No description provided for @remoteFilesCopyFromDevice.
   ///
@@ -4447,14 +4447,14 @@ abstract class AppLocalizations {
   /// Device page switch: this device may browse my files without asking each time. Turning it off takes back an earlier "Always allow".
   ///
   /// In zh, this message translates to:
-  /// **'始终允许浏览我的文件'**
+  /// **'始终允许浏览我共享的目录'**
   String get deviceFilesAlwaysAllowed;
 
   /// No description provided for @deviceMountHere.
   ///
   /// In zh, this message translates to:
-  /// **'挂载到本机'**
-  String get deviceMountHere;
+  /// **'挂载 {device} 共享的目录'**
+  String deviceMountHere(String device);
 
   /// Toast after closing a window from the recents: the window stayed open on its device (for example a save prompt).
   ///
@@ -4705,19 +4705,19 @@ abstract class AppLocalizations {
   /// File browser: another device whose files have not been allowed in this window yet (not asked, or the user stopped waiting); a button asks.
   ///
   /// In zh, this message translates to:
-  /// **'浏览 {device} 的文件需要对方允许'**
+  /// **'浏览 {device} 共享的目录需要对方允许'**
   String remoteFilesNotAsked(String device);
 
   /// Device page switch under 'Always allow browsing my files'. Off, this device may open and copy my files but not create, rename, delete or change them, in its file browser or where it mounts them.
   ///
   /// In zh, this message translates to:
-  /// **'允许修改我的文件'**
+  /// **'允许修改我共享的目录'**
   String get deviceFilesAllowChanges;
 
   /// Toast when trying to change files on a device whose user allows reading only.
   ///
   /// In zh, this message translates to:
-  /// **'{device} 只允许读取文件'**
+  /// **'{device} 不允许修改它共享的目录'**
   String remoteFilesReadOnlyHost(String device);
 
   /// Android settings row: the island drawn over other apps while Whisper is in the background
@@ -5005,13 +5005,13 @@ abstract class AppLocalizations {
   /// No description provided for @shellCardBrowse.
   ///
   /// In zh, this message translates to:
-  /// **'浏览我的文件'**
+  /// **'浏览我共享的目录'**
   String get shellCardBrowse;
 
   /// No description provided for @shellCardChange.
   ///
   /// In zh, this message translates to:
-  /// **'修改我的文件'**
+  /// **'修改我共享的目录'**
   String get shellCardChange;
 
   /// No description provided for @shellCardDiagnostics.
@@ -6560,6 +6560,78 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'网页不能接收文件夹，可以先压缩成一个文件'**
   String get webTransferNoFolders;
+
+  /// No description provided for @sharedFolders.
+  ///
+  /// In zh, this message translates to:
+  /// **'共享的目录'**
+  String get sharedFolders;
+
+  /// No description provided for @sharedFoldersCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count, plural, =0{无} other{{count} 个磁盘}}'**
+  String sharedFoldersCount(int count);
+
+  /// No description provided for @sharedFoldersDisks.
+  ///
+  /// In zh, this message translates to:
+  /// **'磁盘和分区'**
+  String get sharedFoldersDisks;
+
+  /// No description provided for @sharedFoldersSystemDisk.
+  ///
+  /// In zh, this message translates to:
+  /// **'系统盘'**
+  String get sharedFoldersSystemDisk;
+
+  /// No description provided for @sharedFoldersSystemDiskNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'系统盘，只共享主目录'**
+  String get sharedFoldersSystemDiskNote;
+
+  /// No description provided for @sharedFoldersExcluded.
+  ///
+  /// In zh, this message translates to:
+  /// **'不共享的目录'**
+  String get sharedFoldersExcluded;
+
+  /// No description provided for @sharedFoldersExclude.
+  ///
+  /// In zh, this message translates to:
+  /// **'添加不共享的目录…'**
+  String get sharedFoldersExclude;
+
+  /// No description provided for @sharedFoldersReveal.
+  ///
+  /// In zh, this message translates to:
+  /// **'在{app}中显示'**
+  String sharedFoldersReveal(String app);
+
+  /// No description provided for @sharedFoldersInclude.
+  ///
+  /// In zh, this message translates to:
+  /// **'恢复共享'**
+  String get sharedFoldersInclude;
+
+  /// No description provided for @sharedFoldersMissing.
+  ///
+  /// In zh, this message translates to:
+  /// **'找不到'**
+  String get sharedFoldersMissing;
+
+  /// No description provided for @sharedFoldersAlready.
+  ///
+  /// In zh, this message translates to:
+  /// **'这个目录已经不共享了'**
+  String get sharedFoldersAlready;
+
+  /// No description provided for @sharedFoldersFooter.
+  ///
+  /// In zh, this message translates to:
+  /// **'其他设备只能浏览这里共享的目录，系统目录、应用数据和密钥始终不共享。'**
+  String get sharedFoldersFooter;
 }
 
 class _AppLocalizationsDelegate

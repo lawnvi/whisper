@@ -28,7 +28,7 @@ String fsPlaceLabel(AppLocalizations l10n, FsPlace place) =>
               : place.removable
               ? l10n.remoteFilesPlaceRemovableDisk(place.drive)
               : l10n.remoteFilesPlaceLocalDisk(place.drive),
-        'volume' when place.label.isNotEmpty => place.label,
+        'volume' || 'folder' when place.label.isNotEmpty => place.label,
         _ =>
           place.root == 'storage'
               ? l10n.remoteFilesPlaceStorage
@@ -41,6 +41,8 @@ String fsPlaceLabel(AppLocalizations l10n, FsPlace place) =>
       'camera' => l10n.remoteFilesPlaceCamera,
       'movies' => l10n.remoteFilesPlaceMovies,
       'music' => l10n.remoteFilesPlaceMusic,
+      // A shared folder that is none of the above (newer computers).
+      'folder' => p.posix.basename(place.path),
       _ => place.path,
     };
 
@@ -66,10 +68,10 @@ String mountFailureText(
   String device,
   String app,
 ) => switch (failure) {
-  MountFailure.hostTooOld => l10n.remoteFilesMountTooOld(device, app),
+  MountFailure.hostTooOld => l10n.remoteFilesMountTooOld(device),
   MountFailure.denied => l10n.remoteFilesMountDenied(device),
   MountFailure.offline => l10n.remoteFilesOffline(device),
-  MountFailure.noFuse => l10n.remoteFilesMountNeedsFuse(app),
+  MountFailure.noFuse => l10n.remoteFilesMountNeedsFuse,
   MountFailure.unsupported ||
   MountFailure.system => l10n.remoteFilesMountFailed(app, device),
 };
@@ -105,7 +107,7 @@ IconData fsPlaceGlyph(FsPlace place) => place.kind != 'root'
         'drive' when place.removable => Icons.usb_rounded,
         'drive' => Icons.storage_rounded,
         'volume' => Icons.usb_rounded,
-        'documents' => CupertinoIcons.folder,
+        'documents' || 'folder' => CupertinoIcons.folder,
         'storage' => CupertinoIcons.device_phone_portrait,
         _ => CupertinoIcons.house,
       };

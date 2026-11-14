@@ -45,7 +45,7 @@ CI runs `flutter pub get`, `flutter analyze`, the size check, a check that gener
 - `lib/audio/`: audio sharing protocol, codecs, capture/playback abstractions, transport, and runtime coordinator.
 - `lib/remote_input/`: keyboard/mouse sharing protocol, topology/layout, native platform bridges, transport, and coordinator.
 - `lib/window_stream/`: window flow — protocol models, coordinator, this device as a source (`remote/`), adb and the Android agent link (`adb/`, `android/`), GNOME helper installer (`linux/`), and the frame pipeline. Capture, encoding, and display are native, in the FFI plugin `packages/window_stream_native/`; the phone-side agent is `android_agent/`, rebuilt with `./script/build_window_agent.sh` after any change.
-- `lib/remote_files/`: cross-device file browser — the FileBrowse protocol, host and client, copies, and `mount/` for "Mount on this computer" (macOS NFS server, Linux FUSE, Windows Cloud Files through `windows/cloud_files/`), each mount in its own isolate.
+- `lib/remote_files/`: cross-device file browser — the FileBrowse protocol, host and client, copies, and `mount/` for mounting another device's shared folders (macOS NFS server, Linux FUSE, Windows Cloud Files through `windows/cloud_files/`), each mount in its own isolate.
 - `lib/share_links/`: LAN share links — the HTTP file server (port 10003 by default, only while a link is on), link store, routes, passwords, pages, and streamed zips.
 - `lib/widget/island/`: the in-app island that gathers transfers, copies, audio, and window flow activity.
 - `lib/helper/`: platform helpers for files, settings, notifications, background services, desktop startup, and general utilities.

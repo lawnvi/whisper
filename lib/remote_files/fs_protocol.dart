@@ -132,6 +132,15 @@ abstract final class FileBrowseList {
   static const maxEntries = 200000;
 }
 
+/// Root kinds a browsing device knows, which its `open` says. A computer
+/// offers only its shared folders: one outside every place it has a root for
+/// is a root of its own, of kind `folder`. A device whose `open` says nothing
+/// (older ones) gets it as a `volume` by the folder's name instead.
+abstract final class FileBrowseRoots {
+  /// What `open` carries as `roots` from a device that knows `folder`.
+  static const version = 1;
+}
+
 /// Ranged reads ([FileBrowseAction.read]).
 abstract final class FileBrowseRead {
   /// What `opened` carries when the host answers reads.

@@ -9,7 +9,7 @@ import '../../../helper/toast.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../window_stream/android/agent/phone_self_start.dart';
 import '../../../theme/app_theme.dart';
-import '../../settings.dart' show SettingsSectionSurface;
+import '../../../widget/settings_section_surface.dart';
 import 'android_service_controller.dart';
 
 /// The phone's "window flow service" page: status, a guided one-time setup

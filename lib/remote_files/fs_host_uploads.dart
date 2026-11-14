@@ -9,6 +9,7 @@ import 'fs_host_files.dart';
 import 'fs_paths.dart';
 import 'fs_placement.dart';
 import 'fs_platform.dart';
+import 'fs_share_policy.dart';
 
 /// A file being written from another device's mounted folder: a hidden
 /// copy next to it ([FsUploads.isTemp]) that takes the writes, in the order
@@ -142,7 +143,11 @@ class FsUploads {
         maxPerOwner) {
       throw const FsPathException('busy');
     }
-    final target = await files.resolver.resolveExisting(rootId, relative);
+    final target = await files.resolver.resolveExisting(
+      rootId,
+      relative,
+      use: FsUse.change,
+    );
     final stat = await FileStat.stat(target);
     if (stat.type != FileSystemEntityType.file) {
       throw const FsPathException('not a file');
@@ -212,10 +217,13 @@ class FsUploads {
       }
       // A rename keeps the attributes: the file is not to come out hidden.
       FsPlatform.setHiddenWindows(upload.temp, false);
+      // The shared folders may have changed since writing began.
+      await files.resolver.checkChange(upload.target);
       final now = await _stamp(upload.target);
       var into = upload.target;
       if (now != null && now != upload.base) {
         into = await _beside(upload);
+        await files.resolver.checkChange(into);
       }
       try {
         await File(upload.temp).rename(into);
@@ -225,6 +233,7 @@ class FsUploads {
         }
         // Held open here (Windows will not replace it): kept beside it.
         into = await _beside(upload);
+        await files.resolver.checkChange(into);
         await File(upload.temp).rename(into);
       }
       files.invalidate(upload.rootId);

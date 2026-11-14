@@ -39,6 +39,7 @@
 - [电视投屏（DLNA）](internals/cast-receiver.md)
 - [两台设备的手工验收](internals/manual-reliability-check.md)
 - [网页传输](internals/web-transfer.md)
+- [电脑共享的目录和底线](internals/shared-folders.md)
 - 界面：[design/README.md](design/README.md)
 
 **记录**

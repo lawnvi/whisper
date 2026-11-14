@@ -1766,7 +1766,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String remoteFilesUnsupported(String device) {
-    return 'Whisper en $device necesita actualizarse para explorar sus archivos';
+    return 'Whisper en $device necesita actualizarse para explorar sus carpetas compartidas';
   }
 
   @override
@@ -1841,7 +1841,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String remoteFilesPromptTitle(String device) {
-    return '$device quiere explorar tus archivos';
+    return '$device quiere explorar tus carpetas compartidas';
   }
 
   @override
@@ -1958,7 +1958,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String remoteFilesOpenFirst(String device) {
-    return 'Abre primero los archivos de $device';
+    return 'Abre primero las carpetas compartidas de $device';
   }
 
   @override
@@ -2092,24 +2092,23 @@ class AppLocalizationsEs extends AppLocalizations {
   String get remoteFilesFileManager => 'Archivos';
 
   @override
-  String remoteFilesMountTooOld(String device, String app) {
-    return 'Whisper en $device necesita actualizarse para abrir sus archivos en $app';
+  String remoteFilesMountTooOld(String device) {
+    return 'Whisper en $device necesita actualizarse para poder montar sus carpetas compartidas';
   }
 
   @override
   String remoteFilesMountDenied(String device) {
-    return '$device no permitió el acceso a sus archivos';
+    return '$device no permitió montar sus carpetas compartidas';
   }
 
   @override
   String remoteFilesMountFailed(String app, String device) {
-    return '$app no pudo abrir los archivos de $device';
+    return '$app no pudo montar las carpetas compartidas de $device';
   }
 
   @override
-  String remoteFilesMountNeedsFuse(String app) {
-    return 'Instala fuse3 para abrir los archivos de otros dispositivos en $app';
-  }
+  String get remoteFilesMountNeedsFuse =>
+      'Instala fuse3 para montar las carpetas compartidas de otros dispositivos';
 
   @override
   String remoteFilesCopyFromDevice(String device, String folder) {
@@ -2651,10 +2650,12 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get deviceFilesAlwaysAllowed =>
-      'Permitir siempre explorar mis archivos';
+      'Permitir siempre explorar mis carpetas compartidas';
 
   @override
-  String get deviceMountHere => 'Montar en este equipo';
+  String deviceMountHere(String device) {
+    return 'Montar las carpetas compartidas de $device';
+  }
 
   @override
   String windowStreamCloseStillOpen(String app) {
@@ -2806,15 +2807,16 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String remoteFilesNotAsked(String device) {
-    return '$device debe permitir explorar sus archivos';
+    return '$device debe permitir explorar sus carpetas compartidas';
   }
 
   @override
-  String get deviceFilesAllowChanges => 'Permitir cambios en mis archivos';
+  String get deviceFilesAllowChanges =>
+      'Permitir cambios en mis carpetas compartidas';
 
   @override
   String remoteFilesReadOnlyHost(String device) {
-    return '$device solo permite leer sus archivos';
+    return '$device no permite cambios en sus carpetas compartidas';
   }
 
   @override
@@ -2982,10 +2984,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get shellCardTrust => 'Aceptar conexiones automáticamente';
 
   @override
-  String get shellCardBrowse => 'Explorar mis archivos';
+  String get shellCardBrowse => 'Explorar mis carpetas compartidas';
 
   @override
-  String get shellCardChange => 'Modificar mis archivos';
+  String get shellCardChange => 'Modificar mis carpetas compartidas';
 
   @override
   String get shellCardDiagnostics => 'Diagnóstico de conexión';
@@ -3959,4 +3961,53 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get webTransferNoFolders =>
       'Una página web no puede recibir carpetas. Comprímela antes en un archivo.';
+
+  @override
+  String get sharedFolders => 'Carpetas compartidas';
+
+  @override
+  String sharedFoldersCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count discos',
+      one: '1 disco',
+      zero: 'Ninguno',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get sharedFoldersDisks => 'Discos y particiones';
+
+  @override
+  String get sharedFoldersSystemDisk => 'Disco del sistema';
+
+  @override
+  String get sharedFoldersSystemDiskNote =>
+      'Disco del sistema, solo la carpeta personal';
+
+  @override
+  String get sharedFoldersExcluded => 'Carpetas no compartidas';
+
+  @override
+  String get sharedFoldersExclude => 'Añadir una carpeta para no compartir…';
+
+  @override
+  String sharedFoldersReveal(String app) {
+    return 'Mostrar en $app';
+  }
+
+  @override
+  String get sharedFoldersInclude => 'Volver a compartir';
+
+  @override
+  String get sharedFoldersMissing => 'No encontrada';
+
+  @override
+  String get sharedFoldersAlready => 'Esta carpeta ya no se comparte';
+
+  @override
+  String get sharedFoldersFooter =>
+      'Los demás dispositivos solo pueden explorar lo que se comparte aquí. Las carpetas del sistema, los datos de las apps y las claves nunca se comparten.';
 }

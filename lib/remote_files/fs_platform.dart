@@ -11,12 +11,14 @@ import 'fs_host_files.dart';
 import 'fs_paths.dart';
 
 /// Platform pieces of the remote file manager: the system trash, file
-/// thumbnails, Windows drives and hidden attributes.
+/// thumbnails, Windows drives, known folders and hidden attributes, Android
+/// SD cards and USB drives.
 ///
 /// The runner's `com.vireen.whisper/file_manager` channel answers
 /// `thumbnail {path, size, video}` → JPEG bytes (macOS, Android, Windows,
-/// Linux, iOS) and `trash {path}` → bool (macOS, Linux); a runner without
-/// it falls back to what Dart can do alone.
+/// Linux, iOS), `trash {path}` → bool (macOS, Linux) and `volumes` →
+/// `[{path, label, removable}]` (Android); a runner without it falls back
+/// to what Dart can do alone.
 abstract final class FsPlatform {
   static const _channel = MethodChannel('com.vireen.whisper/file_manager');
 
@@ -199,10 +201,21 @@ abstract final class FsPlatform {
 
   /// Hidden on Windows: the hidden or system attribute (AppData,
   /// desktop.ini, the recycle bin…), as Explorer hides them.
-  static bool isHiddenWindows(String path) {
+  static bool isHiddenWindows(String path) =>
+      Platform.isWindows && fsHiddenFromAttributes(_windowsAttributes(path));
+
+  /// The system's own on Windows: the system attribute (the recycle bin,
+  /// System Volume Information, pagefile.sys, NTUSER.DAT, the old
+  /// "Application Data" junctions in a profile).
+  static bool isSystemWindows(String path) {
     if (!Platform.isWindows) {
       return false;
     }
+    final attributes = _windowsAttributes(path);
+    return attributes != 0xFFFFFFFF && attributes & 0x4 != 0;
+  }
+
+  static int _windowsAttributes(String path) {
     final native = path.toNativeUtf16();
     try {
       var attributes = GetFileAttributes(native);
@@ -220,7 +233,7 @@ abstract final class FsPlatform {
           calloc.free(data);
         }
       }
-      return fsHiddenFromAttributes(attributes);
+      return attributes;
     } finally {
       calloc.free(native);
     }
@@ -245,6 +258,82 @@ abstract final class FsPlatform {
           ),
       ];
     } catch (_) {
+      return const [];
+    }
+  }
+
+  /// Where Windows keeps the user's usual folders now, by kind (desktop,
+  /// documents, downloads, pictures, movies, music): wherever they were
+  /// moved, to another drive or into OneDrive, which a path under the home
+  /// folder would miss.
+  static Map<String, String> windowsKnownFolders() {
+    if (!Platform.isWindows) {
+      return const {};
+    }
+    const ids = {
+      'desktop': FOLDERID_Desktop,
+      'documents': FOLDERID_Documents,
+      'downloads': FOLDERID_Downloads,
+      'pictures': FOLDERID_Pictures,
+      'movies': FOLDERID_Videos,
+      'music': FOLDERID_Music,
+    };
+    final found = <String, String>{};
+    for (final MapEntry(key: kind, value: id) in ids.entries) {
+      final guid = GUIDFromString(id);
+      final path = calloc<Pointer<Utf16>>();
+      try {
+        if (SUCCEEDED(
+          SHGetKnownFolderPath(guid, KF_FLAG_DEFAULT, NULL, path),
+        )) {
+          found[kind] = path.value.toDartString();
+        }
+      } finally {
+        // Set, to be freed, even when the call fails.
+        CoTaskMemFree(path.value);
+        calloc.free(path);
+        calloc.free(guid);
+      }
+    }
+    return found;
+  }
+
+  /// Android's other shared storage, as a USB cable shows it: SD cards and
+  /// USB drives that are in, by the name the system gives them ("SD 卡").
+  static Future<List<FsRoot>> androidVolumes() async {
+    if (!Platform.isAndroid) {
+      return const [];
+    }
+    try {
+      final found =
+          await _channel.invokeListMethod<Object?>('volumes') ?? const [];
+      final roots = <FsRoot>[];
+      final ids = <String>{};
+      for (final volume in found) {
+        if (volume case {
+          'path': final String path,
+          'label': final String label,
+          'removable': final bool removable,
+        } when p.isAbsolute(path) && p.basename(path).isNotEmpty) {
+          final name = p.basename(path);
+          var id = 'vol:$name';
+          for (var n = 2; !ids.add(id); n++) {
+            id = 'vol:$name $n';
+          }
+          roots.add(
+            FsRoot(
+              id: id,
+              directory: path,
+              kind: FsRootKind.volume,
+              label: label.isEmpty ? name : label,
+              removable: removable,
+            ),
+          );
+        }
+      }
+      return roots;
+    } catch (_) {
+      // A runner without it: shared storage only.
       return const [];
     }
   }

@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:math' as math;
 import 'dart:ui' show BoxWidthStyle, PlatformDispatcher;
 
 import 'package:file_picker/file_picker.dart';
@@ -27,12 +26,15 @@ import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/main.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/new_ui/settings/settings_controls.dart';
+import 'package:whisper/new_ui/settings/settings_panel.dart';
+import 'package:whisper/new_ui/settings/settings_shared_folders.dart';
 import 'package:whisper/page/appList.dart';
 import 'package:whisper/page/window_stream/android_service/android_service_page.dart';
 import 'package:whisper/helper/macos_permissions.dart';
 import 'package:whisper/page/remote_files/files_copy_island.dart';
 import 'package:whisper/page/remote_files/files_icons.dart';
 import 'package:whisper/remote_files/fs_host.dart';
+import 'package:whisper/remote_files/fs_shared_folders.dart';
 import 'package:whisper/remote_files/mount/remote_mounts.dart';
 import 'package:whisper/remote_input/remote_input_coordinator.dart';
 import 'package:whisper/share_links/share_link_store.dart';
@@ -49,6 +51,7 @@ import 'package:whisper/cast_receiver/cast_receiver_manager.dart';
 import 'package:whisper/widget/glass_dialog.dart';
 import 'package:whisper/widget/island/island_overlay_setting.dart';
 import 'package:whisper/widget/release_notes.dart';
+import 'package:whisper/widget/settings_section_surface.dart';
 import 'package:whisper/widget/windows_input_service_setting.dart';
 import 'package:whisper/window_stream/linux/gnome_helper_tile.dart';
 import 'package:whisper/window_stream/linux/gnome_shell_helper.dart';
@@ -133,32 +136,6 @@ class SettingsPresentation {
   final String? languageCode;
 }
 
-class SettingsSectionSurface extends StatelessWidget {
-  const SettingsSectionSurface({super.key, required this.children});
-
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    return WhisperGlassSurface(
-      borderRadius: BorderRadius.circular(14),
-      showTopHighlight: false,
-      showShadow: false,
-      neutral: true,
-      // These cards cover a solid page, so backdrop sampling adds no detail
-      // and repaints every visible group throughout the iOS slide transition.
-      blurBackground: false,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: children,
-        ),
-      ),
-    );
-  }
-}
-
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
     super.key,
@@ -186,6 +163,7 @@ class SettingsScreen extends StatefulWidget {
     this.screenshotController,
     this.shareLinks,
     this.readIslandOverlay,
+    this.sharedFolders,
   });
 
   final SettingsPresentationLoader? presentationLoader;
@@ -214,6 +192,9 @@ class SettingsScreen extends StatefulWidget {
   final DesktopScreenshotController? screenshotController;
   final ShareLinkStore? shareLinks;
   final Future<({bool needed, bool allowed})> Function()? readIslandOverlay;
+
+  /// 「共享的文件夹」 on a computer; this one's unless given.
+  final FsSharedFolders? sharedFolders;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -255,6 +236,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Animation<double>? _openingAnimation;
   Completer<void>? _openingTransition;
   int _panelSection = 0;
+  bool _sharedFoldersOpen = false;
   bool _pageScrolled = false;
   bool _isMacPlatform = false;
   String? _pickedLanguage;
@@ -1198,7 +1180,7 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
                       ListenableBuilder(
                         listenable: RemoteMounts.shared,
                         builder: (context, _) => _DeviceSettingTile(
-                          title: l10n.deviceMountHere,
+                          title: l10n.deviceMountHere(device.name),
                           icon: Icon(
                             Icons.drive_file_move_outline,
                             color: palette.ink2,

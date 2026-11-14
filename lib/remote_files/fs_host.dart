@@ -14,6 +14,8 @@ import 'fs_paths.dart';
 import 'fs_placement.dart';
 import 'fs_platform.dart';
 import 'fs_protocol.dart';
+import 'fs_share_policy.dart';
+import 'fs_shared_folders.dart';
 
 /// Sends a file-browse message to a peer; false when it could not.
 typedef FileBrowseSender =
@@ -153,7 +155,15 @@ class FileBrowseHost {
     uploads = FsUploads(this.files);
   }
 
-  static final FileBrowseHost shared = FileBrowseHost();
+  /// 「共享的文件夹」: what this computer lets other devices browse. Null on
+  /// a phone, which offers its storage as it always has.
+  static final FsSharedFolders? sharedFolders = FsSharedFolders.supported
+      ? FsSharedFolders(mounts: () => FsHostFiles.excluded())
+      : null;
+
+  static final FileBrowseHost shared = FileBrowseHost(
+    files: FsHostFiles(sharing: sharedFolders),
+  );
 
   final FsHostFiles files;
   final FileBrowseGate gate;
@@ -312,12 +322,17 @@ class FileBrowseHost {
           final folder = await files.resolver.resolveExisting(
             text('root'),
             text('folder'),
+            use: FsUse.fill,
           );
           if (await FileSystemEntity.type(folder) !=
               FileSystemEntityType.directory) {
             throw const FsPathException('not a folder');
           }
-          TransferPlacements.shared.expect(transferId, folder);
+          TransferPlacements.shared.expect(
+            transferId,
+            folder,
+            guard: files.mayPlace,
+          );
           await _ok(message);
         case FileBrowseAction.create:
           final entry = await files.create(
@@ -498,12 +513,14 @@ class FileBrowseHost {
       deviceName,
     );
     final readOnly = await permissions.isReadOnly(peerId);
-    // Drives and volumes come and go; list what is there now.
+    // Drives, volumes and shared folders come and go; list what is there now.
     await files.refreshRoots();
+    final rootKinds = message.payload['roots'];
+    final folders = rootKinds is int && rootKinds >= FileBrowseRoots.version;
     final roots = <Map<String, Object?>>[];
     for (final root in files.resolver.roots) {
       roots.add({
-        ...root.toJson(),
+        ...root.toJson(folders: folders),
         'shortcuts': [
           for (final shortcut in root.shortcuts)
             if (await Directory('${root.directory}/${shortcut.path}').exists())
@@ -562,6 +579,7 @@ class FileBrowseHost {
       final real = await files.resolver.resolveExisting(
         item['root'] as String,
         item['path'] as String,
+        use: FsUse.copy,
       );
       final folder =
           await FileSystemEntity.type(real) == FileSystemEntityType.directory;

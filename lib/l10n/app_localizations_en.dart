@@ -1742,7 +1742,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String remoteFilesUnsupported(String device) {
-    return 'Whisper on $device needs updating to browse its files';
+    return 'Whisper on $device needs updating to browse its shared folders';
   }
 
   @override
@@ -1818,7 +1818,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String remoteFilesPromptTitle(String device) {
-    return '$device wants to browse your files';
+    return '$device wants to browse your shared folders';
   }
 
   @override
@@ -1934,7 +1934,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String remoteFilesOpenFirst(String device) {
-    return 'Open $device’s files first';
+    return 'Open $device’s shared folders first';
   }
 
   @override
@@ -2067,24 +2067,23 @@ class AppLocalizationsEn extends AppLocalizations {
   String get remoteFilesFileManager => 'Files';
 
   @override
-  String remoteFilesMountTooOld(String device, String app) {
-    return 'Whisper on $device needs updating to open its files in $app';
+  String remoteFilesMountTooOld(String device) {
+    return 'Whisper on $device needs updating before you can mount its shared folders';
   }
 
   @override
   String remoteFilesMountDenied(String device) {
-    return '$device didn\'t allow access to its files';
+    return '$device didn\'t allow mounting its shared folders';
   }
 
   @override
   String remoteFilesMountFailed(String app, String device) {
-    return '$app couldn\'t open the files on $device';
+    return '$app couldn\'t mount $device\'s shared folders';
   }
 
   @override
-  String remoteFilesMountNeedsFuse(String app) {
-    return 'Install fuse3 to open other devices\' files in $app';
-  }
+  String get remoteFilesMountNeedsFuse =>
+      'Install fuse3 to mount other devices\' shared folders';
 
   @override
   String remoteFilesCopyFromDevice(String device, String folder) {
@@ -2619,10 +2618,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get windowStreamShareSetting => 'Share This Computer\'s Windows';
 
   @override
-  String get deviceFilesAlwaysAllowed => 'Always Allow Browsing My Files';
+  String get deviceFilesAlwaysAllowed =>
+      'Always Allow Browsing My Shared Folders';
 
   @override
-  String get deviceMountHere => 'Mount on this computer';
+  String deviceMountHere(String device) {
+    return 'Mount $device\'s shared folders';
+  }
 
   @override
   String windowStreamCloseStillOpen(String app) {
@@ -2770,15 +2772,15 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String remoteFilesNotAsked(String device) {
-    return '$device Needs to Allow Browsing';
+    return '$device Needs to Allow Browsing Its Shared Folders';
   }
 
   @override
-  String get deviceFilesAllowChanges => 'Allow Changes to My Files';
+  String get deviceFilesAllowChanges => 'Allow Changes to My Shared Folders';
 
   @override
   String remoteFilesReadOnlyHost(String device) {
-    return '$device only allows reading its files';
+    return '$device doesn\'t allow changes to its shared folders';
   }
 
   @override
@@ -2946,10 +2948,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get shellCardTrust => 'Accept connections automatically';
 
   @override
-  String get shellCardBrowse => 'Browse my files';
+  String get shellCardBrowse => 'Browse my shared folders';
 
   @override
-  String get shellCardChange => 'Change my files';
+  String get shellCardChange => 'Change my shared folders';
 
   @override
   String get shellCardDiagnostics => 'Connection diagnostics';
@@ -3918,4 +3920,52 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get webTransferNoFolders =>
       'A web page can\'t receive folders. Compress it into one file first.';
+
+  @override
+  String get sharedFolders => 'Shared Folders';
+
+  @override
+  String sharedFoldersCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count disks',
+      one: '1 disk',
+      zero: 'None',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get sharedFoldersDisks => 'Disks and Partitions';
+
+  @override
+  String get sharedFoldersSystemDisk => 'System Disk';
+
+  @override
+  String get sharedFoldersSystemDiskNote => 'System disk, home folder only';
+
+  @override
+  String get sharedFoldersExcluded => 'Folders Not Shared';
+
+  @override
+  String get sharedFoldersExclude => 'Add a Folder Not to Share…';
+
+  @override
+  String sharedFoldersReveal(String app) {
+    return 'Show in $app';
+  }
+
+  @override
+  String get sharedFoldersInclude => 'Share Again';
+
+  @override
+  String get sharedFoldersMissing => 'Not found';
+
+  @override
+  String get sharedFoldersAlready => 'This folder is already not shared';
+
+  @override
+  String get sharedFoldersFooter =>
+      'Other devices can browse only what is shared here. System folders, app data and keys are never shared.';
 }

@@ -337,6 +337,7 @@ class _ShellDeviceCardState extends State<ShellDeviceCard> {
                             child: _Circle(
                               glyph: WhisperGlyph.drive,
                               title: l10n.shellCardMount,
+                              tooltip: l10n.deviceMountHere(device.label),
                               on: RemoteMounts.shared.wants(device.uid),
                               busy: RemoteMounts.shared.isMounting(device.uid),
                               touch: touch,
@@ -484,6 +485,7 @@ class _Circle extends StatelessWidget {
     required this.touch,
     required this.onTap,
     this.sub,
+    this.tooltip,
     this.on = false,
     this.busy = false,
     this.act = false,
@@ -492,6 +494,9 @@ class _Circle extends StatelessWidget {
   final WhisperGlyph glyph;
   final String title;
   final String? sub;
+
+  /// Says on hover what the short [title] does.
+  final String? tooltip;
   final bool on, busy, act, touch;
   final VoidCallback? onTap;
 
@@ -501,7 +506,7 @@ class _Circle extends StatelessWidget {
     final type = WhisperType(touch: touch);
     final background = on ? c.accent : (act ? c.group : c.fill);
     final foreground = on ? c.onAccent : (act ? c.accentText : c.ink);
-    return Opacity(
+    final circle = Opacity(
       opacity: onTap == null && !busy ? .45 : 1,
       child: Pressable(
         onTap: busy ? null : onTap,
@@ -555,5 +560,7 @@ class _Circle extends StatelessWidget {
         ),
       ),
     );
+    final tooltip = this.tooltip;
+    return tooltip == null ? circle : Tooltip(message: tooltip, child: circle);
   }
 }

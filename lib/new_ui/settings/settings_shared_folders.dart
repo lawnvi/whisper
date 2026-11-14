@@ -1,0 +1,513 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
+import 'package:whisper/helper/file.dart';
+import 'package:whisper/helper/toast.dart';
+import 'package:whisper/helper/whisper_file_picker.dart';
+import 'package:whisper/l10n/app_localizations.dart';
+import 'package:whisper/new_ui/phone/panel_menu.dart';
+import 'package:whisper/page/remote_files/files_copy_island.dart';
+import 'package:whisper/page/remote_files/files_icons.dart';
+import 'package:whisper/remote_files/fs_browser.dart';
+import 'package:whisper/remote_files/fs_host_files.dart';
+import 'package:whisper/remote_files/fs_paths.dart';
+import 'package:whisper/remote_files/fs_share_places.dart';
+import 'package:whisper/remote_files/fs_shared_folders.dart';
+import 'package:whisper/theme/whisper_icons.dart';
+import 'package:whisper/theme/whisper_ui.dart';
+
+import 'settings_controls.dart';
+import 'settings_panel.dart';
+
+/// 「共享的目录」 in 共享与权限: how many disks are shared, and the way to
+/// them.
+class SharedFoldersRow extends StatelessWidget {
+  const SharedFoldersRow({
+    super.key,
+    required this.folders,
+    required this.onTap,
+  });
+
+  final FsSharedFolders folders;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    return ListenableBuilder(
+      listenable: folders,
+      builder: (context, _) => SettingsRow(
+        title: l10n.sharedFolders,
+        onTap: onTap,
+        trailing: SettingsDisclosure(
+          value: l10n.sharedFoldersCount(
+            (folders.systemDiskShared ? 1 : 0) + folders.sharedDisks.length,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The page under 共享与权限 (docs/design/surfaces.md「设置」): every disk
+/// and partition with the switch that shares it, the system disk (its home
+/// folder) first; then the folders left out, whose menu shows one in the file
+/// manager or shares it again, and a row that leaves one more out.
+class SharedFoldersPage extends StatefulWidget {
+  const SharedFoldersPage({
+    super.key,
+    required this.folders,
+    required this.back,
+    required this.backLabel,
+    this.pickFolder,
+    this.showMessage,
+  });
+
+  final FsSharedFolders folders;
+  final VoidCallback back;
+  final String backLabel;
+
+  /// The system's folder picker unless given (previews).
+  final Future<String?> Function()? pickFolder;
+  final void Function(String message)? showMessage;
+
+  @override
+  State<SharedFoldersPage> createState() => _SharedFoldersPageState();
+}
+
+class _SharedFoldersPageState extends State<SharedFoldersPage> {
+  FsDisk? _system;
+  List<FsDisk> _disks = const [];
+
+  /// Folders left out that are not there now, such as on a USB stick taken
+  /// out.
+  Set<String> _missing = const {};
+
+  @override
+  void initState() {
+    super.initState();
+    widget.folders.addListener(_check);
+    unawaited(widget.folders.refresh());
+    unawaited(_readDisks());
+    _check();
+  }
+
+  @override
+  void dispose() {
+    widget.folders.removeListener(_check);
+    super.dispose();
+  }
+
+  /// The disks here: read once the page opens.
+  Future<void> _readDisks() async {
+    final system = await widget.folders.systemDisk();
+    final disks = await widget.folders.otherDisks();
+    if (mounted) {
+      setState(() {
+        _system = system;
+        _disks = disks;
+      });
+    }
+  }
+
+  Future<void> _check() async {
+    final missing = <String>{
+      for (final folder in widget.folders.excluded)
+        if (!await FsSharedFolders.exists(folder)) folder,
+    };
+    if (mounted) setState(() => _missing = missing);
+  }
+
+  void _say(String message) {
+    final show = widget.showMessage;
+    show != null
+        ? show(message)
+        : showAppToast(message, tone: AppToastTone.warning);
+  }
+
+  Future<void> _exclude(AppLocalizations l10n) async {
+    final folder = await (widget.pickFolder ?? WhisperFilePicker.pickFolder)();
+    if (folder == null) return;
+    if (await widget.folders.exclude(folder) == FsExcluded.already) {
+      _say(l10n.sharedFoldersAlready);
+    }
+  }
+
+  void _menu(AppLocalizations l10n, String folder, Rect anchor) {
+    unawaited(
+      showPanelMenu(
+        context,
+        anchor: anchor,
+        items: [
+          PanelMenuEntry(
+            label: l10n.sharedFoldersReveal(systemFileManagerName(l10n)),
+            enabled: !_missing.contains(folder),
+            onSelected: () => unawaited(openDir(folder)),
+          ),
+          PanelMenuEntry(
+            label: l10n.sharedFoldersInclude,
+            onSelected: () => unawaited(widget.folders.include(folder)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _diskRow(AppLocalizations l10n, FsDisk disk, {required bool system}) {
+    final folders = widget.folders;
+    final name = disk.label.isEmpty && disk.drive.isEmpty
+        ? l10n.sharedFoldersSystemDisk
+        : diskName(l10n, disk);
+    return _SwitchRow(
+      key: ValueKey(disk.path),
+      icon: _DiskIcon(removable: disk.removable),
+      name: name,
+      // Sharing it shares the home folder on it, not the system's.
+      path: system ? l10n.sharedFoldersSystemDiskNote : disk.path,
+      value: folders.isDiskShared(disk, system: system),
+      onChanged: (on) => unawaited(folders.shareDisk(disk, on, system: system)),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final c = context.wc;
+    final type = WhisperType(touch: SettingsScope.of(context).touch);
+    final folders = widget.folders;
+    final system = _system;
+    return ListenableBuilder(
+      listenable: folders,
+      builder: (context, _) => SettingsPanelPage(
+        title: l10n.sharedFolders,
+        back: widget.back,
+        backLabel: widget.backLabel,
+        children: [
+          SettingsGroupLabel(l10n.sharedFoldersDisks),
+          SettingsGroup(
+            children: [
+              if (system != null) _diskRow(l10n, system, system: true),
+              for (final disk in _disks) _diskRow(l10n, disk, system: false),
+            ],
+          ),
+          const SizedBox(height: 16),
+          SettingsGroupLabel(l10n.sharedFoldersExcluded),
+          SettingsGroup(
+            children: [
+              for (final folder in folders.excluded)
+                _FolderRow(
+                  key: ValueKey(folder),
+                  name: p.basename(folder).isEmpty
+                      ? folder
+                      : p.basename(folder),
+                  path: _shown(folder, folders.home),
+                  missing: _missing.contains(folder)
+                      ? l10n.sharedFoldersMissing
+                      : null,
+                  onMenu: (anchor) => _menu(l10n, folder, anchor),
+                ),
+              _AddRow(
+                label: l10n.sharedFoldersExclude,
+                onTap: () => unawaited(_exclude(l10n)),
+              ),
+            ],
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
+            child: Text(
+              l10n.sharedFoldersFooter,
+              style: TextStyle(fontSize: type.note, height: 1.4, color: c.ink2),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A disk as Explorer names it (「Data (D:)」「本地磁盘 (D:)」), else by its
+/// volume's or folder's name.
+String diskName(AppLocalizations l10n, FsDisk disk) => disk.drive.isEmpty
+    ? disk.label
+    : fsPlaceLabel(
+        l10n,
+        FsPlace(
+          root: '',
+          path: '',
+          kind: 'root',
+          rootKind: 'drive',
+          label: disk.label,
+          drive: disk.drive,
+          removable: disk.removable,
+        ),
+      );
+
+/// ~ for the [home] folder: it is the part nobody needs to read.
+String _shown(String folder, FsRoot? home) {
+  if (home != null && p.isWithin(home.directory, folder)) {
+    return '~${p.separator}${p.relative(folder, from: home.directory)}';
+  }
+  return folder;
+}
+
+/// A folder left out: its icon, name and where it is. Pressed, or clicked
+/// with the other button, it opens its menu where the pointer is.
+class _FolderRow extends StatefulWidget {
+  const _FolderRow({
+    super.key,
+    required this.name,
+    required this.path,
+    required this.missing,
+    required this.onMenu,
+  });
+
+  final String name, path;
+
+  /// Said on the right when the folder is not there now.
+  final String? missing;
+  final ValueChanged<Rect> onMenu;
+
+  @override
+  State<_FolderRow> createState() => _FolderRowState();
+}
+
+class _FolderRowState extends State<_FolderRow> {
+  Offset? _pointer;
+
+  /// Where the menu grows from: the pointer, or the row from a key.
+  Rect _anchor() {
+    final row = panelMenuAnchor(context);
+    final pointer = _pointer;
+    _pointer = null;
+    if (pointer == null) return row;
+    final overlay =
+        Navigator.of(context, rootNavigator: true).context.findRenderObject()!
+            as RenderBox;
+    return Rect.fromCenter(
+      center: overlay.globalToLocal(pointer),
+      width: 1,
+      height: 1,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.wc;
+    final scope = SettingsScope.of(context);
+    final missing = widget.missing;
+    return Listener(
+      onPointerDown: (event) => _pointer = event.position,
+      child: GestureDetector(
+        onSecondaryTapUp: (details) {
+          _pointer = details.globalPosition;
+          widget.onMenu(_anchor());
+        },
+        child: Pressable(
+          scale: 1,
+          radius: scope.page ? 0 : WhisperRadius.xs,
+          label: widget.name,
+          onTap: () => widget.onMenu(_anchor()),
+          child: SettingsHighlight(
+            hover: scope.touch ? null : c.fill,
+            press: scope.touch ? c.fill : c.fill2,
+            child: _PlaceRowBody(
+              icon: Opacity(
+                opacity: missing == null ? 1 : .45,
+                child: const _FolderIcon(),
+              ),
+              name: widget.name,
+              path: widget.path,
+              dim: missing != null,
+              trailing: missing == null ? null : SettingsValue(missing),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A disk, with the switch that shares it. The whole row
+/// flips it, as a switch row does.
+class _SwitchRow extends StatelessWidget {
+  const _SwitchRow({
+    super.key,
+    required this.icon,
+    required this.name,
+    required this.path,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final Widget icon;
+  final String name, path;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    container: true,
+    excludeSemantics: true,
+    label: '$name, $path',
+    toggled: value,
+    onTap: () => onChanged(!value),
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      excludeFromSemantics: true,
+      onTap: () => onChanged(!value),
+      child: _PlaceRowBody(
+        icon: icon,
+        name: name,
+        path: path,
+        trailing: WhisperSwitch(
+          value: value,
+          onChanged: onChanged,
+          label: name,
+        ),
+      ),
+    ),
+  );
+}
+
+/// An icon of 28, a name, where it is under it, and what is on the right.
+class _PlaceRowBody extends StatelessWidget {
+  const _PlaceRowBody({
+    required this.icon,
+    required this.name,
+    required this.path,
+    this.dim = false,
+    this.trailing,
+  });
+
+  final Widget icon;
+  final String name, path;
+
+  /// The name in the quiet colour: the folder is not there now.
+  final bool dim;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.wc;
+    final scope = SettingsScope.of(context);
+    final type = WhisperType(touch: scope.touch);
+    final trailing = this.trailing;
+    return SettingsRowFrame(
+      minHeight: scope.touch ? 60 : 52,
+      child: Row(
+        children: [
+          SizedBox(width: 28, child: Center(child: icon)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: type.body,
+                    height: 1.3,
+                    color: dim ? c.ink2 : c.ink,
+                  ),
+                ),
+                Text(
+                  path,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: type.note,
+                    height: 1.3,
+                    color: c.ink2,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (trailing != null) ...[const SizedBox(width: 10), trailing],
+        ],
+      ),
+    );
+  }
+}
+
+class _FolderIcon extends StatelessWidget {
+  const _FolderIcon();
+
+  @override
+  Widget build(BuildContext context) => const FsFileIcon(
+    entry: FsEntry(name: '', isDir: true, size: 0, modifiedMs: 0),
+    size: 28,
+  );
+}
+
+/// A disk, or a USB stick or card, drawn as the file pages draw them.
+class _DiskIcon extends StatelessWidget {
+  const _DiskIcon({required this.removable});
+
+  final bool removable;
+
+  @override
+  Widget build(BuildContext context) => Icon(
+    removable ? Icons.usb_rounded : Icons.storage_rounded,
+    size: 22,
+    color: context.wc.ink2,
+  );
+}
+
+/// 「添加不共享的目录…」, in the accent colour like a link, its plus where the
+/// folders have their icon.
+class _AddRow extends StatelessWidget {
+  const _AddRow({required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.wc;
+    final scope = SettingsScope.of(context);
+    final type = WhisperType(touch: scope.touch);
+    return Pressable(
+      scale: 1,
+      radius: scope.page ? 0 : WhisperRadius.xs,
+      label: label,
+      onTap: onTap,
+      child: SettingsHighlight(
+        hover: scope.touch ? null : c.fill,
+        press: scope.touch ? c.fill : c.fill2,
+        child: SettingsRowFrame(
+          child: Row(
+            children: [
+              SizedBox(
+                width: 28,
+                child: Center(
+                  child: WhisperIcon(
+                    WhisperGlyph.plus,
+                    size: 16,
+                    weight: 2,
+                    color: c.accentText,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: type.body,
+                    height: 1.3,
+                    color: c.accentText,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

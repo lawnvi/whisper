@@ -786,7 +786,7 @@ Future<Map<String, Object?>> _wsOffer(HookParams params) async {
 
 // -------------------------------------------------------------- file browser
 
-FsHostFiles get _localFiles => FileBrowseHost.shared.files;
+final _localFiles = FsHostFiles(); // Whole, as this device's own pane.
 final _fileClients = <String, RemoteFilesClient>{};
 
 bool _isLocal(String peer) => peer.isEmpty || peer == 'local';

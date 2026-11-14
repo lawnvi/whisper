@@ -4,6 +4,9 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.media.ThumbnailUtils
 import android.os.Build
+import android.os.Environment
+import android.os.storage.StorageManager
+import android.os.storage.StorageVolume
 import android.util.Size
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.MethodCall
@@ -13,9 +16,9 @@ import java.io.File
 import java.util.concurrent.Executors
 
 /**
- * Thumbnails for the remote file manager (another device browsing this
- * phone's files). Android has no trash: deletions are confirmed in the UI
- * and done in Dart.
+ * Thumbnails and the SD cards and USB drives for the remote file manager
+ * (another device browsing this phone's files). Android has no trash:
+ * deletions are confirmed in the UI and done in Dart.
  */
 class FileManagerPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     private lateinit var channel: MethodChannel
@@ -48,6 +51,13 @@ class FileManagerPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 }
             }
             "trash" -> result.success(false)
+            "volumes" -> result.success(
+                try {
+                    volumes()
+                } catch (_: Exception) {
+                    emptyList<Map<String, Any>>()
+                },
+            )
             "scan" -> {
                 val paths = call.argument<List<String>>("paths").orEmpty()
                 if (paths.isNotEmpty() && context != null) {
@@ -57,6 +67,42 @@ class FileManagerPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
             }
             else -> result.notImplemented()
         }
+    }
+
+    /**
+     * The shared storage other than the phone's own that is mounted now, as
+     * a USB cable shows it: SD cards and USB drives, named as Settings names
+     * them.
+     */
+    private fun volumes(): List<Map<String, Any>> {
+        val context = context ?: return emptyList()
+        val manager = context.getSystemService(StorageManager::class.java) ?: return emptyList()
+        val found: List<Pair<StorageVolume, File>> =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                manager.storageVolumes.mapNotNull { volume ->
+                    volume.directory?.let { volume to it }
+                }
+            } else {
+                // .../Android/data/<package>/files on each volume.
+                context.getExternalFilesDirs(null).filterNotNull().mapNotNull { dir ->
+                    val root = dir.parentFile?.parentFile?.parentFile?.parentFile
+                    val volume = manager.getStorageVolume(dir)
+                    if (root == null || volume == null) null else volume to root
+                }
+            }
+        return found
+            .filter { (volume, _) ->
+                !volume.isPrimary &&
+                    (volume.state == Environment.MEDIA_MOUNTED ||
+                        volume.state == Environment.MEDIA_MOUNTED_READ_ONLY)
+            }
+            .map { (volume, root) ->
+                mapOf(
+                    "path" to root.absolutePath,
+                    "label" to volume.getDescription(context).orEmpty(),
+                    "removable" to volume.isRemovable,
+                )
+            }
     }
 
     private fun thumbnail(file: File, size: Int, video: Boolean): ByteArray? {

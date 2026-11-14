@@ -86,10 +86,10 @@ On Android, long-press a file message and choose "Share" to send the file on thr
 
 Switch to "Files" at the top of a conversation (on the device page on a phone) to browse the other device's files as you would in your own file manager. The other device must be connected and running a recent version of Whisper.
 
-Each time, the other device asks first, with "Don't allow" and "Allow"; allowing lets you view and copy out this once. To allow it for good, or to allow changes, turn on "Browse my files" and "Change my files" on the device card (the info button at the top right); turning them off takes that back.
+Each time, the other device asks first, with "Don't allow" and "Allow"; allowing lets you view and copy out this once. To allow it for good, or to allow changes, turn on "Browse my shared folders" and "Change my shared folders" on the device card (the info button at the top right); turning them off takes that back.
 
-- **Computer**: the other device sees your home folder (and each drive on Windows). Deleted files go to the Trash.
-- **Android**: the other device sees internal storage. Phones have no Trash, so deleting asks once more.
+- **Computer**: the other device sees the disks turned on in "Shared Folders", without the system's folders and the folders not shared. Deleted files go to the Trash.
+- **Android**: the other device sees what a USB cable shows: internal storage, plus each SD card and USB drive that is in. Phones have no Trash, so deleting asks once more.
 
 | To do this | Do this |
 | --- | --- |
@@ -100,11 +100,26 @@ Each time, the other device asks first, with "Don't allow" and "Allow"; allowing
 
 Copy progress shows at the top of the window. "Transfers" in the sidebar lists every copy, where you can resume, retry, or stop it; after a disconnect a copy waits for the device to come back and continues. Pasting the same files into the same place again within a few seconds counts as one copy.
 
-### Mount on this computer
+### Which folders a computer shares
 
-On macOS, Windows, and Linux you can also put the other device's files into the system file manager and open them in any app without copying them first. Android phones and computers can both be mounted.
+On the computer, open Settings, then "Sharing & Permissions › Shared Folders". It has two groups:
 
-- Select the info button at the top right, then turn on "Mount", and the files are mounted whenever the device connects. For a one-off, right-click in "Files" and choose "Open in Finder" ("Open in File Explorer" on Windows).
+- **Disks and Partitions**: a switch for each disk. The system disk (C: on Windows, Macintosh HD on a Mac, the root partition on Linux) starts on and shares only your home folder on it: the rest of it holds the system and installed programs. Other disks, partitions and USB sticks start off; turning one on shares the ordinary folders on the whole disk.
+- **Folders Not Shared**: select "Add a Folder Not to Share…" and pick a folder; it and everything in it are no longer shown. Select one to show it in Finder (File Explorer, the file manager) or to "Share Again". A folder already inside one not shared says it is already not shared; a folder holding some already in the list takes their place; picking a whole disk (or your home folder on the system disk) switches that disk off. A folder on a USB stick that is out says "Not found".
+
+Whatever you set, these are never shared: the folders of the system and its programs (Windows, Program Files and ProgramData; the Mac's System, Applications and Library; /usr, /etc and the like on Linux), hidden items and recycle bins at the top of each disk, other users' folders, the hidden items starting with `.` in your home folder (such as `.ssh` and `.config`), Windows' `AppData`, and Whisper's own data. Symbolic links to them don't open either.
+
+The settings are the same for every device allowed to browse. Changes apply from the other device's next action, without reconnecting; a disk you turn on shows up the next time it opens your files.
+
+- A shared disk itself can't be renamed, moved or deleted. When the other device opens a folder that holds one not shared, it doesn't see that one and can't copy the whole folder out, though it can copy everything else in it.
+- In a Git repository, the other device can look at the hooks and config (`hooks` and `config` in `.git`) but not change them, and it can't create, delete or replace `.git` either.
+- A device with an older version of Whisper can still browse.
+
+### Mount another device's shared folders
+
+On macOS, Windows, and Linux you can also mount the other device's shared folders in the system file manager and open them in any app without copying them first. A mount shows the same as browsing in "Files": a computer's "Shared Folders", or an Android phone's internal storage plus any SD card or USB drive in it.
+
+- Select the info button at the top right, then turn on "Mount", and the folders are mounted whenever the device connects.
 - Where the files appear:
   - **macOS**: under Locations in the Finder sidebar, one disk per device, named "device name (Whisper)".
   - **Windows**: under "Devices and drives" in This PC, named "device name (Whisper)", and in the File Explorer navigation pane with the Whisper icon.
@@ -113,12 +128,12 @@ On macOS, Windows, and Linux you can also put the other device's files into the 
   - A save is written to a hidden copy next to the file and put in its place in one go, so a dropped connection never leaves a half-written file.
   - If the file changes on the other device while you write it, the original is left alone and what you wrote is saved next to it as "name (this device)".
   - Deleting a file that was already there sends it to the other device's Trash (Android has none, so it is deleted); files made in the mount are deleted right away.
-  - If the other device turns off "Change my files" on its device card, the mount only lets you open and copy files out.
+  - If the other device turns off "Change my shared folders" on its device card, the mount only lets you open and copy files out.
   - On macOS, the `._` and `.DS_Store` files Finder writes stay on this Mac and never reach the other device.
   - On Windows, files you create or change in File Explorer are sent a few seconds after they are closed.
 - Only the parts of a file that are opened are transferred, so speed depends on the network and the other device.
 - Unless the other device chose "Always allow", it has to allow each mount.
-- A mount goes away when the device disconnects, "Mount on this computer" stays on, and the files come back when it reconnects. Ejecting the mount in Finder or a Linux file manager turns the switch off.
+- A mount goes away when the device disconnects, "Mount" stays on, and the files come back when it reconnects. Ejecting the mount in Finder or a Linux file manager turns the switch off.
 - On Windows, files changed on the other device update within about 5 seconds, and new files appear the next time you open their folder.
 
 ## Share links

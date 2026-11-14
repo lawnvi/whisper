@@ -7,19 +7,20 @@ import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqlite3/sqlite3.dart';
 import 'package:sqlite3_flutter_libs/sqlite3_flutter_libs.dart';
-import 'package:whisper/state/app_health.dart';
 import 'package:whisper/remote_input/remote_input_layout.dart';
 import 'package:whisper/socket/auth_protocol.dart';
 import 'package:whisper/socket/file_transfer_v3.dart';
 
 import '../helper/helper.dart';
 import '../helper/ios_sandbox_path.dart';
-import '../helper/user_directories.dart';
+import 'database_location.dart';
 import 'device.dart';
 import 'favorite_text.dart';
 import 'file_transfer.dart';
 import 'message.dart';
 
+export 'database_location.dart'
+    show canOpenMacOSDatabase, migrateLegacyMacOSDatabase;
 export 'device.dart' show DeviceData;
 
 part 'LocalDatabase.g.dart';
@@ -2119,8 +2120,7 @@ extension RemoteInputLayoutDataAutoRoleX on RemoteInputLayoutData {
 LazyDatabase _openConnection() {
   // the LazyDatabase util lets us find the right location for the file async.
   return LazyDatabase(() async {
-    final dbFolder = await _databaseDirectory();
-    final file = File('${dbFolder.path}/db.sqlite');
+    final file = await databaseFile();
 
     // Also work around limitations on old Android versions
     if (Platform.isAndroid) {
@@ -2139,124 +2139,6 @@ LazyDatabase _openConnection() {
       setup: configureWhisperDatabase,
     );
   });
-}
-
-Future<Directory> _databaseDirectory() async {
-  if (Platform.isMacOS) {
-    final currentDirectory = await getApplicationSupportDirectory();
-    final currentDatabase = File('${currentDirectory.path}/db.sqlite');
-    if (await currentDatabase.exists()) {
-      return currentDirectory;
-    }
-    final home = Platform.environment['HOME'];
-    if (home != null && home.isNotEmpty) {
-      final legacyDirectory = Directory(
-        '$home/Library/Containers/com.vireen.whisper/Data/Documents',
-      );
-      final legacyDatabase = File('${legacyDirectory.path}/db.sqlite');
-      if (await migrateLegacyMacOSDatabase(
-        legacyDatabase: legacyDatabase,
-        destinationDirectory: currentDirectory,
-      )) {
-        return currentDirectory;
-      }
-      if (await canOpenMacOSDatabase(legacyDatabase)) {
-        return legacyDirectory;
-      }
-      AppHealth.shared.oldHistoryUnreadable = await legacyDatabase.exists();
-    }
-    return currentDirectory;
-  }
-  if (Platform.isIOS) {
-    // Documents is the Whisper folder the Files app shows (received files,
-    // other devices browsing it): the database lives out of sight, in
-    // Application Support, moved there from Documents once.
-    final support = await getApplicationSupportDirectory();
-    final current = File('${support.path}/db.sqlite');
-    if (await current.exists()) {
-      return support;
-    }
-    final documents = await userDocumentsDirectory();
-    final legacy = File('${documents.path}/db.sqlite');
-    if (await migrateLegacyMacOSDatabase(
-      legacyDatabase: legacy,
-      destinationDirectory: support,
-    )) {
-      for (final suffix in const ['', '-wal', '-shm']) {
-        try {
-          await File('${legacy.path}$suffix').delete();
-        } on FileSystemException {
-          // Already gone.
-        }
-      }
-      return support;
-    }
-    if (await legacy.exists()) {
-      return documents;
-    }
-    await support.create(recursive: true);
-    return support;
-  }
-  return userDocumentsDirectory();
-}
-
-Future<bool> migrateLegacyMacOSDatabase({
-  required File legacyDatabase,
-  required Directory destinationDirectory,
-}) async {
-  final destination = File('${destinationDirectory.path}/db.sqlite');
-  if (await destination.exists()) {
-    return true;
-  }
-  if (!await legacyDatabase.exists()) {
-    return false;
-  }
-
-  await destinationDirectory.create(recursive: true);
-  final temporary = File('${destination.path}.migrating');
-  Database? source;
-  Database? target;
-  try {
-    if (await temporary.exists()) {
-      await temporary.delete();
-    }
-    source = sqlite3.open(legacyDatabase.path, mode: OpenMode.readOnly);
-    target = sqlite3.open(temporary.path);
-    await source.backup(target, nPage: -1).drain<void>();
-    target.dispose();
-    target = null;
-    source.dispose();
-    source = null;
-    await temporary.rename(destination.path);
-    return true;
-  } catch (_) {
-    return false;
-  } finally {
-    target?.dispose();
-    source?.dispose();
-    if (await temporary.exists()) {
-      await temporary.delete();
-    }
-  }
-}
-
-/// Whether a database left in an old sandboxed install's container can be used
-/// where it is. macOS may keep this app out of that container, signed differently
-/// as it is: the file is there, and opening it fails. Going ahead with it would
-/// leave the app with no database at all, and so no server and no discovery either,
-/// with nothing on screen to say so. Its history stays where it is, untouched.
-Future<bool> canOpenMacOSDatabase(File database) async {
-  if (!await database.exists()) return false;
-  Database? opened;
-  try {
-    opened = sqlite3.open(database.path);
-    opened.select('SELECT count(*) FROM sqlite_master');
-    return true;
-  } catch (_) {
-    return false;
-  } finally {
-    opened?.dispose();
-  }
 }
 
 void configureWhisperDatabase(Database database) {

@@ -861,7 +861,7 @@
       }
     }
   },
-  "remoteFilesUnsupported": "{device} 上的 Whisper 需要更新到最新版才能浏览文件",
+  "remoteFilesUnsupported": "{device} 上的 Whisper 需要更新到最新版，才能浏览它共享的目录",
   "@remoteFilesUnsupported": {
     "placeholders": {
       "device": {
@@ -905,7 +905,7 @@
   "remoteFilesPlaceCamera": "相机",
   "remoteFilesPlaceMovies": "影片",
   "remoteFilesPlaceMusic": "音乐",
-  "remoteFilesPromptTitle": "{device} 请求访问你的文件",
+  "remoteFilesPromptTitle": "{device} 想浏览你共享的目录",
   "@remoteFilesPromptTitle": {
     "placeholders": {
       "device": {
@@ -984,7 +984,7 @@
   "remoteFilesRefresh": "刷新",
   "remoteFilesSameDevice": "已在该设备上",
   "remoteFilesBetweenOthers": "只能在本机和另一台设备之间复制",
-  "remoteFilesOpenFirst": "先打开 {device} 的文件",
+  "remoteFilesOpenFirst": "先打开 {device} 共享的目录",
   "@remoteFilesOpenFirst": {
     "placeholders": {
       "device": {
@@ -1069,18 +1069,15 @@
   "remoteFilesFinder": "访达",
   "remoteFilesExplorer": "文件资源管理器",
   "remoteFilesFileManager": "文件管理器",
-  "remoteFilesMountTooOld": "{device} 上的 Whisper 需要更新，才能在{app}中打开文件",
+  "remoteFilesMountTooOld": "{device} 上的 Whisper 需要更新，才能挂载它共享的目录",
   "@remoteFilesMountTooOld": {
     "placeholders": {
       "device": {
         "type": "String"
-      },
-      "app": {
-        "type": "String"
       }
     }
   },
-  "remoteFilesMountDenied": "{device} 未允许访问文件",
+  "remoteFilesMountDenied": "{device} 未允许挂载它共享的目录",
   "@remoteFilesMountDenied": {
     "placeholders": {
       "device": {
@@ -1088,7 +1085,7 @@
       }
     }
   },
-  "remoteFilesMountFailed": "{app}无法打开 {device} 的文件",
+  "remoteFilesMountFailed": "{app}没能挂载 {device} 共享的目录",
   "@remoteFilesMountFailed": {
     "placeholders": {
       "app": {
@@ -1099,14 +1096,7 @@
       }
     }
   },
-  "remoteFilesMountNeedsFuse": "要在{app}中打开其他设备的文件，需要先安装 fuse3",
-  "@remoteFilesMountNeedsFuse": {
-    "placeholders": {
-      "app": {
-        "type": "String"
-      }
-    }
-  },
+  "remoteFilesMountNeedsFuse": "要挂载其他设备共享的目录，需要先安装 fuse3",
   "remoteFilesCopyFromDevice": "从 {device} 复制到“{folder}”",
   "@remoteFilesCopyFromDevice": {
     "placeholders": {
@@ -1782,11 +1772,18 @@
   "@windowStreamShareSetting": {
     "description": "Settings switch: whether trusted devices may open and control this computer's windows (window flow source)"
   },
-  "deviceFilesAlwaysAllowed": "始终允许浏览我的文件",
+  "deviceFilesAlwaysAllowed": "始终允许浏览我共享的目录",
   "@deviceFilesAlwaysAllowed": {
     "description": "Device page switch: this device may browse my files without asking each time. Turning it off takes back an earlier \"Always allow\"."
   },
-  "deviceMountHere": "挂载到本机",
+  "deviceMountHere": "挂载 {device} 共享的目录",
+  "@deviceMountHere": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
   "windowStreamCloseStillOpen": "“{app}”还没有关闭，可能在问你是否保存",
   "@windowStreamCloseStillOpen": {
     "description": "Toast after closing a window from the recents: the window stayed open on its device (for example a save prompt).",
@@ -1976,7 +1973,7 @@
   "@remoteFilesNoAnswerDetail": {
     "description": "File browser: under remoteFilesNoAnswer."
   },
-  "remoteFilesNotAsked": "浏览 {device} 的文件需要对方允许",
+  "remoteFilesNotAsked": "浏览 {device} 共享的目录需要对方允许",
   "@remoteFilesNotAsked": {
     "description": "File browser: another device whose files have not been allowed in this window yet (not asked, or the user stopped waiting); a button asks.",
     "placeholders": {
@@ -1985,11 +1982,11 @@
       }
     }
   },
-  "deviceFilesAllowChanges": "允许修改我的文件",
+  "deviceFilesAllowChanges": "允许修改我共享的目录",
   "@deviceFilesAllowChanges": {
     "description": "Device page switch under 'Always allow browsing my files'. Off, this device may open and copy my files but not create, rename, delete or change them, in its file browser or where it mounts them."
   },
-  "remoteFilesReadOnlyHost": "{device} 只允许读取文件",
+  "remoteFilesReadOnlyHost": "{device} 不允许修改它共享的目录",
   "@remoteFilesReadOnlyHost": {
     "description": "Toast when trying to change files on a device whose user allows reading only.",
     "placeholders": {
@@ -2118,8 +2115,8 @@
     }
   },
   "shellCardTrust": "自动接受连接",
-  "shellCardBrowse": "浏览我的文件",
-  "shellCardChange": "修改我的文件",
+  "shellCardBrowse": "浏览我共享的目录",
+  "shellCardChange": "修改我共享的目录",
   "shellCardDiagnostics": "连接诊断",
   "shellCardWake": "唤醒",
   "shellCardAlias": "备注名",
@@ -2917,5 +2914,31 @@
     }
   },
   "webTransferAwaitingDownload": "等对方下载",
-  "webTransferNoFolders": "网页不能接收文件夹，可以先压缩成一个文件"
+  "webTransferNoFolders": "网页不能接收文件夹，可以先压缩成一个文件",
+  "sharedFolders": "共享的目录",
+  "sharedFoldersCount": "{count, plural, =0{无} other{{count} 个磁盘}}",
+  "@sharedFoldersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sharedFoldersDisks": "磁盘和分区",
+  "sharedFoldersSystemDisk": "系统盘",
+  "sharedFoldersSystemDiskNote": "系统盘，只共享主目录",
+  "sharedFoldersExcluded": "不共享的目录",
+  "sharedFoldersExclude": "添加不共享的目录…",
+  "sharedFoldersReveal": "在{app}中显示",
+  "@sharedFoldersReveal": {
+    "placeholders": {
+      "app": {
+        "type": "String"
+      }
+    }
+  },
+  "sharedFoldersInclude": "恢复共享",
+  "sharedFoldersMissing": "找不到",
+  "sharedFoldersAlready": "这个目录已经不共享了",
+  "sharedFoldersFooter": "其他设备只能浏览这里共享的目录，系统目录、应用数据和密钥始终不共享。"
 }
