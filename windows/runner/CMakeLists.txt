@@ -13,6 +13,8 @@ add_executable(${BINARY_NAME} WIN32
   "file_manager_plugin.cpp"
   "flutter_window.cpp"
   "input_service.cpp"
+  "input_service_manifest.cpp"
+  "input_service_update.cpp"
   "main.cpp"
   "remote_input_plugin.cpp"
   "screenshot_plugin.cpp"
@@ -46,6 +48,16 @@ target_link_libraries(${BINARY_NAME} PRIVATE "dwmapi.lib" "ole32.lib" "windowsco
 target_link_libraries(${BINARY_NAME} PRIVATE "msimg32.lib")
 target_link_libraries(${BINARY_NAME} PRIVATE "wtsapi32.lib")
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
+
+# Ed25519 for the input service's self-update (third_party/monocypher/README.md).
+# C, and built with the compiler's default warnings: it is not ours to change.
+set(MONOCYPHER_DIR "${CMAKE_SOURCE_DIR}/../third_party/monocypher")
+add_library(monocypher STATIC
+  "${MONOCYPHER_DIR}/monocypher.c"
+  "${MONOCYPHER_DIR}/optional/monocypher-ed25519.c"
+)
+target_include_directories(monocypher PUBLIC "${MONOCYPHER_DIR}")
+target_link_libraries(${BINARY_NAME} PRIVATE monocypher)
 
 # Run the Flutter tool portions of the build. This must not be removed.
 add_dependencies(${BINARY_NAME} flutter_assemble)

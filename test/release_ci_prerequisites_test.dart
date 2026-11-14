@@ -34,7 +34,10 @@ void main() {
         contains(r'Resolve-Path -LiteralPath $env:WINDOWS_RELEASE_DIR'),
       );
       expect(workflow, contains(r'$destination = Join-Path $releaseDir $_'));
-      expect(workflow, contains(r'/DBUILD_DIR="$env:WINDOWS_RELEASE_DIR"'));
+      // Packed by its own job from the uploaded build, once the input
+      // service's manifest is signed beside it.
+      expect(workflow, contains(r'path: ${{ env.WINDOWS_RELEASE_DIR }}'));
+      expect(workflow, contains(r'/DBUILD_DIR="$buildDir"'));
       expect(windowsInstaller, contains(r'!define BUILD_DIR'));
       expect(windowsInstaller, contains(r'File /r "${BUILD_DIR}\*.*"'));
       expect(
@@ -55,5 +58,4 @@ void main() {
     expect(removeConflict, greaterThanOrEqualTo(0));
     expect(installDependencies, greaterThan(removeConflict));
   });
-
 }

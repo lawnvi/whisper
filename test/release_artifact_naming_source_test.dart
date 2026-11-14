@@ -49,7 +49,7 @@ void main() {
     expect(workflow, contains('merge-multiple: true'));
     expect(workflow, contains('      - build-on-macos'));
     expect(workflow, contains('      - build-on-macos-intel'));
-    expect(workflow, contains('      - build-on-windows'));
+    expect(workflow, contains('      - package-windows'));
     expect(workflow, contains('      - build-on-linux'));
     expect(workflow, contains('files: release-assets/**/*'));
     expect(workflow, contains('overwrite_files: true'));
@@ -75,7 +75,7 @@ void main() {
     for (final job in <String>[
       'build-on-macos',
       'build-on-macos-intel',
-      'build-on-windows',
+      'package-windows',
       'build-on-linux',
     ]) {
       expect(allTarget, contains("needs.$job.result == 'success'"));

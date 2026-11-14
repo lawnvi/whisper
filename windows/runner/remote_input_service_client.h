@@ -8,6 +8,7 @@
 
 #include <mutex>
 #include <string>
+#include <thread>
 
 #include "input_service_protocol.h"
 
@@ -87,16 +88,32 @@ class RemoteInputServiceClient {
     hello.command = whisper_input_service::kCommandHello;
     whisper_input_service::Response response = {};
     retry_tick_ = 0;
+    // A newer service still serves this app, and keeps itself up to date
+    // (RequestUpdate); an older one has to be reinstalled.
     if (Transact(&hello, &response) &&
-        response.version != whisper_input_service::kVersion) {
+        response.version < whisper_input_service::kUpdateVersion) {
       state = State::kOutdated;
     }
     return state;
   }
 
-  // Runs this executable again behind a UAC prompt, in one of the elevated
-  // roles. Success only means the user accepted the prompt; the caller polls
-  // for the outcome.
+  // Asks the service to update itself from the files beside this executable,
+  // which it takes only when they are signed and newer than itself. Returns
+  // a whisper_input_service::Status.
+  DWORD RequestUpdate() {
+    whisper_input_service::Request request = {};
+    request.command = whisper_input_service::kCommandUpdate;
+    whisper_input_service::Response response = {};
+    return Transact(&request, &response)
+               ? response.status
+               : static_cast<DWORD>(whisper_input_service::kStatusFailed);
+  }
+
+  // Runs one of the elevated roles behind a UAC prompt. Installing copies
+  // this executable, so it runs this one; everything else runs the installed
+  // copy, which only an administrator can have put there, unlike this folder.
+  // Success only means the user accepted the prompt; the caller polls for the
+  // outcome.
   DWORD RunElevated(const wchar_t* argument) {
     Disconnect();
     std::wstring path(32768, L'\0');
@@ -106,6 +123,13 @@ class RemoteInputServiceClient {
       return ERROR_PATH_NOT_FOUND;
     }
     path.resize(length);
+    const std::wstring installed =
+        whisper_input_service::InstalledExecutablePath();
+    if (wcscmp(argument, whisper_input_service::kInstallArgument) != 0 &&
+        !installed.empty() &&
+        GetFileAttributesW(installed.c_str()) != INVALID_FILE_ATTRIBUTES) {
+      path = installed;
+    }
 
     SHELLEXECUTEINFOW info = {};
     info.cbSize = sizeof(info);
@@ -144,7 +168,9 @@ class RemoteInputServiceClient {
     // Only what is new in this version says so: an agent a version behind
     // still serves the rest (a user may not have updated it yet).
     request->version =
-        request->command == whisper_input_service::kCommandAllowForeground
+        request->command == whisper_input_service::kCommandUpdate
+            ? whisper_input_service::kUpdateVersion
+        : request->command == whisper_input_service::kCommandAllowForeground
             ? whisper_input_service::kAllowForegroundVersion
             : whisper_input_service::kOldestClientVersion;
     // The agent is replaced whenever the console session changes, so one
@@ -234,6 +260,19 @@ class RemoteInputServiceClient {
 inline RemoteInputServiceClient& SharedRemoteInputService() {
   static RemoteInputServiceClient client;
   return client;
+}
+
+// Lets the service catch up with this app once it has started, without
+// asking anyone: an app update leaves the new files beside whisper.exe, and
+// the service takes them only when they are signed and newer than itself.
+inline void UpdateRemoteInputServiceLater() {
+  std::thread([] {
+    Sleep(3000);
+    RemoteInputServiceClient& service = SharedRemoteInputService();
+    if (service.QueryState() == RemoteInputServiceClient::State::kRunning) {
+      service.RequestUpdate();
+    }
+  }).detach();
 }
 
 #endif  // WHISPER_REMOTE_INPUT_SERVICE_CLIENT_H_

@@ -26,6 +26,9 @@
   !define INPUT_SERVICE_OPT_OUT "InputServiceOptOut"
 !endif
 
+; Where the service runs from, as windows/runner/input_service_protocol.h says.
+!define INPUT_SERVICE_EXE "$PROGRAMFILES64\Whisper Input Service\whisper_input_service.exe"
+
 !ifndef INSTALL_ROOT
   !define INSTALL_ROOT "$LocalAppData\Programs\${APP_NAME}"
 !endif
@@ -148,16 +151,23 @@ Section "Install"
 
   WriteUninstaller "$INSTDIR\Uninstall.exe"
 
-  ; The lock screen input service comes with the app and is brought up to date
-  ; on every upgrade, which takes one elevation prompt. Whoever removed it from
-  ; the app's settings is not asked again.
+  ; The lock screen input service comes with the app, which takes one
+  ; elevation prompt. Whoever removed it from the app's settings is not asked
+  ; again.
   ReadRegDWORD $0 HKCU "Software\${APP_NAME}" "${INPUT_SERVICE_OPT_OUT}"
   StrCmp $0 "1" input_service_installed
-  ; An update only brings a service that is there up to date; whoever never
-  ; let it be installed is not asked again every time.
-  ${If} $Updating == "1"
-    ReadRegStr $0 HKLM "SYSTEM\CurrentControlSet\Services\${INPUT_SERVICE_NAME}" "ImagePath"
-    StrCmp $0 "" input_service_installed
+  ReadRegStr $0 HKLM "SYSTEM\CurrentControlSet\Services\${INPUT_SERVICE_NAME}" "ImagePath"
+  ${If} $0 != ""
+    ; Already there. Since version 5 it updates itself from the files just
+    ; installed once Whisper starts again, checking their signature; only an
+    ; older one needs approval, this one last time.
+    SetRegView 64
+    ReadRegDWORD $0 HKLM "SOFTWARE\Whisper\InputService" "SelfUpdating"
+    SetRegView lastused
+    StrCmp $0 "1" input_service_installed
+  ${ElseIf} $Updating == "1"
+    ; Whoever never let it be installed is not asked again on every update.
+    Goto input_service_installed
   ${EndIf}
   DetailPrint "Installing the lock screen input service (administrator approval required)..."
   ExecShellWait "runas" "$INSTDIR\${APP_EXE}" "--install-input-service" SW_HIDE
@@ -165,11 +175,17 @@ Section "Install"
 SectionEnd
 
 Section "Uninstall"
-  ; The optional lock screen input service is installed machine-wide from
-  ; inside the app, so removing it needs one elevation prompt of its own.
+  ; The optional lock screen input service is installed machine-wide, so
+  ; removing it needs one elevation prompt of its own. The installed copy does
+  ; it: only an administrator can have put it there, unlike this folder's
+  ; whisper.exe, which anything the user runs could have replaced.
   ReadRegStr $0 HKLM "SYSTEM\CurrentControlSet\Services\${INPUT_SERVICE_NAME}" "ImagePath"
   StrCmp $0 "" input_service_removed
-  ExecShellWait "runas" "$INSTDIR\${APP_EXE}" "--uninstall-input-service" SW_HIDE
+  ${If} ${FileExists} "${INPUT_SERVICE_EXE}"
+    ExecShellWait "runas" "${INPUT_SERVICE_EXE}" "--uninstall-input-service" SW_HIDE
+  ${Else}
+    ExecShellWait "runas" "$INSTDIR\${APP_EXE}" "--uninstall-input-service" SW_HIDE
+  ${EndIf}
   input_service_removed:
 
   Delete "$DESKTOP\${APP_NAME}.lnk"

@@ -1,7 +1,9 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:whisper/helper/update_signature.dart';
 import 'package:whisper/helper/windows_input_service.dart';
 
 void main() {
@@ -197,7 +199,7 @@ void main() {
       final install = RegExp(
         r'DWORD Install\(\)[\s\S]*?\n}',
       ).firstMatch(service)!.group(0)!;
-      expect(install, isNot(contains('kPolicyRegistryKey')));
+      expect(install, isNot(contains('kAllowElevatedValue')));
     });
 
     test('the app changes the policy only behind a UAC prompt', () {
@@ -246,6 +248,131 @@ void main() {
       expect(plugin, contains('method == "getInputServiceState"'));
       expect(plugin, contains('error == ERROR_CANCELLED'));
       expect(client, contains('info.lpVerb = L"runas";'));
+    });
+
+    // The service runs as LocalSystem and updates itself, with no prompt,
+    // from the app's folder, which anything the user runs can write to. If
+    // any of these checks went, a program of the user's could get its own
+    // code run as LocalSystem, or bring back an older service.
+    test('the service updates itself only to signed, newer files', () {
+      final manifest = File(
+        'windows/runner/input_service_manifest.cpp',
+      ).readAsStringSync();
+      final update = File(
+        'windows/runner/input_service_update.cpp',
+      ).readAsStringSync();
+
+      // The keys that sign update packages, and no other.
+      final keys = RegExp(
+        r'const SigningKey kManifestSigningKeys\[\] = \{([\s\S]*?)\n\};',
+      ).firstMatch(manifest)!.group(1)!;
+      final native = [
+        for (final key in RegExp(r'\{([^{}]*)\}').allMatches(keys))
+          base64.encode([
+            for (final byte in RegExp(
+              r'0x([0-9a-f]{2})',
+            ).allMatches(key.group(1)!))
+              int.parse(byte.group(1)!, radix: 16),
+          ]),
+      ];
+      expect(native, whisperUpdateSigningKeys);
+      expect(manifest, contains('crypto_ed25519_check('));
+      expect(
+        manifest,
+        contains(
+          'constexpr char kHeader[] = '
+          '"whisper-input-service-v1\\n";',
+        ),
+      );
+
+      final body = update.substring(update.indexOf('DWORD ReadOffer('));
+      int at(String code) {
+        final index = body.indexOf(code);
+        expect(index, isNonNegative, reason: code);
+        return index;
+      }
+
+      // What the client offers is read as the client's user, from a local
+      // drive: never with this machine's rights or credentials.
+      expect(
+        at('ClientIdentity client(process);'),
+        lessThan(at('LocalProcessDirectory(process)')),
+      );
+      expect(
+        at('LocalProcessDirectory(process)'),
+        lessThan(at('ReadWholeFile(')),
+      );
+      expect(update, contains('== DRIVE_REMOTE'));
+      expect(at('VerifyManifest('), lessThan(at('IsNewer(')));
+      expect(
+        at('if (!IsNewer(manifest.version, kOwnVersion)) {'),
+        lessThan(at('ReadWholeFile(source + L"\\\\" + name')),
+      );
+      expect(at('!= file.sha512'), lessThan(at('Replace(target, files)')));
+      expect(at('Replace(target, files)'), lessThan(at('StartRestart(')));
+      // Nobody can change a file between its check and its copy.
+      expect(update, contains('GENERIC_READ, FILE_SHARE_READ, nullptr,'));
+
+      final handle = RegExp(
+        r'DWORD Handle\(const Request& request, Response\* response\)[\s\S]*?\n  }',
+      ).firstMatch(service)!.group(0)!;
+      expect(
+        handle,
+        contains(
+          'return request.version < whisper_input_service::kUpdateVersion',
+        ),
+      );
+      // The restart role does nothing for the app's own copy.
+      expect(
+        service,
+        contains(
+          'if (mode == whisper_input_service::kRestartArgument && '
+          'IsInstalledCopy()) {',
+        ),
+      );
+
+      // Everything elevated but installing runs the installed copy, which
+      // only an administrator can have put in Program Files.
+      final elevated = RegExp(
+        r'DWORD RunElevated\(const wchar_t\* argument\) \{[\s\S]*?\n  }',
+      ).firstMatch(client)!.group(0)!;
+      expect(
+        elevated,
+        contains(
+          'if (wcscmp(argument, whisper_input_service::kInstallArgument) != 0',
+        ),
+      );
+      expect(elevated, contains('path = installed;'));
+      expect(protocol, contains('FOLDERID_ProgramFiles'));
+      final installer = File('windows/installer.nsi').readAsStringSync();
+      expect(
+        installer,
+        contains(
+          r'ExecShellWait "runas" "${INPUT_SERVICE_EXE}" '
+          '"--uninstall-input-service"',
+        ),
+      );
+    });
+
+    test('the release signs the input service apart from the build', () {
+      final workflow = File('.github/workflows/release.yml').readAsStringSync();
+      String job(String name) {
+        final start = workflow.indexOf('\n  $name:\n');
+        expect(start, isNonNegative, reason: name);
+        final end = workflow.indexOf(RegExp(r'\n  [a-z-]+:\n'), start + 1);
+        return workflow.substring(start, end < 0 ? workflow.length : end);
+      }
+
+      final build = job('build-on-windows');
+      final sign = job('sign-windows-input-service');
+      final package = job('package-windows');
+      expect(build, isNot(contains('secrets.')));
+      expect(sign, contains(r'${{ secrets.UPDATE_SIGNING_KEY }}'));
+      expect(sign, contains('script/sign_input_service.sh'));
+      expect(sign, isNot(contains('flutter')));
+      expect(package, isNot(contains('secrets.')));
+      expect(package, contains('whisper_input_service.manifest.sig'));
+      expect(job('publish-release'), contains('- package-windows'));
     });
   });
 }

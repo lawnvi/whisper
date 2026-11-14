@@ -7,6 +7,8 @@
 //                            elevated, started by the app
 //   --input-service          LocalSystem service that supervises the agent
 //   --input-agent <pid>      LocalSystem process inside the console session
+//   --restart-input-service  LocalSystem, started by the agent after it
+//                            updated the service (input_service_update.cpp)
 //
 // The lock screen lives on the Winlogon desktop, which only LocalSystem may
 // join. The app stays an ordinary user process and asks the agent, over a
@@ -26,6 +28,7 @@
 #include <string>
 
 #include "input_service_protocol.h"
+#include "input_service_update.h"
 
 namespace {
 
@@ -35,17 +38,6 @@ using whisper_input_service::Response;
 constexpr wchar_t kServiceDisplayName[] = L"Whisper Input Service";
 constexpr wchar_t kServiceDescription[] =
     L"Delivers Whisper's shared keyboard and mouse input to the lock screen.";
-// Installed under Program Files so that only administrators can replace the
-// binary LocalSystem runs; the app's own folder is writable by the user.
-constexpr wchar_t kInstallFolder[] = L"Whisper Input Service";
-// The app links the C runtime dynamically and ships these next to itself.
-// Copying them along keeps the service from depending on a system-wide
-// runtime, which is not guaranteed to be installed.
-constexpr const wchar_t* kRuntimeLibraries[] = {
-    L"msvcp140.dll",
-    L"vcruntime140.dll",
-    L"vcruntime140_1.dll",
-};
 constexpr wchar_t kLockDesktop[] = L"Winlogon";
 constexpr wchar_t kScreenSaverDesktop[] = L"Screen-saver";
 constexpr DWORD kSupervisorIntervalMs = 2000;
@@ -164,6 +156,11 @@ class Agent {
     if (request.version < whisper_input_service::kOldestClientVersion ||
         request.version > whisper_input_service::kVersion) {
       return whisper_input_service::kStatusBadRequest;
+    }
+    if (request.command == whisper_input_service::kCommandUpdate) {
+      return request.version < whisper_input_service::kUpdateVersion
+                 ? whisper_input_service::kStatusBadRequest
+                 : whisper_input_service::UpdateFromClient(client_process_);
     }
     std::wstring desktop;
     if (!desktop_.Attach(&desktop)) {
@@ -485,6 +482,8 @@ void WINAPI ServiceMain(DWORD, LPWSTR*) {
     return;
   }
   ReportStatus(SERVICE_RUNNING);
+  // What the last update or uninstall could not delete while it ran.
+  whisper_input_service::RemoveLeftovers();
 
   HANDLE agent = nullptr;
   DWORD agent_session = 0;
@@ -525,19 +524,6 @@ int RunService() {
 // ---------------------------------------------------------------------------
 // Install / uninstall
 // ---------------------------------------------------------------------------
-
-std::wstring InstallDirectory() {
-  // Resolved from the machine's known folders rather than the environment,
-  // which the unelevated caller controls.
-  PWSTR program_files = nullptr;
-  std::wstring directory;
-  if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_ProgramFiles, 0, nullptr,
-                                     &program_files))) {
-    directory = std::wstring(program_files) + L"\\" + kInstallFolder;
-  }
-  CoTaskMemFree(program_files);
-  return directory;
-}
 
 bool WaitForServiceState(SC_HANDLE service, DWORD state) {
   const ULONGLONG deadline = GetTickCount64() + kServiceStateTimeoutMs;
@@ -608,7 +594,7 @@ bool CopyServiceFiles(const std::wstring& source, const std::wstring& target) {
   if (!RetryFileOperation(CopyOver, source, target)) {
     return false;
   }
-  for (const wchar_t* library : kRuntimeLibraries) {
+  for (const wchar_t* library : whisper_input_service::kRuntimeLibraries) {
     const std::wstring from = DirectoryOf(source) + L"\\" + library;
     if (FileExists(from) &&
         !RetryFileOperation(CopyOver, from,
@@ -621,7 +607,7 @@ bool CopyServiceFiles(const std::wstring& source, const std::wstring& target) {
 
 DWORD Install() {
   const std::wstring source = ExecutablePath();
-  const std::wstring directory = InstallDirectory();
+  const std::wstring directory = whisper_input_service::InstallDirectory();
   if (source.empty() || directory.empty()) {
     return ERROR_PATH_NOT_FOUND;
   }
@@ -678,6 +664,43 @@ DWORD Install() {
   }
   if (service != nullptr) CloseServiceHandle(service);
   CloseServiceHandle(manager);
+  if (error == NO_ERROR) {
+    // From here on the service updates itself; the installer reads this to
+    // know an upgrade needs no administrator approval.
+    const DWORD self_updating = 1;
+    RegSetKeyValueW(HKEY_LOCAL_MACHINE,
+                    whisper_input_service::kPolicyRegistryKey,
+                    whisper_input_service::kSelfUpdatingValue, REG_DWORD,
+                    &self_updating, sizeof(self_updating));
+  }
+  return error;
+}
+
+// Started by the agent once an update is in place: stopping the service ends
+// the agent, so it cannot do this itself.
+DWORD RestartService() {
+  // Lets the agent answer the app first.
+  Sleep(500);
+  const SC_HANDLE manager =
+      OpenSCManagerW(nullptr, nullptr, SC_MANAGER_CONNECT);
+  if (manager == nullptr) {
+    return GetLastError();
+  }
+  DWORD error = NO_ERROR;
+  const SC_HANDLE service =
+      OpenServiceW(manager, whisper_input_service::kServiceName,
+                   SERVICE_STOP | SERVICE_START | SERVICE_QUERY_STATUS);
+  if (service == nullptr) {
+    error = GetLastError();
+  } else {
+    StopService(service);
+    if (!StartServiceW(service, 0, nullptr) &&
+        GetLastError() != ERROR_SERVICE_ALREADY_RUNNING) {
+      error = GetLastError();
+    }
+    CloseServiceHandle(service);
+  }
+  CloseServiceHandle(manager);
   return error;
 }
 
@@ -689,9 +712,12 @@ DWORD SetElevatedPolicy(bool allow) {
       sizeof(value)));
 }
 
+// The stopped agent can hold its files a moment longer; the installed copy,
+// which removes the service when the uninstaller or the app's settings start
+// it, holds its own until it exits.
 void RemoveInstalledFile(const std::wstring& path) {
   if (!RetryFileOperation(DeleteExisting, path, std::wstring())) {
-    MoveFileExW(path.c_str(), nullptr, MOVEFILE_DELAY_UNTIL_REBOOT);
+    whisper_input_service::RemoveFileNowOrLater(path);
   }
 }
 
@@ -720,14 +746,27 @@ DWORD Uninstall() {
   // A later install starts out limited to the lock screen again.
   RegDeleteKeyW(HKEY_LOCAL_MACHINE, whisper_input_service::kPolicyRegistryKey);
 
-  const std::wstring directory = InstallDirectory();
+  const std::wstring directory = whisper_input_service::InstallDirectory();
   if (!directory.empty()) {
-    RemoveInstalledFile(directory + L"\\" +
-                        whisper_input_service::kInstalledExecutableName);
-    for (const wchar_t* library : kRuntimeLibraries) {
-      RemoveInstalledFile(directory + L"\\" + library);
+    const std::wstring self = ExecutablePath();
+    const std::wstring executable =
+        directory + L"\\" + whisper_input_service::kInstalledExecutableName;
+    if (_wcsicmp(self.c_str(), executable.c_str()) == 0) {
+      // The installed copy removing the service: it is its own executable.
+      whisper_input_service::RemoveFileNowOrLater(executable);
+      for (const wchar_t* library : whisper_input_service::kRuntimeLibraries) {
+        whisper_input_service::RemoveFileNowOrLater(directory + L"\\" +
+                                                    library);
+      }
+    } else {
+      RemoveInstalledFile(executable);
+      for (const wchar_t* library : whisper_input_service::kRuntimeLibraries) {
+        RemoveInstalledFile(directory + L"\\" + library);
+      }
     }
-    RemoveDirectoryW(directory.c_str());
+    if (!RemoveDirectoryW(directory.c_str())) {
+      MoveFileExW(directory.c_str(), nullptr, MOVEFILE_DELAY_UNTIL_REBOOT);
+    }
   }
   return error;
 }
@@ -767,6 +806,9 @@ std::optional<int> RunInputServiceCommand() {
   }
   if (mode == whisper_input_service::kDisableElevatedArgument) {
     return static_cast<int>(SetElevatedPolicy(false));
+  }
+  if (mode == whisper_input_service::kRestartArgument && IsInstalledCopy()) {
+    return static_cast<int>(RestartService());
   }
   if (IsInstalledCopy()) {
     return static_cast<int>(ERROR_INVALID_PARAMETER);

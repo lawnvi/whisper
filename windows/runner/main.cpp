@@ -5,6 +5,7 @@
 #include "desktop_quick_send_plugin.h"
 #include "flutter_window.h"
 #include "input_service.h"
+#include "remote_input_service_client.h"
 #include "single_instance.h"
 #include "utils.h"
 
@@ -23,6 +24,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
     return NotifyExistingInstance(command_line_arguments) ? EXIT_SUCCESS
                                                            : EXIT_FAILURE;
   }
+  UpdateRemoteInputServiceLater();
 
   // Attach to console when present (e.g., 'flutter run') or create a
   // new console when running with a debugger.

@@ -233,6 +233,8 @@ jobs:
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == 'windows' }}
     needs: verify-release-version
     runs-on: windows-2022
+    outputs:
+      package-version: ${{ steps.release-version.outputs.package-version }}
     env:
       # Cargokit's symlink resolver cannot traverse the hidden AppData folder.
       PUB_CACHE: ${{ github.workspace }}\.pub-cache
@@ -260,6 +262,7 @@ jobs:
           key: windows-native-${{ runner.arch }}-${{ hashFiles('pubspec.lock') }}
 
       - name: Set release version
+        id: release-version
         env:
           REQUESTED_VERSION: ${{ inputs.version }}
         run: |
@@ -277,13 +280,7 @@ jobs:
           "PACKAGE_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "APP_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "UPDATE_CHANNEL=$channel" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
-      - name: Verify NSIS
-        run: |
-          $makensis = "${env:ProgramFiles(x86)}\NSIS\makensis.exe"
-          if (!(Test-Path -LiteralPath $makensis -PathType Leaf)) {
-            throw "NSIS not found at $makensis"
-          }
+          "package-version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Build Windows app
         run: |
@@ -318,15 +315,91 @@ jobs:
             Copy-Item -LiteralPath $source -Destination $destination -Force
           }
 
+      # Signed and packed by the next two jobs: the update key never meets
+      # the job that runs the build and everything it pulls in.
+      - name: Upload Windows build
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-build-${{ github.run_id }}
+          path: ${{ env.WINDOWS_RELEASE_DIR }}
+          retention-days: 1
+
+  # The lock screen input service updates itself from the files an app update
+  # leaves beside whisper.exe, as LocalSystem, only when this manifest of them
+  # is signed (windows/runner/input_service_update.cpp).
+  sign-windows-input-service:
+    name: Sign Windows input service
+    needs: build-on-windows
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Check out signing script
+        uses: actions/checkout@v4
+
+      - name: Download Windows build
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-build-${{ github.run_id }}
+          path: windows-build
+
+      - name: Sign input service manifest
+        env:
+          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+          PACKAGE_VERSION: ${{ needs.build-on-windows.outputs.package-version }}
+        run: bash script/sign_input_service.sh "$PACKAGE_VERSION" windows-build input-service
+
+      - name: Upload signed manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-input-service-${{ github.run_id }}
+          path: input-service
+          retention-days: 1
+
+  package-windows:
+    name: Windows installer
+    needs:
+      - build-on-windows
+      - sign-windows-input-service
+    runs-on: windows-2022
+    env:
+      PACKAGE_VERSION: ${{ needs.build-on-windows.outputs.package-version }}
+    steps:
+      - name: Check out installer script
+        uses: actions/checkout@v4
+
+      - name: Download Windows build
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-build-${{ github.run_id }}
+          path: windows-build
+
+      - name: Download signed manifest
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-input-service-${{ github.run_id }}
+          path: windows-build
+
+      - name: Verify NSIS
+        run: |
+          $makensis = "${env:ProgramFiles(x86)}\NSIS\makensis.exe"
+          if (!(Test-Path -LiteralPath $makensis -PathType Leaf)) {
+            throw "NSIS not found at $makensis"
+          }
+          foreach ($name in @("whisper.exe", "whisper_input_service.manifest", "whisper_input_service.manifest.sig")) {
+            if (!(Test-Path -LiteralPath (Join-Path "windows-build" $name) -PathType Leaf)) {
+              throw "Missing from the Windows build: $name"
+            }
+          }
+
       - name: Create EXE installer
         run: |
+          $buildDir = (Resolve-Path -LiteralPath "windows-build" -ErrorAction Stop).Path
           Push-Location windows
           & "${env:ProgramFiles(x86)}\NSIS\makensis.exe" `
             /DAPP_NAME="Whisper" `
-            /DAPP_VERSION="$env:APP_VERSION" `
+            /DAPP_VERSION="$env:PACKAGE_VERSION" `
             /DAPP_PUBLISHER="lawnvi" `
             /DOUTPUT_NAME="whisper-$($env:PACKAGE_VERSION)-windows-x86_64.exe" `
-            /DBUILD_DIR="$env:WINDOWS_RELEASE_DIR" `
+            /DBUILD_DIR="$buildDir" `
             installer.nsi
           Pop-Location
 
@@ -549,7 +622,7 @@ jobs:
             startsWith(github.ref, 'refs/tags/') &&
             needs.build-on-macos.result == 'success' &&
             needs.build-on-macos-intel.result == 'success' &&
-            needs.build-on-windows.result == 'success' &&
+            needs.package-windows.result == 'success' &&
             needs.build-on-linux.result == 'success'
           ) ||
           (
@@ -561,7 +634,7 @@ jobs:
                 inputs.target == 'all' &&
                 needs.build-on-macos.result == 'success' &&
                 needs.build-on-macos-intel.result == 'success' &&
-                needs.build-on-windows.result == 'success' &&
+                needs.package-windows.result == 'success' &&
                 needs.build-on-linux.result == 'success'
               ) ||
               (
@@ -574,7 +647,7 @@ jobs:
               ) ||
               (
                 inputs.target == 'windows' &&
-                needs.build-on-windows.result == 'success'
+                needs.package-windows.result == 'success'
               )
             )
           )
@@ -583,7 +656,7 @@ jobs:
     needs:
       - build-on-macos
       - build-on-macos-intel
-      - build-on-windows
+      - package-windows
       - build-on-linux
     runs-on: ubuntu-22.04
     steps:
