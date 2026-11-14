@@ -8,6 +8,7 @@
 #include "input_service_update.h"
 
 #include <algorithm>
+#include <cstring>
 #include <utility>
 #include <vector>
 
@@ -113,11 +114,70 @@ bool ReadWholeFile(const std::wstring& path,
   return ok;
 }
 
-bool WriteWholeFile(const std::wstring& path, const std::string& content) {
-  const HANDLE file = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr,
-                                  CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-  if (file == INVALID_HANDLE_VALUE) {
-    return false;
+// A file this service holds from before it is renamed until after. It holds
+// the right to delete it, so whoever opens it meanwhile has to share that
+// right and cannot hold a rename up: the user can open what is here, and a
+// rename that fails half way through a swap could leave no service.
+class Held {
+ public:
+  Held() = default;
+  explicit Held(HANDLE handle) : handle_(handle) {}
+  Held(Held&& other) noexcept
+      : handle_(std::exchange(other.handle_, INVALID_HANDLE_VALUE)) {}
+  Held& operator=(Held&& other) noexcept {
+    if (this != &other) {
+      Close();
+      handle_ = std::exchange(other.handle_, INVALID_HANDLE_VALUE);
+    }
+    return *this;
+  }
+  Held(const Held&) = delete;
+  Held& operator=(const Held&) = delete;
+  ~Held() { Close(); }
+
+  bool valid() const { return handle_ != INVALID_HANDLE_VALUE; }
+  HANDLE get() const { return handle_; }
+
+  // Moves it to [path], a full path where nothing is.
+  bool RenameTo(const std::wstring& path) const {
+    const size_t bytes = path.size() * sizeof(wchar_t);
+    // Zeroed: no RootDirectory, nothing replaced, and the name ends in NUL.
+    std::vector<BYTE> buffer(sizeof(FILE_RENAME_INFO) + bytes);
+    auto* info = reinterpret_cast<FILE_RENAME_INFO*>(buffer.data());
+    info->FileNameLength = static_cast<DWORD>(bytes);
+    memcpy(info->FileName, path.data(), bytes);
+    return valid() &&
+           SetFileInformationByHandle(handle_, FileRenameInfo, info,
+                                      static_cast<DWORD>(buffer.size()));
+  }
+
+  // Deletes it as it closes, now.
+  void Discard() {
+    if (valid()) {
+      FILE_DISPOSITION_INFO dispose = {TRUE};
+      SetFileInformationByHandle(handle_, FileDispositionInfo, &dispose,
+                                 sizeof(dispose));
+    }
+    Close();
+  }
+
+  void Close() {
+    if (valid()) {
+      CloseHandle(std::exchange(handle_, INVALID_HANDLE_VALUE));
+    }
+  }
+
+ private:
+  HANDLE handle_ = INVALID_HANDLE_VALUE;
+};
+
+// Writes [content] to a new file at [path], open to nobody else until it is
+// in place or discarded.
+Held WriteStaged(const std::wstring& path, const std::string& content) {
+  Held file(CreateFileW(path.c_str(), GENERIC_WRITE | DELETE, 0, nullptr,
+                        CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr));
+  if (!file.valid()) {
+    return file;
   }
   bool ok = true;
   size_t done = 0;
@@ -125,16 +185,15 @@ bool WriteWholeFile(const std::wstring& path, const std::string& content) {
     const DWORD chunk =
         static_cast<DWORD>(std::min<size_t>(content.size() - done, 1 << 20));
     DWORD written = 0;
-    ok = WriteFile(file, content.data() + done, chunk, &written, nullptr) &&
+    ok = WriteFile(file.get(), content.data() + done, chunk, &written,
+                   nullptr) &&
          written == chunk;
     done += written;
   }
-  ok = ok && FlushFileBuffers(file);
-  CloseHandle(file);
-  if (!ok) {
-    DeleteFileW(path.c_str());
+  if (!ok || !FlushFileBuffers(file.get())) {
+    file.Discard();
   }
-  return ok;
+  return file;
 }
 
 // A running image can be renamed but not deleted or overwritten. A name of
@@ -143,60 +202,71 @@ std::wstring AsideName(const std::wstring& path) {
   return path + L"." + std::to_wstring(GetTickCount64()) + kOldSuffix;
 }
 
-struct Staged {
+struct Swap {
   std::wstring path;
+  // The new file, under [path] + kNewSuffix until it is swapped in.
+  Held incoming;
+  // What was at [path], under [aside] once moved there.
+  Held outgoing;
   std::wstring aside;
 };
 
-void Restore(const std::vector<Staged>& done) {
-  for (auto it = done.rbegin(); it != done.rend(); ++it) {
-    DeleteFileW(it->path.c_str());
-    if (!it->aside.empty()) {
-      MoveFileExW(it->aside.c_str(), it->path.c_str(), 0);
-    }
+// Puts what was at [swap.path] back, the new file out of its way first:
+// someone may have it open, so it is moved, not deleted, which would keep
+// its name taken until they close it.
+void Undo(Swap& swap, bool swapped) {
+  if (swapped) {
+    swap.incoming.RenameTo(AsideName(swap.path) + kNewSuffix);
   }
+  if (!swap.aside.empty()) {
+    swap.outgoing.RenameTo(swap.path);
+  }
+  swap.incoming.Discard();
 }
 
 // Writes every file beside the installed ones first, then swaps them in;
-// a failure part way puts back what was there.
+// a failure part way puts back what was there. Every file is held from
+// before its rename to the end, so nobody else can stop it from going back.
 bool Replace(const std::wstring& directory,
              const std::vector<std::pair<std::wstring, std::string>>& files) {
-  std::vector<std::wstring> written;
+  std::vector<Swap> swaps;
+  swaps.reserve(files.size());
   for (const auto& [name, content] : files) {
-    const std::wstring staged = directory + L"\\" + name + kNewSuffix;
-    if (!WriteWholeFile(staged, content)) {
-      for (const std::wstring& path : written) {
-        DeleteFileW(path.c_str());
+    Swap swap;
+    swap.path = directory + L"\\" + name;
+    swap.incoming = WriteStaged(swap.path + kNewSuffix, content);
+    if (!swap.incoming.valid()) {
+      for (Swap& written : swaps) {
+        written.incoming.Discard();
       }
       return false;
     }
-    written.push_back(staged);
+    swaps.push_back(std::move(swap));
   }
-  std::vector<Staged> done;
-  for (size_t i = 0; i < files.size(); ++i) {
-    Staged step{directory + L"\\" + files[i].first, std::wstring()};
-    if (GetFileAttributesW(step.path.c_str()) != INVALID_FILE_ATTRIBUTES) {
-      step.aside = AsideName(step.path);
-      if (!MoveFileExW(step.path.c_str(), step.aside.c_str(), 0)) {
-        step.aside.clear();
-        Restore(done);
-        for (size_t j = i; j < written.size(); ++j) {
-          DeleteFileW(written[j].c_str());
-        }
-        return false;
+  for (size_t i = 0; i < swaps.size(); ++i) {
+    Swap& swap = swaps[i];
+    bool ok = true;
+    if (GetFileAttributesW(swap.path.c_str()) != INVALID_FILE_ATTRIBUTES) {
+      swap.outgoing = Held(CreateFileW(
+          swap.path.c_str(), DELETE | SYNCHRONIZE,
+          FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+          OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr));
+      swap.aside = AsideName(swap.path);
+      ok = swap.outgoing.RenameTo(swap.aside);
+      if (!ok) {
+        swap.aside.clear();
       }
     }
-    if (!MoveFileExW(written[i].c_str(), step.path.c_str(), 0)) {
-      if (!step.aside.empty()) {
-        MoveFileExW(step.aside.c_str(), step.path.c_str(), 0);
+    if (!ok || !swap.incoming.RenameTo(swap.path)) {
+      Undo(swap, false);
+      for (size_t j = i + 1; j < swaps.size(); ++j) {
+        swaps[j].incoming.Discard();
       }
-      Restore(done);
-      for (size_t j = i; j < written.size(); ++j) {
-        DeleteFileW(written[j].c_str());
+      for (size_t j = i; j-- > 0;) {
+        Undo(swaps[j], true);
       }
       return false;
     }
-    done.push_back(step);
   }
   return true;
 }

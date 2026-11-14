@@ -326,9 +326,14 @@ jobs:
 
   # The lock screen input service updates itself from the files an app update
   # leaves beside whisper.exe, as LocalSystem, only when this manifest of them
-  # is signed (windows/runner/input_service_update.cpp).
+  # is signed (windows/runner/input_service_update.cpp). Only for what is
+  # published, at the version pubspec.yaml was checked to have: a signed
+  # manifest never expires and the service takes any newer one, so a test
+  # run's (whose artifacts anyone can download, at any version) would push
+  # that build into every service.
   sign-windows-input-service:
     name: Sign Windows input service
+    if: ${{ startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.publish) }}
     needs: build-on-windows
     runs-on: ubuntu-22.04
     steps:
@@ -354,14 +359,18 @@ jobs:
           path: input-service
           retention-days: 1
 
+  # A test run's installer has no manifest: the service it finds stays as it
+  # is.
   package-windows:
     name: Windows installer
+    if: ${{ !cancelled() && needs.build-on-windows.result == 'success' && (needs.sign-windows-input-service.result == 'success' || needs.sign-windows-input-service.result == 'skipped') }}
     needs:
       - build-on-windows
       - sign-windows-input-service
     runs-on: windows-2022
     env:
       PACKAGE_VERSION: ${{ needs.build-on-windows.outputs.package-version }}
+      SIGNED_INPUT_SERVICE: ${{ needs.sign-windows-input-service.result == 'success' }}
     steps:
       - name: Check out installer script
         uses: actions/checkout@v4
@@ -373,6 +382,7 @@ jobs:
           path: windows-build
 
       - name: Download signed manifest
+        if: ${{ env.SIGNED_INPUT_SERVICE == 'true' }}
         uses: actions/download-artifact@v4
         with:
           name: windows-input-service-${{ github.run_id }}
@@ -384,7 +394,11 @@ jobs:
           if (!(Test-Path -LiteralPath $makensis -PathType Leaf)) {
             throw "NSIS not found at $makensis"
           }
-          foreach ($name in @("whisper.exe", "whisper_input_service.manifest", "whisper_input_service.manifest.sig")) {
+          $required = @("whisper.exe")
+          if ($env:SIGNED_INPUT_SERVICE -eq "true") {
+            $required += @("whisper_input_service.manifest", "whisper_input_service.manifest.sig")
+          }
+          foreach ($name in $required) {
             if (!(Test-Path -LiteralPath (Join-Path "windows-build" $name) -PathType Leaf)) {
               throw "Missing from the Windows build: $name"
             }

@@ -370,6 +370,16 @@ void main() {
       expect(sign, contains(r'${{ secrets.UPDATE_SIGNING_KEY }}'));
       expect(sign, contains('script/sign_input_service.sh'));
       expect(sign, isNot(contains('flutter')));
+      // Only what is published, whose version verify-release-version held
+      // to pubspec.yaml: a test run's manifest, at any version, would be
+      // taken by every service and never expire.
+      expect(
+        sign,
+        contains(
+          "if: \${{ startsWith(github.ref, 'refs/tags/') || "
+          "(github.event_name == 'workflow_dispatch' && inputs.publish) }}",
+        ),
+      );
       expect(package, isNot(contains('secrets.')));
       expect(package, contains('whisper_input_service.manifest.sig'));
       expect(job('publish-release'), contains('- package-windows'));
