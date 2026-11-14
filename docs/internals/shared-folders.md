@@ -30,7 +30,7 @@ Android 和插数据线时看到的一样：内部存储，加上插着的 SD �
   - 主目录旁边别的用户的目录（`C:\Users`、`/Users`、`/home` 里除了自己和 `Public`、`Shared` 的），主目录里 Windows 带系统属性的（`NTUSER.DAT`、旧的 `Application Data` 这类联接）、macOS 的 `~/Applications`、Linux 的 `~/snap`。
 - **用户排除的**（`remote_files.excluded_folders`）。
 
-排除只在离它最近的共享根里算（`FsSharePolicy._counts`）：一块盘挂在另一块共享的盘下面时，外面那块的排除管不到它。
+排除只在离它最近的共享根里算（`FsSharePolicy._counts`）：一块盘挂在另一块共享的盘下面时，外面那块的排除管不到它。反过来，没打开的盘挂在共享的目录里（Linux 把分区挂在 `~/data`）也算排除，开关关着就真的不共享。
 
 系统盘只共享主目录：盘的最上层除了系统目录还常有装上去的程序（`C:\Python311`、`C:\xampp`、这台 Mac 的 `/pkg`），认不出是不是用户的；放在那里的东西要共享，就得放进主目录或单独的分区。系统盘上主目录以外的目录不能加进「不共享的目录」（本来就不共享，回 `FsExcluded.already`），排除主目录本身等于关掉系统盘。上面那份「系统相关的」名单对系统盘只剩主目录里那几项还用得上，留着给另外打开的盘（D 盘上的 `Program Files`、Linux 分区的 `lost+found`）和以后。
 
@@ -51,12 +51,12 @@ Android 和插数据线时看到的一样：内部存储，加上插着的 SD �
 | `read` | `read`、`thumb`、`stat`、改动的父文件夹 | 在共享的盘里，不在排除的目录里，不在底线里 |
 | `copy` | `fetch` | 能读，并且里面不含底线里的地方（主目录本身或它的上层、私有目录、挂载），也不含排除的目录；数据库这类 Whisper 自己的文件由扫描留下 |
 | `fill` | `incoming`、新建和移动的目标文件夹 | 能读，不是 git 的控制项 |
-| `change` | 写入、新建、重命名、移动（两头）、删除、改时间 | 能读，不是共享的盘根本身，不是 git 的控制项。已经存在的条目再按它的真实路径查一次，换个大小写或 Windows 短名（`GIT~1`）绕不过去 |
+| `change` | 写入、新建、重命名、移动（两头）、删除、改时间 | 能读，不是共享的盘根本身，不是 git 的控制项，里面不含排除的目录、底线里的地方、Whisper 自己的文件和挂载（这些都按路径认，上层一改名就脱离规则，一删就跟着没了）；指向不共享地方的符号链接（列表里本来就藏着）也不能动，否则对方能在检查和打开之间把它换到要读的文件的位置上。已经存在的条目再按它的真实路径查一次，换个大小写或 Windows 短名（`GIT~1`）绕不过去 |
 
 **底线**（`FsProtectedAreas`），怎么设都不变：
 
 - 不能读写：主目录里直接以 `.` 开头的条目和它们里面的一切；macOS 的 `~/Library`；Windows 的 `%USERPROFILE%\AppData` 和 `APPDATA`、`LOCALAPPDATA`；Linux 设了的 `XDG_CONFIG_HOME`、`XDG_DATA_HOME`、`XDG_STATE_HOME`、`XDG_CACHE_HOME`；path_provider 给的应用支持和缓存目录；数据库和它旁边的 `-wal`、`-shm`、`-journal`（Linux 和 Windows 上在文稿里，打开时登记到 `AppPrivatePaths`）；别的设备挂在这台上的文件夹（`FsHostFiles.excluded`）。
-- 不能写（新建、覆盖、改名成、删除、移走）：`.git` 条目本身（文件夹，或指向别处的 gitfile），`.git` 下面任何一层的 `hooks` 和里面的东西，`.git` 下面的 `config` 和 `config.worktree`（子模块和工作树有自己的）。git 会自己执行这些，编辑器打开文件夹就会跑 `git status`。把 `.git` 本身也挡住，是因为否则可以先建一个带 `config` 和 `hooks` 的普通文件夹，再改名成 `.git`。
+- 不能写（新建、覆盖、改名成、删除、移走）：`.git` 条目本身（文件夹，或指向别处的 gitfile），`.git` 下面任何一层的 `hooks` 和里面的东西，`.git` 下面的 `config`、`config.worktree`（子模块和工作树有自己的）和 `commondir`（工作树从它指的地方读 config）。git 会自己执行这些，编辑器打开文件夹就会跑 `git status`。把 `.git` 本身也挡住，是因为否则可以先建一个带 `config` 和 `hooks` 的普通文件夹，再改名成 `.git`。
 - 比较时先去掉 HFS+ 会忽略的不可见字符，再忽略大小写（`fsFold`），宁可多挡。允许的判断用规范化后的精确路径，宁可少放。
 
 拷进来的文件（`incoming`）先落在下载目录，完成后才搬进选的文件夹。搬之前 `mayPlace` 再按当时的 policy 查一遍目标和整棵树：树里有 `.git` 就不搬，留在下载目录（`TransferPlacements.unplaced`）。

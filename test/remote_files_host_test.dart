@@ -164,6 +164,7 @@ void main() {
         'Documents/repo/.git/config',
         'Documents/repo/.git/HEAD',
         'Documents/repo/.git/hooks/pre-commit.sample',
+        'Documents/repo/.git/worktrees/w/commondir',
         'Documents/evil/config',
       ]) {
         await write(path);
@@ -185,6 +186,7 @@ void main() {
         ['', 'Projects/app'],
         excluded: ['Projects', 'Music', 'Documents/repo'],
       );
+      final deep = sharing([''], excluded: ['Projects/app']);
       Future<void> place(String from, String to) async {
         if (!await folders.mayPlace(from, p.join(real, to))) {
           throw const FsPathException('not shared');
@@ -236,6 +238,12 @@ void main() {
         ),
         'change a git config': () =>
             folders.touch('home', 'Documents/repo/.git/config', 0),
+        // A worktree's commondir says where its config is read from.
+        'point a worktree at another config': () => folders.touch(
+          'home',
+          'Documents/repo/.git/worktrees/w/commondir',
+          0,
+        ),
         'delete a hook': () => folders.deletePermanently(
           'home',
           'Documents/repo/.git/hooks/pre-commit.sample',
@@ -264,6 +272,19 @@ void main() {
             leftOut.mkdir('home', 'Music', 'New'),
         'copy out a folder holding one left out': () => leftOut.resolver
             .resolveExisting('home', 'Documents', use: FsUse.copy),
+        // What is left out, Whisper's files and mounts are known by where
+        // they are: a folder holding one renamed, moved or deleted would
+        // take it out from under its rule, or delete it.
+        'rename a folder holding one left out': () =>
+            deep.rename('home', 'Projects', 'Other'),
+        'move a folder holding Whisper\'s file': () =>
+            whole.move('home', 'Documents', 'Music', 'Docs'),
+        'delete a folder holding one left out': () =>
+            deep.deletePermanently('home', 'Projects'),
+        // Hidden from listings; put in place of a file being read, between
+        // the check and the open, it would be what is opened.
+        'move a link to ~/.ssh': () =>
+            folders.rename('home', 'Documents/keys', 'notes'),
       };
       for (final MapEntry(key: name, value: run) in allowed.entries) {
         await expectLater(run(), completes, reason: name);

@@ -161,9 +161,17 @@ class FsProtectedAreas {
         _mounts().any((mount) => p.isWithin(folded, fsFold(mount)));
   }
 
+  /// Something here is inside [path], Whisper's own files too: renaming,
+  /// moving or deleting [path] would take it out from under these rules,
+  /// which know it by where it is, or delete it.
+  bool holdsAny(String path) =>
+      holdsProtected(path) ||
+      _files.any((file) => p.isWithin(fsFold(path), file));
+
   /// A `.git` entry (folder, or the file that points git elsewhere), and in
-  /// a `.git` folder any `hooks` folder and its contents and any `config` or
-  /// `config.worktree` (submodules and worktrees have their own).
+  /// a `.git` folder any `hooks` folder and its contents and any `config`,
+  /// `config.worktree` (submodules and worktrees have their own) or
+  /// `commondir` (where a worktree's config is read from).
   static bool isGitControl(String path) {
     final parts = [for (final part in p.split(path)) fsFold(part)];
     final git = parts.indexOf('.git');
@@ -174,6 +182,7 @@ class FsProtectedAreas {
     return last == '.git' ||
         last == 'config' ||
         last == 'config.worktree' ||
+        last == 'commondir' ||
         parts.skip(git + 1).contains('hooks');
   }
 }
@@ -267,10 +276,14 @@ class FsSharePolicy {
           !protected.holdsProtected(path) &&
           !_holdsExcluded(path),
     FsUse.fill => allows(path, FsUse.read) && !protected.blocksWrite(path),
+    // A folder holding something left out or never reached stays where it
+    // is: both are known by where they are.
     FsUse.change =>
       allows(path, FsUse.read) &&
           !_isSharedFolder(path) &&
-          !protected.blocksWrite(path),
+          !protected.blocksWrite(path) &&
+          !protected.holdsAny(path) &&
+          !_holdsExcluded(path),
   };
 
   /// What [folder] lists when it only leads to shared folders: the names of

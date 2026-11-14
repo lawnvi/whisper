@@ -104,14 +104,14 @@ Copy progress shows at the top of the window. "Transfers" in the sidebar lists e
 
 On the computer, open Settings, then "Sharing & Permissions › Shared Folders". It has two groups:
 
-- **Disks and Partitions**: a switch for each disk. The system disk (C: on Windows, Macintosh HD on a Mac, the root partition on Linux) starts on and shares only your home folder on it: the rest of it holds the system and installed programs. Other disks, partitions and USB sticks start off; turning one on shares the ordinary folders on the whole disk.
+- **Disks and Partitions**: a switch for each disk. The system disk (C: on Windows, Macintosh HD on a Mac, the root partition on Linux) starts on and shares only your home folder on it: the rest of it holds the system and installed programs. Other disks, partitions and USB sticks start off; turning one on shares the ordinary folders on the whole disk. A partition mounted inside your home folder counts as a disk of its own and isn't shared while it's off.
 - **Folders Not Shared**: select "Add a Folder Not to Share…" and pick a folder; it and everything in it are no longer shown. Select one to show it in Finder (File Explorer, the file manager) or to "Share Again". A folder already inside one not shared says it is already not shared; a folder holding some already in the list takes their place; picking a whole disk (or your home folder on the system disk) switches that disk off. A folder on a USB stick that is out says "Not found".
 
 Whatever you set, these are never shared: the folders of the system and its programs (Windows, Program Files and ProgramData; the Mac's System, Applications and Library; /usr, /etc and the like on Linux), hidden items and recycle bins at the top of each disk, other users' folders, the hidden items starting with `.` in your home folder (such as `.ssh` and `.config`), Windows' `AppData`, and Whisper's own data. Symbolic links to them don't open either.
 
 The settings are the same for every device allowed to browse. Changes apply from the other device's next action, without reconnecting; a disk you turn on shows up the next time it opens your files.
 
-- A shared disk itself can't be renamed, moved or deleted. When the other device opens a folder that holds one not shared, it doesn't see that one and can't copy the whole folder out, though it can copy everything else in it.
+- A shared disk itself can't be renamed, moved or deleted. When the other device opens a folder that holds one not shared, it doesn't see that one and can't copy, rename, move or delete the whole folder, though it can copy and change everything else in it.
 - In a Git repository, the other device can look at the hooks and config (`hooks` and `config` in `.git`) but not change them, and it can't create, delete or replace `.git` either.
 - A device with an older version of Whisper can still browse.
 

@@ -479,6 +479,22 @@ class FsPathResolver {
         !policy.allows(await File(path).resolveSymbolicLinks(), FsUse.change)) {
       throw const FsPathException('not shared');
     }
+    // A link to somewhere not shared (listings hide it) stays where it is:
+    // put in place of a file being read, between the check and the open,
+    // it would be what is opened.
+    if (type == FileSystemEntityType.link &&
+        !await _linkShared(path, policy)) {
+      throw const FsPathException('not shared');
+    }
+  }
+
+  static Future<bool> _linkShared(String link, FsSharePolicy policy) async {
+    try {
+      return policy.allows(await Link(link).resolveSymbolicLinks(), FsUse.read);
+    } on FileSystemException {
+      // Pointing nowhere yet.
+      return false;
+    }
   }
 
   /// The entry itself, to change (a symlink stays a symlink, so renaming or

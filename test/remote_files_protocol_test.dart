@@ -269,6 +269,7 @@ void main() {
       'Users/me/Documents/a.txt',
       'Users/me/Music/song.mp3',
       'Users/me/Private/p.txt',
+      'Users/me/Projects/x.txt',
       'Users/other/o.txt',
       'usr/bin/sh',
     ]) {
@@ -301,7 +302,11 @@ void main() {
       ],
       commonFolders: () async => const [],
       systemDisk: () async => FsDisk(path: disk, label: 'Disk'),
-      disks: () async => [dataDisk],
+      // A partition mounted in the home folder, switched off (Linux).
+      disks: () async => [
+        dataDisk,
+        FsDisk(path: p.join(homeDir, 'Projects'), label: 'Projects'),
+      ],
     );
     final sender = host.sender;
     host = FileBrowseHost(
@@ -329,10 +334,11 @@ void main() {
 
     // The system disk at first, as its home folder alone: not the drive as
     // well (the same files twice), never the system's folders or other
-    // users'.
+    // users', nor a disk in it that is switched off.
     var info = await client.open();
     expect([for (final root in info.roots) root.id], ['home']);
     expect(await names('home', ''), ['Documents', 'Music', 'Private']);
+    await expectLater(client.read('home', 'Projects/x.txt', 0, 1), refused);
     final policy = folders.policy;
     expect(
       policy.allows(p.join(disk, 'usr', 'bin', 'sh'), FsUse.read),

@@ -252,9 +252,21 @@ class FsSharedFolders extends ChangeNotifier {
         roots.add(real);
       }
     }
+    // A disk switched off is not shared where another one holds it: Linux
+    // mounts partitions in the home folder too (~/data).
+    final offInside = <String>[];
+    for (final disk in await _disks()) {
+      final real = await _real(disk.path);
+      if (real != null &&
+          !roots.any((root) => p.equals(root, real)) &&
+          roots.any((root) => p.isWithin(root, real))) {
+        offInside.add(real);
+      }
+    }
     final systemFolders = _systemFolders;
     final homeDirectory = home?.directory;
     final excluded = [
+      ...offInside,
       ...systemFolders != null
           ? await systemFolders(roots)
           : await fsSystemFolders(
