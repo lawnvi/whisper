@@ -16,6 +16,7 @@
 - [Screenshots](#screenshots)
 - [Android notifications](#android-notifications)
 - [TV casting](#tv-casting)
+- [Updates](#updates)
 - [Diagnostics](#diagnostics)
 
 ## Connect devices
@@ -335,6 +336,17 @@ After granting the notification access permission on Android, choose which apps 
 ## TV casting
 
 With "TV casting" turned on in desktop Settings, video apps on the same network can cast to this computer without Whisper pairing. The feature is experimental and off by default; see the [TV casting notes (Chinese)](internals/cast-receiver.md).
+
+## Updates
+
+In Settings, select "Version" to check for updates; when there is a new version, select "Update" in the window that opens. Whisper downloads it, checks its signature and installs it, then closes and reopens. There is no installer to click through:
+
+- Windows: the new version goes where Whisper already is.
+- macOS: the new version replaces Whisper.app. If Whisper's folder can't be written to (for example when your account is not an administrator, or Whisper runs from the disk image), the disk image opens instead; drag Whisper into Applications.
+- Linux: deb and rpm packages are installed by the system package manager, which asks for your password once. An AppImage is replaced in place and keeps its file name.
+- Android: the system asks you to confirm the installation.
+
+If it can't be installed, Whisper tells you where the package was saved so you can install it yourself.
 
 ## Diagnostics
 

@@ -4,12 +4,17 @@ import 'dart:ffi';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
-import 'package:open_filex/open_filex.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
-import 'package:permission_handler/permission_handler.dart';
 
+import 'app_update_install.dart';
 import 'update_signature.dart';
+
+export 'app_update_install.dart'
+    show
+        linuxPackageInstallScript,
+        updateAfterExitScript,
+        windowsUpdateInstallerArgument;
 
 const whisperUpdateChannel = String.fromEnvironment(
   'WHISPER_UPDATE_CHANNEL',
@@ -39,26 +44,6 @@ enum AppUpdatePlatform { android, ios, macos, windows, linux, unsupported }
 enum AppUpdateStatus { upToDate, updateAvailable }
 
 enum AppUpdateInstallDisposition { keepRunning, exitApplication, installed }
-
-/// What the Windows installer is started with for an update: it then asks
-/// nothing, installs where Whisper already is and starts it again
-/// (`windows/installer.nsi`).
-const windowsUpdateInstallerArgument = '/UPDATE';
-
-/// Run as root through pkexec to install a Linux package: `$1` is the
-/// package, `$2` its SHA-256. The package was checked where it was
-/// downloaded, but any program of the user can replace it there while the
-/// password is asked for, and apt runs its scripts as root. So root copies
-/// it somewhere only root can change and checks it again there.
-const linuxDebInstallScript = r'''set -eu
-dir=$(mktemp -d /var/tmp/whisper-update.XXXXXX)
-trap 'rm -rf "$dir"' EXIT
-chmod 755 "$dir"
-cp -- "$1" "$dir/whisper.deb"
-chmod 644 "$dir/whisper.deb"
-echo "$2  $dir/whisper.deb" | sha256sum -c - >/dev/null
-apt-get -y install -- "$dir/whisper.deb"
-''';
 
 class AppUpdateException implements Exception {
   const AppUpdateException(this.message);
@@ -201,6 +186,12 @@ class AppUpdateService implements AppUpdateManager {
   final Duration _slowDownloadWindow;
   final int _minBytesInSlowWindow;
   final List<String> _signingKeys;
+
+  late final AppUpdateInstaller _installer = AppUpdateInstaller(
+    platform: platform,
+    run: _processRunner,
+    start: _installerStarter,
+  );
 
   bool? _githubReachable;
   AppUpdateCheckResult? _cachedResult;
@@ -570,66 +561,7 @@ class AppUpdateService implements AppUpdateManager {
     AppUpdateDownload download,
   ) async {
     await _checkBeforeInstall(download);
-    if (platform == AppUpdatePlatform.android) {
-      var permission = await Permission.requestInstallPackages.status;
-      if (!permission.isGranted) {
-        permission = await Permission.requestInstallPackages.request();
-      }
-      if (!permission.isGranted) {
-        throw const AppUpdateException('Package install permission denied');
-      }
-    }
-
-    if (platform == AppUpdatePlatform.linux &&
-        download.file.path.toLowerCase().endsWith('.deb')) {
-      // App Center may open successfully without accepting a local package.
-      // Let polkit request authorization, and wait for the package manager's result.
-      final result = await _processRunner('/usr/bin/pkexec', <String>[
-        '/bin/sh',
-        '-c',
-        linuxDebInstallScript,
-        'sh',
-        download.file.absolute.path,
-        download.release.asset!.sha256!.toLowerCase(),
-      ]);
-      await File(
-        p.join(download.file.parent.path, 'install.log'),
-      ).writeAsString(
-        'exitCode=${result.exitCode}\n${result.stdout}\n${result.stderr}',
-      );
-      if (result.exitCode != 0) {
-        throw AppUpdateException(
-          'Linux package installation failed (${result.exitCode})',
-        );
-      }
-      return AppUpdateInstallDisposition.installed;
-    }
-
-    if (platform == AppUpdatePlatform.linux &&
-        download.file.path.toLowerCase().endsWith('.appimage')) {
-      final chmod = await _processRunner('chmod', <String>[
-        '+x',
-        download.file.path,
-      ]);
-      if (chmod.exitCode != 0) {
-        throw const AppUpdateException('Unable to prepare AppImage update');
-      }
-    }
-
-    if (platform == AppUpdatePlatform.windows) {
-      // Nothing opens to click through: the installer runs by itself, and
-      // Whisper only has to get out of its way.
-      await _installerStarter(download.file.path, const <String>[
-        windowsUpdateInstallerArgument,
-      ]);
-      return AppUpdateInstallDisposition.exitApplication;
-    }
-
-    final result = await OpenFilex.open(download.file.path);
-    if (result.type != ResultType.done) {
-      throw AppUpdateException(result.message);
-    }
-    return installDispositionForPlatform(platform);
+    return _installer.install(download);
   }
 }
 
@@ -643,17 +575,6 @@ Future<Directory> _updateDownloadDirectory(AppUpdatePlatform platform) async {
         await getApplicationSupportDirectory();
   }
   return getTemporaryDirectory();
-}
-
-AppUpdateInstallDisposition installDispositionForPlatform(
-  AppUpdatePlatform platform,
-) {
-  final shouldExit =
-      platform == AppUpdatePlatform.macos ||
-      platform == AppUpdatePlatform.windows;
-  return shouldExit
-      ? AppUpdateInstallDisposition.exitApplication
-      : AppUpdateInstallDisposition.keepRunning;
 }
 
 AppUpdateChannel configuredAppUpdateChannel() {
@@ -942,6 +863,11 @@ bool _isTrustedDownloadUri(Uri uri) {
 }
 
 String _linuxPackagePreference() {
+  // An AppImage updates itself in place; a system package beside it would
+  // leave the AppImage that runs as it was.
+  if (Platform.environment.containsKey('APPIMAGE')) {
+    return '.appimage';
+  }
   if (File('/etc/debian_version').existsSync()) {
     return '.deb';
   }

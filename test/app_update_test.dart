@@ -141,8 +141,9 @@ void main() {
 
     tearDown(() => directory.delete(recursive: true));
 
-    test('waits for apt and passes the installer as one argument', () async {
+    test('waits for apt, then starts Whisper again once it has quit', () async {
       var invoked = false;
+      final started = <(String, List<String>)>[];
       final service = AppUpdateService(
         platform: AppUpdatePlatform.linux,
         signingKeys: _trustedKeys,
@@ -154,20 +155,34 @@ void main() {
           expect(arguments, [
             '/bin/sh',
             '-c',
-            linuxDebInstallScript,
+            linuxPackageInstallScript,
             'sh',
             download.file.absolute.path,
             download.release.asset!.sha256,
+            'deb',
           ]);
           return ProcessResult(1, 0, 'installed', '');
         },
+        installerStarter: (executable, arguments) async =>
+            started.add((executable, arguments)),
       );
       expect(
         await service.openInstaller(download),
-        AppUpdateInstallDisposition.installed,
+        AppUpdateInstallDisposition.exitApplication,
       );
       expect(invoked, isTrue);
       expect(await download.file.exists(), isTrue);
+      final exe = Platform.resolvedExecutable;
+      expect(started.single.$1, '/bin/sh');
+      expect(started.single.$2, [
+        '-c',
+        updateAfterExitScript,
+        'sh',
+        '$pid',
+        exe,
+        '',
+        exe,
+      ]);
     });
 
     // Windows used to open the installer for the user to click through.
@@ -234,6 +249,50 @@ void main() {
       },
     );
   });
+
+  // Swapped in after Whisper quits, the new app must never leave no app at
+  // all: the user could not start Whisper to try again.
+  test(
+    'after Whisper quits the new app takes its place, or the old one stays',
+    () async {
+      final root = await Directory.systemTemp.createTemp('whisper-swap-');
+      addTearDown(() => root.delete(recursive: true));
+      final gone = await Process.start('true', const []);
+      await gone.exitCode;
+      for (final staged in [true, false]) {
+        final app = Directory('${root.path}/Whisper.app');
+        final next = Directory('${root.path}/.Whisper.app.update');
+        final marker = File('${root.path}/started');
+        await app.create();
+        await File('${app.path}/version').writeAsString('old');
+        if (staged) {
+          await next.create();
+          await File('${next.path}/version').writeAsString('new');
+        }
+        final result = await Process.run('/bin/sh', [
+          '-c',
+          updateAfterExitScript,
+          'sh',
+          '${gone.pid}',
+          app.path,
+          next.path,
+          'touch',
+          marker.path,
+        ]);
+        expect(result.exitCode, 0, reason: '${result.stderr}');
+        expect(
+          File('${app.path}/version').readAsStringSync(),
+          staged ? 'new' : 'old',
+        );
+        expect(next.existsSync(), isFalse);
+        expect(Directory('${next.path}.old').existsSync(), isFalse);
+        expect(marker.existsSync(), isTrue);
+        await app.delete(recursive: true);
+        await marker.delete();
+      }
+    },
+    skip: Platform.isWindows,
+  );
 
   test('stable channel ignores preview releases', () {
     final result = parseGitHubReleases(
