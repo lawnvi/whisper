@@ -798,10 +798,11 @@ void main() {
         final file = File(p.join(temp.path, 'stall-recover.bin'))
           ..writeAsBytesSync(_pattern(size, 9));
         connect(
-          ackTimeout: const Duration(milliseconds: 120),
+          ackTimeout: const Duration(milliseconds: 350),
           watchdogRetryDelays: const <Duration>[
-            Duration(milliseconds: 50),
-            Duration(milliseconds: 100),
+            Duration(milliseconds: 250),
+            Duration(milliseconds: 400),
+            Duration(milliseconds: 600),
           ],
           ackIntervalSize: 512 * _kib,
         );

@@ -21,31 +21,34 @@ final class OutgoingWindowPump {
       <String, OutgoingWindowWork>{};
   final Map<String, String> _peers = <String, String>{};
   final Map<String, int> _epochs = <String, int>{};
+  int _nextEpoch = 1;
   final Set<String> _running = <String>{};
   Completer<void>? _idleCompleter;
 
-  int currentEpoch(String transferId) => _epochs[transferId] ?? 0;
+  int currentEpoch(String transferId) =>
+      _epochs.putIfAbsent(transferId, () => _nextEpoch++);
 
   bool isCurrentEpoch(String transferId, int epoch) =>
-      (_epochs[transferId] ?? 0) == epoch;
+      _epochs[transferId] == epoch;
 
   void schedule(OutgoingWindowWork work) {
     final id = work.transfer.transferId;
     _peers[id] = work.transfer.peerUid;
+    _epochs.putIfAbsent(id, () => _nextEpoch++);
     _latest[id] = work;
     if (_running.add(id)) {
       unawaited(_drain(id));
     }
   }
 
-  /// Drops queued work for [transferId] and advances its attempt epoch so any
+  /// Drops queued work for [transferId] and clears its attempt epoch so any
   /// already-queued or waiting `fileData` frames from the prior attempt are
-  /// skipped before encryption/sending.
+  /// skipped before encryption/sending without retaining per-transfer state.
   void cancel(String transferId, {String? peerId}) {
     final removed = _latest.remove(transferId);
-    _epochs[transferId] = (_epochs[transferId] ?? 0) + 1;
-    final targetPeer =
-        peerId ?? removed?.transfer.peerUid ?? _peers[transferId];
+    final trackedPeer = _peers.remove(transferId);
+    _epochs.remove(transferId);
+    final targetPeer = peerId ?? removed?.transfer.peerUid ?? trackedPeer;
     if (targetPeer != null && targetPeer.isNotEmpty) {
       _onInvalidate?.call(targetPeer);
     }
@@ -60,7 +63,8 @@ final class OutgoingWindowPump {
     };
     for (final id in ids) {
       _latest.remove(id);
-      _epochs[id] = (_epochs[id] ?? 0) + 1;
+      _peers.remove(id);
+      _epochs.remove(id);
     }
     if (peerId.isNotEmpty) {
       _onInvalidate?.call(peerId);
@@ -68,15 +72,13 @@ final class OutgoingWindowPump {
   }
 
   void clear() {
-    final ids = <String>{..._latest.keys, ..._peers.keys, ..._epochs.keys};
     final peers = <String>{
       for (final work in _latest.values) work.transfer.peerUid,
       ..._peers.values,
     };
     _latest.clear();
-    for (final id in ids) {
-      _epochs[id] = (_epochs[id] ?? 0) + 1;
-    }
+    _peers.clear();
+    _epochs.clear();
     for (final peerId in peers) {
       if (peerId.isNotEmpty) {
         _onInvalidate?.call(peerId);
