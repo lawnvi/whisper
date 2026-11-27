@@ -2,9 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/audio/audio_protocol.dart';
-import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/message.dart';
-import 'package:whisper/state/peer_profile.dart';
 
 void main() {
   const format = AudioStreamFormat(
@@ -204,52 +202,6 @@ void main() {
       () => AudioGroupPacketFrame.decode(legacy),
       throwsA(isA<FormatException>()),
     );
-  });
-
-  test('PeerCapabilities round-trips audio group flags', () {
-    final profile = PeerProfile(
-      device: DeviceData(
-        id: 1,
-        uid: 'peer-a',
-        name: 'Peer A',
-        host: '127.0.0.1',
-        port: 9000,
-        password: '',
-        platform: 'macos',
-        isServer: true,
-        online: true,
-        clipboard: true,
-        auth: true,
-        lastTime: 1,
-        around: true,
-      ),
-      trustedPeerIds: const <String>['peer-b'],
-      autoApproveNewDevices: false,
-      autoConnectEnabled: true,
-      protocolVersion: 5,
-      capabilities: const PeerCapabilities(
-        audioGroupSourceV1: true,
-        audioGroupSinkV1: true,
-        audioSyncClockV1: true,
-        audioChannelRoleV1: true,
-      ),
-    );
-
-    final decoded = PeerProfile.fromJson(profile.toJson());
-
-    expect(decoded.capabilities.audioGroupSourceV1, isTrue);
-    expect(decoded.capabilities.audioGroupSinkV1, isTrue);
-    expect(decoded.capabilities.audioSyncClockV1, isTrue);
-    expect(decoded.capabilities.audioChannelRoleV1, isTrue);
-  });
-
-  test('legacy capabilities default audio group flags to false', () {
-    final capabilities = PeerCapabilities.fromJson(const <String, dynamic>{});
-
-    expect(capabilities.audioGroupSourceV1, isFalse);
-    expect(capabilities.audioGroupSinkV1, isFalse);
-    expect(capabilities.audioSyncClockV1, isFalse);
-    expect(capabilities.audioChannelRoleV1, isFalse);
   });
 
   test('AudioGroupControl is appended after remote input control', () {

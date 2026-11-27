@@ -91,11 +91,7 @@ class AudioMediaSessionBridge {
     if (sourcePeerId.isEmpty) {
       return false;
     }
-    return WsSvrManager()
-            .remoteProfileFor(sourcePeerId)
-            ?.capabilities
-            .audioGroupRejoinV1 ==
-        true;
+    return WsSvrManager().remoteProfileFor(sourcePeerId) != null;
   }
 
   String _sourceTitle(String sourcePeerId) {

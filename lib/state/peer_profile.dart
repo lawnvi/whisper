@@ -553,19 +553,12 @@ int _boundedWireInt(Object? value, {required int min, required int max}) {
 class PeerCapabilities {
   const PeerCapabilities({
     this.fileTransferV3 = false,
-    this.systemAudioSourceV1 = false,
-    this.speakerSinkV1 = false,
     this.remoteInputManualSourceV1 = false,
     this.remoteInputManualSinkV1 = false,
     this.remoteInputSourceV1 = false,
     this.remoteInputSinkV1 = false,
     this.remoteInputTopologyV1 = false,
     this.remoteInputWorkspaceGraphV1 = false,
-    this.audioGroupSourceV1 = false,
-    this.audioGroupSinkV1 = false,
-    this.audioGroupRejoinV1 = false,
-    this.audioSyncClockV1 = false,
-    this.audioChannelRoleV1 = false,
     this.windowStreamSourceV1 = false,
     this.windowStreamSinkV1 = false,
     this.windowStreamOfferV1 = false,
@@ -573,19 +566,12 @@ class PeerCapabilities {
   });
 
   final bool fileTransferV3;
-  final bool systemAudioSourceV1;
-  final bool speakerSinkV1;
   final bool remoteInputManualSourceV1;
   final bool remoteInputManualSinkV1;
   final bool remoteInputSourceV1;
   final bool remoteInputSinkV1;
   final bool remoteInputTopologyV1;
   final bool remoteInputWorkspaceGraphV1;
-  final bool audioGroupSourceV1;
-  final bool audioGroupSinkV1;
-  final bool audioGroupRejoinV1;
-  final bool audioSyncClockV1;
-  final bool audioChannelRoleV1;
 
   /// Offers its windows to other peers over `/window` (protocol 12).
   final bool windowStreamSourceV1;
@@ -603,19 +589,12 @@ class PeerCapabilities {
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
       'fileTransferV3': fileTransferV3,
-      'systemAudioSourceV1': systemAudioSourceV1,
-      'speakerSinkV1': speakerSinkV1,
       'remoteInputManualSourceV1': remoteInputManualSourceV1,
       'remoteInputManualSinkV1': remoteInputManualSinkV1,
       'remoteInputSourceV1': remoteInputSourceV1,
       'remoteInputSinkV1': remoteInputSinkV1,
       'remoteInputTopologyV1': remoteInputTopologyV1,
       'remoteInputWorkspaceGraphV1': remoteInputWorkspaceGraphV1,
-      'audioGroupSourceV1': audioGroupSourceV1,
-      'audioGroupSinkV1': audioGroupSinkV1,
-      'audioGroupRejoinV1': audioGroupRejoinV1,
-      'audioSyncClockV1': audioSyncClockV1,
-      'audioChannelRoleV1': audioChannelRoleV1,
       'windowStreamSourceV1': windowStreamSourceV1,
       'windowStreamSinkV1': windowStreamSinkV1,
       'windowStreamOfferV1': windowStreamOfferV1,
@@ -626,8 +605,6 @@ class PeerCapabilities {
   factory PeerCapabilities.fromJson(Map<String, dynamic> json) {
     return PeerCapabilities(
       fileTransferV3: json['fileTransferV3'] as bool? ?? false,
-      systemAudioSourceV1: json['systemAudioSourceV1'] as bool? ?? false,
-      speakerSinkV1: json['speakerSinkV1'] as bool? ?? false,
       remoteInputManualSourceV1:
           json['remoteInputManualSourceV1'] as bool? ?? false,
       remoteInputManualSinkV1:
@@ -637,11 +614,6 @@ class PeerCapabilities {
       remoteInputTopologyV1: json['remoteInputTopologyV1'] as bool? ?? false,
       remoteInputWorkspaceGraphV1:
           json['remoteInputWorkspaceGraphV1'] as bool? ?? false,
-      audioGroupSourceV1: json['audioGroupSourceV1'] as bool? ?? false,
-      audioGroupSinkV1: json['audioGroupSinkV1'] as bool? ?? false,
-      audioGroupRejoinV1: json['audioGroupRejoinV1'] as bool? ?? false,
-      audioSyncClockV1: json['audioSyncClockV1'] as bool? ?? false,
-      audioChannelRoleV1: json['audioChannelRoleV1'] as bool? ?? false,
       windowStreamSourceV1: json['windowStreamSourceV1'] as bool? ?? false,
       windowStreamSinkV1: json['windowStreamSinkV1'] as bool? ?? false,
       windowStreamOfferV1: json['windowStreamOfferV1'] as bool? ?? false,
@@ -651,19 +623,12 @@ class PeerCapabilities {
 
   static const Set<String> _knownKeys = <String>{
     'fileTransferV3',
-    'systemAudioSourceV1',
-    'speakerSinkV1',
     'remoteInputManualSourceV1',
     'remoteInputManualSinkV1',
     'remoteInputSourceV1',
     'remoteInputSinkV1',
     'remoteInputTopologyV1',
     'remoteInputWorkspaceGraphV1',
-    'audioGroupSourceV1',
-    'audioGroupSinkV1',
-    'audioGroupRejoinV1',
-    'audioSyncClockV1',
-    'audioChannelRoleV1',
     'windowStreamSourceV1',
     'windowStreamSinkV1',
     'windowStreamOfferV1',

@@ -56,12 +56,7 @@ class AudioIslandSource extends ChangeNotifier implements IslandSource {
   }
 
   static bool _liveCanRejoin(String peerId) =>
-      peerId.isNotEmpty &&
-      WsSvrManager()
-              .remoteProfileFor(peerId)
-              ?.capabilities
-              .audioGroupRejoinV1 ==
-          true;
+      peerId.isNotEmpty && WsSvrManager().remoteProfileFor(peerId) != null;
 
   int _round = 0;
   IslandAudioState? _state;

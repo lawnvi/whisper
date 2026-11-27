@@ -549,28 +549,13 @@ class WsSvrManager {
         (peerId == receiver ? _remoteProfile : null);
   }
 
-  bool supportsAudioGroupSourceFor(String peerId) {
-    final profile =
-        _remoteProfilesByPeerId[peerId] ??
-        (peerId == receiver ? _remoteProfile : null);
-    return profile?.capabilities.audioGroupSourceV1 == true;
-  }
-
-  bool supportsAudioGroupSinkFor(String peerId) {
-    final profile =
-        _remoteProfilesByPeerId[peerId] ??
-        (peerId == receiver ? _remoteProfile : null);
-    return profile?.capabilities.audioGroupSinkV1 == true;
-  }
-
+  /// Every connected device whose profile has come: from protocol 16 all of
+  /// them can play a group's sound.
   List<DeviceData> connectedAudioGroupSinkDevices({
     String preferredPeerId = '',
   }) {
     final devices = <DeviceData>[];
     for (final peerId in connectedPeerIds) {
-      if (!supportsAudioGroupSinkFor(peerId)) {
-        continue;
-      }
       final profile =
           _remoteProfilesByPeerId[peerId] ??
           (peerId == receiver ? _remoteProfile : null);
@@ -5246,19 +5231,12 @@ class WsSvrManager {
       protocolVersion: PeerSocketSession.protocolVersion,
       capabilities: PeerCapabilities(
         fileTransferV3: true,
-        systemAudioSourceV1: supportsNativeSystemAudio(),
-        speakerSinkV1: true,
         remoteInputManualSourceV1: supportsManualRemoteInputSource(),
         remoteInputManualSinkV1: supportsManualRemoteInputSink(),
         remoteInputSourceV1: supportsNativeRemoteInput(),
         remoteInputSinkV1: supportsNativeRemoteInput(),
         remoteInputTopologyV1: hasTopology,
         remoteInputWorkspaceGraphV1: hasTopology,
-        audioGroupSourceV1: supportsNativeSystemAudio(),
-        audioGroupSinkV1: true,
-        audioGroupRejoinV1: true,
-        audioSyncClockV1: true,
-        audioChannelRoleV1: true,
         windowStreamSourceV1: supportsWindowStreamSource(),
         windowStreamSinkV1: supportsWindowStreamSink(),
         windowStreamOfferV1: supportsWindowStreamSink(),

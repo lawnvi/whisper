@@ -33,9 +33,7 @@ class SoundBackend {
     return SoundBackend(
       isConnected: socket.isConnectedTo,
       canRejoinFrom: (peerId) =>
-          peerId.isNotEmpty &&
-          socket.remoteProfileFor(peerId)?.capabilities.audioGroupRejoinV1 ==
-              true,
+          peerId.isNotEmpty && socket.remoteProfileFor(peerId) != null,
       sendGroupControl: (peerId, control) =>
           unawaited(socket.sendAudioGroupControlTo(peerId, control)),
       deviceFor: (peerId) => socket.remoteProfileFor(peerId)?.device,

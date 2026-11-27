@@ -29,8 +29,6 @@ void main() {
         autoConnectEnabled: true,
         protocolVersion: 3,
         capabilities: const PeerCapabilities(
-          systemAudioSourceV1: true,
-          speakerSinkV1: true,
           remoteInputSourceV1: true,
           remoteInputSinkV1: true,
         ),
@@ -38,8 +36,6 @@ void main() {
 
       final decoded = PeerProfile.fromJson(profile.toJson());
 
-      expect(decoded.capabilities.systemAudioSourceV1, isTrue);
-      expect(decoded.capabilities.speakerSinkV1, isTrue);
       expect(decoded.capabilities.remoteInputSourceV1, isTrue);
       expect(decoded.capabilities.remoteInputSinkV1, isTrue);
     });
@@ -67,8 +63,6 @@ void main() {
         'capabilities': <String, dynamic>{},
       });
 
-      expect(profile.capabilities.systemAudioSourceV1, isFalse);
-      expect(profile.capabilities.speakerSinkV1, isFalse);
       expect(profile.capabilities.remoteInputSourceV1, isFalse);
       expect(profile.capabilities.remoteInputSinkV1, isFalse);
     });

@@ -1758,16 +1758,9 @@ PeerProfile _profile(String uid, {int displayCount = 0}) => PeerProfile(
   protocolVersion: PeerSocketSession.protocolVersion,
   capabilities: PeerCapabilities(
     fileTransferV3: true,
-    systemAudioSourceV1: false,
-    speakerSinkV1: false,
     remoteInputSourceV1: displayCount > 0,
     remoteInputSinkV1: displayCount > 0,
     remoteInputTopologyV1: displayCount > 0,
-    audioGroupSourceV1: false,
-    audioGroupSinkV1: false,
-    audioGroupRejoinV1: false,
-    audioSyncClockV1: false,
-    audioChannelRoleV1: false,
   ),
   displayTopology: displayCount == 0
       ? null
