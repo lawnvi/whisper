@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
+import '../helper/place_without_overwrite.dart';
 import '../model/file_transfer.dart';
 import '../socket/file_transfer_v3.dart' show fileTransferPeerCanceled;
 import 'files_log.dart';
@@ -278,70 +279,34 @@ class TransferPlacements extends ChangeNotifier {
   }
 
   /// Moves [source] (file or folder) into [directory] under a name that
-  /// is free there, across filesystems if need be. Returns the new path.
+  /// is free there ("name 2"…), across filesystems if need be, never over
+  /// anything already there. Returns the new path.
   static Future<String> moveInto(String source, String directory) async {
-    final target = await freeName(directory, p.basename(source));
     if (p.equals(p.dirname(source), directory)) {
       return source;
     }
-    final type = await FileSystemEntity.type(source, followLinks: false);
-    try {
-      if (type == FileSystemEntityType.directory) {
-        await Directory(source).rename(target);
-      } else {
-        await File(source).rename(target);
-      }
-      return target;
-    } on FileSystemException {
-      // Another volume (or, on Windows, a file still open somewhere): copy.
-      if (type == FileSystemEntityType.directory) {
-        await _copyTree(Directory(source), Directory(target));
-      } else {
-        await File(source).copy(target);
-      }
-    }
-    // The copy is in place. The original is removed if it can be; one that
-    // is still held open stays behind rather than failing the whole copy.
-    try {
-      if (type == FileSystemEntityType.directory) {
-        await Directory(source).delete(recursive: true);
-      } else {
-        await File(source).delete();
-      }
-    } on FileSystemException catch (error) {
-      FilesLog.write(
+    return placeWithoutOverwrite(
+      source,
+      directory,
+      spacedNames(p.basename(source)),
+      // The copy is in place; one still held open stays behind.
+      kept: (error) => FilesLog.write(
         'placement kept the original '
         '(${error.osError?.errorCode ?? error.message})',
-      );
-    }
-    return target;
+      ),
+    );
   }
 
-  /// "name", else "name 2", "name 3"… in [directory].
+  /// "name", else "name 2", "name 3"… in [directory]: the first free now,
+  /// for checking where something would go. Placing takes its own.
   static Future<String> freeName(String directory, String name) async {
-    var candidate = p.join(directory, name);
-    final stem = p.basenameWithoutExtension(name);
-    final ext = p.extension(name);
-    for (
-      var n = 2;
-      await FileSystemEntity.type(candidate, followLinks: false) !=
-          FileSystemEntityType.notFound;
-      n++
-    ) {
-      candidate = p.join(directory, '$stem $n$ext');
-    }
-    return candidate;
-  }
-
-  static Future<void> _copyTree(Directory from, Directory to) async {
-    await to.create(recursive: true);
-    await for (final entity in from.list(followLinks: false)) {
-      final target = p.join(to.path, p.basename(entity.path));
-      if (entity is Directory) {
-        await _copyTree(entity, Directory(target));
-      } else if (entity is File) {
-        await entity.copy(target);
+    for (final candidate in spacedNames(name)) {
+      final path = p.join(directory, candidate);
+      if (await FileSystemEntity.type(path, followLinks: false) ==
+          FileSystemEntityType.notFound) {
+        return path;
       }
     }
+    throw StateError('names never run out');
   }
 }

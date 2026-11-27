@@ -5,6 +5,8 @@ import 'dart:typed_data';
 
 import 'package:path/path.dart' as p;
 
+import '../helper/place_without_overwrite.dart';
+
 import 'fs_host_files.dart';
 import 'fs_paths.dart';
 import 'fs_placement.dart';
@@ -220,21 +222,18 @@ class FsUploads {
       // The shared folders may have changed since writing began.
       await files.resolver.checkChange(upload.target);
       final now = await _stamp(upload.target);
-      var into = upload.target;
+      String into;
       if (now != null && now != upload.base) {
-        into = await _beside(upload);
-        await files.resolver.checkChange(into);
-      }
-      try {
-        await File(upload.temp).rename(into);
-      } on FileSystemException {
-        if (into != upload.target) {
-          rethrow;
+        into = await _putBeside(upload);
+      } else {
+        try {
+          // Saving replaces the file: what was asked for.
+          await File(upload.temp).rename(upload.target);
+          into = upload.target;
+        } on FileSystemException {
+          // Held open here (Windows will not replace it): kept beside it.
+          into = await _putBeside(upload);
         }
-        // Held open here (Windows will not replace it): kept beside it.
-        into = await _beside(upload);
-        await files.resolver.checkChange(into);
-        await File(upload.temp).rename(into);
       }
       files.invalidate(upload.rootId);
       await FsPlatform.mediaScan([into]);
@@ -245,17 +244,21 @@ class FsUploads {
     }
   }
 
-  /// "report (MacBook).docx" next to "report.docx".
-  static Future<String> _beside(FsUpload upload) {
+  /// "report (MacBook).docx" next to "report.docx" (changed since writing
+  /// began, or held open), never over anything already there.
+  Future<String> _putBeside(FsUpload upload) async {
+    final directory = p.dirname(upload.target);
     final name = p.basename(upload.target);
     final device = upload.device
         .replaceAll(RegExp(r'[<>:"/\\|?*\x00-\x1f]'), ' ')
         .trim();
-    return TransferPlacements.freeName(
-      p.dirname(upload.target),
-      '${p.basenameWithoutExtension(name)} '
-      '(${device.isEmpty ? 'Whisper' : device})${p.extension(name)}',
+    final beside =
+        '${p.basenameWithoutExtension(name)} '
+        '(${device.isEmpty ? 'Whisper' : device})${p.extension(name)}';
+    await files.resolver.checkChange(
+      await TransferPlacements.freeName(directory, beside),
     );
+    return placeWithoutOverwrite(upload.temp, directory, spacedNames(beside));
   }
 
   static Future<({int size, int modifiedMs})?> _stamp(String path) async {

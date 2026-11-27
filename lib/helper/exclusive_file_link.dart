@@ -36,8 +36,10 @@ ExclusiveFileLink? _loadNativeLink() {
     'GetLastError',
   );
   return (source, destination) {
-    final from = _extendedPath(source).toNativeUtf16(allocator: calloc);
-    final to = _extendedPath(destination).toNativeUtf16(allocator: calloc);
+    final from = windowsExtendedPath(source).toNativeUtf16(allocator: calloc);
+    final to = windowsExtendedPath(
+      destination,
+    ).toNativeUtf16(allocator: calloc);
     try {
       if (link(to, from, nullptr) != 0) return ExclusiveFileLinkResult.linked;
       final error = lastError();
@@ -61,7 +63,8 @@ ExclusiveFileLink? _loadNativeLink() {
   };
 }
 
-String _extendedPath(String path) {
+/// [path] as Windows takes it past 260 characters (`\\?\`).
+String windowsExtendedPath(String path) {
   final absolute = File(path).absolute.path.replaceAll('/', r'\');
   if (absolute.startsWith(r'\\?\')) return absolute;
   if (absolute.startsWith(r'\\')) return r'\\?\UNC\' + absolute.substring(2);

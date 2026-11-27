@@ -41,6 +41,7 @@
 - [两台设备的手工验收](internals/manual-reliability-check.md)
 - [网页传输](internals/web-transfer.md)
 - [电脑共享的目录和底线](internals/shared-folders.md)
+- [往用户的目录里放文件：不覆盖](internals/file-placement.md)
 - [剪贴板同步：发给谁、哪些不发](internals/clipboard-sync.md)
 - [声音共享：谁负责接着放、按什么时钟](internals/audio-group-recovery.md)
 - 界面：[design/README.md](design/README.md)

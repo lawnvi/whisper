@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 import 'package:synchronized/synchronized.dart';
 import 'package:whisper/helper/atomic_file_move.dart';
 import 'package:whisper/helper/exclusive_file_link.dart';
+import 'package:whisper/helper/place_without_overwrite.dart';
 import 'package:whisper/socket/transfer_file_name.dart';
 
 const int _fileIoBufferSize = 1024 * 1024;
@@ -210,13 +211,7 @@ Future<DownloadFileReservation> reserveUniqueDownloadFile(
   }
   return _downloadReservationLock.synchronized(() async {
     final canonicalRoot = p.normalize(await root.resolveSymbolicLinks());
-    final extension = p.extension(fileName);
-    final stem = extension.isEmpty
-        ? fileName
-        : fileName.substring(0, fileName.length - extension.length);
-    var suffix = 0;
-    while (true) {
-      final candidateName = suffix == 0 ? fileName : '$stem-$suffix$extension';
+    for (final candidateName in dashedNames(fileName)) {
       final candidatePath = p.normalize(p.join(canonicalRoot, candidateName));
       if (p.dirname(candidatePath) != canonicalRoot) {
         throw FileSystemException(
@@ -235,7 +230,6 @@ Future<DownloadFileReservation> reserveUniqueDownloadFile(
         if (type == FileSystemEntityType.notFound) {
           rethrow;
         }
-        suffix += 1;
         continue;
       }
       final createdStat = await candidate.stat();
@@ -277,6 +271,7 @@ Future<DownloadFileReservation> reserveUniqueDownloadFile(
         rethrow;
       }
     }
+    throw StateError('names never run out');
   });
 }
 
@@ -322,10 +317,7 @@ Future<DownloadFileReservation> publishVerifiedDownload(
     if (snapshot._verifyPathContentBeforePublishing) return null;
     await snapshot._verifyStillOwnedMetadata();
     final canonicalRoot = p.normalize(await root.resolveSymbolicLinks());
-    final extension = p.extension(fileName);
-    final stem = fileName.substring(0, fileName.length - extension.length);
-    for (var suffix = 0; ; suffix++) {
-      final name = suffix == 0 ? fileName : '$stem-$suffix$extension';
+    for (final name in dashedNames(fileName)) {
       final destination = p.join(canonicalRoot, name);
       await snapshot._verifyStillOwnedMetadata();
       final result = atomicMove(snapshot.path, destination);
@@ -418,8 +410,8 @@ Future<DownloadFileReservation> publishVerifiedDownload(
 }
 
 /// Moves a fully received folder from staging to a free name under [root].
-/// An existing file or folder is never replaced: the name gets a numeric
-/// suffix instead, as received files do.
+/// An existing file or folder is never replaced, not even an empty folder:
+/// the name gets a numeric suffix instead, as received files do.
 Future<Directory> publishStagedDirectory(
   Directory staged,
   Directory root,
@@ -435,29 +427,22 @@ Future<Directory> publishStagedDirectory(
         FileSystemEntityType.directory) {
       throw FileSystemException('staged folder is missing', staged.path);
     }
-    for (var suffix = 0; ; suffix++) {
-      final name = suffix == 0 ? folderName : '$folderName-$suffix';
-      final destination = p.join(canonicalRoot, name);
-      if (p.dirname(destination) != canonicalRoot) {
-        throw FileSystemException('folder escapes download root', destination);
-      }
-      if (await FileSystemEntity.type(destination, followLinks: false) !=
-          FileSystemEntityType.notFound) {
-        continue;
-      }
-      // A scanner still holding one of the new files makes the rename fail
-      // on Windows for a moment.
-      for (var attempt = 0; ; attempt++) {
-        try {
-          return await staged.rename(destination);
-        } on FileSystemException {
-          if (await FileSystemEntity.type(destination, followLinks: false) !=
-              FileSystemEntityType.notFound) {
-            break;
-          }
-          if (attempt >= 20) rethrow;
-          await Future<void>.delayed(retryDelay);
+    // A scanner still holding one of the new files makes the move fail on
+    // Windows for a moment.
+    for (var attempt = 0; ; attempt++) {
+      try {
+        final placed = await moveToFreeName(
+          staged.path,
+          canonicalRoot,
+          dashedNames(folderName, folder: true),
+        );
+        if (placed == null) {
+          throw FileSystemException('staged folder is on another volume');
         }
+        return Directory(placed);
+      } on FileSystemException {
+        if (attempt >= 20) rethrow;
+        await Future<void>.delayed(retryDelay);
       }
     }
   });

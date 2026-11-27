@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:whisper/helper/atomic_file_move.dart';
 import 'package:whisper/helper/exclusive_file_link.dart';
+import 'package:whisper/helper/place_without_overwrite.dart';
 import 'package:whisper/socket/verified_file_publisher.dart';
 
 void main() {
@@ -292,6 +293,68 @@ void main() {
       expect(await destination.readAsString(), 'keep');
     });
   }, skip: !Platform.isMacOS && !Platform.isLinux);
+
+  // Placing into a folder someone chose (received into a shared folder,
+  // dragged, pasted, a mount save kept beside) checked a name and then
+  // renamed: whatever appeared in between was replaced, and on Linux and
+  // macOS a rename takes over an empty folder of that name outright.
+  test('placing never replaces what is already there', () async {
+    final temp = await Directory.systemTemp.createTemp('place');
+    addTearDown(() => temp.delete(recursive: true));
+    final into = await Directory(p.join(temp.path, 'into')).create();
+    Future<String> made(String name, {bool folder = false}) async {
+      final path = p.join(temp.path, 'from', name);
+      if (folder) {
+        await File(p.join(path, 'inner.txt')).create(recursive: true);
+      } else {
+        await File(path).create(recursive: true);
+        await File(path).writeAsString('new');
+      }
+      return path;
+    }
+
+    await File(p.join(into.path, 'a.txt')).writeAsString('old');
+    final file = await placeWithoutOverwrite(
+      await made('a.txt'),
+      into.path,
+      spacedNames('a.txt'),
+    );
+    expect(p.basename(file), 'a 2.txt');
+    expect(await File(p.join(into.path, 'a.txt')).readAsString(), 'old');
+
+    await Directory(p.join(into.path, 'Photos')).create();
+    final folder = await moveToFreeName(
+      await made('Photos', folder: true),
+      into.path,
+      dashedNames('Photos', folder: true),
+    );
+    expect(p.basename(folder!), 'Photos-1');
+    expect(await Directory(p.join(into.path, 'Photos')).list().isEmpty, isTrue);
+    expect(await File(p.join(folder, 'inner.txt')).exists(), isTrue);
+
+    final kept = await made('b.txt');
+    final copied = await placeWithoutOverwrite(
+      kept,
+      into.path,
+      spacedNames('b.txt'),
+      copy: true,
+    );
+    expect(await File(kept).readAsString(), 'new');
+    expect(await File(copied).readAsString(), 'new');
+    expect(
+      await into
+          .list()
+          .where((e) => p.basename(e.path).startsWith('.'))
+          .isEmpty,
+      isTrue,
+      reason: 'no hidden copy left behind',
+    );
+
+    await expectLater(
+      placeWithoutOverwrite(kept, into.path, ['../out.txt']),
+      throwsArgumentError,
+    );
+  });
 }
 
 final class _Stat implements FileStat {

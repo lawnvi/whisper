@@ -9,6 +9,7 @@ import 'package:uuid/uuid.dart';
 import 'package:whisper/clipboard/clipboard_ledger.dart';
 import 'package:whisper/helper/desktop_clipboard_image.dart';
 import 'package:whisper/helper/helper.dart' show getClipboardText;
+import 'package:whisper/helper/place_without_overwrite.dart';
 import 'package:whisper/helper/privacy_log.dart';
 import 'package:whisper/model/file_transfer.dart';
 import 'package:whisper/remote_files/fs_placement.dart';
@@ -267,11 +268,8 @@ final class RemoteClipboardTransferEngine {
     final paths = _prepared[key];
     if (paths == null || paths.isEmpty) return false;
     for (final path in paths) {
-      final target = await TransferPlacements.freeName(
-        directory,
-        p.basename(path),
-      );
-      await File(path).copy(target);
+      final names = spacedNames(p.basename(path));
+      await placeWithoutOverwrite(path, directory, names, copy: true);
     }
     traceRemoteClipboard('placed', count: paths.length);
     return true;
