@@ -20,12 +20,13 @@ bool isSafeClipboardName(String value) {
       !value.contains('\u0000');
 }
 
-/// App-private base directory for clipboard paste caches and outgoing
-/// screenshot staging files (never Downloads). Falls back to system temp in
-/// headless unit tests where `path_provider` plugins are unavailable.
+/// App-private cache directory for clipboard paste caches and outgoing
+/// screenshot staging files (never Downloads, and excluded from Windows
+/// roaming profiles and macOS Time Machine backups). Falls back to system temp
+/// in headless unit tests where `path_provider` plugins are unavailable.
 Future<Directory> defaultPrivateClipboardDirectory() async {
   try {
-    return await getApplicationSupportDirectory();
+    return await getApplicationCacheDirectory();
   } on MissingPluginException {
     return Directory.systemTemp;
   } on UnsupportedError {
