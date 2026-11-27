@@ -21,7 +21,7 @@
 
 ## Connect devices
 
-When two devices are on the same network with Whisper open, they usually appear in each other's device list. Select the other device and confirm the request on the receiving side; the first time, both sides check and confirm the same pairing code. When you start a pairing that relies on the code alone, the other device needs the latest Whisper too, otherwise you are asked to update it; if it can't be updated yet, pair by scanning its QR code. Devices that are already paired keep connecting as before. After you decline a pairing request, that device can't send another one for a minute.
+When two devices are on the same network with Whisper open, they usually appear in each other's device list. Select the other device and confirm the request on the receiving side; the first time, both sides check and confirm the same pairing code. Starting with this release, all devices must be updated together; older and newer versions cannot connect to each other, and connecting tells you which device needs to be updated. After you decline a pairing request, that device can't send another one for a minute.
 
 If the other device is not listed, connect with a QR code or an address:
 
@@ -32,11 +32,11 @@ The QR code carries both the LAN address and the device identity, so there is no
 
 On Linux, discovery depends on Avahi. On networks that block mDNS / Bonjour, connecting by IP is more reliable.
 
-Once connected, the "Network" row on the device card shows the link's quality and latency; select it for jitter and loss. High latency, a lot of jitter or loss makes keyboard and mouse stutter and files slow; 5 GHz Wi-Fi, a spot nearer the router or a cable helps a lot. The row below it is the other device's address; select it to copy it. Rest the pointer on this device's name at the bottom left to see its address. When the other device also runs 0.0.61 or later, the card shows its version too.
+Once connected, the "Network" row on the device card shows the link's quality and latency; select it for jitter and loss. High latency, a lot of jitter or loss makes keyboard and mouse stutter and files slow; 5 GHz Wi-Fi, a spot nearer the router or a cable helps a lot. The row below it is the other device's address; select it to copy it. Rest the pointer on this device's name at the bottom left to see its address; the card also shows the other device's version.
 
 When there are too many devices to tell apart, give one a name in "Custom name" on its device card, such as "Study desktop". The sidebar, chats, the tray and every device picker use that name. It is kept on this device only: the device itself and others still see its own name. Empty the field to go back to it.
 
-In the device list, each device's round icon shows whether it is a laptop, desktop, phone or tablet, and the mark on its screen is its system. Computers tell others whether they are a laptop or a desktop (from 0.0.61), and their icons are drawn that way. When a connection error prompts to release the connection, choosing "Disconnect" only disconnects that failing device without affecting other connected devices.
+In the device list, each device's round icon shows whether it is a laptop, desktop, phone or tablet, and the mark on its screen is its system. Computers tell others whether they are a laptop or a desktop, and their icons are drawn that way. When a connection error prompts to release the connection, choosing "Disconnect" only disconnects that failing device without affecting other connected devices.
 
 ### Wake a sleeping computer
 
@@ -46,7 +46,6 @@ Once a computer has connected, Whisper remembers its network cards. After it goe
 
 The computer being woken needs:
 
-- A new version of Whisper on both devices. Older versions don't share their network cards.
 - A cable. Computers on Wi-Fi generally don't hear the wake signal while asleep.
 - To be asleep, not shut down or hibernated, and on the same subnet as the device waking it.
 - Wake-on-LAN turned on:
@@ -65,9 +64,9 @@ To send without opening a conversation first:
 - **Android**: choose Whisper from the system share sheet.
 - **Desktop**: use the file context menu, or press `Cmd+Option+V` (macOS) or `Ctrl+Alt+V` (Windows / Linux) to send the current clipboard content.
 
-An interrupted file transfer continues from the last confirmed position. While sound or keyboard and mouse are shared, a transfer makes way for them. With keyboard and mouse sharing on and both devices on this version, it slows down as soon as their data starts to queue and speeds up while the network is free, and it does not start at full speed. Otherwise (sound only, or an older version on the other device) it leaves about a tenth of the bandwidth to them, after a few seconds at full speed to measure the network; another transfer to the same device within a few minutes skips that.
+An interrupted file transfer continues from the last confirmed position. While sound or keyboard and mouse are shared, a transfer makes way for them. With keyboard and mouse sharing on, it slows down as soon as their data starts to queue and speeds up while the network is free, and it does not start at full speed; with sound only, it leaves about a tenth of the bandwidth to sound after a few seconds at full speed to measure the network, and another transfer to the same device within a few minutes skips that.
 
-On desktop you can also send a whole folder: drop it into the conversation, or choose "Folder" from `+` in the message box. A folder goes as one transfer, without being archived first, and arrives with the same structure. Links are not sent. If some files could not be transferred, the message shows how many; open it to see which. If Whisper on the other device is too old, you are asked to update it first.
+On desktop you can also send a whole folder: drop it into the conversation, or choose "Folder" from `+` in the message box. A folder goes as one transfer, without being archived first, and arrives with the same structure. Links are not sent. If some files could not be transferred, the message shows how many; open it to see which.
 
 ## This device
 
@@ -85,7 +84,7 @@ On Android, long-press a file message and choose "Share" to send the file on thr
 
 ## Browse files
 
-Switch to "Files" at the top of a conversation (on the device page on a phone) to browse the other device's files as you would in your own file manager. The other device must be connected and running a recent version of Whisper.
+Switch to "Files" at the top of a conversation (on the device page on a phone) to browse the other device's files as you would in your own file manager. The other device must be connected.
 
 Each time, the other device asks first, with "Don't allow" and "Allow"; allowing lets you view and copy out this once. To allow it for good, or to allow changes, turn on "Browse my shared folders" and "Change my shared folders" on the device card (the info button at the top right); turning them off takes that back.
 
@@ -114,7 +113,6 @@ The settings are the same for every device allowed to browse. Changes apply from
 
 - A shared disk itself can't be renamed, moved or deleted. When the other device opens a folder that holds one not shared, it doesn't see that one and can't rename, move or delete the whole folder; copying the whole folder skips the unshared folders inside (and reports how many items were skipped), while everything else in it can be copied and changed as usual.
 - In a Git repository, the other device can look at the hooks and config (`hooks` and `config` in `.git`) but not change them, and it can't create, delete or replace `.git` either.
-- A device with an older version of Whisper can still browse.
 
 ### Mount another device's shared folders
 
@@ -258,7 +256,7 @@ Flowed apps run on a virtual display on the phone, so you can keep using the pho
 
 - Copied text goes to every connected, trusted device that has clipboard sync on, whichever conversation is open. When several devices copy one after another, the most recent copy wins.
 - Synced content never enters the chat history.
-- Image and file clipboards sync only during keyboard and mouse sharing on desktop. Files start moving when you paste: between two up-to-date devices, up to 64 GB per file and 20 files at a time, and files that take a while show their progress at the top of the screen on macOS and Windows, where you can cancel, while the keyboard and mouse keep working; files pasted into a folder or the desktop go straight into that folder once they arrive; pasted anywhere else, they paste themselves, or, if another window is in front by then, you are asked to press paste again; pasting other files while earlier ones are still coming does not stop them, and both arrive; with older versions, 64 MB per file and 128 MB in all.
+- Image and file clipboards sync only during keyboard and mouse sharing on desktop. Files and screenshots start moving when you paste: up to 64 GB per file and 20 files at a time, and transfers that take a while show their progress at the top of the screen on macOS and Windows, where you can cancel, while the keyboard and mouse keep working; files pasted into a folder or the desktop go straight into that folder once they arrive; pasted anywhere else, they paste themselves, or, if another window is in front by then, you are asked to press paste again; pasting other files while earlier ones are still coming does not stop them, and both arrive.
 
 Android syncs text only. Under the [Android 10 privacy restriction](https://developer.android.com/about/versions/10/privacy/changes#clipboard-data), Whisper cannot read what you copy in another app while it is in the background; it checks the clipboard and sends the change when you return to it.
 
@@ -268,7 +266,7 @@ On desktop, select the keyboard at the top of the sidebar, drag the other device
 
 Turn on clipboard sync first if you want to paste across devices.
 
-When both computers run 0.0.60 or later, pointer movement goes over a separate encrypted UDP channel, so a packet lost now and then on Wi-Fi no longer makes the pointer stop and jump. Keys and clicks still all arrive, in order. With an older version on the other side, or UDP blocked by a firewall, the original connection is used and everything still works.
+Pointer movement goes over a separate encrypted UDP channel, so a packet lost now and then on Wi-Fi no longer makes the pointer stop and jump. Keys and clicks still all arrive, in order. When UDP is blocked by a firewall, the original connection is used and everything still works.
 
 ### Leaving and stopping
 

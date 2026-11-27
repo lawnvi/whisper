@@ -12,8 +12,8 @@ enum WhisperFrameType {
   fileError(8),
   clipboardOffer(9),
   clipboardRequest(10),
-  clipboardData(11),
-  clipboardComplete(12),
+  // Codes 11 and 12 (legacy clipboardData / clipboardComplete) were retired
+  // in protocol 16; all clipboard files and images go over file transfers.
   clipboardClear(13),
   clipboardError(14),
 

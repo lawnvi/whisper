@@ -13,21 +13,16 @@ import 'package:whisper/helper/privacy_log.dart';
 import 'package:whisper/model/file_transfer.dart';
 import 'package:whisper/remote_files/fs_placement.dart';
 import 'package:whisper/remote_files/mount/mount_names.dart';
+import 'package:whisper/remote_input/remote_clipboard_paths.dart';
+import 'package:whisper/socket/file_transfer_v3.dart'
+    show fileTransferPeerCanceled;
 import 'package:whisper/socket/peer_connection.dart';
 import 'package:whisper/socket/whisper_frame_v3.dart';
 import 'package:whisper/socket/wire_input_policy.dart'
     show isCanonicalTransferId;
-import 'package:whisper/remote_input/remote_clipboard_paths.dart';
 
-// Files sent as clipboard frames, held in memory along the way: what older
-// devices take, and what a screenshot uses.
-const int remoteClipboardMaxFileBytes = 64 * 1024 * 1024;
-const int remoteClipboardMaxBatchBytes = 128 * 1024 * 1024;
-const int remoteClipboardMaxItems = 20;
-const int remoteClipboardChunkBytes = 512 * 1024;
-
-// Files sent as ordinary file transfers, between devices that both can: the
-// disk is the limit, not memory.
+// All clipboard files and images travel as ordinary resumable file transfers:
+// the disk is the limit, not memory.
 const int remoteClipboardTransferMaxFileBytes = 64 * 1024 * 1024 * 1024;
 const int remoteClipboardTransferMaxBatchBytes = 256 * 1024 * 1024 * 1024;
 // Each item is one transfer, and a device keeps at most 32 unfinished
@@ -133,8 +128,9 @@ final class RemoteClipboardLocalItem {
   final Stream<List<int>> Function() openRead;
   final bool isImage;
 
-  /// A file on disk with this content, for sending it as a file transfer.
-  /// Null when it has none (image bytes): it then goes as frames.
+  /// A file on disk with this content, for sending it directly as a file
+  /// transfer. When null (in-memory image bytes), the engine materializes it
+  /// into an app-private staging file on paste and removes it once done.
   final Future<String> Function()? resolvePath;
 }
 
@@ -206,7 +202,6 @@ final class RemoteClipboardTransferEngine {
     required RemoteClipboardSessionValidator sessionValidator,
     DesktopClipboardFileWriter writer = const DesktopClipboardFileWriter(),
     RemoteClipboardDirectoryProvider? directoryProvider,
-    Duration requestTimeout = const Duration(minutes: 2),
     Duration cacheTtl = const Duration(minutes: 10),
     Uuid uuid = const Uuid(),
     RemoteClipboardFileSender? sendFile,
@@ -219,7 +214,6 @@ final class RemoteClipboardTransferEngine {
        _sessionValidator = sessionValidator,
        _writer = writer,
        _directoryProvider = directoryProvider ?? _defaultDirectory,
-       _requestTimeout = requestTimeout,
        _cacheTtl = cacheTtl,
        _uuid = uuid,
        _sendFile = sendFile,
@@ -233,12 +227,9 @@ final class RemoteClipboardTransferEngine {
   final RemoteClipboardSessionValidator _sessionValidator;
   final DesktopClipboardFileWriter _writer;
   final RemoteClipboardDirectoryProvider _directoryProvider;
-  final Duration _requestTimeout;
   final Duration _cacheTtl;
   final Uuid _uuid;
 
-  /// Files go as file transfers when both ends can: fast, and as large as
-  /// the disk allows. Without these, every file goes as frames.
   final RemoteClipboardFileSender? _sendFile;
   final Future<void> Function(String transferId)? _cancelTransfer;
   final TransferPlacements? _placements;
@@ -252,6 +243,18 @@ final class RemoteClipboardTransferEngine {
   /// The files each paste put on the clipboard, by what was copied (its
   /// offer id, the paste's key).
   final Map<String, List<String>> _prepared = <String, List<String>>{};
+
+  /// Temporary private staging directories created for outgoing in-memory
+  /// clipboard items (such as screenshots), keyed by transfer id.
+  final Map<String, _StagedOutgoing> _stagedOutgoing =
+      <String, _StagedOutgoing>{};
+
+  /// Deletes leftover clipboard caches and screenshot staging files from a
+  /// previous run.
+  Future<void> cleanupStaleDirectories() async {
+    final base = await _directoryProvider();
+    await cleanupRemoteClipboardDirectories(base.path);
+  }
 
   /// Which paste a shortcut pressed now in [sessionId] is: what is offered
   /// there.
@@ -294,6 +297,8 @@ final class RemoteClipboardTransferEngine {
   bool get _sendsTransfers =>
       _sendFile != null && _cancelTransfer != null && _placements != null;
 
+  bool get _receivesTransfers => _placements != null && _cancelTransfer != null;
+
   /// Pastes whose files are on their way, by offer id. Several at once: a
   /// paste pressed while another one's files come waits its turn instead of
   /// cancelling it.
@@ -304,7 +309,6 @@ final class RemoteClipboardTransferEngine {
 
   final Map<String, _SourceOffer> _sourceOffers = <String, _SourceOffer>{};
   final Map<String, _RemoteOffer> _remoteOffers = <String, _RemoteOffer>{};
-  final Map<String, _IncomingRequest> _incoming = <String, _IncomingRequest>{};
   final Map<String, _CachedPaste> _cached = <String, _CachedPaste>{};
   final Map<String, Timer> _cacheTimers = <String, Timer>{};
   final Map<_RemoteOffer, Future<RemoteClipboardPasteResult>>
@@ -325,11 +329,7 @@ final class RemoteClipboardTransferEngine {
       traceRemoteClipboard('publish_rejected', reason: 'session');
       return false;
     }
-    final viaTransfer =
-        _sendsTransfers &&
-        items.isNotEmpty &&
-        items.every((item) => item.resolvePath != null);
-    final normalized = _validatedLocalItems(items, viaTransfer: viaTransfer);
+    final normalized = _validatedLocalItems(items);
     if (normalized == null) {
       traceRemoteClipboard('publish_rejected', reason: 'limits');
       await clearSession(sessionId, notifyPeer: true, peerId: peerId);
@@ -350,24 +350,6 @@ final class RemoteClipboardTransferEngine {
       _sourceOffers.remove(sessionId);
       return false;
     }
-    if (viaTransfer &&
-        _validatedLocalItems(items, viaTransfer: false) == null) {
-      // An older device turns this offer down and would keep pasting the
-      // previous one: it hears that the clipboard was cleared first.
-      await _sendFrame(
-        binding,
-        WhisperFrameV3(
-          type: WhisperFrameType.clipboardClear,
-          transferId: '',
-          offset: 0,
-          sequence: 0,
-          payload: _jsonBytes(<String, Object?>{
-            'protocolVersion': protocolVersion,
-            'sessionId': sessionId,
-          }),
-        ),
-      );
-    }
     final sent = await _sendFrame(
       binding,
       WhisperFrameV3(
@@ -386,8 +368,6 @@ final class RemoteClipboardTransferEngine {
                 'kind': item.isImage ? 'image' : 'file',
               },
           ],
-          // Older devices ignore it and ask for frames.
-          if (viaTransfer) 'viaTransfer': true,
         }),
       ),
     );
@@ -410,6 +390,9 @@ final class RemoteClipboardTransferEngine {
     _sourceOffers.remove(sessionId);
     final remote = _remoteOffers[sessionId];
     final cleanup = _removeRemoteOffer(sessionId, endsPaste: endsPaste);
+    final stagingCleanup = endsPaste
+        ? _cleanupStagedForSession(sessionId)
+        : Future<void>.value();
     try {
       if (notifyPeer && peerId.isNotEmpty) {
         final binding = _currentBinding(peerId);
@@ -430,7 +413,7 @@ final class RemoteClipboardTransferEngine {
         }
       }
     } finally {
-      await cleanup;
+      await Future.wait(<Future<void>>[cleanup, stagingCleanup]);
     }
   }
 
@@ -440,10 +423,15 @@ final class RemoteClipboardTransferEngine {
         if (offer.peerId == peerId) offer.sessionId,
       for (final offer in _remoteOffers.values)
         if (offer.peerId == peerId) offer.sessionId,
+      for (final staged in _stagedOutgoing.values)
+        if (staged.peerId == peerId) staged.sessionId,
     };
-    await Future.wait(
-      sessionIds.map((sessionId) => clearSession(sessionId, endsPaste: true)),
-    );
+    await Future.wait(<Future<void>>[
+      ...sessionIds.map(
+        (sessionId) => clearSession(sessionId, endsPaste: true),
+      ),
+      _cleanupStagedForPeer(peerId),
+    ]);
   }
 
   Future<RemoteClipboardPasteResult> preparePaste({
@@ -541,12 +529,6 @@ final class RemoteClipboardTransferEngine {
     try {
       return await download;
     } catch (error) {
-      final request = _incoming[offer.sessionId];
-      if (request != null && identical(request.offer, offer)) {
-        _incoming.remove(offer.sessionId);
-        request.complete(RemoteClipboardPasteResult.failed);
-        await request.dispose(deleteDirectory: true);
-      }
       traceRemoteClipboard(
         'paste_download_failed',
         reason: error.runtimeType.toString(),
@@ -573,7 +555,6 @@ final class RemoteClipboardTransferEngine {
       return RemoteClipboardPasteResult.notAvailable;
     }
     final sessionId = offer.sessionId;
-    final peerId = offer.peerId;
     final cached = _cached[sessionId];
     if (cached != null &&
         cached.offerId == offer.offerId &&
@@ -584,68 +565,10 @@ final class RemoteClipboardTransferEngine {
     if (!_isCurrentRemoteOffer(offer)) {
       return RemoteClipboardPasteResult.notAvailable;
     }
-    if (offer.viaTransfer && _placements != null && _cancelTransfer != null) {
-      return _downloadAsTransfers(offer);
-    }
-    final existing = _incoming[sessionId];
-    if (existing != null && existing.offer.offerId == offer.offerId) {
-      return existing.completion.future.timeout(
-        _requestTimeout,
-        onTimeout: () => RemoteClipboardPasteResult.failed,
-      );
-    }
-    await _removeCached(sessionId);
-    if (!_isCurrentRemoteOffer(offer)) {
-      return RemoteClipboardPasteResult.notAvailable;
-    }
-    if (existing != null) {
-      existing.complete(RemoteClipboardPasteResult.failed);
-      await existing.dispose(deleteDirectory: true);
-    }
-    final directory = await _offerDirectory(offer);
-    await directory.create(recursive: true);
-    final request = await _IncomingRequest.create(offer, directory);
-    // A local copy, new offer or disconnect can supersede this download while
-    // its temporary files are being opened.
-    if (!_isCurrentRemoteOffer(offer)) {
-      await request.dispose(deleteDirectory: true);
-      return RemoteClipboardPasteResult.notAvailable;
-    }
-    _incoming[sessionId] = request;
-    final binding = _currentBinding(peerId);
-    if (binding == null ||
-        !await _sendFrame(
-          binding,
-          WhisperFrameV3(
-            type: WhisperFrameType.clipboardRequest,
-            transferId: offer.offerId,
-            offset: 0,
-            sequence: 0,
-            payload: _jsonBytes(<String, Object?>{
-              'protocolVersion': protocolVersion,
-              'sessionId': sessionId,
-            }),
-          ),
-        )) {
-      traceRemoteClipboard('request_sent', success: false);
-      if (identical(_incoming[sessionId], request)) {
-        _incoming.remove(sessionId);
-      }
-      request.complete(RemoteClipboardPasteResult.failed);
-      await request.dispose(deleteDirectory: true);
+    if (!_receivesTransfers) {
       return RemoteClipboardPasteResult.failed;
     }
-    traceRemoteClipboard('request_sent', success: true);
-    final result = await request.completion.future.timeout(
-      _requestTimeout,
-      onTimeout: () => RemoteClipboardPasteResult.failed,
-    );
-    if (result == RemoteClipboardPasteResult.failed &&
-        identical(_incoming[sessionId], request)) {
-      _incoming.remove(sessionId);
-      await request.dispose(deleteDirectory: true);
-    }
-    return result;
+    return _downloadAsTransfers(offer);
   }
 
   RemoteClipboardOfferSnapshot? remoteOffer({
@@ -691,6 +614,7 @@ final class RemoteClipboardTransferEngine {
           size: item.size,
           isImage: item.isImage,
           openRead: () => _openRelayedItem(origin, index),
+          resolvePath: () => _resolveRelayedPath(origin, index),
         ),
       );
     }
@@ -701,12 +625,12 @@ final class RemoteClipboardTransferEngine {
     );
   }
 
-  Stream<List<int>> _openRelayedItem(_RemoteOffer offer, int index) async* {
+  Future<String> _resolveRelayedPath(_RemoteOffer offer, int index) async {
     if (!identical(_remoteOffers[offer.sessionId], offer)) {
       throw const FileSystemException('workspace clipboard offer changed');
     }
     final result = await _materializeRemoteOffer(offer);
-    final cached = _cached[offer.sessionId];
+    final cached = _cached[offer.sessionId] ?? _leftovers[offer.offerId];
     if (result != RemoteClipboardPasteResult.prepared ||
         cached == null ||
         cached.offerId != offer.offerId ||
@@ -714,7 +638,12 @@ final class RemoteClipboardTransferEngine {
         index >= cached.paths.length) {
       throw const FileSystemException('workspace clipboard relay failed');
     }
-    yield* File(cached.paths[index]).openRead();
+    return cached.paths[index];
+  }
+
+  Stream<List<int>> _openRelayedItem(_RemoteOffer offer, int index) async* {
+    final path = await _resolveRelayedPath(offer, index);
+    yield* File(path).openRead();
   }
 
   Future<void> handleFrame(
@@ -748,12 +677,6 @@ final class RemoteClipboardTransferEngine {
         return;
       case WhisperFrameType.clipboardRequest:
         await _handleRequest(binding, frame);
-        return;
-      case WhisperFrameType.clipboardData:
-        await _handleData(binding, frame);
-        return;
-      case WhisperFrameType.clipboardComplete:
-        await _handleComplete(binding, frame);
         return;
       case WhisperFrameType.clipboardError:
         await _handleError(binding, frame);
@@ -796,8 +719,6 @@ final class RemoteClipboardTransferEngine {
         )) {
       throw const FormatException('invalid remote clipboard offer');
     }
-    final viaTransfer = json['viaTransfer'] == true;
-    final limits = _limits(viaTransfer);
     final items = <_RemoteItem>[];
     var total = 0;
     for (final raw in rawItems) {
@@ -813,13 +734,15 @@ final class RemoteClipboardTransferEngine {
           size is! int ||
           (kind != 'file' && kind != 'image') ||
           size < 0 ||
-          size > limits.file) {
+          size > remoteClipboardTransferMaxFileBytes) {
         throw const FormatException('invalid remote clipboard item');
       }
       total += size;
       items.add(_RemoteItem(name: name, size: size, isImage: kind == 'image'));
     }
-    if (items.isEmpty || items.length > limits.items || total > limits.batch) {
+    if (items.isEmpty ||
+        items.length > remoteClipboardTransferMaxItems ||
+        total > remoteClipboardTransferMaxBatchBytes) {
       throw const FormatException('remote clipboard offer exceeds limits');
     }
     await _replaceRemoteOffer(
@@ -828,7 +751,6 @@ final class RemoteClipboardTransferEngine {
         sessionId: sessionId,
         peerId: binding.peerId,
         items: items,
-        viaTransfer: viaTransfer,
       ),
     );
     traceRemoteClipboard('offer_received', count: items.length);
@@ -871,28 +793,25 @@ final class RemoteClipboardTransferEngine {
     }
     traceRemoteClipboard('request_received');
     final transferIds = _transferIdsFrom(json['transferIds'], offer.items);
-    if (transferIds != null) {
-      unawaited(_sendAsTransfers(binding, offer, transferIds));
+    if (transferIds == null) {
+      await _sendError(binding, offer.offerId, offer.sessionId);
+      traceRemoteClipboard('request_rejected', reason: 'transfer_ids');
       return;
     }
-    unawaited(_streamOffer(binding, offer));
+    unawaited(_sendAsTransfers(binding, offer, transferIds));
   }
 
-  /// The ids an asking device chose for the transfers, one per item, when it
-  /// takes them and this device can send them.
+  /// The ids an asking device chose for the transfers, one per item.
   List<String>? _transferIdsFrom(
     Object? raw,
     List<RemoteClipboardLocalItem> items,
   ) {
-    if (!_sendsTransfers ||
-        raw is! List ||
-        raw.length != items.length ||
-        items.any((item) => item.resolvePath == null)) {
+    if (!_sendsTransfers || raw is! List || raw.length != items.length) {
       return null;
     }
     final ids = <String>[];
     for (final value in raw) {
-      if (value is! String || !_uuidPattern.hasMatch(value)) {
+      if (value is! String || !isCanonicalTransferId(value)) {
         return null;
       }
       ids.add(value);
@@ -900,23 +819,39 @@ final class RemoteClipboardTransferEngine {
     return ids.toSet().length == ids.length ? ids : null;
   }
 
-  static final RegExp _uuidPattern = RegExp(
-    r'^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
-  );
-
   Future<void> _sendAsTransfers(
     TransferConnectionBinding binding,
     _SourceOffer offer,
     List<String> transferIds,
   ) async {
     traceRemoteClipboard('transfers_start', count: offer.items.length);
+    _listenToTransfers();
     try {
       // What was asked for is sent, even if the clipboard changed since: the
       // paste on the other device waits for it.
       for (var index = 0; index < offer.items.length; index++) {
-        final path = await offer.items[index].resolvePath!();
-        _placements?.markEphemeral(transferIds[index]);
-        if (!await _sendFile!(offer.peerId, path, transferIds[index])) {
+        final item = offer.items[index];
+        final transferId = transferIds[index];
+        Directory? stagedDir;
+        final String path;
+        if (item.resolvePath != null) {
+          path = await item.resolvePath!();
+        } else {
+          final staged = await _stageItemToPrivateTemp(
+            item: item,
+            transferId: transferId,
+            sessionId: offer.sessionId,
+            peerId: offer.peerId,
+          );
+          stagedDir = staged.directory;
+          path = staged.path;
+        }
+        _placements?.markEphemeral(transferId);
+        final sent = await _sendFile!(offer.peerId, path, transferId);
+        if (!sent) {
+          if (stagedDir != null) {
+            await _disposeStagedTransfer(transferId);
+          }
           throw const FileSystemException('clipboard transfer not sent');
         }
       }
@@ -931,141 +866,66 @@ final class RemoteClipboardTransferEngine {
     }
   }
 
-  Future<void> _streamOffer(
-    TransferConnectionBinding binding,
-    _SourceOffer offer,
-  ) async {
-    traceRemoteClipboard('stream_start', count: offer.items.length);
+  Future<({Directory directory, String path})> _stageItemToPrivateTemp({
+    required RemoteClipboardLocalItem item,
+    required String transferId,
+    required String sessionId,
+    required String peerId,
+  }) async {
+    final base = await _directoryProvider();
+    final dir = remoteClipboardStagingDirectory(base.path, transferId);
+    await dir.create(recursive: true);
+    final fileName = localFileName(item.name);
+    final filePath = p.join(dir.path, fileName);
+    final sink = File(filePath).openWrite();
+    var written = 0;
     try {
-      for (var index = 0; index < offer.items.length; index++) {
-        final item = offer.items[index];
-        var offset = 0;
-        await for (final block in item.openRead()) {
-          var start = 0;
-          while (start < block.length) {
-            final end = (start + remoteClipboardChunkBytes).clamp(
-              0,
-              block.length,
-            );
-            final chunk = Uint8List.fromList(block.sublist(start, end));
-            if (chunk.isEmpty || offset + chunk.length > item.size) {
-              throw const FileSystemException('clipboard source size changed');
-            }
-            final current = _sourceOffers[offer.sessionId];
-            if (!identical(current, offer) ||
-                _currentBinding(offer.peerId) != binding ||
-                !await _sendFrame(
-                  binding,
-                  WhisperFrameV3(
-                    type: WhisperFrameType.clipboardData,
-                    transferId: offer.offerId,
-                    offset: offset,
-                    sequence: index,
-                    payload: chunk,
-                  ),
-                )) {
-              throw const FileSystemException('clipboard peer disconnected');
-            }
-            offset += chunk.length;
-            start = end;
-          }
-        }
-        if (offset != item.size) {
+      await for (final chunk in item.openRead()) {
+        written += chunk.length;
+        if (written > item.size) {
           throw const FileSystemException('clipboard source size changed');
         }
+        sink.add(chunk);
       }
-      await _sendFrame(
-        binding,
-        WhisperFrameV3(
-          type: WhisperFrameType.clipboardComplete,
-          transferId: offer.offerId,
-          offset: offer.items.fold<int>(0, (sum, item) => sum + item.size),
-          sequence: offer.items.length,
-          payload: _jsonBytes(<String, Object?>{
-            'protocolVersion': protocolVersion,
-            'sessionId': offer.sessionId,
-          }),
-        ),
-      );
-      traceRemoteClipboard('stream_complete', success: true);
-    } catch (error) {
-      traceRemoteClipboard(
-        'stream_complete',
-        success: false,
-        reason: error.runtimeType.toString(),
-      );
-      await _sendError(binding, offer.offerId, offer.sessionId);
-    }
-  }
-
-  Future<void> _handleData(
-    TransferConnectionBinding binding,
-    WhisperFrameV3 frame,
-  ) async {
-    if (frame.payload.isEmpty ||
-        frame.payload.length > remoteClipboardChunkBytes) {
-      throw const FormatException('invalid remote clipboard data');
-    }
-    final request = _incoming.values
-        .where((item) => item.offer.offerId == frame.transferId)
-        .firstOrNull;
-    if (request == null || request.offer.peerId != binding.peerId) {
-      return;
-    }
-    try {
-      await request.add(frame);
+      await sink.flush();
+      await sink.close();
+      if (written != item.size) {
+        throw const FileSystemException('clipboard source size changed');
+      }
     } catch (_) {
-      if (!identical(_incoming[request.offer.sessionId], request)) {
-        return;
-      }
-      _incoming.remove(request.offer.sessionId);
-      request.complete(RemoteClipboardPasteResult.failed);
-      await request.dispose(deleteDirectory: true);
+      await sink.close().catchError((_) {});
+      await dir.delete(recursive: true).catchError((_) => dir);
       rethrow;
     }
+    _stagedOutgoing[transferId] = _StagedOutgoing(
+      transferId: transferId,
+      sessionId: sessionId,
+      peerId: peerId,
+      directory: dir,
+    );
+    return (directory: dir, path: filePath);
   }
 
-  Future<void> _handleComplete(
-    TransferConnectionBinding binding,
-    WhisperFrameV3 frame,
-  ) async {
-    final json = _frameJson(frame);
-    final sessionId = json['sessionId'];
-    if (json['protocolVersion'] != protocolVersion || sessionId is! String) {
-      throw const FormatException('invalid remote clipboard completion');
-    }
-    final request = _incoming[sessionId];
-    // A screenshot can be replaced or cancelled while its last frames are
-    // already on the wire; those frames must not tear down the peer session.
-    if (request == null ||
-        request.offer.peerId != binding.peerId ||
-        request.offer.offerId != frame.transferId) {
-      return;
-    }
-    if (frame.sequence != request.offer.items.length ||
-        frame.offset != request.offer.totalSize) {
-      throw const FormatException('invalid remote clipboard completion');
-    }
-    _incoming.remove(sessionId);
-    try {
-      final paths = await request.finish();
-      if (!_isCurrentRemoteOffer(request.offer)) {
-        request.complete(RemoteClipboardPasteResult.notAvailable);
-        await request.dispose(deleteDirectory: true);
-        return;
-      }
-      _storeCached(request.offer, request.directory, paths);
-      request.complete(RemoteClipboardPasteResult.prepared);
-      traceRemoteClipboard('cache_ready', success: true);
-    } catch (error) {
-      traceRemoteClipboard(
-        'cache_ready',
-        success: false,
-        reason: error.runtimeType.toString(),
-      );
-      request.complete(RemoteClipboardPasteResult.failed);
-      await request.dispose(deleteDirectory: true);
-    }
+  Future<void> _disposeStagedTransfer(String transferId) async {
+    final staged = _stagedOutgoing.remove(transferId);
+    if (staged == null) return;
+    await staged.dispose();
+  }
+
+  Future<void> _cleanupStagedForSession(String sessionId) async {
+    final ids = <String>[
+      for (final entry in _stagedOutgoing.entries)
+        if (entry.value.sessionId == sessionId) entry.key,
+    ];
+    await Future.wait(ids.map(_disposeStagedTransfer));
+  }
+
+  Future<void> _cleanupStagedForPeer(String peerId) async {
+    final ids = <String>[
+      for (final entry in _stagedOutgoing.entries)
+        if (entry.value.peerId == peerId) entry.key,
+    ];
+    await Future.wait(ids.map(_disposeStagedTransfer));
   }
 
   Future<void> _handleError(
@@ -1074,15 +934,15 @@ final class RemoteClipboardTransferEngine {
   ) async {
     final json = _frameJson(frame);
     final sessionId = json['sessionId'];
-    final request = sessionId is String ? _incoming[sessionId] : null;
+    final request = _transferRequests[frame.transferId];
     if (request == null ||
         request.offer.peerId != binding.peerId ||
-        request.offer.offerId != frame.transferId) {
+        (sessionId is String &&
+            sessionId.isNotEmpty &&
+            request.offer.sessionId != sessionId)) {
       return;
     }
-    _incoming.remove(sessionId);
-    request.complete(RemoteClipboardPasteResult.failed);
-    await request.dispose(deleteDirectory: true);
+    await _abandonTransferRequest(request);
   }
 
   Future<void> _sendError(
@@ -1106,40 +966,25 @@ final class RemoteClipboardTransferEngine {
   }
 
   List<RemoteClipboardLocalItem>? _validatedLocalItems(
-    List<RemoteClipboardLocalItem> items, {
-    required bool viaTransfer,
-  }) {
-    final limits = _limits(viaTransfer);
-    if (items.isEmpty || items.length > limits.items) {
+    List<RemoteClipboardLocalItem> items,
+  ) {
+    if (items.isEmpty || items.length > remoteClipboardTransferMaxItems) {
       return null;
     }
     var total = 0;
     for (final item in items) {
       if (!isSafeClipboardName(item.name) ||
           item.size < 0 ||
-          item.size > limits.file) {
+          item.size > remoteClipboardTransferMaxFileBytes) {
         return null;
       }
       total += item.size;
-      if (total > limits.batch) {
+      if (total > remoteClipboardTransferMaxBatchBytes) {
         return null;
       }
     }
     return List<RemoteClipboardLocalItem>.unmodifiable(items);
   }
-
-  static ({int items, int file, int batch}) _limits(bool viaTransfer) =>
-      viaTransfer
-      ? (
-          items: remoteClipboardTransferMaxItems,
-          file: remoteClipboardTransferMaxFileBytes,
-          batch: remoteClipboardTransferMaxBatchBytes,
-        )
-      : (
-          items: remoteClipboardMaxItems,
-          file: remoteClipboardMaxFileBytes,
-          batch: remoteClipboardMaxBatchBytes,
-        );
 
   void _storeCached(
     _RemoteOffer offer,
@@ -1163,7 +1008,7 @@ final class RemoteClipboardTransferEngine {
     });
   }
 
-  // ---- Files that come as file transfers ----
+  // ---- Files and screenshots that come as file transfers ----
 
   /// Transfers given up on before their offer arrived: cancelled as soon as
   /// they show up.
@@ -1232,7 +1077,8 @@ final class RemoteClipboardTransferEngine {
   }
 
   void _listenToTransfers() {
-    final placements = _placements!;
+    final placements = _placements;
+    if (placements == null) return;
     _placedSubscription ??= placements.placed.listen(_onTransferPlaced);
     _updateSubscription ??= placements.updates.listen(_onTransferUpdated);
   }
@@ -1256,12 +1102,9 @@ final class RemoteClipboardTransferEngine {
       return null;
     }
     final total = offer.items.fold<int>(0, (sum, item) => sum + item.size);
-    final incoming = _incoming[offer.sessionId];
     final cached = _cached[offer.sessionId];
     final received = transfers != null
         ? transfers.received.fold<int>(0, (sum, bytes) => sum + bytes)
-        : incoming != null && identical(incoming.offer, offer)
-        ? incoming.offsets.fold<int>(0, (sum, bytes) => sum + bytes)
         : (cached != null && cached.offerId == key) || _leftovers[key] != null
         ? total
         : 0;
@@ -1279,15 +1122,6 @@ final class RemoteClipboardTransferEngine {
     final transfers = _transferRequests[key];
     if (transfers != null) {
       await _abandonTransferRequest(transfers);
-    }
-    final sessionId = _incoming.entries
-        .where((entry) => entry.value.offer.offerId == key)
-        .map((entry) => entry.key)
-        .firstOrNull;
-    final incoming = sessionId == null ? null : _incoming.remove(sessionId);
-    if (incoming != null) {
-      incoming.complete(RemoteClipboardPasteResult.failed);
-      await incoming.dispose(deleteDirectory: true);
     }
   }
 
@@ -1315,6 +1149,16 @@ final class RemoteClipboardTransferEngine {
   }
 
   void _onTransferUpdated(TransferSnapshot snapshot) {
+    if (snapshot.direction == FileTransferDirection.outgoing) {
+      final stoppedByPeer =
+          snapshot.state == FileTransferState.paused &&
+          snapshot.lastError == fileTransferPeerCanceled;
+      if (_stagedOutgoing.containsKey(snapshot.transferId) &&
+          (isTerminalFileTransferState(snapshot.state) || stoppedByPeer)) {
+        unawaited(_disposeStagedTransfer(snapshot.transferId));
+      }
+      return;
+    }
     if (snapshot.direction != FileTransferDirection.incoming) {
       return;
     }
@@ -1361,7 +1205,9 @@ final class RemoteClipboardTransferEngine {
           directory: request.directory,
           paths: paths,
           createdAt: DateTime.now(),
-          asImage: false,
+          asImage:
+              request.offer.items.length == 1 &&
+              request.offer.items.single.isImage,
         ),
       );
       traceRemoteClipboard('cache_ready', success: true, reason: 'left');
@@ -1408,7 +1254,6 @@ final class RemoteClipboardTransferEngine {
     if (identical(_latestRemoteOffer, removed)) {
       _latestRemoteOffer = null;
     }
-    final request = _incoming.remove(sessionId);
     // A paste waiting for its files was asked for before this: it goes on.
     final ended = endsPaste
         ? [
@@ -1422,9 +1267,7 @@ final class RemoteClipboardTransferEngine {
     _cacheTimers.remove(sessionId)?.cancel();
     // Only the content changed: what was pasted may still be being copied out.
     if (cached != null && !endsPaste) _retire(cached);
-    request?.complete(RemoteClipboardPasteResult.failed);
     await Future.wait([
-      if (request != null) request.dispose(deleteDirectory: true),
       for (final request in ended) _abandonTransferRequest(request),
       if (cached != null && endsPaste) cached.dispose(),
     ]);
@@ -1495,6 +1338,26 @@ final class RemoteClipboardTransferEngine {
   static Future<Directory> _defaultDirectory() async => Directory.systemTemp;
 }
 
+final class _StagedOutgoing {
+  const _StagedOutgoing({
+    required this.transferId,
+    required this.sessionId,
+    required this.peerId,
+    required this.directory,
+  });
+
+  final String transferId;
+  final String sessionId;
+  final String peerId;
+  final Directory directory;
+
+  Future<void> dispose() async {
+    if (await directory.exists()) {
+      await directory.delete(recursive: true).catchError((_) => directory);
+    }
+  }
+}
+
 final class _SourceOffer {
   const _SourceOffer({
     required this.offerId,
@@ -1515,17 +1378,12 @@ final class _RemoteOffer {
     required this.sessionId,
     required this.peerId,
     required this.items,
-    this.viaTransfer = false,
   });
 
   final String offerId;
   final String sessionId;
   final String peerId;
   final List<_RemoteItem> items;
-
-  /// The source sends these as file transfers when asked with their ids.
-  final bool viaTransfer;
-  int get totalSize => items.fold<int>(0, (sum, item) => sum + item.size);
 }
 
 final class _RemoteItem {
@@ -1536,107 +1394,6 @@ final class _RemoteItem {
   final String name;
   final int size;
   final bool isImage;
-}
-
-final class _IncomingRequest {
-  _IncomingRequest._({
-    required this.offer,
-    required this.directory,
-    required this.paths,
-    required this.files,
-  });
-
-  static Future<_IncomingRequest> create(
-    _RemoteOffer offer,
-    Directory directory,
-  ) async {
-    final paths = <String>[];
-    final files = <RandomAccessFile>[];
-    final usedNames = <String>{};
-    try {
-      for (final item in offer.items) {
-        final name = _uniqueName(item.name, usedNames);
-        final path = p.join(directory.path, name);
-        paths.add(path);
-        files.add(await File(path).open(mode: FileMode.write));
-      }
-      return _IncomingRequest._(
-        offer: offer,
-        directory: directory,
-        paths: paths,
-        files: files,
-      );
-    } catch (_) {
-      await Future.wait(files.map((file) => file.close().catchError((_) {})));
-      await directory.delete(recursive: true).catchError((_) => directory);
-      rethrow;
-    }
-  }
-
-  final _RemoteOffer offer;
-  final Directory directory;
-  final List<String> paths;
-  final List<RandomAccessFile> files;
-  final Completer<RemoteClipboardPasteResult> completion =
-      Completer<RemoteClipboardPasteResult>();
-  late final List<int> offsets = List<int>.filled(offer.items.length, 0);
-  bool _closed = false;
-
-  Future<void> add(WhisperFrameV3 frame) async {
-    final index = frame.sequence;
-    if (_closed || index < 0 || index >= offer.items.length) {
-      throw const FormatException('invalid remote clipboard item index');
-    }
-    final expected = offsets[index];
-    final item = offer.items[index];
-    if (frame.offset != expected ||
-        frame.payload.length > item.size - expected) {
-      throw const FormatException('invalid remote clipboard offset');
-    }
-    await files[index].writeFrom(frame.payload);
-    offsets[index] += frame.payload.length;
-  }
-
-  Future<List<String>> finish() async {
-    if (_closed ||
-        List<int>.generate(
-          offer.items.length,
-          (index) => index,
-        ).any((index) => offsets[index] != offer.items[index].size)) {
-      throw const FormatException('incomplete remote clipboard transfer');
-    }
-    _closed = true;
-    await Future.wait(files.map((file) => file.close()));
-    return List<String>.unmodifiable(paths);
-  }
-
-  void complete(RemoteClipboardPasteResult result) {
-    if (!completion.isCompleted) {
-      completion.complete(result);
-    }
-  }
-
-  Future<void> dispose({required bool deleteDirectory}) async {
-    if (!_closed) {
-      _closed = true;
-      await Future.wait(files.map((file) => file.close().catchError((_) {})));
-    }
-    if (deleteDirectory && await directory.exists()) {
-      await directory.delete(recursive: true).catchError((_) => directory);
-    }
-  }
-
-  static String _uniqueName(String original, Set<String> used) {
-    var candidate = original;
-    var suffix = 2;
-    final extension = p.extension(original);
-    final stem = p.basenameWithoutExtension(original);
-    while (!used.add(candidate.toLowerCase())) {
-      candidate = '$stem-$suffix$extension';
-      suffix++;
-    }
-    return candidate;
-  }
 }
 
 final class _CachedPaste {

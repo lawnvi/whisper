@@ -40,9 +40,7 @@ OutboundFrameClassification classifyOutboundFrame(Uint8List bytes) {
       code == WhisperFrameType.browseWrite.code) {
     return (kind: OutboundPacketKind.mount, waitForSpace: true);
   }
-  if (code == WhisperFrameType.fileData.code ||
-      code == WhisperFrameType.clipboardData.code ||
-      code == WhisperFrameType.clipboardComplete.code) {
+  if (code == WhisperFrameType.fileData.code) {
     return (kind: OutboundPacketKind.file, waitForSpace: true);
   }
   return (kind: OutboundPacketKind.control, waitForSpace: false);

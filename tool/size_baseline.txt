@@ -17,11 +17,11 @@
 1188 lib/remote_files/mount/cloud_files_windows.dart
 1270 lib/remote_files/mount/mount_tree.dart
 1475 lib/remote_input/mobile_control_screen.dart
-1722 lib/remote_input/remote_clipboard_transfer.dart
+1479 lib/remote_input/remote_clipboard_transfer.dart
 2172 lib/remote_input/remote_input_coordinator.dart
 1822 lib/remote_input/remote_input_workspace_coordinator.dart
 1111 lib/share_links/share_server.dart
-4821 lib/socket/file_transfer_engine.dart
+4819 lib/socket/file_transfer_engine.dart
 1093 lib/socket/peer_socket_session.dart
 6822 lib/socket/svrmanager.dart
 1303 lib/state/desktop_quick_send_inbox.dart

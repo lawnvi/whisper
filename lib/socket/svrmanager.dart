@@ -71,6 +71,7 @@ import 'package:whisper/socket/wire_message_replay.dart';
 import 'package:whisper/socket/wire_input_policy.dart';
 import 'package:whisper/remote_input/remote_input_coordinator.dart';
 import 'package:whisper/remote_input/remote_clipboard_paste_watch.dart';
+import 'package:whisper/remote_input/remote_clipboard_paths.dart';
 import 'package:whisper/remote_input/remote_clipboard_transfer.dart';
 import 'package:whisper/remote_input/remote_input_layout.dart';
 import 'package:whisper/remote_input/remote_input_manager.dart';
@@ -474,8 +475,9 @@ class WsSvrManager {
             _peerConnections.sendToAwaitedIfCurrent(binding, frame.encode()),
         currentBinding: _peerConnections.currentBinding,
         sessionValidator: _validateRemoteClipboardSession,
-        // Files go as quiet transfers, like file-manager copies: no message
-        // in the conversation, placed where the paste waits for them.
+        // Files and screenshots go as quiet transfers, like file-manager
+        // copies: no message in the conversation, placed where the paste waits.
+        directoryProvider: defaultPrivateClipboardDirectory,
         sendFile: _sendCopiedFile,
         cancelTransfer: cancelTransfer,
         placements: TransferPlacements.shared,
@@ -1210,6 +1212,7 @@ class WsSvrManager {
       return;
     }
     await _transferEngine.reconcileInterruptedTransfersOnStartup();
+    await _remoteClipboardTransfer.cleanupStaleDirectories();
     _interruptedTransfersReconciled = true;
   }
 
@@ -4423,7 +4426,6 @@ class WsSvrManager {
       throw const WireInputRejected(WireInputReason.sessionNotAuthenticated);
     }
     if ((frame.type == WhisperFrameType.fileData ||
-            frame.type == WhisperFrameType.clipboardData ||
             frame.type == WhisperFrameType.browseData ||
             frame.type == WhisperFrameType.browseWrite) &&
         frame.payload.length > _maxFileDataPayloadBytes) {
@@ -4462,8 +4464,6 @@ class WsSvrManager {
         break;
       case WhisperFrameType.clipboardOffer:
       case WhisperFrameType.clipboardRequest:
-      case WhisperFrameType.clipboardData:
-      case WhisperFrameType.clipboardComplete:
       case WhisperFrameType.clipboardClear:
       case WhisperFrameType.clipboardError:
         if (!(await LocalSetting().instance()).clipboard) {
