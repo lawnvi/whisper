@@ -55,36 +55,19 @@ void main() {
       );
     },
   );
-  test('manual capabilities are absent for both older protocol versions', () {
+  test('manual capabilities round-trip and ignore unknown capability keys', () {
     const caps = PeerCapabilities(
       remoteInputManualSourceV1: true,
       remoteInputManualSinkV1: true,
       remoteInputWorkspaceGraphV1: true,
     );
-    for (final version in [9, 10]) {
-      final json = caps.toWireJson(version);
-      expect(json, isNot(contains('remoteInputManualSourceV1')));
-      expect(
-        PeerCapabilities.fromWireJson(
-          json,
-          protocolVersion: version,
-        ).remoteInputManualSinkV1,
-        isFalse,
-      );
-      expect(
-        () => PeerCapabilities.fromWireJson({
-          ...json,
-          'remoteInputManualSinkV1': true,
-        }, protocolVersion: version),
-        throwsFormatException,
-      );
-    }
-    expect(
-      PeerCapabilities.fromWireJson(
-        caps.toWireJson(11),
-      ).remoteInputManualSinkV1,
-      isTrue,
-    );
+    final decoded = PeerCapabilities.fromWireJson(<String, dynamic>{
+      ...caps.toJson(),
+      'futureInputFeatureV2': true,
+    });
+    expect(decoded.remoteInputManualSourceV1, isTrue);
+    expect(decoded.remoteInputManualSinkV1, isTrue);
+    expect(decoded.remoteInputWorkspaceGraphV1, isTrue);
   });
 
   late RemoteInputManager manager;

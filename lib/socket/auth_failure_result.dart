@@ -9,8 +9,9 @@ ConnectionAttemptResult authFailureResult(
 ) {
   final reason = switch (code) {
     'pairing_expired' => ConnectionAttemptReason.pairingExpired,
-    'upgrade_required' => ConnectionAttemptReason.protocolMismatch,
-    'pairing_requires_update' => ConnectionAttemptReason.pairingNeedsUpdate,
+    'upgrade_required' ||
+    'peer_upgrade_required' => ConnectionAttemptReason.protocolMismatch,
+    'local_upgrade_required' => ConnectionAttemptReason.localUpgradeRequired,
     pairingBusyAction => ConnectionAttemptReason.pairingBusy,
     'wrong_intended_peer' ||
     'wrong_intended_pkh' ||

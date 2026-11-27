@@ -2022,9 +2022,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
           return false;
         }
         final displayMessage = switch (result.reason) {
-          ConnectionAttemptReason.protocolMismatch =>
-            l10n.pairingUpgradeRequired,
-          ConnectionAttemptReason.pairingNeedsUpdate => l10n.pairingNeedsUpdate,
+          ConnectionAttemptReason.protocolMismatch => l10n.pairingUpgradeRequired,
+          ConnectionAttemptReason.localUpgradeRequired => l10n.localUpgradeRequired,
           ConnectionAttemptReason.pairingExpired => l10n.pairingExpired,
           ConnectionAttemptReason.peerRejected => l10n.pairingRejectedByPeer,
           _ => l10n.connectFailed,

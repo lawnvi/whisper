@@ -33,7 +33,7 @@ final class ConnectionDiagnostic {
         ConnectionAttemptReason.trustRevoked =>
           ConnectionDiagnosticStage.identity,
         ConnectionAttemptReason.protocolMismatch ||
-        ConnectionAttemptReason.pairingNeedsUpdate =>
+        ConnectionAttemptReason.localUpgradeRequired =>
           ConnectionDiagnosticStage.version,
         ConnectionAttemptReason.peerRejected ||
         ConnectionAttemptReason.pairingExpired ||

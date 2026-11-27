@@ -17,7 +17,6 @@ import 'package:whisper/remote_input/remote_input_layout.dart';
 import 'package:whisper/window_stream/core/window_stream_models.dart';
 import 'package:whisper/window_stream/remote/remote_peer_source.dart';
 import 'package:whisper/socket/auth_protocol.dart';
-import 'package:whisper/socket/auth_transcript.dart';
 import 'package:whisper/socket/device_identity.dart';
 import 'package:whisper/socket/peer_socket_session.dart';
 import 'package:whisper/socket/pre_auth_byte_cap.dart';
@@ -31,101 +30,41 @@ import 'package:whisper/state/peer_profile.dart';
 import 'package:whisper/state/peer_reconnect_controller.dart';
 
 void main() {
-  const newest = PeerSocketSession.protocolVersion;
-  // A server before 15 rejects a 15 hello explicitly and just closes on the
-  // newer versions after it; a plain close at 15 is a dropped connection.
-  for (final (supportedVersion, rejectsAt15) in [
-    (14, true),
-    (12, true),
-    (11, true),
-    (10, true),
-    (9, true),
-    (14, false),
-  ]) {
-    test(
-      'client retries from $newest to $supportedVersion when a legacy server '
-      '${rejectsAt15 ? 'rejects' : 'closes on'} $newest, and pairs there by QR code',
-      () async {
-        final harness = await _HandshakeHarness.start();
-        final proxy = await _LegacyCloseThenProxy.start(
-          harness.port,
-          closeCount: newest - supportedVersion,
-          rejectFirst: rejectsAt15,
-        );
-        addTearDown(proxy.close);
-
-        final result = await harness.connectVia(
-          proxy.port,
-          publicKeyHash: identityPublicKeyHash(await _publicKey(1)),
-        );
-
-        if (!rejectsAt15) {
-          expect(result.reason, ConnectionAttemptReason.transportClosed);
-          expect(proxy.acceptedConnections, 1);
-          return;
-        }
-        expect(result.status, ConnectionAttemptStatus.authenticated);
-        expect(proxy.acceptedConnections, newest + 1 - supportedVersion);
-        expect(
-          harness.client.remoteProfileFor('server-peer')?.protocolVersion,
-          supportedVersion,
-        );
-      },
-    );
-  }
-
-  // Before protocol 15 a device in the middle can choose the pairing code
-  // (see peer_socket_session_test), so there only a pinned key or a scanned
-  // QR code may vouch for the other device.
   test(
-    'below protocol $nonceCommitmentProtocolVersion a client never pairs by code alone, a server still does',
+    'incompatible servers fail in one attempt and indicate which device must update',
     () async {
-      final serverKey = await _publicKey(1);
-      final clientKey = await _publicKey(33);
-      Future<ConnectionAttemptResult> dialAt14(
-        _HandshakeHarness harness,
-      ) async {
-        final proxy = await _LegacyCloseThenProxy.start(
-          harness.port,
-          closeCount: newest - 14,
+      final harness = await _HandshakeHarness.start();
+      for (final scenario in <({
+        int version,
+        int? minVersion,
+        int? maxVersion,
+        ConnectionAttemptReason expected,
+      })>[
+        (
+          version: 15,
+          minVersion: null,
+          maxVersion: null,
+          expected: ConnectionAttemptReason.protocolMismatch,
+        ),
+        (
+          version: 17,
+          minVersion: 17,
+          maxVersion: 17,
+          expected: ConnectionAttemptReason.localUpgradeRequired,
+        ),
+      ]) {
+        final server = await _UpgradeRequiredServer.start(
+          version: scenario.version,
+          minVersion: scenario.minVersion,
+          maxVersion: scenario.maxVersion,
         );
-        addTearDown(proxy.close);
-        return harness.connectVia(proxy.port);
+        addTearDown(server.close);
+
+        final result = await harness.connectVia(server.port);
+        expect(result.status, ConnectionAttemptStatus.rejected);
+        expect(result.reason, scenario.expected);
+        expect(server.acceptedConnections, 1);
       }
-
-      // Like a server on 14, this one already trusts the client and asks for
-      // no pairing, so only the client's own refusal is in play.
-      final oldServer = await _HandshakeHarness.start();
-      await _trust(oldServer.database, 'client-peer', clientKey);
-      final refused = await dialAt14(oldServer);
-      expect(refused.status, ConnectionAttemptStatus.rejected);
-      expect(refused.reason, ConnectionAttemptReason.pairingNeedsUpdate);
-      expect(oldServer.clientEvents.pairingCount, 0);
-      expect(await oldServer.database.fetchDevice('server-peer'), isNull);
-
-      // A new server still pairs a client on 14 by code, as before: a client
-      // in the middle cannot steer the code, so only clients refuse.
-      final newServer = await _HandshakeHarness.start();
-      await _trust(newServer.database, 'server-peer', serverKey);
-      final paired = await dialAt14(newServer);
-      expect(paired.status, ConnectionAttemptStatus.authenticated);
-      expect(newServer.serverEvents.pairingCount, 1);
-      expect(
-        (await newServer.database.fetchDevice('client-peer'))?.auth,
-        isTrue,
-      );
-
-      final pinned = await _HandshakeHarness.start();
-      await _trust(pinned.database, 'server-peer', serverKey);
-      await _trust(pinned.database, 'client-peer', clientKey);
-      final reconnected = await dialAt14(pinned);
-      expect(reconnected.status, ConnectionAttemptStatus.authenticated);
-      expect(
-        pinned.client.remoteProfileFor('server-peer')?.protocolVersion,
-        14,
-      );
-      expect(pinned.clientEvents.pairingCount, 0);
-      expect(pinned.serverEvents.pairingCount, 0);
     },
   );
 
@@ -1519,70 +1458,53 @@ void main() {
   });
 }
 
-final class _LegacyCloseThenProxy {
-  _LegacyCloseThenProxy._(
+final class _UpgradeRequiredServer {
+  _UpgradeRequiredServer._(
     this._server,
-    this._upstreamPort,
-    this.closeCount,
-    this.rejectFirst,
+    this.version,
+    this.minVersion,
+    this.maxVersion,
   );
 
   final HttpServer _server;
-  final int _upstreamPort;
-  final int closeCount;
-
-  /// Answers the first hello with upgrade_required, as every server before
-  /// 15 does for a 15 hello it cannot parse, instead of closing.
-  final bool rejectFirst;
+  final int version;
+  final int? minVersion;
+  final int? maxVersion;
   final Set<WebSocket> _sockets = <WebSocket>{};
   int acceptedConnections = 0;
 
   int get port => _server.port;
 
-  static Future<_LegacyCloseThenProxy> start(
-    int upstreamPort, {
-    required int closeCount,
-    bool rejectFirst = true,
+  static Future<_UpgradeRequiredServer> start({
+    required int version,
+    int? minVersion,
+    int? maxVersion,
   }) async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    final proxy = _LegacyCloseThenProxy._(
+    final stub = _UpgradeRequiredServer._(
       server,
-      upstreamPort,
-      closeCount,
-      rejectFirst,
+      version,
+      minVersion,
+      maxVersion,
     );
-    server.listen(proxy._handleRequest);
-    return proxy;
+    server.listen(stub._handleRequest);
+    return stub;
   }
 
   Future<void> _handleRequest(HttpRequest request) async {
     final downstream = await WebSocketTransformer.upgrade(request);
     _sockets.add(downstream);
     acceptedConnections += 1;
-    if (acceptedConnections <= closeCount) {
-      await downstream.first;
-      if (acceptedConnections == 1 && rejectFirst) {
-        downstream.add(_upgradeRequiredFrame());
-      }
-      await downstream.close();
-      _sockets.remove(downstream);
-      return;
-    }
-
-    final upstream = await WebSocket.connect(
-      'ws://127.0.0.1:$_upstreamPort/chat',
+    await downstream.first;
+    downstream.add(
+      _upgradeRequiredFrame(
+        version: version,
+        minVersion: minVersion,
+        maxVersion: maxVersion,
+      ),
     );
-    _sockets.add(upstream);
-    downstream.listen(
-      upstream.add,
-      onError: (_) => upstream.close(),
-      onDone: upstream.close,
-    );
-    upstream.listen(
-      downstream.add,
-      onError: (_) => downstream.close(),
-      onDone: downstream.close,
-    );
+    await downstream.close();
+    _sockets.remove(downstream);
   }
 
   Future<void> close() async {
@@ -1591,10 +1513,18 @@ final class _LegacyCloseThenProxy {
   }
 }
 
-/// The raw auth message a legacy server sends when it cannot parse a hello.
-Uint8List _upgradeRequiredFrame() => _authFrame(
+Uint8List _upgradeRequiredFrame({
+  required int version,
+  int? minVersion,
+  int? maxVersion,
+}) => _authFrame(
   'server-peer',
-  jsonEncode(<String, Object?>{'action': 'upgrade_required', 'version': 14}),
+  jsonEncode(<String, Object?>{
+    'action': 'upgrade_required',
+    'version': version,
+    if (minVersion != null) 'minVersion': minVersion,
+    if (maxVersion != null) 'maxVersion': maxVersion,
+  }),
 );
 
 Uint8List _authFrame(String sender, String content) => WhisperFrameV3(

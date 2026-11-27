@@ -11,6 +11,8 @@ final class AuthEnvelope {
   const AuthEnvelope._({
     required this.action,
     required this.protocolVersion,
+    this.minProtocolVersion,
+    this.maxProtocolVersion,
     required this.peerId,
     required this.nonce,
     required this.profileDigest,
@@ -28,10 +30,14 @@ final class AuthEnvelope {
     this.reason,
   });
 
-  /// Carries [nonce] before protocol 15 and [nonceCommitment] from then on;
-  /// the session checks which one the version calls for.
+  /// From protocol 16, carries [minProtocolVersion] and [maxProtocolVersion]
+  /// (defaulting to [protocolVersion] when omitted by an older peer) plus
+  /// [nonceCommitment]. [nonce] is accepted only when parsing an older peer's
+  /// hello so the server can reject it with `upgrade_required`.
   factory AuthEnvelope.hello({
     required int protocolVersion,
+    int? minProtocolVersion,
+    int? maxProtocolVersion,
     required String peerId,
     required String identityPublicKey,
     required String ephemeralPublicKey,
@@ -45,6 +51,8 @@ final class AuthEnvelope {
     return _validated(
       action: AuthAction.hello,
       protocolVersion: protocolVersion,
+      minProtocolVersion: minProtocolVersion ?? protocolVersion,
+      maxProtocolVersion: maxProtocolVersion ?? protocolVersion,
       peerId: peerId,
       identityPublicKey: identityPublicKey,
       ephemeralPublicKey: ephemeralPublicKey,
@@ -156,7 +164,12 @@ final class AuthEnvelope {
 
   final AuthAction action;
   final int protocolVersion;
+  final int? minProtocolVersion;
+  final int? maxProtocolVersion;
   final String peerId;
+
+  int get effectiveMinProtocolVersion => minProtocolVersion ?? protocolVersion;
+  int get effectiveMaxProtocolVersion => maxProtocolVersion ?? protocolVersion;
   final String? identityPublicKey;
   final String? ephemeralPublicKey;
 
@@ -206,7 +219,15 @@ final class AuthEnvelope {
     if (action == null) {
       throw const FormatException('Unknown auth action');
     }
-    _rejectUnexpectedKeys(json, _allowedKeys[action]!);
+    if (action == AuthAction.hello) {
+      // Tolerate unknown top-level keys on hello (bounded) so newer versions
+      // can negotiate down to protocol 16 in a single round-trip.
+      if (json.length > 32) {
+        throw const FormatException('Too many auth hello fields');
+      }
+    } else {
+      _rejectUnexpectedKeys(json, _allowedKeys[action]!);
+    }
 
     final common = (
       protocolVersion: _requiredInt(json, 'version'),
@@ -217,6 +238,8 @@ final class AuthEnvelope {
       case AuthAction.hello:
         return AuthEnvelope.hello(
           protocolVersion: common.protocolVersion,
+          minProtocolVersion: _optionalInt(json, 'minVersion'),
+          maxProtocolVersion: _optionalInt(json, 'maxVersion'),
           peerId: common.peerId,
           identityPublicKey: _requiredString(json, 'identityKey'),
           ephemeralPublicKey: _requiredString(json, 'ephemeralKey'),
@@ -280,6 +303,10 @@ final class AuthEnvelope {
     return <String, Object?>{
       'action': action.name,
       'version': protocolVersion,
+      if (action == AuthAction.hello && minProtocolVersion != null)
+        'minVersion': minProtocolVersion,
+      if (action == AuthAction.hello && maxProtocolVersion != null)
+        'maxVersion': maxProtocolVersion,
       'peerId': peerId,
       if (identityPublicKey != null) 'identityKey': identityPublicKey,
       if (ephemeralPublicKey != null) 'ephemeralKey': ephemeralPublicKey,
@@ -306,6 +333,8 @@ final class AuthEnvelope {
     return other is AuthEnvelope &&
         other.action == action &&
         other.protocolVersion == protocolVersion &&
+        other.minProtocolVersion == minProtocolVersion &&
+        other.maxProtocolVersion == maxProtocolVersion &&
         other.peerId == peerId &&
         other.identityPublicKey == identityPublicKey &&
         other.ephemeralPublicKey == ephemeralPublicKey &&
@@ -327,6 +356,8 @@ final class AuthEnvelope {
   int get hashCode => Object.hash(
     action,
     protocolVersion,
+    minProtocolVersion,
+    maxProtocolVersion,
     peerId,
     identityPublicKey,
     ephemeralPublicKey,
@@ -348,6 +379,8 @@ final class AuthEnvelope {
 AuthEnvelope _validated({
   required AuthAction action,
   required int protocolVersion,
+  int? minProtocolVersion,
+  int? maxProtocolVersion,
   required String peerId,
   required String? nonce,
   required String profileDigest,
@@ -366,6 +399,17 @@ AuthEnvelope _validated({
 }) {
   if (protocolVersion <= 0 || protocolVersion > 0xffff) {
     throw const FormatException('Invalid protocol version');
+  }
+  if (minProtocolVersion != null || maxProtocolVersion != null) {
+    final minV = minProtocolVersion ?? protocolVersion;
+    final maxV = maxProtocolVersion ?? protocolVersion;
+    if (minV <= 0 ||
+        maxV > 0xffff ||
+        minV > maxV ||
+        protocolVersion < minV ||
+        protocolVersion > maxV) {
+      throw const FormatException('Invalid protocol version range');
+    }
   }
   if (peerId.isEmpty || utf8.encode(peerId).length > _maxPeerIdBytes) {
     throw const FormatException('Invalid peer id');
@@ -413,6 +457,8 @@ AuthEnvelope _validated({
   return AuthEnvelope._(
     action: action,
     protocolVersion: protocolVersion,
+    minProtocolVersion: minProtocolVersion,
+    maxProtocolVersion: maxProtocolVersion,
     peerId: peerId,
     identityPublicKey: identityPublicKey,
     ephemeralPublicKey: ephemeralPublicKey,
@@ -549,6 +595,17 @@ int _requiredInt(Map<String, Object?> json, String key) {
   final value = json[key];
   if (value is! int) {
     throw FormatException('Missing or invalid $key');
+  }
+  return value;
+}
+
+int? _optionalInt(Map<String, Object?> json, String key) {
+  final value = json[key];
+  if (value == null) {
+    return null;
+  }
+  if (value is! int) {
+    throw FormatException('Invalid $key');
   }
   return value;
 }

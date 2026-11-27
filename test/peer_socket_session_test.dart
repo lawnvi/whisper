@@ -140,47 +140,74 @@ void main() {
     expect(server.phase, PeerSocketPhase.awaitingHello);
   });
 
-  test('previous auth protocol versions fail before pairing starts', () async {
+  test('older and future-only auth protocol versions fail with directional codes', () async {
     final client = await _session(
       role: PeerSocketRole.client,
       generation: 1,
       seedStart: 0,
     );
-    final server = await _session(
+    final serverOld = await _session(
       role: PeerSocketRole.server,
       generation: 2,
       seedStart: 32,
     );
+    final serverFuture = await _session(
+      role: PeerSocketRole.server,
+      generation: 3,
+      seedStart: 32,
+    );
     addTearDown(client.close);
-    addTearDown(server.close);
+    addTearDown(serverOld.close);
+    addTearDown(serverFuture.close);
     final hello = await client.createHello();
     final oldHello = AuthEnvelope.hello(
-      protocolVersion: 5,
+      protocolVersion: 15,
       peerId: hello.peerId,
       identityPublicKey: hello.identityPublicKey!,
       ephemeralPublicKey: hello.ephemeralPublicKey!,
-      nonce: hello.nonce,
       nonceCommitment: hello.nonceCommitment,
       profileDigest: hello.profileDigest,
       intendedPeerId: hello.intendedPeerId,
       intendedPublicKeyHash: hello.intendedPublicKeyHash,
       profile: hello.profile,
     );
-
     await expectLater(
-      server.receiveHello(oldHello),
+      serverOld.receiveHello(oldHello),
       throwsA(
         isA<AuthHandshakeException>().having(
           (error) => error.code,
           'code',
-          'upgrade_required',
+          'peer_upgrade_required',
         ),
       ),
     );
-    expect(server.isClosed, isTrue);
+    expect(serverOld.isClosed, isTrue);
+
+    final futureOnlyHello = AuthEnvelope.hello(
+      protocolVersion: 18,
+      minProtocolVersion: 17,
+      maxProtocolVersion: 18,
+      peerId: hello.peerId,
+      identityPublicKey: hello.identityPublicKey!,
+      ephemeralPublicKey: hello.ephemeralPublicKey!,
+      nonceCommitment: hello.nonceCommitment,
+      profileDigest: hello.profileDigest,
+      profile: hello.profile,
+    );
+    await expectLater(
+      serverFuture.receiveHello(futureOnlyHello),
+      throwsA(
+        isA<AuthHandshakeException>().having(
+          (error) => error.code,
+          'code',
+          'local_upgrade_required',
+        ),
+      ),
+    );
+    expect(serverFuture.isClosed, isTrue);
   });
 
-  test('protocol 10 server negotiates a legacy protocol 9 handshake', () async {
+  test('protocol 16 server negotiates in one round-trip with a future v17 [16, 17] client carrying unknown fields', () async {
     final server = await _session(
       role: PeerSocketRole.server,
       generation: 1,
@@ -190,31 +217,41 @@ void main() {
       role: PeerSocketRole.client,
       generation: 2,
       seedStart: 0,
-      negotiatedProtocolVersion: PeerSocketSession.minimumProtocolVersion,
     );
     addTearDown(client.close);
     addTearDown(server.close);
 
-    final hello = await client.createHello();
-    final helloCapabilities = hello.profile!['capabilities']! as Map;
-    expect(hello.protocolVersion, 9);
-    expect(helloCapabilities, isNot(contains('remoteInputWorkspaceGraphV1')));
+    final baseHello = await client.createHello();
+    final futureProfileJson = <String, Object?>{
+      ...baseHello.profile!,
+      'protocolVersion': 17,
+      'capabilities': <String, Object?>{
+        ...(baseHello.profile!['capabilities']! as Map<String, Object?>),
+        'futureCapV2': true,
+      },
+      'futureNested': <String, Object?>{'mode': 'fast', 'retries': 3},
+      'futureList': <Object?>['a', 1, true],
+    };
+    final futureProfile = WirePeerProfile.fromJson(futureProfileJson);
+    final futureHelloJson = <String, Object?>{
+      ...baseHello.toJson(),
+      'version': 17,
+      'minVersion': 16,
+      'maxVersion': 17,
+      'futureHelloField': 'ignored',
+      'profile': futureProfileJson,
+      'profileDigest': encodeAuthBase64Url(futureProfile.canonicalDigest()),
+    };
 
-    final challenge = await server.receiveHello(hello);
-    final challengeCapabilities = challenge.profile!['capabilities']! as Map;
-    expect(challenge.protocolVersion, 9);
+    final parsedHello = AuthEnvelope.fromJson(futureHelloJson);
+    final challenge = await server.receiveHello(parsedHello);
+    expect(challenge.protocolVersion, 16);
+    expect(server.negotiatedProtocolVersion, 16);
+    expect(server.remoteProfile!.protocolVersion, 17);
+    expect(server.remoteProfile!.capabilities.fileTransferV3, isTrue);
     expect(
-      challengeCapabilities,
-      isNot(contains('remoteInputWorkspaceGraphV1')),
-    );
-
-    await client.receiveChallenge(challenge);
-    expect(client.remoteProfile!.protocolVersion, 9);
-    expect(server.remoteProfile!.protocolVersion, 9);
-    expect(client.remoteProfile!.capabilities.fileTransferV3, isTrue);
-    expect(
-      client.remoteProfile!.capabilities.remoteInputWorkspaceGraphV1,
-      isFalse,
+      server.remoteProfile!.canonicalDigest(),
+      orderedEquals(futureProfile.canonicalDigest()),
     );
   });
 

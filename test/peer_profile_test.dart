@@ -22,26 +22,68 @@ void main() {
     expect(decoded.remoteInputWorkspaceGraphV1, isTrue);
   });
 
-  test('legacy wire profiles omit capabilities unknown to protocol 9', () {
-    const profile = WirePeerProfile(
+  test('future wire profile ignores unknown keys, keeps raw canonical digest, and rejects floats in unknown fields', () {
+    const base = WirePeerProfile(
       uid: 'peer-a',
       name: 'Peer A',
       platform: 'windows',
+      protocolVersion: 17,
       capabilities: PeerCapabilities(
         fileTransferV3: true,
         remoteInputWorkspaceGraphV1: true,
       ),
     );
+    final futureJson = <String, Object?>{
+      ...base.toJson(),
+      'capabilities': <String, Object?>{
+        ...base.capabilities.toJson(),
+        'futureFeatureV2': true,
+      },
+      'futureNested': <String, Object?>{
+        'enabled': true,
+        'tier': 2,
+        'tag': 'v17',
+      },
+      'futureList': <Object?>['alpha', 42, false],
+    };
 
-    final legacy = profile.forProtocolVersion(9);
-    final capabilities = legacy.toJson()['capabilities']! as Map;
-    expect(capabilities['fileTransferV3'], isTrue);
-    expect(capabilities, isNot(contains('remoteInputWorkspaceGraphV1')));
-
-    final decoded = WirePeerProfile.fromJson(legacy.toJson());
-    expect(decoded.protocolVersion, 9);
+    final decoded = WirePeerProfile.fromJson(futureJson);
+    expect(decoded.protocolVersion, 17);
     expect(decoded.capabilities.fileTransferV3, isTrue);
-    expect(decoded.capabilities.remoteInputWorkspaceGraphV1, isFalse);
+    expect(decoded.capabilities.remoteInputWorkspaceGraphV1, isTrue);
+    // Re-hashing the received raw wire map must differ from stripped toJson()
+    // and match a second decode of the same map with reordered keys.
+    expect(decoded.canonicalDigest(), isNot(orderedEquals(base.canonicalDigest())));
+    final reordered = <String, Object?>{
+      'futureList': futureJson['futureList'],
+      'futureNested': <String, Object?>{
+        'tag': 'v17',
+        'tier': 2,
+        'enabled': true,
+      },
+      ...base.toJson(),
+      'capabilities': futureJson['capabilities'],
+    };
+    expect(
+      WirePeerProfile.fromJson(reordered).canonicalDigest(),
+      orderedEquals(decoded.canonicalDigest()),
+    );
+
+    // Floats in unknown fields are rejected so canonical JSON never diverges.
+    expect(
+      () => WirePeerProfile.fromJson(<String, Object?>{
+        ...base.toJson(),
+        'futureFloat': 1.5,
+      }),
+      throwsFormatException,
+    );
+    expect(
+      () => WirePeerProfile.fromJson(<String, Object?>{
+        ...base.toJson(),
+        'futureNested': <String, Object?>{'ratio': 1.0},
+      }),
+      throwsFormatException,
+    );
   });
 
   group('form factor', () {
@@ -64,21 +106,12 @@ void main() {
       expect(PeerProfile.fromWire(decoded).toWireProfile(), ipad);
     });
 
-    test('an older peer (0.0.57 speaks 11) is never sent the field', () {
-      final legacy = ipad.forProtocolVersion(11);
-      expect(legacy.toJson(), isNot(contains('formFactor')));
-      // Its strict parser takes the profile as it always did.
-      expect(WirePeerProfile.fromJson(legacy.toJson()).formFactor, isEmpty);
-    });
-
-    test('an older version says nothing', () {
+    test('omits formFactor when empty', () {
       const mac = WirePeerProfile(uid: 'mac', name: 'Mac', platform: 'macos');
       expect(mac.toJson(), isNot(contains('formFactor')));
       expect(WirePeerProfile.fromJson(mac.toJson()).formFactor, isEmpty);
     });
 
-    // From 0.0.61. Versions 12 and 13 read any short string here and keep
-    // only a phone or a tablet, so it goes to them as well.
     test('a computer says whether it is a laptop or a desktop', () {
       const mac = WirePeerProfile(
         uid: 'mac',
@@ -87,7 +120,6 @@ void main() {
         formFactor: DeviceFormFactor.laptop,
       );
       expect(WirePeerProfile.fromJson(mac.toJson()).formFactor, 'laptop');
-      expect(mac.forProtocolVersion(12).toJson()['formFactor'], 'laptop');
     });
 
     test('rejects a form factor that is not a short string', () {
@@ -118,12 +150,6 @@ void main() {
       expect(PeerProfile.fromWire(decoded).toWireProfile(), desk);
     });
 
-    test('a peer on 12 (0.0.59) is never sent them', () {
-      final legacy = desk.forProtocolVersion(12);
-      expect(legacy.toJson(), isNot(contains('wake')));
-      expect(WirePeerProfile.fromJson(legacy.toJson()).wake, isEmpty);
-    });
-
     test('rejects what is not a short list of unicast addresses', () {
       final good = desk.toJson();
       for (final bad in <Object?>[
@@ -148,11 +174,6 @@ void main() {
           reason: '$bad',
         );
       }
-      expect(
-        () => WirePeerProfile.fromJson({...good, 'protocolVersion': 12}),
-        throwsFormatException,
-        reason: 'a version that does not know the field cannot send it',
-      );
     });
 
     test('reads the spellings systems print', () {
@@ -178,12 +199,6 @@ void main() {
       expect(PeerProfile.fromWire(decoded).toWireProfile(), desk);
     });
 
-    test('a peer on 13 (0.0.60) is never sent it', () {
-      final legacy = desk.forProtocolVersion(13);
-      expect(legacy.toJson(), isNot(contains('appVersion')));
-      expect(WirePeerProfile.fromJson(legacy.toJson()).appVersion, isEmpty);
-    });
-
     test('rejects what is not a short version', () {
       final good = desk.toJson();
       for (final bad in <Object?>['', 42, '0.0.61 beta', 'v' * 33, '0.0.6\n']) {
@@ -200,11 +215,6 @@ void main() {
         }).appVersion,
         '1.2.3+45',
       );
-      expect(
-        () => WirePeerProfile.fromJson({...good, 'protocolVersion': 13}),
-        throwsFormatException,
-        reason: 'a version that does not know the field cannot send it',
-      );
     });
   });
 
@@ -213,8 +223,8 @@ void main() {
       'uid': 'peer-a',
       'name': 'Peer A',
       'platform': 'macos',
-      'protocolVersion': 5,
-      'capabilities': const PeerCapabilities().toWireJson(5),
+      'protocolVersion': 16,
+      'capabilities': const PeerCapabilities().toJson(),
       'displayTopology': topology,
     };
 
@@ -247,12 +257,12 @@ void main() {
       expect(parsed.displayTopology!.primaryDisplay.displayId, 'primary');
     });
 
-    test('rejects unknown fields, wrong types, and excessive nesting', () {
+    test('ignores unknown topology fields while rejecting wrong types and excessive nesting', () {
       final unknown = topology(<Object?>[display()]);
-      unknown['unexpected'] = true;
+      unknown['futureFlag'] = true;
       expect(
-        () => WirePeerProfile.fromJson(profileWith(unknown)),
-        throwsFormatException,
+        WirePeerProfile.fromJson(profileWith(unknown)).displayTopology,
+        isA<RemoteInputTopology>(),
       );
 
       final wrongType = topology(<Object?>[display()]);

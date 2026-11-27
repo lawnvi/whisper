@@ -98,12 +98,33 @@ final class PairingAttemptLimiter {
 }
 
 /// The failure code for a raw auth message that no envelope parses: a
-/// server's [pairingBusyAction], or else upgrade_required.
+/// server's [pairingBusyAction], or a directional upgrade code derived from
+/// the peer's advertised protocol version range.
 String rawAuthFailureCode(String? content) {
   try {
     final decoded = jsonDecode(content ?? '');
-    if (decoded is Map && decoded['action'] == pairingBusyAction) {
-      return pairingBusyAction;
+    if (decoded is Map) {
+      final action = decoded['action'];
+      if (action == pairingBusyAction) {
+        return pairingBusyAction;
+      }
+      if (action == 'upgrade_required') {
+        final version = decoded['version'];
+        final minVersion = decoded['minVersion'] is int
+            ? decoded['minVersion'] as int
+            : (version is int ? version : null);
+        final maxVersion = decoded['maxVersion'] is int
+            ? decoded['maxVersion'] as int
+            : (version is int ? version : null);
+        if (maxVersion != null &&
+            maxVersion < PeerSocketSession.minimumProtocolVersion) {
+          return 'peer_upgrade_required';
+        }
+        if (minVersion != null &&
+            minVersion > PeerSocketSession.protocolVersion) {
+          return 'local_upgrade_required';
+        }
+      }
     }
   } on FormatException {
     // Not JSON at all: the peer speaks something else.

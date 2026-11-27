@@ -1033,7 +1033,11 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get pairingUpgradeRequired =>
-      'El otro dispositivo está desactualizado. Actualiza Whisper e inténtalo de nuevo';
+      'El otro dispositivo usa una versión antigua de Whisper. Actualiza ese dispositivo e inténtalo de nuevo';
+
+  @override
+  String get localUpgradeRequired =>
+      'Este dispositivo usa una versión antigua de Whisper. Actualiza este dispositivo e inténtalo de nuevo';
 
   @override
   String get pairingExpired => 'La solicitud de emparejamiento ha caducado';
@@ -1041,10 +1045,6 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get pairingRejectedByPeer =>
       'El otro dispositivo rechazó la solicitud de conexión';
-
-  @override
-  String get pairingNeedsUpdate =>
-      'Confirmar solo con el código de emparejamiento requiere la última versión de Whisper en ambos dispositivos. Actualiza el otro dispositivo o empareja escaneando su código QR';
 
   @override
   String get pairingEncryptionNotice =>

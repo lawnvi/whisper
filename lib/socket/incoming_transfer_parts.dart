@@ -60,9 +60,6 @@ final class IncomingAckClock {
     DateTime Function()? now,
   }) : _now = now ?? DateTime.now;
 
-  /// Receivers on this protocol version or later answer this way.
-  static const sinceProtocolVersion = 13;
-
   /// A pause in what comes this long means the sender is waiting.
   static const idle = Duration(milliseconds: 20);
 

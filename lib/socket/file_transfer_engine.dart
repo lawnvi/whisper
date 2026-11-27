@@ -2540,10 +2540,7 @@ class FileTransferEngine {
     final durableOffset = offset;
     final pacer = _outgoingPacerFor?.call(transfer.transferId);
     // A folder's receiver answers from its worker, on its own schedule.
-    final timely =
-        !_isFolderTransfer(transfer) &&
-        (_remoteProfileFor(transfer.peerUid)?.protocolVersion ?? 0) >=
-            IncomingAckClock.sinceProtocolVersion;
+    final timely = !_isFolderTransfer(transfer);
     final windowEnd = math.min(transfer.size, durableOffset + flow.windowSize);
     // Past what may be unanswered sending pauses; what went is not resent.
     final allowed =

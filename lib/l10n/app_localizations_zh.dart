@@ -959,17 +959,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get pairingViewDetails => '查看详情';
 
   @override
-  String get pairingUpgradeRequired => '对方版本过低，请升级 Whisper 后重试';
+  String get pairingUpgradeRequired => '对方设备版本过低，请升级对方设备上的 Whisper 后重试';
+
+  @override
+  String get localUpgradeRequired => '本机 Whisper 版本过低，请升级本机后重试';
 
   @override
   String get pairingExpired => '配对请求已过期';
 
   @override
   String get pairingRejectedByPeer => '对方拒绝了连接请求';
-
-  @override
-  String get pairingNeedsUpdate =>
-      '只靠配对码确认，需要两台设备都是最新版 Whisper。请先更新对方设备，或者扫描对方的二维码配对';
 
   @override
   String get pairingEncryptionNotice => '配对后，文本、文件、剪贴板和控制数据均端到端加密';

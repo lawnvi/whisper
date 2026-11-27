@@ -1855,8 +1855,14 @@ abstract class AppLocalizations {
   /// No description provided for @pairingUpgradeRequired.
   ///
   /// In zh, this message translates to:
-  /// **'对方版本过低，请升级 Whisper 后重试'**
+  /// **'对方设备版本过低，请升级对方设备上的 Whisper 后重试'**
   String get pairingUpgradeRequired;
+
+  /// No description provided for @localUpgradeRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'本机 Whisper 版本过低，请升级本机后重试'**
+  String get localUpgradeRequired;
 
   /// No description provided for @pairingExpired.
   ///
@@ -1869,12 +1875,6 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'对方拒绝了连接请求'**
   String get pairingRejectedByPeer;
-
-  /// No description provided for @pairingNeedsUpdate.
-  ///
-  /// In zh, this message translates to:
-  /// **'只靠配对码确认，需要两台设备都是最新版 Whisper。请先更新对方设备，或者扫描对方的二维码配对'**
-  String get pairingNeedsUpdate;
 
   /// No description provided for @pairingEncryptionNotice.
   ///

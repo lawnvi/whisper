@@ -13,10 +13,7 @@ void rememberPeerTraits(String peerId, PeerProfile profile) {
   if (profile.formFactor.isNotEmpty) {
     unawaited(DeviceFormFactors.shared.record(peerId, profile.formFactor));
   }
-  // An older version can't say; what it said before stays.
-  if (profile.protocolVersion >= WakeTarget.sinceProtocolVersion) {
-    unawaited(WakeTargets.shared.record(peerId, profile.wake));
-  }
+  unawaited(WakeTargets.shared.record(peerId, profile.wake));
 }
 
 /// A removed device leaves nothing behind, the name given to it here too.

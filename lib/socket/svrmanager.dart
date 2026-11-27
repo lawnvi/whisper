@@ -28,7 +28,6 @@ import 'package:whisper/socket/auth_request_gate.dart';
 import 'package:whisper/socket/auth_handshake_lifecycle.dart';
 import 'package:whisper/socket/auth_protocol.dart';
 import 'package:whisper/socket/auth_failure_result.dart';
-import 'package:whisper/socket/auth_transcript.dart';
 import 'package:whisper/socket/authenticated_frame.dart';
 import 'package:whisper/socket/device_identity.dart';
 import 'package:whisper/socket/dial_tiebreaker.dart';
@@ -546,8 +545,7 @@ class WsSvrManager {
 
   bool supportsManualInputFor(String peerId) {
     final profile = remoteProfileFor(peerId);
-    return (profile?.protocolVersion ?? 0) >= 11 &&
-        profile?.capabilities.remoteInputManualSinkV1 == true;
+    return profile?.capabilities.remoteInputManualSinkV1 == true;
   }
 
   PeerProfile? remoteProfileFor(String peerId) {
@@ -2558,28 +2556,7 @@ class WsSvrManager {
 
   Future<ConnectionAttemptResult> _connectToServer(
     PendingOutgoingConnection attempt,
-  ) async {
-    for (
-      var version = PeerSocketSession.protocolVersion;
-      version >= PeerSocketSession.minimumProtocolVersion;
-      version--
-    ) {
-      final result = await _connectToServerVersion(attempt, version);
-      // Older servers reject a 15 hello explicitly; a close there is a drop.
-      final retry =
-          result.reason == ConnectionAttemptReason.protocolMismatch ||
-          (version != nonceCommitmentProtocolVersion &&
-              result.reason == ConnectionAttemptReason.transportClosed &&
-              attempt.session?.remoteProfile == null);
-      if (!retry ||
-          attempt.isCancelled ||
-          version == PeerSocketSession.minimumProtocolVersion) {
-        return result;
-      }
-      attempt.resetTransportForProtocolRetry();
-    }
-    throw StateError('no supported peer protocol');
-  }
+  ) => _connectToServerVersion(attempt, PeerSocketSession.protocolVersion);
 
   Future<ConnectionAttemptResult> _connectToServerVersion(
     PendingOutgoingConnection attempt,
@@ -3587,9 +3564,15 @@ class WsSvrManager {
       await _failSocketSession(session, sink, code);
     } on AuthHandshakeException catch (error) {
       if ((error.code == 'upgrade_required' ||
+              error.code == 'peer_upgrade_required' ||
+              error.code == 'local_upgrade_required' ||
               error.code == pairingBusyAction) &&
           session.role == PeerSocketRole.server) {
-        await _sendUpgradeRequired(sink, session, action: error.code);
+        final action =
+            error.code == pairingBusyAction
+                ? pairingBusyAction
+                : 'upgrade_required';
+        await _sendUpgradeRequired(sink, session, action: action);
       }
       await _failSocketSession(session, sink, error.code);
     }
@@ -3670,7 +3653,6 @@ class WsSvrManager {
       await _closeSocketSink(sink);
       return;
     }
-    session.refuseCodeOnlyPairing(pairingReason, pinPlan.expectedPublicKey);
     final generation = session.connectionGeneration;
     _identityPinPlansBySink[sink] = pinPlan;
 
@@ -4421,6 +4403,8 @@ class WsSvrManager {
     final payload = jsonEncode(<String, Object?>{
       'action': action,
       'version': PeerSocketSession.protocolVersion,
+      'minVersion': PeerSocketSession.minimumProtocolVersion,
+      'maxVersion': PeerSocketSession.protocolVersion,
     });
     final message = _buildMessage(
       MessageEnum.Auth,
@@ -5176,7 +5160,6 @@ class WsSvrManager {
           final manual = control.mode == RemoteInputMode.manual;
           final manualAllowed =
               supportsManualRemoteInputSink() &&
-              remoteProfile.protocolVersion >= 11 &&
               remoteProfile.capabilities.remoteInputManualSourceV1;
           final localCanInject = manual
               ? manualAllowed
@@ -5416,21 +5399,16 @@ class WsSvrManager {
             peerId: peerId,
             name: profile.device.label,
             platform: windowStreamPlatformOf(profile.device.platform),
-            takesWindows:
-                profile.protocolVersion >= 12 &&
-                profile.capabilities.windowStreamOfferV1,
+            takesWindows: profile.capabilities.windowStreamOfferV1,
           ),
         );
-        if (profile.protocolVersion >= 12 &&
-            profile.capabilities.remoteFilesV1 &&
-            _manageSharedCoordinators) {
+        if (profile.capabilities.remoteFilesV1 && _manageSharedCoordinators) {
           // "挂载到本机" on for it: its files show in the file manager again.
           unawaited(
             RemoteMounts.shared.peerConnected(peerId, profile.device.label),
           );
         }
-        if (profile.protocolVersion >= 12 &&
-            profile.capabilities.windowStreamSourceV1 &&
+        if (profile.capabilities.windowStreamSourceV1 &&
             supportsWindowStreamSink()) {
           WindowStreamViewer.shared.peerAvailable(
             peerId: peerId,
@@ -5584,14 +5562,9 @@ class WsSvrManager {
       }
     }
     final profile = await _localPeerProfile();
-    // As the handshake agreed with this peer: an older one rejects a
-    // profile carrying fields it does not know.
-    final agreed =
-        _sessionsByPeerId[targetPeerId]?.localProfile.protocolVersion ??
-        profile.protocolVersion;
     var message = _buildMessage(
       MessageEnum.Heartbeat,
-      jsonEncode(profile.toWireProfile().forProtocolVersion(agreed).toJson()),
+      jsonEncode(profile.toWireProfile().toJson()),
       profileRefreshRequest ? _profileRefreshRequestMessage : "",
       "",
       0,

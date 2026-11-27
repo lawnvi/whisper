@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
@@ -12,7 +13,6 @@ import 'package:whisper/socket/bounded_outbound_queue.dart';
 import 'package:whisper/socket/bounded_receive_queue.dart';
 import 'package:whisper/socket/device_identity.dart';
 import 'package:whisper/socket/socket_admission.dart';
-import 'package:whisper/state/pairing_request.dart';
 import 'package:whisper/state/peer_profile.dart';
 
 enum PeerSocketRole { server, client }
@@ -65,8 +65,8 @@ final class PeerSocketSession {
     });
   }
 
-  static const int protocolVersion = 15;
-  static const int minimumProtocolVersion = 9;
+  static const int protocolVersion = 16;
+  static const int minimumProtocolVersion = 16;
 
   static bool _supportsProtocolVersion(int version) =>
       version >= minimumProtocolVersion && version <= protocolVersion;
@@ -76,6 +76,8 @@ final class PeerSocketSession {
   final DeviceIdentity localIdentity;
   WirePeerProfile localProfile;
   int _negotiatedProtocolVersion;
+  int _clientMinProtocolVersion = minimumProtocolVersion;
+  int _clientMaxProtocolVersion = protocolVersion;
   final KeyPair _localEphemeralKeyPair;
   final Uint8List _localNonce;
   final String intendedPeerId;
@@ -140,7 +142,7 @@ final class PeerSocketSession {
       role: role,
       connectionGeneration: connectionGeneration,
       localIdentity: localIdentity,
-      localProfile: localProfile.forProtocolVersion(negotiatedProtocolVersion),
+      localProfile: localProfile,
       negotiatedProtocolVersion: negotiatedProtocolVersion,
       localEphemeralKeyPair:
           localEphemeralKeyPair ??
@@ -192,23 +194,14 @@ final class PeerSocketSession {
   String get remotePairingReason => _remoteProofReason;
   bool get serverPairingRequired => _transcript?.serverPairingRequired ?? false;
 
-  T withMediaSendKey<T>(T Function(Uint8List key) action) {
-    return _withMediaKey(_mediaSendKey, action);
-  }
-
-  Future<T> withMediaSendKeyAsync<T>(Future<T> Function(Uint8List key) action) {
-    return _withMediaKeyAsync(_mediaSendKey, action);
-  }
-
-  T withMediaReceiveKey<T>(T Function(Uint8List key) action) {
-    return _withMediaKey(_mediaReceiveKey, action);
-  }
-
-  Future<T> withMediaReceiveKeyAsync<T>(
-    Future<T> Function(Uint8List key) action,
-  ) {
-    return _withMediaKeyAsync(_mediaReceiveKey, action);
-  }
+  T withMediaSendKey<T>(T Function(Uint8List key) action) =>
+      _withMediaKey(_mediaSendKey, action);
+  Future<T> withMediaSendKeyAsync<T>(Future<T> Function(Uint8List key) action) =>
+      _withMediaKeyAsync(_mediaSendKey, action);
+  T withMediaReceiveKey<T>(T Function(Uint8List key) action) =>
+      _withMediaKey(_mediaReceiveKey, action);
+  Future<T> withMediaReceiveKeyAsync<T>(Future<T> Function(Uint8List key) action) =>
+      _withMediaKeyAsync(_mediaReceiveKey, action);
 
   bool get _canResolveLocalApproval => switch (role) {
     PeerSocketRole.client => phase == PeerSocketPhase.awaitingLocalApproval,
@@ -406,22 +399,7 @@ final class PeerSocketSession {
     return _continueAfter(_codec!.decode(frame), PeerSocketPhase.authenticated);
   }
 
-  bool get _commitsNonce => usesNonceCommitment(_negotiatedProtocolVersion);
-
-  /// Before protocol 15 a server in the middle can choose the pairing code,
-  /// so a client there refuses pairing that rests on the code alone. Only the
-  /// client checks: a client in the middle cannot steer the code anyway.
-  void refuseCodeOnlyPairing(PairingReason? reason, String pinnedPublicKey) {
-    if (!_commitsNonce &&
-        pairingRestsOnCodeAlone(
-          reason: reason,
-          pinnedPublicKey: pinnedPublicKey,
-          presentedPublicKey: remoteIdentityPublicKey,
-          intendedPublicKeyHash: intendedPublicKeyHash,
-        )) {
-      _fail<void>('pairing_requires_update');
-    }
-  }
+  int get negotiatedProtocolVersion => _negotiatedProtocolVersion;
 
   Future<AuthEnvelope> createHello() async {
     _require(PeerSocketRole.client, PeerSocketPhase.awaitingChallenge);
@@ -429,15 +407,16 @@ final class PeerSocketSession {
       AuthSessionKeys.publicKeyBase64Url(_localEphemeralKeyPair),
       PeerSocketPhase.awaitingChallenge,
     );
+    _clientMinProtocolVersion = minimumProtocolVersion;
+    _clientMaxProtocolVersion = protocolVersion;
     return AuthEnvelope.hello(
-      protocolVersion: _negotiatedProtocolVersion,
+      protocolVersion: protocolVersion,
+      minProtocolVersion: minimumProtocolVersion,
+      maxProtocolVersion: protocolVersion,
       peerId: localProfile.uid,
       identityPublicKey: localIdentity.publicKeyBase64Url,
       ephemeralPublicKey: publicKey,
-      nonce: _commitsNonce ? null : encodeAuthBase64Url(_localNonce),
-      nonceCommitment: _commitsNonce
-          ? encodeAuthBase64Url(commitClientNonce(_localNonce))
-          : null,
+      nonceCommitment: encodeAuthBase64Url(commitClientNonce(_localNonce)),
       profileDigest: encodeAuthBase64Url(localProfile.canonicalDigest()),
       intendedPeerId: intendedPeerId.isEmpty ? null : intendedPeerId,
       intendedPublicKeyHash: intendedPublicKeyHash.isEmpty
@@ -453,9 +432,14 @@ final class PeerSocketSession {
   }) async {
     _require(PeerSocketRole.server, PeerSocketPhase.awaitingHello);
     try {
-      _selectIncomingProtocol(hello.protocolVersion);
-      _requireEnvelope(hello, AuthAction.hello);
-      if (_commitsNonce != (hello.nonceCommitment != null)) {
+      if (hello.action != AuthAction.hello) {
+        return _fail('unexpected_action');
+      }
+      _selectIncomingProtocolRange(
+        hello.effectiveMinProtocolVersion,
+        hello.effectiveMaxProtocolVersion,
+      );
+      if (hello.nonceCommitment == null) {
         return _fail('invalid_hello');
       }
       if (hello.intendedPeerId != null &&
@@ -469,7 +453,10 @@ final class PeerSocketSession {
           hello.intendedPublicKeyHash != localPkh) {
         return _fail('wrong_intended_pkh');
       }
-      final remoteProfile = _decodeProfile(hello);
+      final remoteProfile = _decodeProfile(
+        hello,
+        expectedProtocolVersion: hello.protocolVersion,
+      );
       if (remoteProfile.uid != hello.peerId) {
         return _fail('profile_peer_mismatch');
       }
@@ -477,21 +464,24 @@ final class PeerSocketSession {
       final remoteEphemeralPublicKey = AuthSessionKeys.parseEphemeralPublicKey(
         hello.ephemeralPublicKey!,
       );
-      final remoteNonce = decodeOptional32(hello.nonce);
       final localEphemeralPublicKey = await _continueAfter(
         AuthSessionKeys.publicKeyBase64Url(_localEphemeralKeyPair),
         PeerSocketPhase.awaitingHello,
       );
       final transcript = AuthTranscript.fromWire(
         protocolVersion: _negotiatedProtocolVersion,
+        clientMinProtocolVersion: _clientMinProtocolVersion,
+        clientMaxProtocolVersion: _clientMaxProtocolVersion,
         clientProfile: remoteProfile,
         serverProfile: localProfile,
         clientIdentityKey: remoteIdentityPublicKey,
         serverIdentityKey: localIdentity.publicKeyBase64Url,
         clientEphemeralKey: hello.ephemeralPublicKey!,
         serverEphemeralKey: localEphemeralPublicKey,
-        clientNonce: remoteNonce,
-        clientNonceCommitment: decodeOptional32(hello.nonceCommitment),
+        clientNonceCommitment: decodeAuthBase64Url(
+          hello.nonceCommitment!,
+          expectedLength: 32,
+        ),
         serverNonce: _localNonce,
         intendedPkh: hello.intendedPublicKeyHash ?? '',
         serverPairingRequired: pairingRequired,
@@ -503,7 +493,7 @@ final class PeerSocketSession {
       _remoteProfile = remoteProfile;
       _remoteIdentityPublicKey = remoteIdentityPublicKey;
       _remoteEphemeralPublicKey = remoteEphemeralPublicKey;
-      _remoteNonce = remoteNonce;
+      _remoteNonce = null;
       _transcript = transcript;
       _transition(PeerSocketPhase.awaitingHello, PeerSocketPhase.awaitingProof);
       return AuthEnvelope.challenge(
@@ -512,7 +502,6 @@ final class PeerSocketSession {
         identityPublicKey: localIdentity.publicKeyBase64Url,
         ephemeralPublicKey: localEphemeralPublicKey,
         nonce: encodeAuthBase64Url(_localNonce),
-        peerNonce: hello.nonce,
         peerNonceCommitment: hello.nonceCommitment,
         profileDigest: encodeAuthBase64Url(localProfile.canonicalDigest()),
         signature: signature,
@@ -529,17 +518,26 @@ final class PeerSocketSession {
   Future<void> receiveChallenge(AuthEnvelope challenge) async {
     _require(PeerSocketRole.client, PeerSocketPhase.awaitingChallenge);
     try {
-      _requireEnvelope(challenge, AuthAction.challenge);
-      final commitment = _commitsNonce ? commitClientNonce(_localNonce) : null;
-      final echoed = decodeOptional32(
-        commitment == null
-            ? challenge.peerNonce
-            : challenge.peerNonceCommitment,
-      );
-      if (echoed == null || !sameAuthBytes(echoed, commitment ?? _localNonce)) {
+      if (challenge.action != AuthAction.challenge) {
+        _fail<void>('unexpected_action');
+      }
+      if (!_supportsProtocolVersion(challenge.protocolVersion)) {
+        _fail<void>(
+          challenge.protocolVersion < minimumProtocolVersion
+              ? 'peer_upgrade_required'
+              : 'local_upgrade_required',
+        );
+      }
+      _negotiatedProtocolVersion = challenge.protocolVersion;
+      final commitment = commitClientNonce(_localNonce);
+      final echoed = decodeOptional32(challenge.peerNonceCommitment);
+      if (echoed == null || !sameAuthBytes(echoed, commitment)) {
         _fail<void>('nonce_mismatch');
       }
-      final remoteProfile = _decodeProfile(challenge);
+      final remoteProfile = _decodeProfile(
+        challenge,
+        expectedProtocolVersion: challenge.protocolVersion,
+      );
       if (remoteProfile.uid != challenge.peerId) {
         _fail<void>('profile_peer_mismatch');
       }
@@ -565,6 +563,8 @@ final class PeerSocketSession {
       );
       final transcript = AuthTranscript.fromWire(
         protocolVersion: _negotiatedProtocolVersion,
+        clientMinProtocolVersion: _clientMinProtocolVersion,
+        clientMaxProtocolVersion: _clientMaxProtocolVersion,
         clientProfile: localProfile,
         serverProfile: remoteProfile,
         clientIdentityKey: localIdentity.publicKeyBase64Url,
@@ -642,9 +642,7 @@ final class PeerSocketSession {
       final revealed = decodeAuthBase64Url(proof.nonce!, expectedLength: 32);
       final transcript = _transcript!.revealClientNonce(revealed);
       if (transcript == null) {
-        _fail<void>(
-          _commitsNonce ? 'nonce_commitment_mismatch' : 'proof_mismatch',
-        );
+        _fail<void>('nonce_commitment_mismatch');
       }
       if (proof.peerId != remotePeerId ||
           !sameAuthBytes(
@@ -989,14 +987,8 @@ final class PeerSocketSession {
   }
 
   void _clearMediaKeys() {
-    final sendKey = _mediaSendKey;
-    final receiveKey = _mediaReceiveKey;
-    if (sendKey != null) {
-      sendKey.fillRange(0, sendKey.length, 0);
-    }
-    if (receiveKey != null) {
-      receiveKey.fillRange(0, receiveKey.length, 0);
-    }
+    _mediaSendKey?.fillRange(0, _mediaSendKey!.length, 0);
+    _mediaReceiveKey?.fillRange(0, _mediaReceiveKey!.length, 0);
     _mediaSendKey = null;
     _mediaReceiveKey = null;
   }
@@ -1006,35 +998,29 @@ final class PeerSocketSession {
       throw const AuthHandshakeException('media_key_missing');
     }
     final scopedKey = Uint8List.fromList(source);
-    try {
-      return action(scopedKey);
-    } finally {
-      scopedKey.fillRange(0, scopedKey.length, 0);
-    }
+    try { return action(scopedKey); } finally { scopedKey.fillRange(0, scopedKey.length, 0); }
   }
 
   Future<T> _withMediaKeyAsync<T>(
-    Uint8List? source,
-    Future<T> Function(Uint8List key) action,
+    Uint8List? source, Future<T> Function(Uint8List key) action,
   ) async {
     if (!isAuthenticated || source == null) {
       throw const AuthHandshakeException('media_key_missing');
     }
     final scopedKey = Uint8List.fromList(source);
-    try {
-      return await action(scopedKey);
-    } finally {
-      scopedKey.fillRange(0, scopedKey.length, 0);
-    }
+    try { return await action(scopedKey); } finally { scopedKey.fillRange(0, scopedKey.length, 0); }
   }
 
-  WirePeerProfile _decodeProfile(AuthEnvelope envelope) {
+  WirePeerProfile _decodeProfile(
+    AuthEnvelope envelope, {
+    required int expectedProtocolVersion,
+  }) {
     final profileJson = envelope.profile;
     if (profileJson == null) {
       return _fail('missing_profile');
     }
     final profile = WirePeerProfile.fromJson(profileJson);
-    if (profile.protocolVersion != _negotiatedProtocolVersion) {
+    if (profile.protocolVersion != expectedProtocolVersion) {
       return _fail('upgrade_required');
     }
     final claimedDigest = decodeAuthBase64Url(
@@ -1088,12 +1074,16 @@ final class PeerSocketSession {
     }
   }
 
-  void _selectIncomingProtocol(int version) {
-    if (!_supportsProtocolVersion(version)) {
-      _fail<void>('upgrade_required');
+  void _selectIncomingProtocolRange(int remoteMin, int remoteMax) {
+    if (remoteMax < minimumProtocolVersion) {
+      _fail<void>('peer_upgrade_required');
     }
-    _negotiatedProtocolVersion = version;
-    localProfile = localProfile.forProtocolVersion(version);
+    if (remoteMin > protocolVersion) {
+      _fail<void>('local_upgrade_required');
+    }
+    _clientMinProtocolVersion = remoteMin;
+    _clientMaxProtocolVersion = remoteMax;
+    _negotiatedProtocolVersion = math.min(protocolVersion, remoteMax);
   }
 
   Never _fail<T>(String code) {

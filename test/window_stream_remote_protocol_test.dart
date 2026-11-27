@@ -319,28 +319,14 @@ void main() {
     );
   });
 
-  test('window capabilities only travel on protocol 12', () {
+  test('window capabilities round-trip through wire json', () {
     const capabilities = PeerCapabilities(
       windowStreamSourceV1: true,
       windowStreamSinkV1: true,
     );
-    expect(
-      capabilities.toWireJson(11).containsKey('windowStreamSourceV1'),
-      isFalse,
-    );
-    final wire = capabilities.toWireJson(12);
+    final wire = capabilities.toJson();
     expect(wire['windowStreamSourceV1'], isTrue);
-    expect(
-      PeerCapabilities.fromWireJson(
-        wire,
-        protocolVersion: 12,
-      ).windowStreamSinkV1,
-      isTrue,
-    );
-    expect(
-      () => PeerCapabilities.fromWireJson(wire, protocolVersion: 11),
-      throwsFormatException,
-    );
+    expect(PeerCapabilities.fromWireJson(wire).windowStreamSinkV1, isTrue);
   });
 
   test('host encrypts video with its own send key, not the claim key', () {

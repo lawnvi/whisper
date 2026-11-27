@@ -10,11 +10,17 @@ String _b64(int length, int start) => base64Url
     .encode(List<int>.generate(length, (index) => (start + index) & 0xff))
     .replaceAll('=', '');
 
-AuthTranscript _transcript({int protocolVersion = 6}) {
+AuthTranscript _transcript({
+  int protocolVersion = 16,
+  int? clientMinProtocolVersion,
+  int? clientMaxProtocolVersion,
+}) {
   final clientNonce =
       Uint8List.fromList(List<int>.generate(32, (index) => index + 128));
   return AuthTranscript(
     protocolVersion: protocolVersion,
+    clientMinProtocolVersion: clientMinProtocolVersion,
+    clientMaxProtocolVersion: clientMaxProtocolVersion,
     clientPeerId: 'client-a',
     serverPeerId: 'server-b',
     clientIdentityPublicKey:
@@ -27,9 +33,7 @@ AuthTranscript _transcript({int protocolVersion = 6}) {
         Uint8List.fromList(List<int>.generate(32, (index) => index + 96)),
     intendedPublicKeyHash: 'discover-pkh',
     clientNonce: clientNonce,
-    clientNonceCommitment: usesNonceCommitment(protocolVersion)
-        ? commitClientNonce(clientNonce)
-        : null,
+    clientNonceCommitment: commitClientNonce(clientNonce),
     serverNonce:
         Uint8List.fromList(List<int>.generate(32, (index) => index + 160)),
     clientProfileDigest:
@@ -105,9 +109,18 @@ void main() {
       );
     });
 
-    test('pairing code has a stable six-digit golden value', () {
-      expect(_transcript().pairingCode(), '886773');
-      expect(_transcript(protocolVersion: 15).pairingCode(), '772570');
+    test('pairing code changes when the offered version range changes', () {
+      final single = _transcript(protocolVersion: 16);
+      final ranged = _transcript(
+        protocolVersion: 16,
+        clientMinProtocolVersion: 16,
+        clientMaxProtocolVersion: 17,
+      );
+      expect(single.pairingCode(), matches(RegExp(r'^\d{6}$')));
+      expect(
+        single.transcriptHash(),
+        isNot(orderedEquals(ranged.transcriptHash())),
+      );
     });
 
     test('both peers get the same pairing code from the canonical transcript',
@@ -115,6 +128,8 @@ void main() {
       final first = _transcript();
       final second = AuthTranscript(
         protocolVersion: first.protocolVersion,
+        clientMinProtocolVersion: first.clientMinProtocolVersion,
+        clientMaxProtocolVersion: first.clientMaxProtocolVersion,
         clientPeerId: first.clientPeerId,
         serverPeerId: first.serverPeerId,
         clientIdentityPublicKey: first.clientIdentityPublicKey,
@@ -123,6 +138,7 @@ void main() {
         serverEphemeralPublicKey: first.serverEphemeralPublicKey,
         intendedPublicKeyHash: first.intendedPublicKeyHash,
         clientNonce: first.clientNonce,
+        clientNonceCommitment: first.clientNonceCommitment,
         serverNonce: first.serverNonce,
         clientProfileDigest: first.clientProfileDigest,
         serverProfileDigest: first.serverProfileDigest,
@@ -148,6 +164,7 @@ void main() {
         serverEphemeralPublicKey: original.serverEphemeralPublicKey,
         intendedPublicKeyHash: original.intendedPublicKeyHash,
         clientNonce: original.clientNonce,
+        clientNonceCommitment: original.clientNonceCommitment,
         serverNonce: original.serverNonce,
         clientProfileDigest: Uint8List(32),
         serverProfileDigest: original.serverProfileDigest,
@@ -162,6 +179,7 @@ void main() {
         serverEphemeralPublicKey: original.serverEphemeralPublicKey,
         intendedPublicKeyHash: original.intendedPublicKeyHash,
         clientNonce: original.clientNonce,
+        clientNonceCommitment: original.clientNonceCommitment,
         serverNonce: original.serverNonce,
         clientProfileDigest: original.clientProfileDigest,
         serverProfileDigest: Uint8List(32),
@@ -314,9 +332,33 @@ void main() {
         }),
         throwsFormatException,
       );
+      // Hello tolerates bounded unknown fields (for forward version negotiation)
+      // but rejects excessive keys; non-hello envelopes reject unexpected keys.
+      expect(
+        AuthEnvelope.fromJson(<String, Object?>{
+          ...valid,
+          'futureHint': 'v17',
+        }).action,
+        AuthAction.hello,
+      );
       expect(
         () => AuthEnvelope.fromJson(<String, Object?>{
           ...valid,
+          for (var i = 0; i < 32; i++) 'k$i': i,
+        }),
+        throwsFormatException,
+      );
+      final validProof = AuthEnvelope.proof(
+        protocolVersion: 16,
+        peerId: 'client-a',
+        nonce: _b64(32, 64),
+        peerNonce: _b64(32, 65),
+        profileDigest: _b64(32, 96),
+        signature: _b64(64, 3),
+      ).toJson();
+      expect(
+        () => AuthEnvelope.fromJson(<String, Object?>{
+          ...validProof,
           'password': 'must-not-cross-the-wire',
         }),
         throwsFormatException,

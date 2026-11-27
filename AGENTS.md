@@ -102,7 +102,7 @@ The code base grew by adding to whatever file was nearest. These rules stop that
 
 ## Changing A Protocol Or The Database
 
-- **Wire format.** A peer's profile rejects unknown fields, so a new field or message is sent only to peers whose protocol version knows it (see `formFactor` in `lib/state/peer_profile.dart`). Say what an older peer does with it, and when versions can't work together, tell the user which device to update. Keep the test for older and newer peers.
+- **Wire format.** From protocol 16, `AuthEnvelope.hello` carries a version range (`minVersion`..`maxVersion`) bound into `AuthTranscript`, so peers agree in one handshake without step-down retries. `WirePeerProfile` and `PeerCapabilities` ignore unknown keys (under strict key-count, length, depth, and byte limits, with no floats in unknown fields, hashing the raw canonical JSON for `profileDigest`), so additive fields and capability flags negotiate by name without bumping the minimum protocol version. When a breaking change raises `minimumProtocolVersion` and versions can't work together, return `upgrade_required` with `minVersion`/`maxVersion` so the initiator tells the user which device (`pairingUpgradeRequired` vs `localUpgradeRequired`) to update. Keep tests for older and newer peers.
 - **Database.** Bump the schema version, make the migration step idempotent, regenerate with build_runner, and test both a fresh database and an upgrade from the previous version.
 
 ## Testing Instructions

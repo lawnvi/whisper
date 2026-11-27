@@ -6,25 +6,16 @@ import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/remote_input/remote_input_layout.dart';
 
 /// What a device says it is, so others can draw it as one
-/// ([PeerProfile.formFactor]): a phone or a tablet, and from 0.0.61 a
-/// laptop or a desktop. Older versions keep only the first two and draw a
-/// computer by its name.
+/// ([PeerProfile.formFactor]): a phone, tablet, laptop, or desktop.
 abstract final class DeviceFormFactor {
   static const phone = 'phone';
   static const tablet = 'tablet';
   static const laptop = 'laptop';
   static const desktop = 'desktop';
-
-  /// Sent from this protocol version on: an older peer rejects a profile
-  /// field it does not know (and 0.0.57 speaks 11).
-  static const sinceProtocolVersion = 12;
 }
 
-/// The app version a device runs ("0.0.61"), shown on its card. Sent from
-/// [sinceProtocolVersion] on: an older peer rejects a profile field it does
-/// not know.
+/// The app version a device runs ("0.0.61"), shown on its card.
 abstract final class AppVersionField {
-  static const sinceProtocolVersion = 14;
   static const maxBytes = 32;
   static final RegExp _pattern = RegExp(r'^[0-9A-Za-z.+\-]+$');
 
@@ -40,9 +31,8 @@ abstract final class AppVersionField {
 final class WakeTarget {
   const WakeTarget({required this.mac, required this.wired});
 
-  /// Sent from this protocol version on.
-  static const sinceProtocolVersion = 13;
   static const maxPerDevice = 4;
+  static const _maxKeys = 16;
   static final RegExp _macPattern = RegExp(r'^[0-9a-f]{2}(:[0-9a-f]{2}){5}$');
 
   /// Lower case, colon separated.
@@ -67,8 +57,17 @@ final class WakeTarget {
   Map<String, Object> toJson() => <String, Object>{'mac': mac, 'wired': wired};
 
   static WakeTarget fromJson(Object? json) {
-    if (json is! Map || json.length != 2) {
+    if (json is! Map || json.length < 2 || json.length > _maxKeys) {
       throw const FormatException('Invalid wake target');
+    }
+    for (final entry in json.entries) {
+      final key = entry.key;
+      if (key is! String || key.isEmpty || utf8.encode(key).length > 64) {
+        throw const FormatException('Invalid wake target');
+      }
+      if (key != 'mac' && key != 'wired') {
+        _validateUnknownJsonValue(entry.value, depth: 2);
+      }
     }
     final mac = json['mac'];
     final wired = json['wired'];
@@ -89,20 +88,35 @@ final class WakeTarget {
   int get hashCode => Object.hash(mac, wired);
 }
 
+/// Wire representation of a peer's profile sent during authentication and
+/// profile updates.
+///
+/// From protocol 16, unknown keys in [WirePeerProfile], [PeerCapabilities],
+/// `displayTopology`, and `wake` are ignored (subject to strict key-count,
+/// key-length, depth, and total-byte bounds) so newer versions can add fields
+/// without breaking older ones. To keep [canonicalDigest] identical across
+/// signers and verifiers when unknown fields are present:
+/// - unknown fields must only contain integers, strings, booleans, null,
+///   lists, or objects (floating-point values are rejected in unknown fields);
+/// - [canonicalDigest] hashes the canonical JSON of the received raw wire map
+///   when decoded via [WirePeerProfile.fromJson].
 class WirePeerProfile {
   const WirePeerProfile({
     required this.uid,
     required this.name,
     required this.platform,
-    this.protocolVersion = 15,
+    this.protocolVersion = 16,
     this.capabilities = const PeerCapabilities(),
     this.displayTopology,
     this.formFactor = '',
     this.wake = const <WakeTarget>[],
     this.appVersion = '',
-  });
+    Map<String, Object?>? rawWireJson,
+  }) : _rawWireJson = rawWireJson;
 
-  static const Set<String> _allowedKeys = <String>{
+  static const int _maxTopLevelKeys = 64;
+  static const int _maxCanonicalBytes = 64 * 1024;
+  static const Set<String> _knownKeys = <String>{
     'uid',
     'name',
     'platform',
@@ -121,8 +135,8 @@ class WirePeerProfile {
   final PeerCapabilities capabilities;
   final RemoteInputTopology? displayTopology;
 
-  /// [DeviceFormFactor.phone] or [DeviceFormFactor.tablet]; empty when not
-  /// said (a computer, an older version).
+  /// [DeviceFormFactor.phone], [DeviceFormFactor.tablet],
+  /// [DeviceFormFactor.laptop], or [DeviceFormFactor.desktop]; empty if unset.
   final String formFactor;
 
   /// This computer's network cards that can wake it; empty on phones.
@@ -131,39 +145,25 @@ class WirePeerProfile {
   /// See [AppVersionField]; empty when not said.
   final String appVersion;
 
-  WirePeerProfile forProtocolVersion(int version) => WirePeerProfile(
-    uid: uid,
-    name: name,
-    platform: platform,
-    protocolVersion: version,
-    capabilities: capabilities,
-    displayTopology: displayTopology,
-    formFactor: formFactor,
-    wake: wake,
-    appVersion: appVersion,
-  );
+  final Map<String, Object?>? _rawWireJson;
 
   Map<String, Object?> toJson() => <String, Object?>{
     'uid': uid,
     'name': name,
     'platform': platform,
     'protocolVersion': protocolVersion,
-    'capabilities': capabilities.toWireJson(protocolVersion),
+    'capabilities': capabilities.toJson(),
     if (displayTopology != null) 'displayTopology': displayTopology!.toJson(),
-    if (formFactor.isNotEmpty &&
-        protocolVersion >= DeviceFormFactor.sinceProtocolVersion)
-      'formFactor': formFactor,
-    if (wake.isNotEmpty && protocolVersion >= WakeTarget.sinceProtocolVersion)
+    if (formFactor.isNotEmpty) 'formFactor': formFactor,
+    if (wake.isNotEmpty)
       'wake': <Object>[for (final target in wake) target.toJson()],
-    if (appVersion.isNotEmpty &&
-        protocolVersion >= AppVersionField.sinceProtocolVersion)
-      'appVersion': appVersion,
+    if (appVersion.isNotEmpty) 'appVersion': appVersion,
   };
 
   String toJsonString() => jsonEncode(toJson());
 
   Uint8List canonicalDigest() => Uint8List.fromList(
-    sha256.convert(utf8.encode(_canonicalJson(toJson()))).bytes,
+    sha256.convert(utf8.encode(_canonicalJson(_rawWireJson ?? toJson()))).bytes,
   );
 
   DeviceData toDeviceData({String host = '', int port = 0}) => DeviceData(
@@ -183,8 +183,17 @@ class WirePeerProfile {
   );
 
   factory WirePeerProfile.fromJson(Map<String, Object?> json) {
-    if (json.keys.any((key) => !_allowedKeys.contains(key))) {
-      throw const FormatException('Unexpected wire profile field');
+    if (json.length > _maxTopLevelKeys) {
+      throw const FormatException('Too many wire profile fields');
+    }
+    for (final entry in json.entries) {
+      final key = entry.key;
+      if (key.isEmpty || utf8.encode(key).length > 64) {
+        throw const FormatException('Invalid wire profile key');
+      }
+      if (!_knownKeys.contains(key)) {
+        _validateUnknownJsonValue(entry.value, depth: 1);
+      }
     }
     final uid = _requiredProfileString(json, 'uid', maxBytes: 256);
     final name = _requiredProfileString(json, 'name', maxBytes: 256);
@@ -212,33 +221,33 @@ class WirePeerProfile {
         : '';
     final wakeValue = json['wake'];
     if (json.containsKey('wake') &&
-        (protocolVersion < WakeTarget.sinceProtocolVersion ||
-            wakeValue is! List ||
-            wakeValue.length > WakeTarget.maxPerDevice)) {
+        (wakeValue is! List || wakeValue.length > WakeTarget.maxPerDevice)) {
       throw const FormatException('Invalid profile wake targets');
     }
     final appVersion = json['appVersion'];
     if (json.containsKey('appVersion') &&
-        (protocolVersion < AppVersionField.sinceProtocolVersion ||
-            appVersion is! String ||
-            !AppVersionField.valid(appVersion))) {
+        (appVersion is! String || !AppVersionField.valid(appVersion))) {
       throw const FormatException('Invalid profile app version');
+    }
+    final capabilities = PeerCapabilities.fromWireJson(capabilitiesJson);
+    final wake = wakeValue is List
+        ? List<WakeTarget>.unmodifiable(wakeValue.map(WakeTarget.fromJson))
+        : const <WakeTarget>[];
+    final frozenRaw = _freezeRawProfile(json);
+    if (utf8.encode(_canonicalJson(frozenRaw)).length > _maxCanonicalBytes) {
+      throw const FormatException('Wire profile exceeds byte limit');
     }
     return WirePeerProfile(
       uid: uid,
       name: name,
       platform: platform,
       protocolVersion: protocolVersion,
-      capabilities: PeerCapabilities.fromWireJson(
-        capabilitiesJson,
-        protocolVersion: protocolVersion,
-      ),
+      capabilities: capabilities,
       displayTopology: topology,
       formFactor: formFactor,
-      wake: wakeValue is List
-          ? List<WakeTarget>.unmodifiable(wakeValue.map(WakeTarget.fromJson))
-          : const <WakeTarget>[],
+      wake: wake,
       appVersion: appVersion is String ? appVersion : '',
+      rawWireJson: frozenRaw,
     );
   }
 
@@ -277,7 +286,7 @@ class PeerProfile {
     required this.trustedPeerIds,
     required this.autoApproveNewDevices,
     required this.autoConnectEnabled,
-    this.protocolVersion = 15,
+    this.protocolVersion = 16,
     this.capabilities = const PeerCapabilities(),
     this.displayTopology,
     this.formFactor = '',
@@ -420,7 +429,9 @@ RemoteInputTopology _wireTopologyFromJson(Object? value) {
     'scale',
     'isPrimary',
   };
-  if (value is! Map || !_hasExactStringKeys(value, topologyKeys)) {
+  if (value is! Map ||
+      value.length > 32 ||
+      !_hasRequiredStringKeys(value, topologyKeys, unknownDepth: 2)) {
     throw const FormatException('Invalid wire display topology');
   }
   final platform = _boundedWireString(
@@ -441,7 +452,9 @@ RemoteInputTopology _wireTopologyFromJson(Object? value) {
   var primaryCount = 0;
   final displays = <RemoteInputDisplay>[];
   for (final rawDisplay in rawDisplays) {
-    if (rawDisplay is! Map || !_hasExactStringKeys(rawDisplay, displayKeys)) {
+    if (rawDisplay is! Map ||
+        rawDisplay.length > 32 ||
+        !_hasRequiredStringKeys(rawDisplay, displayKeys, unknownDepth: 3)) {
       throw const FormatException('Invalid wire display');
     }
     final displayId = _boundedWireString(
@@ -497,16 +510,24 @@ RemoteInputTopology _wireTopologyFromJson(Object? value) {
   );
 }
 
-bool _hasExactStringKeys(Map<Object?, Object?> value, Set<String> keys) {
-  if (value.length != keys.length) {
-    return false;
-  }
-  for (final key in value.keys) {
-    if (key is! String || !keys.contains(key)) {
+bool _hasRequiredStringKeys(
+  Map<Object?, Object?> value,
+  Set<String> requiredKeys, {
+  required int unknownDepth,
+}) {
+  var found = 0;
+  for (final entry in value.entries) {
+    final key = entry.key;
+    if (key is! String || key.isEmpty || utf8.encode(key).length > 64) {
       return false;
     }
+    if (requiredKeys.contains(key)) {
+      found += 1;
+    } else {
+      _validateUnknownJsonValue(entry.value, depth: unknownDepth);
+    }
   }
-  return true;
+  return found == requiredKeys.length;
 }
 
 String _boundedWireString(
@@ -602,24 +623,6 @@ class PeerCapabilities {
     };
   }
 
-  Map<String, dynamic> toWireJson(int protocolVersion) {
-    final json = toJson();
-    if (protocolVersion < 12) {
-      json.remove('windowStreamSourceV1');
-      json.remove('windowStreamSinkV1');
-      json.remove('windowStreamOfferV1');
-      json.remove('remoteFilesV1');
-    }
-    if (protocolVersion < 11) {
-      json.remove('remoteInputManualSourceV1');
-      json.remove('remoteInputManualSinkV1');
-    }
-    if (protocolVersion < 10) {
-      json.remove('remoteInputWorkspaceGraphV1');
-    }
-    return json;
-  }
-
   factory PeerCapabilities.fromJson(Map<String, dynamic> json) {
     return PeerCapabilities(
       fileTransferV3: json['fileTransferV3'] as bool? ?? false,
@@ -646,44 +649,105 @@ class PeerCapabilities {
     );
   }
 
-  factory PeerCapabilities.fromWireJson(
-    Map<String, dynamic> json, {
-    int protocolVersion = 12,
-  }) {
-    const legacyAllowed = <String>{
-      'fileTransferV3',
-      'systemAudioSourceV1',
-      'speakerSinkV1',
-      'remoteInputSourceV1',
-      'remoteInputSinkV1',
-      'remoteInputTopologyV1',
-      'audioGroupSourceV1',
-      'audioGroupSinkV1',
-      'audioGroupRejoinV1',
-      'audioSyncClockV1',
-      'audioChannelRoleV1',
-    };
-    const workspaceGraphV1 = <String>{'remoteInputWorkspaceGraphV1'};
-    final allowed = protocolVersion >= 10
-        ? legacyAllowed.union(workspaceGraphV1)
-        : legacyAllowed;
-    if (protocolVersion >= 11) {
-      allowed.addAll({'remoteInputManualSourceV1', 'remoteInputManualSinkV1'});
+  static const Set<String> _knownKeys = <String>{
+    'fileTransferV3',
+    'systemAudioSourceV1',
+    'speakerSinkV1',
+    'remoteInputManualSourceV1',
+    'remoteInputManualSinkV1',
+    'remoteInputSourceV1',
+    'remoteInputSinkV1',
+    'remoteInputTopologyV1',
+    'remoteInputWorkspaceGraphV1',
+    'audioGroupSourceV1',
+    'audioGroupSinkV1',
+    'audioGroupRejoinV1',
+    'audioSyncClockV1',
+    'audioChannelRoleV1',
+    'windowStreamSourceV1',
+    'windowStreamSinkV1',
+    'windowStreamOfferV1',
+    'remoteFilesV1',
+  };
+
+  factory PeerCapabilities.fromWireJson(Map<String, dynamic> json) {
+    if (json.length > 64) {
+      throw const FormatException('Too many wire capabilities');
     }
-    if (protocolVersion >= 12) {
-      allowed.addAll({
-        'windowStreamSourceV1',
-        'windowStreamSinkV1',
-        'windowStreamOfferV1',
-        'remoteFilesV1',
-      });
-    }
-    if (json.keys.any((key) => !allowed.contains(key)) ||
-        json.values.any((value) => value is! bool)) {
-      throw const FormatException('Invalid wire capabilities');
+    for (final entry in json.entries) {
+      final key = entry.key;
+      if (key.isEmpty || utf8.encode(key).length > 64) {
+        throw const FormatException('Invalid wire capability key');
+      }
+      if (_knownKeys.contains(key)) {
+        if (entry.value is! bool) {
+          throw const FormatException('Invalid wire capabilities');
+        }
+      } else {
+        _validateUnknownJsonValue(entry.value, depth: 2);
+      }
     }
     return PeerCapabilities.fromJson(json);
   }
+}
+
+const int _maxUnknownDepth = 16;
+
+void _validateUnknownJsonValue(Object? value, {required int depth}) {
+  if (depth > _maxUnknownDepth) {
+    throw const FormatException('Wire profile nesting too deep');
+  }
+  if (value == null || value is bool || value is int || value is String) {
+    return;
+  }
+  if (value is double) {
+    // Floats have parser-dependent formatting (e.g. 1.0 vs 1), which would
+    // make canonicalDigest diverge between peers.
+    throw const FormatException(
+      'Floating-point values are not allowed in unknown wire profile fields',
+    );
+  }
+  if (value is List) {
+    for (final item in value) {
+      _validateUnknownJsonValue(item, depth: depth + 1);
+    }
+    return;
+  }
+  if (value is Map) {
+    if (value.length > 64) {
+      throw const FormatException('Unknown wire profile object too large');
+    }
+    for (final entry in value.entries) {
+      final key = entry.key;
+      if (key is! String || key.isEmpty || utf8.encode(key).length > 64) {
+        throw const FormatException('Invalid unknown wire profile key');
+      }
+      _validateUnknownJsonValue(entry.value, depth: depth + 1);
+    }
+    return;
+  }
+  throw const FormatException('Unsupported wire profile value');
+}
+
+Map<String, Object?> _freezeRawProfile(Map<Object?, Object?> value) {
+  final result = <String, Object?>{};
+  for (final entry in value.entries) {
+    result[entry.key as String] = _freezeRawValue(entry.value);
+  }
+  return Map<String, Object?>.unmodifiable(result);
+}
+
+Object? _freezeRawValue(Object? value) {
+  if (value == null || value is String || value is bool || value is num) {
+    return value;
+  }
+  if (value is Map) {
+    return _freezeRawProfile(value);
+  }
+  if (value is List) {
+    return List<Object?>.unmodifiable(value.map(_freezeRawValue));
+  }
+  throw const FormatException('Unsupported wire profile value');
 }
 
 String _requiredProfileString(

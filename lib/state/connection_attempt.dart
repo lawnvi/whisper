@@ -30,9 +30,8 @@ enum ConnectionAttemptReason {
   socketError,
   protocolMismatch,
 
-  /// The other device speaks a protocol older than 15, where pairing by the
-  /// code alone is refused: update it or pair with its QR code.
-  pairingNeedsUpdate,
+  /// This device's protocol is older than the other device's minimum version.
+  localUpgradeRequired,
 
   /// The other device paused pairing by code after too many abandoned tries.
   pairingBusy,

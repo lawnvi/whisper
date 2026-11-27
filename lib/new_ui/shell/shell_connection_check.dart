@@ -51,7 +51,8 @@ String connectionFailureText(
   ConnectionAttemptReason reason,
 ) => switch (reason) {
   ConnectionAttemptReason.peerRejected => l10n.pairingRejectedByPeer,
-  ConnectionAttemptReason.pairingNeedsUpdate => l10n.pairingNeedsUpdate,
+  ConnectionAttemptReason.protocolMismatch => l10n.pairingUpgradeRequired,
+  ConnectionAttemptReason.localUpgradeRequired => l10n.localUpgradeRequired,
   _ => connectionDiagnosticText(
     l10n,
     ConnectionDiagnostic.fromReason(reason).stage,

@@ -5,16 +5,6 @@ import 'package:crypto/crypto.dart';
 import 'package:whisper/socket/auth_protocol.dart';
 import 'package:whisper/state/peer_profile.dart';
 
-/// From this protocol version the client's hello carries only a commitment to
-/// its nonce, and the nonce itself comes in the proof, after the server has
-/// signed its own nonce and keys. Neither side can then steer the pairing
-/// code once it sees the other's values. Before it, a server in the middle
-/// saw the client's nonce and could try server nonces until the code matched.
-const int nonceCommitmentProtocolVersion = 15;
-
-bool usesNonceCommitment(int protocolVersion) =>
-    protocolVersion >= nonceCommitmentProtocolVersion;
-
 /// SHA-256 over a fixed tag and the 32-byte client nonce.
 Uint8List commitClientNonce(Uint8List nonce) {
   if (nonce.length != 32) {
@@ -30,11 +20,15 @@ final List<int> _commitmentTag = utf8.encode(
 );
 
 final class AuthTranscript {
-  /// From [nonceCommitmentProtocolVersion] on, [clientNonceCommitment] is
-  /// required and [clientNonce] may be missing until the client reveals it;
-  /// before it, [clientNonce] is required and there is no commitment.
+  /// [clientNonceCommitment] is always required from protocol 16 on;
+  /// [clientNonce] may be omitted on the server until the client's proof
+  /// reveals it. [clientMinProtocolVersion] and [clientMaxProtocolVersion]
+  /// bind the client's offered version range into the signed transcript so a
+  /// MITM cannot downgrade negotiation when future versions span a range.
   AuthTranscript({
     required this.protocolVersion,
+    int? clientMinProtocolVersion,
+    int? clientMaxProtocolVersion,
     required this.clientPeerId,
     required this.serverPeerId,
     required Uint8List clientIdentityPublicKey,
@@ -44,11 +38,13 @@ final class AuthTranscript {
     required this.intendedPublicKeyHash,
     this.serverPairingRequired = false,
     Uint8List? clientNonce,
-    Uint8List? clientNonceCommitment,
+    required Uint8List clientNonceCommitment,
     required Uint8List serverNonce,
     required Uint8List clientProfileDigest,
     required Uint8List serverProfileDigest,
-  }) : _clientIdentityPublicKey = _copyFixed(
+  }) : clientMinProtocolVersion = clientMinProtocolVersion ?? protocolVersion,
+       clientMaxProtocolVersion = clientMaxProtocolVersion ?? protocolVersion,
+       _clientIdentityPublicKey = _copyFixed(
          clientIdentityPublicKey,
          'clientIdentityPublicKey',
        ),
@@ -67,9 +63,10 @@ final class AuthTranscript {
        _clientNonce = clientNonce == null
            ? null
            : _copyFixed(clientNonce, 'clientNonce'),
-       _clientNonceCommitment = clientNonceCommitment == null
-           ? null
-           : _copyFixed(clientNonceCommitment, 'clientNonceCommitment'),
+       _clientNonceCommitment = _copyFixed(
+         clientNonceCommitment,
+         'clientNonceCommitment',
+       ),
        _serverNonce = _copyFixed(serverNonce, 'serverNonce'),
        _clientProfileDigest = _copyFixed(
          clientProfileDigest,
@@ -82,20 +79,19 @@ final class AuthTranscript {
     if (protocolVersion <= 0 || protocolVersion > 0xffffffff) {
       throw ArgumentError.value(protocolVersion, 'protocolVersion');
     }
+    if (this.clientMinProtocolVersion <= 0 ||
+        this.clientMaxProtocolVersion > 0xffffffff ||
+        this.clientMinProtocolVersion > this.clientMaxProtocolVersion ||
+        protocolVersion < this.clientMinProtocolVersion ||
+        protocolVersion > this.clientMaxProtocolVersion) {
+      throw ArgumentError('Invalid protocol version range');
+    }
     if (clientPeerId.isEmpty || serverPeerId.isEmpty) {
       throw ArgumentError('Peer ids must not be empty');
     }
-    final commitment = _clientNonceCommitment;
     final nonce = _clientNonce;
-    if (usesNonceCommitment(protocolVersion) != (commitment != null)) {
-      throw ArgumentError('Nonce commitment does not match protocol version');
-    }
-    if (commitment == null && nonce == null) {
-      throw ArgumentError('Missing the client nonce');
-    }
-    if (commitment != null &&
-        nonce != null &&
-        !_sameBytes(commitClientNonce(nonce), commitment)) {
+    if (nonce != null &&
+        !_sameBytes(commitClientNonce(nonce), _clientNonceCommitment)) {
       throw ArgumentError('Client nonce does not match its commitment');
     }
   }
@@ -103,6 +99,8 @@ final class AuthTranscript {
   /// Decodes the base64url wire values of a hello and its challenge.
   factory AuthTranscript.fromWire({
     required int protocolVersion,
+    int? clientMinProtocolVersion,
+    int? clientMaxProtocolVersion,
     required WirePeerProfile clientProfile,
     required WirePeerProfile serverProfile,
     required String clientIdentityKey,
@@ -110,12 +108,14 @@ final class AuthTranscript {
     required String clientEphemeralKey,
     required String serverEphemeralKey,
     Uint8List? clientNonce,
-    Uint8List? clientNonceCommitment,
+    required Uint8List clientNonceCommitment,
     required Uint8List serverNonce,
     required String intendedPkh,
     required bool serverPairingRequired,
   }) => AuthTranscript(
     protocolVersion: protocolVersion,
+    clientMinProtocolVersion: clientMinProtocolVersion,
+    clientMaxProtocolVersion: clientMaxProtocolVersion,
     clientPeerId: clientProfile.uid,
     serverPeerId: serverProfile.uid,
     clientIdentityPublicKey: decodeAuthBase64Url(
@@ -144,6 +144,8 @@ final class AuthTranscript {
   );
 
   final int protocolVersion;
+  final int clientMinProtocolVersion;
+  final int clientMaxProtocolVersion;
   final String clientPeerId;
   final String serverPeerId;
   final Uint8List _clientIdentityPublicKey;
@@ -153,7 +155,7 @@ final class AuthTranscript {
   final String intendedPublicKeyHash;
   final bool serverPairingRequired;
   final Uint8List? _clientNonce;
-  final Uint8List? _clientNonceCommitment;
+  final Uint8List _clientNonceCommitment;
   final Uint8List _serverNonce;
   final Uint8List _clientProfileDigest;
   final Uint8List _serverProfileDigest;
@@ -168,9 +170,8 @@ final class AuthTranscript {
       Uint8List.fromList(_serverEphemeralPublicKey);
   Uint8List? get clientNonce =>
       _clientNonce == null ? null : Uint8List.fromList(_clientNonce);
-  Uint8List? get clientNonceCommitment => _clientNonceCommitment == null
-      ? null
-      : Uint8List.fromList(_clientNonceCommitment);
+  Uint8List get clientNonceCommitment =>
+      Uint8List.fromList(_clientNonceCommitment);
   Uint8List get serverNonce => Uint8List.fromList(_serverNonce);
   Uint8List get clientProfileDigest => Uint8List.fromList(_clientProfileDigest);
   Uint8List get serverProfileDigest => Uint8List.fromList(_serverProfileDigest);
@@ -180,18 +181,20 @@ final class AuthTranscript {
   bool get hasClientNonce => _clientNonce != null;
 
   /// This transcript with the client's nonce from its proof, or null when it
-  /// is not the nonce the hello committed to (or carried, before commitments).
+  /// is not the nonce the hello committed to.
   AuthTranscript? revealClientNonce(Uint8List nonce) {
     final known = _clientNonce;
     if (known != null) {
       return _sameBytes(known, nonce) ? this : null;
     }
     if (nonce.length != 32 ||
-        !_sameBytes(commitClientNonce(nonce), _clientNonceCommitment!)) {
+        !_sameBytes(commitClientNonce(nonce), _clientNonceCommitment)) {
       return null;
     }
     return AuthTranscript(
       protocolVersion: protocolVersion,
+      clientMinProtocolVersion: clientMinProtocolVersion,
+      clientMaxProtocolVersion: clientMaxProtocolVersion,
       clientPeerId: clientPeerId,
       serverPeerId: serverPeerId,
       clientIdentityPublicKey: _clientIdentityPublicKey,
@@ -208,8 +211,8 @@ final class AuthTranscript {
     );
   }
 
-  /// Signed by the server before it may know the client's nonce, so from
-  /// [nonceCommitmentProtocolVersion] on it covers only the commitment.
+  /// Signed by the server before it knows the client's nonce, so it covers
+  /// only the commitment.
   Uint8List challengeBytes() => _canonical('challenge');
 
   Uint8List proofBytes({String reason = 'approved'}) =>
@@ -250,9 +253,13 @@ final class AuthTranscript {
     List<List<int>> extraFields = const <List<int>>[],
   }) {
     final version = ByteData(4)..setUint32(0, protocolVersion);
+    final minVersion = ByteData(4)..setUint32(0, clientMinProtocolVersion);
+    final maxVersion = ByteData(4)..setUint32(0, clientMaxProtocolVersion);
     final fields = <List<int>>[
       utf8.encode('whisper-auth-v1/$stage'),
       version.buffer.asUint8List(),
+      minVersion.buffer.asUint8List(),
+      maxVersion.buffer.asUint8List(),
       utf8.encode(clientPeerId),
       utf8.encode(serverPeerId),
       _clientIdentityPublicKey,
@@ -277,21 +284,15 @@ final class AuthTranscript {
     return builder.takeBytes();
   }
 
-  /// Before commitments: the nonce, as it always was. From then on: the
-  /// commitment, then the nonce, which stays empty in the challenge.
   List<List<int>> _clientNonceFields(String stage) {
-    final commitment = _clientNonceCommitment;
-    if (commitment == null) {
-      return <List<int>>[_clientNonce!];
-    }
     if (stage == 'challenge') {
-      return <List<int>>[commitment, const <int>[]];
+      return <List<int>>[_clientNonceCommitment, const <int>[]];
     }
     final nonce = _clientNonce;
     if (nonce == null) {
       throw StateError('The client has not revealed its nonce yet');
     }
-    return <List<int>>[commitment, nonce];
+    return <List<int>>[_clientNonceCommitment, nonce];
   }
 }
 
