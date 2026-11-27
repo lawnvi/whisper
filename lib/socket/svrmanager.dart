@@ -44,6 +44,7 @@ import 'package:whisper/socket/pairing_attempt_limiter.dart';
 import 'package:whisper/socket/outbound_frame_class.dart';
 import 'package:whisper/socket/pre_auth_byte_cap.dart';
 import 'package:whisper/socket/peer_connection.dart';
+import 'package:whisper/socket/peer_directory.dart';
 import 'package:whisper/socket/peer_ping_tracker.dart';
 import 'package:whisper/socket/peer_profile_refresh.dart';
 import 'package:whisper/socket/peer_socket_session.dart';
@@ -68,7 +69,6 @@ import 'package:whisper/window_stream/remote/remote_peer_source.dart';
 import 'package:whisper/window_stream/remote/window_stream_control.dart';
 import 'package:whisper/window_stream/remote/window_stream_host.dart';
 import 'package:whisper/window_stream/window_stream_support.dart';
-import 'package:whisper/socket/transport_close_guard.dart';
 import 'package:whisper/socket/transfer_pacing.dart';
 import 'package:whisper/socket/whisper_frame_v3.dart';
 import 'package:whisper/socket/wire_message_codec.dart';
@@ -291,18 +291,18 @@ class WsSvrManager {
   }
 
   WebSocketSink? _sink;
-  final PeerConnectionRegistry _peerConnections = PeerConnectionRegistry();
+  late final PeerDirectory _peers = PeerDirectory(
+    socketCloseTimeout: _socketCloseTimeout,
+    maxPreAuthMessageBytes: _maxPreAuthMessageBytes,
+    maxAuthenticatedMessageBytes: _maxAuthenticatedMessageBytes,
+    authenticatedFrameOverhead: _authenticatedFrameOverhead,
+    ignoreFuture: _ignoreFuture,
+    logInfo: logger.i,
+  );
   final PeerPingTracker _pingTracker = PeerPingTracker();
   final Set<String> _deletedPeerDiscoverySuppressions = <String>{};
-  final Map<WebSocketSink, String> _peerIdsBySink = <WebSocketSink, String>{};
-  final Map<WebSocketSink, PeerSocketSession> _sessionsBySink =
-      <WebSocketSink, PeerSocketSession>{};
-  final Map<String, PeerSocketSession> _sessionsByPeerId =
-      <String, PeerSocketSession>{};
   final Map<WebSocketSink, Completer<_SocketAuthResult>> _authResultsBySink =
       <WebSocketSink, Completer<_SocketAuthResult>>{};
-  final Map<WebSocketSink, ({String host, int port})> _endpointsBySink =
-      <WebSocketSink, ({String host, int port})>{};
   final DeviceIdentityStore _identityStore;
   final AuthEnvelopeObserver? _authEnvelopeObserver;
   int _nextConnectionGeneration = 0;
@@ -314,14 +314,6 @@ class WsSvrManager {
       <WebSocketSink, String>{};
   final Map<WebSocketSink, _IdentityPinPlan> _identityPinPlansBySink =
       <WebSocketSink, _IdentityPinPlan>{};
-  final Map<String, PeerProfile> _remoteProfilesByPeerId =
-      <String, PeerProfile>{};
-  final Map<WebSocketSink, Future<void>> _socketCleanups =
-      <WebSocketSink, Future<void>>{};
-  final Map<WebSocketSink, TransportCloseGuard> _socketCloseGuards =
-      <WebSocketSink, TransportCloseGuard>{};
-  final Map<WebSocketSink, PeerDisconnectCause> _terminalDisconnectCauses =
-      <WebSocketSink, PeerDisconnectCause>{};
   final Set<Future<void>> _pendingSocketAttachments = <Future<void>>{};
   final Set<PendingOutgoingConnection> _pendingOutgoingConnections =
       <PendingOutgoingConnection>{};
@@ -372,12 +364,6 @@ class WsSvrManager {
       <String, Set<_PeerAuthSuppressionReason>>{};
   final Map<PeerSocketSession, int> _sessionStartedPolicyRevisions =
       <PeerSocketSession, int>{};
-  final Map<PeerSocketSession, int> _sessionAuthCommitWatermarks =
-      <PeerSocketSession, int>{};
-  final Set<PeerSocketSession> _supersededOnAuth = <PeerSocketSession>{};
-  final Set<WebSocketSink> _deferSinkCloseForSuperseded = <WebSocketSink>{};
-  final Map<PeerSocketSession, WebSocketSink> _deferredSupersededSinks =
-      <PeerSocketSession, WebSocketSink>{};
   final Map<String, Future<void>> _peerAuthenticationTails =
       <String, Future<void>>{};
   int _globalPolicyEpoch = 0;
@@ -403,23 +389,21 @@ class WsSvrManager {
   final Set<String> _systemSleepReconnectPeerIds = <String>{};
   HttpServer? _serverClosing;
   PeerProfile? _remoteProfile;
-  final PeerProfileRefreshTracker _profileRefreshTracker =
-      PeerProfileRefreshTracker();
   final TransferAckWatchdog? _transferAckWatchdog;
   final List<Duration>? _transferRetryDelays;
   late final FileTransferEngine _transferEngine = FileTransferEngine(
-    currentConnectionBinding: _peerConnections.currentBinding,
+    currentConnectionBinding: _peers.currentBinding,
     outgoingPacerFor: _transferPacing.forTransfer,
     incomingFlowLimitsFor: (transferId) =>
         _remoteClipboardTransfer.carriesTransfer(transferId)
         ? FileTransferV3FlowParameters.sharedLink
         : null,
     authenticatedIdentityHashForConnection: (binding) {
-      final session = _sessionsByPeerId[binding.peerId];
+      final session = _peers.sessionForPeer(binding.peerId);
       if (session == null ||
           !session.isAuthenticated ||
           session.connectionGeneration != binding.generation ||
-          _peerConnections.currentBinding(binding.peerId) != binding ||
+          _peers.currentBinding(binding.peerId) != binding ||
           !_isPeerAuthenticationAllowed(binding.peerId)) {
         return null;
       }
@@ -429,10 +413,10 @@ class WsSvrManager {
         return null;
       }
     },
-    sendBytesToConnection: _peerConnections.sendToAwaitedIfCurrent,
-    enqueueBytesToConnection: _peerConnections.sendToAwaitedIfCurrent,
+    sendBytesToConnection: _peers.sendToAwaitedIfCurrent,
+    enqueueBytesToConnection: _peers.sendToAwaitedIfCurrent,
     pruneInvalidOutbound: (peerId) =>
-        _sessionsByPeerId[peerId]?.dropInvalidOutbound(),
+        _peers.sessionForPeer(peerId)?.dropInvalidOutbound(),
     ackWatchdog: _transferAckWatchdog,
     watchdogRetryDelays: _transferRetryDelays,
     markPeerUnresponsive: _removeUnresponsivePeerIfCurrent,
@@ -442,15 +426,12 @@ class WsSvrManager {
       _dispatchToAll((event) => event.onTransferUpdated(snapshot));
     },
     notify: (message) => _dispatchToPrimary((event) => event.onNotice(message)),
-    remoteProfileFor: (peerId) =>
-        _remoteProfilesByPeerId[peerId] ??
-        (peerId == receiver ? _remoteProfile : null),
+    remoteProfileFor: remoteProfileFor,
     isConnectedTo: isConnectedTo,
-    connectedPeerIds: () => _peerConnections.connectedPeerIds,
+    connectedPeerIds: () => _peers.connectedPeerIds,
     defaultPeerId: () => receiver,
     hasLegacySinkFor: (peerId) => peerId == receiver && _sink != null,
-    localPeerIdFor: (peerId) =>
-        _sessionsByPeerId[peerId]?.localProfile.uid ?? '',
+    localPeerIdFor: _peers.localPeerIdFor,
     buildMessage: _buildMessage,
     dispatchOutgoingMessage: _dispatchOutgoingMessage,
     ackMessage: _ackMessage,
@@ -462,8 +443,8 @@ class WsSvrManager {
   late final RemoteClipboardTransferEngine _remoteClipboardTransfer =
       RemoteClipboardTransferEngine(
         sendFrame: (binding, frame) =>
-            _peerConnections.sendToAwaitedIfCurrent(binding, frame.encode()),
-        currentBinding: _peerConnections.currentBinding,
+            _peers.sendToAwaitedIfCurrent(binding, frame.encode()),
+        currentBinding: _peers.currentBinding,
         sessionValidator: _validateRemoteClipboardSession,
         // Files and screenshots go as quiet transfers, like file-manager
         // copies: no message in the conversation, placed where the paste waits.
@@ -493,26 +474,24 @@ class WsSvrManager {
   int _workspaceClipboardRevision = 0;
 
   PeerProfile? get _selectedRemoteProfile =>
-      _remoteProfilesByPeerId[receiver] ?? _remoteProfile;
+      _peers.remoteProfileFor(receiver, legacyReceiver: receiver, legacyProfile: _remoteProfile);
 
-  Set<String> get connectedPeerIds => _peerConnections.connectedPeerIds;
+  Set<String> get connectedPeerIds => _peers.connectedPeerIds;
 
   /// Which connection to [peerId] this is (a new one after a reconnect);
   /// null while not connected.
-  int? connectionIdOf(String peerId) =>
-      _peerConnections.currentBinding(peerId)?.generation;
+  int? connectionIdOf(String peerId) => _peers.connectionIdOf(peerId);
 
   /// [peerId] is connected and accepts windows sent to it ("送出去").
   bool canOfferWindowsTo(String peerId) =>
       supportsWindowStreamSource() &&
-      _sessionsByPeerId[peerId]?.isAuthenticated == true &&
+      _peers.sessionForPeer(peerId)?.isAuthenticated == true &&
       remoteProfileFor(peerId)?.capabilities.windowStreamOfferV1 == true;
 
   /// This device's peer id on [peerId]'s authenticated session.
-  String localPeerIdFor(String peerId) =>
-      _sessionsByPeerId[peerId]?.localProfile.uid ?? '';
+  String localPeerIdFor(String peerId) => _peers.localPeerIdFor(peerId);
   bool get isConnected =>
-      _sink != null || _peerConnections.connectedPeerIds.isNotEmpty;
+      _sink != null || _peers.connectedPeerIds.isNotEmpty;
   bool get supportsFileTransferV3 =>
       _selectedRemoteProfile?.capabilities.fileTransferV3 == true;
   bool get supportsRemoteInput =>
@@ -525,136 +504,93 @@ class WsSvrManager {
   RemoteInputTopology? get remoteDisplayTopology =>
       _selectedRemoteProfile?.displayTopology;
 
-  bool supportsRemoteInputFor(String peerId) {
-    final profile =
-        _remoteProfilesByPeerId[peerId] ??
-        (peerId == receiver ? _remoteProfile : null);
-    return profile?.capabilities.remoteInputSourceV1 == true &&
-        profile?.capabilities.remoteInputSinkV1 == true;
-  }
+  bool supportsRemoteInputFor(String peerId) => _peers.supportsRemoteInputFor(
+    peerId,
+    legacyReceiver: receiver,
+    legacyProfile: _remoteProfile,
+  );
 
-  bool supportsManualInputFor(String peerId) {
-    final profile = remoteProfileFor(peerId);
-    return profile?.capabilities.remoteInputManualSinkV1 == true;
-  }
+  bool supportsManualInputFor(String peerId) => _peers.supportsManualInputFor(
+    peerId,
+    legacyReceiver: receiver,
+    legacyProfile: _remoteProfile,
+  );
 
-  PeerProfile? remoteProfileFor(String peerId) {
-    return _remoteProfilesByPeerId[peerId] ??
-        (peerId == receiver ? _remoteProfile : null);
-  }
+  PeerProfile? remoteProfileFor(String peerId) => _peers.remoteProfileFor(
+    peerId,
+    legacyReceiver: receiver,
+    legacyProfile: _remoteProfile,
+  );
 
   /// Every connected device whose profile has come: from protocol 16 all of
   /// them can play a group's sound.
   List<DeviceData> connectedAudioGroupSinkDevices({
     String preferredPeerId = '',
-  }) {
-    final devices = <DeviceData>[];
-    for (final peerId in connectedPeerIds) {
-      final profile =
-          _remoteProfilesByPeerId[peerId] ??
-          (peerId == receiver ? _remoteProfile : null);
-      final device = profile?.device;
-      if (device != null) {
-        devices.add(device);
-      }
-    }
-    devices.sort((left, right) {
-      if (left.uid == preferredPeerId) {
-        return -1;
-      }
-      if (right.uid == preferredPeerId) {
-        return 1;
-      }
-      return left.name.compareTo(right.name);
-    });
-    return devices;
-  }
+  }) => _peers.connectedAudioGroupSinkDevices(
+    preferredPeerId: preferredPeerId,
+    legacyReceiver: receiver,
+    legacyProfile: _remoteProfile,
+  );
 
-  List<DeviceData> connectedRemoteInputDevices({String preferredPeerId = ''}) {
-    final devices = <DeviceData>[];
-    for (final peerId in connectedPeerIds) {
-      if (!supportsRemoteInputFor(peerId)) {
-        continue;
-      }
-      final profile =
-          _remoteProfilesByPeerId[peerId] ??
-          (peerId == receiver ? _remoteProfile : null);
-      final device = profile?.device;
-      if (device != null) {
-        devices.add(device);
-      }
-    }
-    devices.sort((left, right) {
-      if (left.uid == preferredPeerId) {
-        return -1;
-      }
-      if (right.uid == preferredPeerId) {
-        return 1;
-      }
-      return left.name.compareTo(right.name);
-    });
-    return devices;
-  }
+  List<DeviceData> connectedRemoteInputDevices({String preferredPeerId = ''}) =>
+      _peers.connectedRemoteInputDevices(
+        preferredPeerId: preferredPeerId,
+        legacyReceiver: receiver,
+        legacyProfile: _remoteProfile,
+      );
 
-  bool supportsRemoteInputTopologyFor(String peerId) {
-    final profile =
-        _remoteProfilesByPeerId[peerId] ??
-        (peerId == receiver ? _remoteProfile : null);
-    return supportsRemoteInputFor(peerId) &&
-        profile?.capabilities.remoteInputTopologyV1 == true &&
-        profile?.displayTopology?.isNotEmpty == true;
-  }
+  bool supportsRemoteInputTopologyFor(String peerId) =>
+      _peers.supportsRemoteInputTopologyFor(
+        peerId,
+        legacyReceiver: receiver,
+        legacyProfile: _remoteProfile,
+      );
 
-  bool supportsRemoteInputWorkspaceGraphFor(String peerId) {
-    final profile =
-        _remoteProfilesByPeerId[peerId] ??
-        (peerId == receiver ? _remoteProfile : null);
-    return supportsRemoteInputTopologyFor(peerId) &&
-        profile?.capabilities.remoteInputWorkspaceGraphV1 == true;
-  }
+  bool supportsRemoteInputWorkspaceGraphFor(String peerId) =>
+      _peers.supportsRemoteInputWorkspaceGraphFor(
+        peerId,
+        legacyReceiver: receiver,
+        legacyProfile: _remoteProfile,
+      );
 
-  RemoteInputTopology? remoteDisplayTopologyFor(String peerId) {
-    final profile =
-        _remoteProfilesByPeerId[peerId] ??
-        (peerId == receiver ? _remoteProfile : null);
-    return profile?.displayTopology;
-  }
+  RemoteInputTopology? remoteDisplayTopologyFor(String peerId) =>
+      _peers.remoteDisplayTopologyFor(
+        peerId,
+        legacyReceiver: receiver,
+        legacyProfile: _remoteProfile,
+      );
 
   bool remoteTrustsPeer(String peerId) {
     final selectedPeerId = _selectedRemoteProfile?.device.uid ?? receiver;
     return peerId == sender &&
-        _sessionsByPeerId[selectedPeerId]?.isAuthenticated == true;
+        _peers.sessionForPeer(selectedPeerId)?.isAuthenticated == true;
   }
 
   bool remotePeerTrustsPeer(String remotePeerId, String trustedPeerId) {
     return trustedPeerId == sender &&
-        _sessionsByPeerId[remotePeerId]?.isAuthenticated == true;
+        _peers.sessionForPeer(remotePeerId)?.isAuthenticated == true;
   }
 
-  bool isConnectedTo(String peerId) {
-    return _peerConnections.isConnectedTo(peerId);
-  }
+  bool isConnectedTo(String peerId) => _peers.isConnectedTo(peerId);
 
   bool isCurrentConnectionGeneration(String peerId, int generation) =>
-      _peerConnections.isCurrent(peerId, generation);
+      _peers.isCurrent(peerId, generation);
 
   void selectPeer(String peerId) {
-    if (!_peerConnections.isConnectedTo(peerId)) {
+    if (!_peers.isConnectedTo(peerId)) {
       return;
     }
     receiver = peerId;
-    for (final entry in _peerIdsBySink.entries) {
-      if (entry.value == peerId) {
-        _sink = entry.key;
-        break;
-      }
+    final foundSink = _peers.findSinkForPeer(peerId);
+    if (foundSink != null) {
+      _sink = foundSink;
     }
-    _setSelectedRemoteProfile(_remoteProfilesByPeerId[peerId]);
+    _setSelectedRemoteProfile(_peers.remoteProfileFor(peerId));
   }
 
   @visibleForTesting
   Future<PeerProfile?> debugWaitForSelectedProfileUpdate() =>
-      _profileRefreshTracker.waitForNextUpdate(receiver);
+      _peers.profileRefreshTracker.waitForNextUpdate(receiver);
 
   @visibleForTesting
   Future<void> debugSendProfileHeartbeatTo(String peerId) =>
@@ -689,9 +625,7 @@ class WsSvrManager {
     }
   }
 
-  String? _peerIdForSink(WebSocketSink? sink) {
-    return sink == null ? null : _peerIdsBySink[sink];
-  }
+  String? _peerIdForSink(WebSocketSink? sink) => _peers.peerIdForSink(sink);
 
   void setSender(String uid) {
     sender = uid;
@@ -811,24 +745,13 @@ class WsSvrManager {
     );
   }
 
-  Future<void> _closeSocketSink(WebSocketSink sink) {
-    final guard = _socketCloseGuards.putIfAbsent(
-      sink,
-      () => TransportCloseGuard(
-        close: () async {
-          await sink.close();
-        },
-        timeout: _socketCloseTimeout,
-      ),
-    );
-    return guard.close();
-  }
+  Future<void> _closeSocketSink(WebSocketSink sink) => _peers.closeSink(sink);
 
   Future<void> debugRegisterPeerConnection(
     String peerId,
     PeerConnection connection,
   ) async {
-    await _peerConnections.register(
+    await _peers.connections.register(
       connection,
       afterRegister: (_) {
         if (receiver.isEmpty) {
@@ -839,118 +762,32 @@ class WsSvrManager {
   }
 
   @visibleForTesting
-  bool debugSendMalformedTransportFrame(String peerId) {
-    for (final entry in _peerIdsBySink.entries) {
-      if (entry.value == peerId) {
-        entry.key.add(Uint8List.fromList(const <int>[0]));
-        return true;
-      }
-    }
-    return false;
-  }
+  bool debugSendMalformedTransportFrame(String peerId) =>
+      _peers.debugSendMalformedTransportFrame(peerId);
 
   @visibleForTesting
-  Future<bool> debugDropPeerTransport(String peerId) async {
-    for (final entry in _peerIdsBySink.entries) {
-      if (entry.value == peerId) {
-        await entry.key.close();
-        return true;
-      }
-    }
-    return false;
-  }
-
-  WebSocketSink? _findSinkForSession(PeerSocketSession? target) {
-    if (target == null) return null;
-    for (final entry in _sessionsBySink.entries) {
-      if (identical(entry.value, target)) return entry.key;
-    }
-    return null;
-  }
-
-  void _closeDeferredSupersededSink(PeerSocketSession session) {
-    final deferred = _deferredSupersededSinks.remove(session);
-    if (deferred != null) {
-      _ignoreFuture(_closeSocketSink(deferred), context: 'close superseded');
-    }
-  }
+  Future<bool> debugDropPeerTransport(String peerId) =>
+      _peers.debugDropPeerTransport(peerId);
 
   Future<bool> _registerPeerConnection({
     required String peerId,
     required WebSocketSink sink,
     required PeerSocketSession session,
     PeerProfile? profile,
-  }) async {
-    if (peerId.isEmpty || !session.isAuthenticationReady) return false;
-    var superseded = false;
-    final deferredOldSink = session.role == PeerSocketRole.server
-        ? _findSinkForSession(_sessionsByPeerId[peerId])
-        : null;
-    if (deferredOldSink != null) {
-      _deferSinkCloseForSuperseded.add(deferredOldSink);
-    }
-    try {
-      await _peerConnections.register(
-        PeerConnection(
-          peerId: peerId,
-          connectionId: session.connectionGeneration,
-          send: (message) {
-            if (session.isAuthenticated) {
-              _ignoreFuture(
-                _sendBytesOnSink(sink, message).then<void>((_) {}),
-                context: 'send peer message',
-              );
-            }
-          },
-          sendAsync: (message) => session.isAuthenticated
-              ? _sendBytesOnSink(sink, message)
-              : Future<bool>.value(false),
-          close: () async {
-            _peerIdsBySink.remove(sink);
-            session.close();
-            if (_deferSinkCloseForSuperseded.remove(sink)) return;
-            await _closeSocketSink(sink);
-          },
-        ),
-        afterRemove: (binding) async {
-          superseded = true;
-          final previous = _sessionsByPeerId[peerId];
-          if (previous?.connectionGeneration == binding.generation) {
-            _sessionsByPeerId.remove(peerId);
-          }
-          await _handlePeerSupersededPreRegister(peerId);
-        },
-        afterRegister: (binding) {
-          if (binding.generation != session.connectionGeneration ||
-              !session.isAuthenticationReady) {
-            throw StateError('stale peer registration');
-          }
-          _sessionsByPeerId[peerId] = session;
-          _peerIdsBySink[sink] = peerId;
-          if (session.role == PeerSocketRole.server &&
-              (receiver.isEmpty || receiver == peerId)) {
-            receiver = peerId;
-            _sink = sink;
-          }
-          _setRemoteProfile(profile, peerId: peerId);
-        },
-      );
-      if (deferredOldSink != null &&
-          !_deferSinkCloseForSuperseded.remove(deferredOldSink)) {
-        _deferredSupersededSinks[session] = deferredOldSink;
+  }) => _peers.registerConnection(
+    peerId: peerId,
+    sink: sink,
+    session: session,
+    onSupersededPreRegister: _handlePeerSupersededPreRegister,
+    onRegistered: (_) {
+      if (session.role == PeerSocketRole.server &&
+          (receiver.isEmpty || receiver == peerId)) {
+        receiver = peerId;
+        _sink = sink;
       }
-    } catch (_) {
-      if (deferredOldSink != null &&
-          !_deferSinkCloseForSuperseded.remove(deferredOldSink)) {
-        _ignoreFuture(
-          _closeSocketSink(deferredOldSink),
-          context: 'close superseded',
-        );
-      }
-      rethrow;
-    }
-    return superseded;
-  }
+      _setRemoteProfile(profile, peerId: peerId);
+    },
+  );
 
   /// Cleans up per-generation state on a superseded connection without taking
   /// the peer offline. Media channels close via [_closeSupersededMediaChannels]
@@ -965,42 +802,19 @@ class WsSvrManager {
     await _transferEngine.preparePeerSuperseded(peerId);
   }
 
-  Future<void> _handlePeerSocketDoneQueued(WebSocketSink sink) {
-    final existing = _socketCleanups[sink];
-    if (existing != null) {
-      return existing;
-    }
-    late final Future<void> cleanup;
-    cleanup = () async {
-      try {
-        await _sessionsBySink[sink]?.stopReceivingAndDrain();
-      } catch (error, stackTrace) {
-        logger.i('停止 websocket 接收失败: $error\n$stackTrace');
-      }
-      try {
-        await _handlePeerSocketDone(sink);
-      } catch (error, stackTrace) {
-        logger.i('处理 websocket 关闭失败: $error\n$stackTrace');
-      } finally {
-        if (identical(_socketCleanups[sink], cleanup)) {
-          unawaited(_socketCleanups.remove(sink));
-        }
-        _socketCloseGuards.remove(sink);
-      }
-    }();
-    _socketCleanups[sink] = cleanup;
-    return cleanup;
-  }
+  Future<void> _handlePeerSocketDoneQueued(WebSocketSink sink) =>
+      _peers.runSocketCleanupQueued(sink, () => _handlePeerSocketDone(sink));
 
   Future<void> _handlePeerSocketDone(WebSocketSink sink) async {
+    final link = _peers.removeLink(sink);
     final disconnectCause =
-        _terminalDisconnectCauses.remove(sink) ?? PeerDisconnectCause.network;
-    final session = _sessionsBySink.remove(sink);
+        link?.takeTerminalDisconnectCause() ?? PeerDisconnectCause.network;
+    final session = link?.session;
     final wasAuthenticated = session?.isAuthenticated == true;
-    if (session != null) {
-      _sessionAuthCommitWatermarks.remove(session);
-      _supersededOnAuth.remove(session);
-      _closeDeferredSupersededSink(session);
+    if (link != null) {
+      link.authCommitWatermark = null;
+      link.supersededOnAuth = false;
+      _peers.closeDeferredSupersededSinkOnLink(link);
     }
     if (session != null &&
         !_peerAuthenticationTails.containsKey(session.remotePeerId)) {
@@ -1009,13 +823,13 @@ class WsSvrManager {
     session?.close();
     await session?.drainOutbound();
     session?.releaseAdmission();
-    _endpointsBySink.remove(sink);
     _identityPinPlansBySink.remove(sink);
     _completeSocketAuth(sink, false, 'connection_closed');
     _releaseOutgoingAuthForSink(sink);
     _releaseIncomingAuthForSink(sink);
     _pingTracker.stopKeepalive(sink);
-    final peerId = _peerIdsBySink.remove(sink);
+    final peerId = link?.registeredPeerId;
+    link?.registeredPeerId = null;
     if (peerId == null) {
       if (identical(_sink, sink)) {
         _sink = null;
@@ -1030,16 +844,14 @@ class WsSvrManager {
     if (pendingAuthTail != null) {
       await pendingAuthTail.catchError((Object _) {});
     }
-    final currentSession = _sessionsByPeerId[peerId];
-    if (!await AuthSocketLifecycle.removeConnectionIfCurrent(
-      connections: _peerConnections,
+    if (!await _peers.removeConnectionIfCurrentForDone(
       peerId: peerId,
       closingSession: session,
-      currentSession: currentSession,
-      afterRemove: (binding) => _afterPeerRemoved(
+      cause: disconnectCause,
+      afterRemove: (binding, closingSession, cause) => _afterPeerRemoved(
         binding,
-        closingSession: session,
-        cause: disconnectCause,
+        closingSession: closingSession,
+        cause: cause,
       ),
     )) {
       return;
@@ -1063,7 +875,7 @@ class WsSvrManager {
       intendedPublicKeyHash: intendedPublicKeyHash,
       negotiatedProtocolVersion: protocolVersion,
       onTimeout: () {
-        if (!identical(_sessionsBySink[sink], session)) {
+        if (!identical(_peers.sessionForSink(sink), session)) {
           return;
         }
         _completeSocketAuth(sink, false, 'pairing_expired');
@@ -1074,7 +886,7 @@ class WsSvrManager {
       },
     );
     _sessionStartedPolicyRevisions[session] = _policyRevision;
-    _sessionsBySink[sink] = session;
+    _peers.attachSession(sink, session);
     return session;
   }
 
@@ -1099,9 +911,9 @@ class WsSvrManager {
         );
       },
       onError: (Object error, StackTrace stackTrace) {
-        final session = _sessionsBySink[sink];
+        final session = _peers.sessionForSink(sink);
         final peerId =
-            _peerIdsBySink[sink] ??
+            _peers.peerIdForSink(sink) ??
             session?.remotePeerId ??
             _pendingOutgoingBySink[sink]?.verifiedPeerId ??
             _pendingOutgoingBySink[sink]?.request.expectedPeerId ??
@@ -1121,7 +933,7 @@ class WsSvrManager {
       },
       onDone: () {
         AuthSocketLifecycle.closeBeforeQueuedCleanup(
-          _sessionsBySink[sink],
+          _peers.sessionForSink(sink),
           () => _ignoreFuture(
             _handlePeerSocketDoneQueued(sink),
             context: 'cleanup closed websocket',
@@ -1139,7 +951,7 @@ class WsSvrManager {
           _closeSocketSink(sink),
           context: 'close failed outbound websocket',
         );
-        if (!identical(_sessionsBySink[sink], session)) {
+        if (!identical(_peers.sessionForSink(sink), session)) {
           return;
         }
         _completeSocketAuth(sink, false, 'queue_overflow');
@@ -1157,7 +969,7 @@ class WsSvrManager {
     String remoteHost,
   ) async {
     final sink = webSocket.sink;
-    _endpointsBySink[sink] = (host: plainPeerHost(remoteHost), port: 0);
+    _peers.setEndpoint(sink, (host: plainPeerHost(remoteHost), port: 0));
     try {
       final session = await _createSocketSession(
         sink: sink,
@@ -1171,7 +983,7 @@ class WsSvrManager {
         asServer: true,
       );
     } catch (_) {
-      _endpointsBySink.remove(sink);
+      _peers.removeLink(sink);
       admissionLease.close();
       _completeSocketAuth(sink, false, 'session_setup_failed');
       await _closeSocketSink(sink);
@@ -1212,7 +1024,7 @@ class WsSvrManager {
     String message, {
     PeerDisconnectCause cause = PeerDisconnectCause.protocolFailure,
   }) async {
-    _terminalDisconnectCauses[sink] = cause;
+    _peers.setTerminalDisconnectCause(sink, cause);
     session.close();
     _identityPinPlansBySink.remove(sink);
     _completeSocketAuth(sink, false, message);
@@ -1445,9 +1257,7 @@ class WsSvrManager {
     _reconnectControllerFor(
       peerId,
     ).updateTarget(target, accelerate: accelerate);
-    final currentProfile =
-        _remoteProfilesByPeerId[peerId] ??
-        (peerId == receiver ? _remoteProfile : null);
+    final currentProfile = remoteProfileFor(peerId);
     if (currentProfile != null &&
         (currentProfile.device.host != target.host ||
             currentProfile.device.port != target.port)) {
@@ -1584,7 +1394,7 @@ class WsSvrManager {
       final storedDevice = await _database.fetchDevice(result.peerId);
       if (context.isCurrent &&
           storedDevice != null &&
-          _peerConnections.isCurrent(result.peerId, result.generation)) {
+          _peers.isCurrent(result.peerId, result.generation)) {
         final shouldSelect = receiver.isEmpty || receiver == result.peerId;
         if (shouldSelect) {
           selectPeer(result.peerId);
@@ -1781,14 +1591,16 @@ class WsSvrManager {
   }
 
   void _cancelPendingAuthSessionsForPeer(String peerId) {
-    for (final entry in _sessionsBySink.entries.toList(growable: false)) {
-      final session = entry.value;
-      if (session.remotePeerId != peerId || session.isAuthenticated) {
+    for (final link in _peers.linksSnapshot) {
+      final session = link.session;
+      if (session == null ||
+          session.remotePeerId != peerId ||
+          session.isAuthenticated) {
         continue;
       }
       session.close();
       _ignoreFuture(
-        entry.key.close(),
+        link.sink.close(),
         context: 'cancel invalidated peer authentication',
       );
     }
@@ -2302,7 +2114,10 @@ class WsSvrManager {
             _outgoingAuthKeysBySink[channelSink] = authRequestKey;
             authClaimOwnedLocally = false;
           }
-          _endpointsBySink[channelSink] = (host: endpoint.host, port: endpoint.port);
+          _peers.setEndpoint(channelSink, (
+            host: endpoint.host,
+            port: endpoint.port,
+          ));
           final authCompleter = Completer<_SocketAuthResult>();
           _authResultsBySink[channelSink] = authCompleter;
           final session = await _createSocketSession(
@@ -2335,8 +2150,8 @@ class WsSvrManager {
           activeChannel = null;
           final peerId = session.remotePeerId;
           final generation = session.connectionGeneration;
-          if (!_peerConnections.isCurrent(peerId, generation) ||
-              !identical(_sessionsByPeerId[peerId], session)) {
+          if (!_peers.isCurrent(peerId, generation) ||
+              !identical(_peers.sessionForPeer(peerId), session)) {
             return ConnectionAttemptResult.cancelled(
               requestId: request.requestId, reason: ConnectionAttemptReason.superseded,
             );
@@ -2486,14 +2301,14 @@ class WsSvrManager {
       hasSelectedSink: _sink != null,
       hasClientTimer: _pingTracker.hasActiveKeepalives,
       hasPendingSessions:
-          _sessionsBySink.isNotEmpty ||
+          _peers.hasAnySessions ||
           _pendingSocketAttachments.isNotEmpty ||
           _mediaUpgrades.hasPending ||
           _pendingOutgoingConnections.isNotEmpty ||
           _audioManager.hasActiveChannels ||
           _remoteInputManager.hasActiveChannels,
       hasPendingResults: _authResultsBySink.isNotEmpty,
-      hasPeerConnections: _peerConnections.connectedPeerIds.isNotEmpty,
+      hasPeerConnections: _peers.connectedPeerIds.isNotEmpty,
       hasReceiver: receiver.isNotEmpty,
     );
     if (!hadActiveConnection && !closeServer) {
@@ -2513,22 +2328,24 @@ class WsSvrManager {
       await Future.wait(_pendingSocketAttachments.toList(growable: false));
       await _mediaUpgrades.drain();
     }
-    final sessionEntries = _sessionsBySink.entries.toList(growable: false);
-    final authenticatedEntries = sessionEntries
-        .where((entry) => entry.value.isAuthenticated)
+    final sessionLinks = _peers.linksSnapshot
+        .where((link) => link.session != null)
+        .toList(growable: false);
+    final authenticatedLinks = sessionLinks
+        .where((link) => link.isAuthenticated)
         .toList(growable: false);
     final hadAuthenticatedConnection =
-        authenticatedEntries.isNotEmpty ||
-        _peerConnections.connectedPeerIds.isNotEmpty;
-    final pendingEntries = sessionEntries
-        .where((entry) => !entry.value.isAuthenticated)
+        authenticatedLinks.isNotEmpty ||
+        _peers.connectedPeerIds.isNotEmpty;
+    final pendingLinks = sessionLinks
+        .where((link) => !link.isAuthenticated)
         .toList(growable: false);
     final pendingSinks = <WebSocketSink>{
-      ...pendingEntries.map((entry) => entry.key),
+      ...pendingLinks.map((link) => link.sink),
       ..._authResultsBySink.keys,
     };
     AuthSocketLifecycle.closePendingAuth(
-      sessions: pendingEntries.map((entry) => entry.value),
+      sessions: pendingLinks.map((link) => link.session!),
       completeFailures: _authResultsBySink.values.map((completer) {
         return () {
           if (!completer.isCompleted) {
@@ -2545,7 +2362,7 @@ class WsSvrManager {
         try {
           await Future.wait(<Future<void>>[
             _closeSocketSink(sink),
-            if (_sessionsBySink[sink] case final session?)
+            if (_peers.sessionForSink(sink) case final session?)
               session.stopReceivingAndDrain(),
           ]);
         } catch (error, stackTrace) {
@@ -2554,7 +2371,7 @@ class WsSvrManager {
         await _handlePeerSocketDoneQueued(sink);
       }),
     );
-    final activeCleanups = _socketCleanups.values.toList(growable: false);
+    final activeCleanups = _peers.activeCleanupsSnapshot;
     if (activeCleanups.isNotEmpty) {
       await Future.wait(activeCleanups);
     }
@@ -2575,8 +2392,8 @@ class WsSvrManager {
         }),
       );
     }
-    final authenticatedSessions = authenticatedEntries
-        .map((entry) => entry.value)
+    final authenticatedSessions = authenticatedLinks
+        .map((link) => link.session!)
         .toSet()
         .toList(growable: false);
     for (final session in authenticatedSessions) {
@@ -2593,7 +2410,7 @@ class WsSvrManager {
       await RemoteInputCoordinator.shared.stopLocal();
     }
     final disconnectedPeerIds = <String>{
-      ..._peerConnections.connectedPeerIds,
+      ..._peers.connectedPeerIds,
       for (final session in authenticatedSessions)
         if (session.remotePeerId.isNotEmpty) session.remotePeerId,
     };
@@ -2611,23 +2428,18 @@ class WsSvrManager {
       await session.drainOutbound();
     }
     _sink = null;
-    await _peerConnections.disconnectAll();
-    for (final entry in authenticatedEntries) {
-      await _handlePeerSocketDoneQueued(entry.key);
+    await _peers.connections.disconnectAll();
+    for (final link in authenticatedLinks) {
+      await _handlePeerSocketDoneQueued(link.sink);
     }
     for (final session in authenticatedSessions) {
       session.releaseAdmission();
     }
-    _sessionsBySink.clear();
-    _sessionsByPeerId.clear();
-    _terminalDisconnectCauses.clear();
+    _peers.clearAllAfterClose();
     _sessionStartedPolicyRevisions.clear();
     _wireControlSessions.clearAll();
     _sessionUpgradeTokens.clearAll();
     _outgoingTextAcknowledgements.clear();
-    _endpointsBySink.clear();
-    _peerIdsBySink.clear();
-    _remoteProfilesByPeerId.clear();
     if (closeServer) {
       await serverCloseFuture;
     } else if (!_closeServerRequested) {
@@ -2717,51 +2529,92 @@ class WsSvrManager {
   Future<void> _removePeerConnection(
     String peerId,
     PeerDisconnectCause cause,
-  ) async {
-    final binding = _peerConnections.currentBinding(peerId);
-    if (binding == null) {
-      return;
-    }
-    await _peerConnections.removeIfCurrent(
-      binding,
-      afterRemove: (removed) => _afterPeerRemoved(
-        removed,
-        closingSession: _sessionsByPeerId[peerId],
-        cause: cause,
-      ),
-    );
-  }
+  ) => _peers.removePeerConnection(
+    peerId,
+    cause,
+    afterRemove: (removed, closingSession, cause) => _afterPeerRemoved(
+      removed,
+      closingSession: closingSession,
+      cause: cause,
+    ),
+  );
 
   Future<bool> _removeUnresponsivePeerIfCurrent(
     TransferConnectionBinding binding,
-  ) {
-    return _peerConnections.removeIfCurrent(
-      binding,
-      afterRemove: (removed) => _afterPeerRemoved(
-        removed,
-        closingSession: _sessionsByPeerId[removed.peerId],
-        cause: PeerDisconnectCause.watchdog,
-      ),
-    );
-  }
+  ) => _peers.removeUnresponsivePeerIfCurrent(
+    binding,
+    afterRemove: (removed, closingSession, cause) => _afterPeerRemoved(
+      removed,
+      closingSession: closingSession,
+      cause: cause,
+    ),
+  );
 
   @visibleForTesting
   Future<bool> debugRemovePeerForWatchdog(String peerId) {
-    final binding = _peerConnections.currentBinding(peerId);
+    final binding = _peers.currentBinding(peerId);
     if (binding == null) {
       return Future<bool>.value(false);
     }
     return _removeUnresponsivePeerIfCurrent(binding);
   }
 
-  bool _removedBindingOwnsPeerState(TransferConnectionBinding binding) {
-    if (_peerConnections.currentBinding(binding.peerId) != null) {
-      return false;
-    }
-    final session = _sessionsByPeerId[binding.peerId];
-    return session == null ||
-        session.connectionGeneration == binding.generation;
-  }
+  /// Explicit ordered teardown steps when a peer's current connection ends.
+  /// Keep this sequence explicit so tokens, acks, and media channels close
+  /// before transfer recovery and shared coordinators run.
+  late final List<PeerDisconnectCleanupStep> _disconnectCleanupSteps =
+      <PeerDisconnectCleanupStep>[
+        (peerId, _) => _pingTracker.clearPeer(peerId),
+        (peerId, _) {
+          _outgoingTextAcknowledgements.disconnectPeer(peerId);
+          _forgetPeerMedia(peerId);
+        },
+        (peerId, _) => _wireControlSessions.clearPeer(
+          peerId,
+          preservedSessions: _manageSharedCoordinators
+              ? _preservedControlSessionsForPeer(peerId)
+              : const <String, Set<String>>{},
+        ),
+        (peerId, cause) async {
+          await Future.wait(<Future<void>>[
+            _audioManager.closePeerChannels(peerId),
+            _remoteInputManager.closePeerChannels(peerId),
+            _remoteClipboardTransfer.clearPeer(peerId),
+            WindowStreamHost.shared.closePeer(peerId),
+          ]);
+          WindowStreamViewer.shared.peerDisconnected(peerId);
+          _fileBrowseTrustCache.invalidate(peerId);
+          final transientDisconnect =
+              cause == PeerDisconnectCause.network ||
+              cause == PeerDisconnectCause.watchdog ||
+              cause == PeerDisconnectCause.systemSleep;
+          if (transientDisconnect) {
+            FileBrowseHost.shared.closePeer(peerId);
+            RemoteFilesClient.peerGone(peerId, reason: 'offline');
+          } else {
+            await _revokeRemoteFilesForPeer(peerId);
+          }
+        },
+        (peerId, cause) => _transferEngine.handlePeerDisconnected(
+          peerId,
+          handoverInProgress:
+              cause == PeerDisconnectCause.network &&
+              _hasReadyPendingOutgoingForPeer(peerId),
+        ),
+        (peerId, _) async {
+          if (!_manageSharedCoordinators) return;
+          AudioGroupCoordinator.shared.peerDisconnected(peerId);
+          await RemoteInputWorkspaceCoordinator.shared.handlePeerDisconnected(
+            peerId,
+          );
+        },
+        (peerId, _) async {
+          if (!_manageSharedCoordinators) return;
+          if (RemoteInputCoordinator.shared.state.isForPeer(peerId)) {
+            await RemoteInputCoordinator.shared.stopLocal();
+          }
+        },
+      ];
 
   Future<void> _afterPeerRemoved(
     TransferConnectionBinding binding, {
@@ -2769,29 +2622,19 @@ class WsSvrManager {
     required PeerDisconnectCause cause,
   }) async {
     final peerId = binding.peerId;
-    final currentSession = _sessionsByPeerId[peerId];
-    if (currentSession != null &&
-        currentSession.connectionGeneration == binding.generation &&
-        (closingSession == null || identical(currentSession, closingSession))) {
-      _sessionsByPeerId.remove(peerId);
-    }
-    if (!_removedBindingOwnsPeerState(binding)) {
-      return;
-    }
-    await _handlePeerDisconnected(
-      peerId, cause: cause, stillOwnsCleanup: () => _removedBindingOwnsPeerState(binding),
+    final stillOwns = await _peers.releaseActivePeerAndRunCleanup(
+      binding,
+      closingSession: closingSession,
+      cause: cause,
+      cleanupSteps: _disconnectCleanupSteps,
     );
-    if (!_removedBindingOwnsPeerState(binding)) {
-      return;
-    }
-    _remoteProfilesByPeerId.remove(peerId);
-    if (!_removedBindingOwnsPeerState(binding)) {
+    if (!stillOwns) {
       return;
     }
     if (receiver == peerId) {
-      receiver = _peerConnections.connectedPeerIds.isEmpty
+      receiver = _peers.connectedPeerIds.isEmpty
           ? ''
-          : _peerConnections.connectedPeerIds.first;
+          : _peers.connectedPeerIds.first;
       if (receiver.isEmpty) {
         _sink = null;
         _setRemoteProfile(null);
@@ -2800,13 +2643,13 @@ class WsSvrManager {
       }
     }
     _completeRemoteProfileRefreshWaiters(peerId: peerId);
-    if (_removedBindingOwnsPeerState(binding)) {
+    if (_peers.removedBindingOwnsPeerState(binding)) {
       // 会话生命周期终点:不论断因都结算稳定性复位,
       // 稳定连接挣得的退避复位不因手动断开等断因而丢失。
       _reconnectControllers[peerId]?.sessionClosed();
       _dispatchToAll((event) => event.onClose());
     }
-    if (_removedBindingOwnsPeerState(binding) &&
+    if (_peers.removedBindingOwnsPeerState(binding) &&
         (cause == PeerDisconnectCause.network ||
             cause == PeerDisconnectCause.watchdog) &&
         !_hasUncancelledPendingAttemptForPeer(peerId)) {
@@ -2846,74 +2689,8 @@ class WsSvrManager {
     return preserved;
   }
 
-  Future<void> _handlePeerDisconnected(
-    String peerId, {
-    PeerDisconnectCause cause = PeerDisconnectCause.network,
-    bool Function()? stillOwnsCleanup,
-  }) async {
-    _pingTracker.clearPeer(peerId);
-    bool ownsCleanup() => stillOwnsCleanup?.call() ?? true;
-
-    if (!ownsCleanup()) {
-      return;
-    }
-    _outgoingTextAcknowledgements.disconnectPeer(peerId);
-    _forgetPeerMedia(peerId);
-    if (!ownsCleanup()) {
-      return;
-    }
-    _wireControlSessions.clearPeer(
-      peerId,
-      preservedSessions: _manageSharedCoordinators
-          ? _preservedControlSessionsForPeer(peerId)
-          : const <String, Set<String>>{},
-    );
-    if (!ownsCleanup()) {
-      return;
-    }
-    await Future.wait(<Future<void>>[
-      _audioManager.closePeerChannels(peerId),
-      _remoteInputManager.closePeerChannels(peerId),
-      _remoteClipboardTransfer.clearPeer(peerId),
-      WindowStreamHost.shared.closePeer(peerId),
-    ]);
-    WindowStreamViewer.shared.peerDisconnected(peerId);
-    _fileBrowseTrustCache.invalidate(peerId);
-    final transientDisconnect = cause == PeerDisconnectCause.network ||
-        cause == PeerDisconnectCause.watchdog || cause == PeerDisconnectCause.systemSleep;
-    if (transientDisconnect) {
-      FileBrowseHost.shared.closePeer(peerId);
-      RemoteFilesClient.peerGone(peerId, reason: 'offline');
-    } else {
-      await _revokeRemoteFilesForPeer(peerId);
-    }
-    if (!ownsCleanup()) {
-      return;
-    }
-    await _transferEngine.handlePeerDisconnected(
-      peerId,
-      handoverInProgress:
-          cause == PeerDisconnectCause.network &&
-          _hasReadyPendingOutgoingForPeer(peerId),
-    );
-    if (!ownsCleanup()) {
-      return;
-    }
-    if (!_manageSharedCoordinators) {
-      return;
-    }
-    AudioGroupCoordinator.shared.peerDisconnected(peerId);
-    await RemoteInputWorkspaceCoordinator.shared.handlePeerDisconnected(peerId);
-    if (!ownsCleanup()) {
-      return;
-    }
-    if (RemoteInputCoordinator.shared.state.isForPeer(peerId)) {
-      await RemoteInputCoordinator.shared.stopLocal();
-    }
-  }
-
   String? remoteIdentityPublicKeyFor(String peerId) =>
-      _sessionsByPeerId[peerId]?.remoteIdentityPublicKey;
+      _peers.remoteIdentityPublicKeyFor(peerId);
 
   Future<void> _revokeRemoteFilesForPeer(String peerId) async {
     FileBrowseHost.shared.closePeer(peerId);
@@ -2928,47 +2705,7 @@ class WsSvrManager {
     WebSocketSink sink,
     Object message, {
     bool rawAuth = false,
-  }) async {
-    final session = _sessionsBySink[sink];
-    final buffered = message is AuthenticatedPayloadBuffer ? message : null;
-    final bytes = buffered?.payload ?? outgoingPayloadBytes(message);
-    if (session == null || bytes == null) {
-      await _closeSocketSink(sink);
-      return false;
-    }
-    final maxBytes = rawAuth
-        ? _maxPreAuthMessageBytes
-        : _maxAuthenticatedMessageBytes;
-    if (bytes.length > maxBytes) {
-      session.close();
-      await _closeSocketSink(sink);
-      return false;
-    }
-    if (rawAuth) {
-      return buffered == null &&
-          await session.enqueueOutgoing(bytes, byteLength: bytes.length);
-    }
-    if (!session.isAuthenticated) {
-      await _closeSocketSink(sink);
-      return false;
-    }
-    final byteLength = bytes.length + _authenticatedFrameOverhead;
-    final cls = classifyOutboundFrame(bytes);
-    if (buffered != null) {
-      return session.enqueueAuthenticatedBuffer(
-        buffered,
-        byteLength: byteLength,
-        kind: cls.kind,
-        waitForSpace: cls.waitForSpace,
-      );
-    }
-    return session.enqueueAuthenticatedOutgoing(
-      bytes,
-      byteLength: byteLength,
-      kind: cls.kind,
-      waitForSpace: cls.waitForSpace,
-    );
-  }
+  }) => _peers.sendBytesOnSink(sink, message, rawAuth: rawAuth);
 
   Future<bool> _sendMessageData(
     MessageData message, {
@@ -2982,7 +2719,7 @@ class WsSvrManager {
     if (sink != null) {
       return _sendBytesOnSink(sink, payload, rawAuth: rawAuth);
     }
-    return _peerConnections.sendTargetedOrDefault(
+    return _peers.sendTargetedOrDefault(
       peerId: peerId,
       message: payload,
       sendDefault: () => _send(encodeWireMessage(message)),
@@ -2997,8 +2734,8 @@ class WsSvrManager {
     final payload = encodeMessageFrame(
       Uint8List.fromList(utf8.encode(message)),
     );
-    if (_peerConnections.isConnectedTo(receiver)) {
-      return _peerConnections.sendToAwaited(receiver, payload);
+    if (_peers.isConnectedTo(receiver)) {
+      return _peers.sendToAwaited(receiver, payload);
     }
     final sink = _sink;
     if (sink != null) {
@@ -3014,7 +2751,7 @@ class WsSvrManager {
     required WebSocketSink sink,
     required bool asServer,
   }) async {
-    final session = _sessionsBySink[sink];
+    final session = _peers.sessionForSink(sink);
     if (session == null ||
         (asServer && session.role != PeerSocketRole.server) ||
         (!asServer && session.role != PeerSocketRole.client)) {
@@ -3049,7 +2786,7 @@ class WsSvrManager {
           '处理 websocket 消息失败: ${error.runtimeType}'
           '${error is WireInputRejected ? ' ${error.reason}' : ''}',
         );
-        final failedSession = _sessionsBySink[sink];
+        final failedSession = _peers.sessionForSink(sink);
         if (failedSession != null) {
           final message = switch (error) {
             AuthHandshakeException() => error.code,
@@ -3069,7 +2806,7 @@ class WsSvrManager {
         }
       }
     });
-    if (!accepted && identical(_sessionsBySink[sink], session)) {
+    if (!accepted && identical(_peers.sessionForSink(sink), session)) {
       await _failSocketSession(session, sink, 'queue_overflow');
     }
   }
@@ -3108,10 +2845,10 @@ class WsSvrManager {
       '',
       0,
       false,
-      senderOverride: _sessionsBySink[sink]?.localProfile.uid,
+      senderOverride: _peers.sessionForSink(sink)?.localProfile.uid,
       receiverOverride: envelope.action == AuthAction.hello
           ? envelope.intendedPeerId ?? ''
-          : _sessionsBySink[sink]?.remotePeerId,
+          : _peers.sessionForSink(sink)?.remotePeerId,
     );
     if (!await _sendMessageData(message, sink: sink, rawAuth: true)) {
       throw const AuthHandshakeException('send_failed');
@@ -3185,7 +2922,7 @@ class WsSvrManager {
       hello,
       pairingRequired: pinPlan.reason != null,
     );
-    final from = _endpointsBySink[sink]?.host ?? '';
+    final from = _peers.endpointForSink(sink)?.host ?? '';
     final codeOnly = _pairingAttempts.admit(hello, pinPlan, from: from);
     if (!_isSessionPeerPolicyCurrent(session)) {
       throw const AuthHandshakeException('session_expired');
@@ -3223,7 +2960,7 @@ class WsSvrManager {
         await _closeSocketSink(sink);
         return;
       }
-      _sessionsBySink[incomingSink]?.close();
+      _peers.sessionForSink(incomingSink)?.close();
       await _closeSocketSink(incomingSink);
     }
     if (!_isPendingPolicyCurrent(attempt)) {
@@ -3388,7 +3125,7 @@ class WsSvrManager {
   WebSocketSink? _activeIncomingAuthSinkForPeer(String peerId) {
     if (peerId.isEmpty) return null;
     for (final entry in _incomingAuthPeerIdsBySink.entries) {
-      final session = _sessionsBySink[entry.key];
+      final session = _peers.sessionForSink(entry.key);
       if (session != null &&
           !session.isClosed &&
           session.remotePeerId == peerId) {
@@ -3449,7 +3186,7 @@ class WsSvrManager {
       if (!accepted || !_isCurrentSession(session, sink, generation)) {
         return;
       }
-      _pairingAttempts.noteDecision(allow, _endpointsBySink[sink]?.host);
+      _pairingAttempts.noteDecision(allow, _peers.endpointForSink(sink)?.host);
       await _tryCompleteServerPairing(session, sink);
     }
 
@@ -3651,7 +3388,7 @@ class WsSvrManager {
     WebSocketSink sink,
   ) async {
     final stored = await _database.fetchDevice(session.remotePeerId);
-    final endpoint = _endpointsBySink[sink];
+    final endpoint = _peers.endpointForSink(sink);
     final host = endpoint?.host.isNotEmpty == true
         ? endpoint!.host
         : stored?.host ?? '';
@@ -3694,12 +3431,13 @@ class WsSvrManager {
       _outgoingTextRetries.clearPeer(session.remotePeerId);
     }
     _requireCurrentAuthenticationCommit(session, sink, generation);
-    final existing = _sessionsByPeerId[session.remotePeerId];
+    final existingLink = _peers.linkForPeer(session.remotePeerId);
+    final existing = existingLink?.session;
     if (existing != null &&
         !existing.isClosed &&
         existing.isAuthenticated &&
         existing.role != session.role &&
-        (_sessionAuthCommitWatermarks[existing] ?? -1) >=
+        (existingLink?.authCommitWatermark ?? -1) >=
             session.connectionGeneration &&
         existingSessionWinsOverlap(
           localUid: session.localProfile.uid,
@@ -3784,9 +3522,12 @@ class WsSvrManager {
         throw const AuthHandshakeException('identity_pin_state_missing');
       }
       session.markTransportAuthenticated();
-      _sessionAuthCommitWatermarks[session] = _nextConnectionGeneration;
-      if (superseded) {
-        _supersededOnAuth.add(session);
+      final link = _peers.linkForSink(sink);
+      if (link != null) {
+        link.authCommitWatermark = _nextConnectionGeneration;
+        if (superseded) {
+          link.supersededOnAuth = true;
+        }
       }
       _transferEngine.allowOutgoingTransfersForPeer(session.remotePeerId);
       _removePeerAuthSuppression(
@@ -3854,8 +3595,8 @@ class WsSvrManager {
     if (session.role == PeerSocketRole.server) {
       _dispatchToAll((event) => event.afterAuth(true, storedDevice));
     }
-    _closeDeferredSupersededSink(session);
-    if (_supersededOnAuth.remove(session) ||
+    _peers.closeDeferredSupersededSink(session);
+    if (_peers.linkForSink(sink)?.takeSupersededOnAuth() == true ||
         _transferEngine.hasSupersededOutgoingForPeer(session.remotePeerId)) {
       _ignoreFuture(
         _transferEngine.resumeSupersededOutgoingForPeer(
@@ -3875,7 +3616,7 @@ class WsSvrManager {
 
   bool _isSameSession(
     PeerSocketSession session, WebSocketSink sink, int generation,
-  ) => identical(_sessionsBySink[sink], session) &&
+  ) => identical(_peers.sessionForSink(sink), session) &&
       session.connectionGeneration == generation;
 
   bool _isCurrentSession(
@@ -3963,25 +3704,11 @@ class WsSvrManager {
     int generation,
   ) {
     _requireCurrentAuthenticatedSession(session, sink, generation);
-    final peerId = session.remotePeerId;
-    WireInputPolicy.validateSessionBinding(
-      isAuthenticated: session.isAuthenticated,
-      sessionPeerId: peerId,
-      sinkPeerId: _peerIdsBySink[sink] ?? '',
-      sessionGeneration: generation,
-      isCurrentSession: identical(_sessionsByPeerId[peerId], session),
-      isCurrentConnection: _peerConnections.isCurrent(peerId, generation),
-    ).requireAccepted();
+    _peers.validateBusinessSession(session, sink, generation);
   }
 
-  PeerProfile _requireRemoteProfileForSession(PeerSocketSession session) {
-    final peerId = session.remotePeerId;
-    final profile = _remoteProfilesByPeerId[peerId];
-    if (profile == null || profile.device.uid != peerId) {
-      throw const WireInputRejected(WireInputReason.sessionNotCurrent);
-    }
-    return profile;
-  }
+  PeerProfile _requireRemoteProfileForSession(PeerSocketSession session) =>
+      _peers.requireRemoteProfileForSession(session);
 
   void _requireCurrentRegisterableSession(
     PeerSocketSession session,
@@ -4708,7 +4435,7 @@ class WsSvrManager {
           final remoteDevice = _requireRemoteProfileForSession(session).device;
           final storedRemote = await _database.fetchDevice(remoteDevice.uid);
           requireCurrentBusiness();
-          final authenticatedSession = _sessionsByPeerId[remoteDevice.uid];
+          final authenticatedSession = _peers.sessionForPeer(remoteDevice.uid);
           final isMutuallyTrusted =
               storedRemote?.auth == true &&
               storedRemote?.identityPublicKey.isNotEmpty == true &&
@@ -4834,7 +4561,7 @@ class WsSvrManager {
     final resolvedReceiver = receiverOverride ?? receiver;
     final resolvedSender =
         senderOverride ??
-        _sessionsByPeerId[resolvedReceiver]?.localProfile.uid ??
+        _peers.sessionForPeer(resolvedReceiver)?.localProfile.uid ??
         sender;
     return MessageData(
       id: 0,
@@ -4905,7 +4632,7 @@ class WsSvrManager {
     if (!isConnectedTo(targetPeerId)) {
       return remoteProfileFor(targetPeerId);
     }
-    return _profileRefreshTracker.request(
+    return _peers.profileRefreshTracker.request(
       peerId: targetPeerId,
       timeout: timeout,
       sendRequest: () => _heartBeat(
@@ -4920,10 +4647,10 @@ class WsSvrManager {
     final hasPeerId = peerId != null && peerId.isNotEmpty;
     if (hasPeerId) {
       if (profile == null) {
-        _remoteProfilesByPeerId.remove(peerId);
+        _peers.removeStoredRemoteProfile(peerId);
         WindowStreamViewer.shared.peerDisconnected(peerId);
       } else {
-        _remoteProfilesByPeerId[peerId] = profile;
+        _peers.setStoredRemoteProfile(peerId, profile);
         if (_manageSharedCoordinators) {
           AudioGroupCoordinator.shared.peerConnected(peerId);
         }
@@ -4960,7 +4687,7 @@ class WsSvrManager {
         }
       }
     } else if (profile == null) {
-      _remoteProfilesByPeerId.clear();
+      _peers.clearStoredRemoteProfiles();
     }
 
     if (!hasPeerId || peerId == receiver) {
@@ -4974,7 +4701,7 @@ class WsSvrManager {
   }
 
   void _completeRemoteProfileRefreshWaiters({String? peerId}) {
-    _profileRefreshTracker.complete(
+    _peers.completeProfileRefreshWaiters(
       peerId: peerId,
       currentProfile: remoteProfileFor,
     );
@@ -4989,7 +4716,7 @@ class WsSvrManager {
       final resolvedPeerId = peerId ?? message.sender;
       final previousProfile = resolvedPeerId.isEmpty
           ? _remoteProfile
-          : _remoteProfilesByPeerId[resolvedPeerId];
+          : _peers.remoteProfileFor(resolvedPeerId);
       final profile = PeerProfileRefreshTracker.decodeHeartbeatProfile(
         message.content,
         resolvedPeerId: resolvedPeerId,
@@ -5007,7 +4734,7 @@ class WsSvrManager {
         await _database.upsertDevice(profile.device);
         requireCurrent?.call();
         if (_manageSharedCoordinators &&
-            _peerConnections.isConnectedTo(profile.device.uid)) {
+            _peers.isConnectedTo(profile.device.uid)) {
           ConnectionCoordinator().markConnected(
             profile.device,
             select: resolvedPeerId == receiver,
@@ -5077,7 +4804,7 @@ class WsSvrManager {
     WebSocketSink? sink,
   }) async {
     if (sink != null && !_isCurrentSinkForPeer(sink, peerId)) return false;
-    final localUid = _sessionsByPeerId[peerId]?.localProfile.uid ?? sender;
+    final localUid = _peers.sessionForPeer(peerId)?.localProfile.uid ?? sender;
     final message = _buildMessage(
       MessageEnum.Heartbeat, content, tag, '', 0, false,
       senderOverride: localUid, receiverOverride: peerId,
@@ -5088,7 +4815,7 @@ class WsSvrManager {
   }
 
   bool _isCurrentSinkForPeer(WebSocketSink sink, String peerId) {
-    final session = _sessionsBySink[sink];
+    final session = _peers.sessionForSink(sink);
     if (session == null || session.remotePeerId != peerId) return false;
     try {
       _requireCurrentBusinessSession(session, sink, session.connectionGeneration);
@@ -5152,7 +4879,7 @@ class WsSvrManager {
     bool reverseInitialDirection = false,
     String context = '',
   }) {
-    final session = _sessionsByPeerId[peerId];
+    final session = _peers.sessionForPeer(peerId);
     if (session == null || !session.isAuthenticated) {
       return false;
     }
@@ -5172,9 +4899,11 @@ class WsSvrManager {
   }
 
   /// [peerId] is connected and speaks the file-browse protocol.
-  bool canBrowseFilesOf(String peerId) =>
-      _sessionsByPeerId[peerId]?.isAuthenticated == true &&
-      remoteProfileFor(peerId)?.capabilities.remoteFilesV1 == true;
+  bool canBrowseFilesOf(String peerId) => _peers.canBrowseFilesOf(
+    peerId,
+    legacyReceiver: receiver,
+    legacyProfile: _remoteProfile,
+  );
 
   /// Sends a file-browse control message (see [FileBrowseMessage]).
   Future<bool> sendFileBrowseControlTo(
@@ -5223,7 +4952,7 @@ class WsSvrManager {
     int offset,
     Uint8List data,
   ) {
-    final binding = _peerConnections.currentBinding(peerId);
+    final binding = _peers.currentBinding(peerId);
     if (binding == null || !canBrowseFilesOf(peerId)) {
       return Future<bool>.value(false);
     }
@@ -5234,7 +4963,7 @@ class WsSvrManager {
       sequence: requestId,
       payload: data,
     );
-    return _peerConnections.sendToAwaitedIfCurrent(binding, frame.encode());
+    return _peers.sendToAwaitedIfCurrent(binding, frame.encode());
   }
 
   /// Bytes a folder of [peerId]'s mounted here writes into one of its
@@ -5246,7 +4975,7 @@ class WsSvrManager {
     int offset,
     Uint8List data,
   ) {
-    final binding = _peerConnections.currentBinding(peerId);
+    final binding = _peers.currentBinding(peerId);
     if (binding == null || !canBrowseFilesOf(peerId)) {
       return Future<bool>.value(false);
     }
@@ -5257,7 +4986,7 @@ class WsSvrManager {
       sequence: requestId,
       payload: data,
     );
-    return _peerConnections.sendToAwaitedIfCurrent(binding, frame.encode());
+    return _peers.sendToAwaitedIfCurrent(binding, frame.encode());
   }
 
   Future<bool> _sendCopiedFile(String peerId, String path, String id) {
@@ -5649,7 +5378,7 @@ class WsSvrManager {
     String expectedPublicKeyHash, {
     TransferConnectionBinding? expectedBinding,
   }) async {
-    final binding = _peerConnections.currentBinding(peerId);
+    final binding = _peers.currentBinding(peerId);
     if (binding == null ||
         (expectedBinding != null && binding != expectedBinding) ||
         !_quickSendSessionMatches(binding, expectedPublicKeyHash)) {
@@ -5660,7 +5389,7 @@ class WsSvrManager {
         !matchesExpectedQuickSendIdentity(
           expectedPublicKeyHash: expectedPublicKeyHash,
           authenticatedIdentityPublicKey:
-              _sessionsByPeerId[peerId]?.remoteIdentityPublicKey ?? '',
+              _peers.sessionForPeer(peerId)?.remoteIdentityPublicKey ?? '',
           storedTrusted: stored.auth,
           storedIdentityPublicKey: stored.identityPublicKey,
         ) ||
@@ -5686,11 +5415,11 @@ class WsSvrManager {
     TransferConnectionBinding binding,
     String expectedPublicKeyHash,
   ) {
-    final session = _sessionsByPeerId[binding.peerId];
+    final session = _peers.sessionForPeer(binding.peerId);
     return session != null &&
         session.isAuthenticated &&
         session.connectionGeneration == binding.generation &&
-        _peerConnections.currentBinding(binding.peerId) == binding &&
+        _peers.currentBinding(binding.peerId) == binding &&
         _isPeerAuthenticationAllowed(binding.peerId) &&
         matchesExpectedQuickSendIdentity(
           expectedPublicKeyHash: expectedPublicKeyHash,
@@ -5928,12 +5657,12 @@ class WsSvrManager {
     required bool sourceIsLocal,
   }) {
     final inputSession = _remoteInputManager.session(sessionId);
-    final socketSession = _sessionsByPeerId[peerId];
+    final socketSession = _peers.sessionForPeer(peerId);
     if (inputSession?.state != RemoteInputSessionState.connected ||
         inputSession?.remoteClipboardV1 != true ||
         socketSession == null ||
         !socketSession.isAuthenticated ||
-        _peerConnections.currentBinding(peerId)?.generation !=
+        _peers.currentBinding(peerId)?.generation !=
             socketSession.connectionGeneration) {
       return false;
     }

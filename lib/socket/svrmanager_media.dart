@@ -246,7 +246,7 @@ extension _MediaChannels on WsSvrManager {
     if (injected != null) {
       return injected(claim);
     }
-    final session = _sessionsByPeerId[claim.peerId];
+    final session = _peers.sessionForPeer(claim.peerId);
     if (session == null ||
         !session.isAuthenticated ||
         session.connectionGeneration != claim.connectionGeneration) {
@@ -389,7 +389,7 @@ extension _MediaChannels on WsSvrManager {
     required String sourcePeerId,
     required String sinkPeerId,
   }) {
-    final session = _sessionsByPeerId[peerId];
+    final session = _peers.sessionForPeer(peerId);
     if (session == null ||
         !session.isAuthenticated ||
         sourcePeerId != peerId ||
@@ -412,7 +412,7 @@ extension _MediaChannels on WsSvrManager {
   /// Runs [action] with this device's media send key for [peerId], or
   /// returns null when that peer has no authenticated session.
   T? _withMediaSendKeyFor<T>(String peerId, T Function(Uint8List key) action) {
-    final session = _sessionsByPeerId[peerId];
+    final session = _peers.sessionForPeer(peerId);
     if (session == null || !session.isAuthenticated) {
       return null;
     }
@@ -443,7 +443,7 @@ extension _MediaChannels on WsSvrManager {
     )
     action,
   ) {
-    final session = _sessionsByPeerId[peerId];
+    final session = _peers.sessionForPeer(peerId);
     final host = session == null ? null : _mediaDialHost(session);
     if (session == null || !session.isAuthenticated || host == null) {
       return null;
@@ -458,10 +458,8 @@ extension _MediaChannels on WsSvrManager {
 
   /// The address to dial [session]'s device back at: the one its `/chat`
   /// came from or went to, never one a message names.
-  String? _mediaDialHost(PeerSocketSession session) {
-    final host = _endpointsBySink[_findSinkForSession(session)]?.host;
-    return host == null || host.isEmpty ? null : plainPeerHost(host);
-  }
+  String? _mediaDialHost(PeerSocketSession session) =>
+      _peers.mediaDialHostFor(session);
 
   /// A token for [peerId] to dial this device's [route] for [sessionId],
   /// only while this device waits for that dial (`media_dial_back.dart`).
@@ -485,7 +483,7 @@ extension _MediaChannels on WsSvrManager {
     final group = AudioGroupCoordinator.shared.session;
     final sink = group?.sinks[sinkPeerId];
     return group != null &&
-        group.sourcePeerId == _sessionsByPeerId[sinkPeerId]?.localProfile.uid &&
+        group.sourcePeerId == _peers.localPeerIdFor(sinkPeerId) &&
         sink != null &&
         sink.sessionId == sessionId &&
         !sink.isTerminal;
@@ -501,7 +499,7 @@ extension _MediaChannels on WsSvrManager {
   /// to send on a channel dialled back to it; null once that connection is
   /// gone or replaced.
   Uint8List? _dialBackSendKey(SessionUpgradeClaim claim) {
-    final session = _sessionsByPeerId[claim.peerId];
+    final session = _peers.sessionForPeer(claim.peerId);
     if (!claim.reverse ||
         session == null ||
         !session.isAuthenticated ||
@@ -516,7 +514,7 @@ extension _MediaChannels on WsSvrManager {
     String peerId,
     String sessionId,
   ) {
-    final session = _sessionsByPeerId[peerId];
+    final session = _peers.sessionForPeer(peerId);
     if (_server == null || session == null || !session.isAuthenticated) {
       return null;
     }
@@ -545,7 +543,7 @@ extension _MediaChannels on WsSvrManager {
     SessionUpgradeClaim claim, {
     required int maxPayloadBytes,
   }) {
-    final session = _sessionsByPeerId[claim.peerId];
+    final session = _peers.sessionForPeer(claim.peerId);
     if (session == null ||
         !session.isAuthenticated ||
         session.connectionGeneration != claim.connectionGeneration) {

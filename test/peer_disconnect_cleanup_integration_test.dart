@@ -230,6 +230,7 @@ void main() {
       });
       await _waitUntil(
         () => hubAudio.activeChannelCount == 2 && hubInput.activeChannelCount == 2,
+        label: 'media channels open',
       );
 
       // 3. Window stream: both peers are registered in WindowStreamViewer.
@@ -330,23 +331,27 @@ void main() {
               (t.state == FileTransferState.transferring ||
                   t.state == FileTransferState.negotiating),
         ),
+        label: 'transfer to peer-a active',
       );
 
-      // Drop peer-a's real transport socket (network disconnect).
-      expect(await hub.debugDropPeerTransport('peer-a'), isTrue);
-      await _waitUntil(() => !hub.isConnectedTo('peer-a'));
+      // Drop hub's upstream TCP socket at the proxy (abrupt network drop) so
+      // hub detects peer-a's disconnect immediately without waiting for a
+      // WebSocket close handshake through the paused proxy or closing peerA's
+      // shared in-process FileBrowseHost singleton for hub-peer.
+      proxyA.dropUpstream();
+      await _waitUntil(() => !hub.isConnectedTo('peer-a'), label: 'peer-a disconnected');
 
       // Assert EVERY subsystem cleaned up for peer-a while peer-b stays alive:
       // 1. Audio: peer-a closed, peer-b still open.
-      await _waitUntil(() => hubAudio.activeChannelCount == 1);
+      await _waitUntil(() => hubAudio.activeChannelCount == 1, label: 'audio count 1');
       // 2. Remote input: peer-a closed, peer-b still open.
-      await _waitUntil(() => hubInput.activeChannelCount == 1);
+      await _waitUntil(() => hubInput.activeChannelCount == 1, label: 'input count 1');
       // 3. Window stream: peer-a removed, peer-b still connected.
       expect(WindowStreamViewer.shared.isConnected('peer-a'), isFalse);
       expect(WindowStreamViewer.shared.isConnected('peer-b'), isTrue);
       // 4 & 5. File browse + Mount: peer-a entered grace (not unmounted on
       // transient drop), peer-b stays mounted and readable.
-      await _waitUntil(() => mounts.isSuspended('peer-a'));
+      await _waitUntil(() => mounts.isSuspended('peer-a'), label: 'mount peer-a suspended');
       expect(mounts.isSuspended('peer-b'), isFalse);
       expect(stoppedA, 0);
       expect(stoppedB, 0);
@@ -377,6 +382,7 @@ void main() {
               t.peerUid == 'peer-a' &&
               t.state == FileTransferState.waitingReconnect,
         ),
+        label: 'peer-a transfer waitingReconnect',
       );
       expect(await hub.sendFileTo('peer-b', smallFileB.path), isTrue);
       await _waitUntil(
@@ -386,6 +392,7 @@ void main() {
               t.state == FileTransferState.completed,
         ),
         timeout: const Duration(seconds: 8),
+        label: 'peer-b transfer completed',
       );
       final completedB = eventsB.transfers.lastWhere(
         (t) =>
@@ -403,6 +410,7 @@ void main() {
             !hub.isConnectedTo('peer-b') &&
             hubAudio.activeChannelCount == 0 &&
             hubInput.activeChannelCount == 0,
+        label: 'peer-b disconnected and channels closed',
       );
       expect(WindowStreamViewer.shared.isConnected('peer-b'), isFalse);
       expect(mounts.of('peer-b'), isNull);
@@ -536,6 +544,8 @@ final class _PausingTcpProxy {
   final int _targetPort;
   final Completer<void> _paused = Completer<void>();
   final List<Socket> _sockets = <Socket>[];
+  final List<Socket> _upstreamSockets = <Socket>[];
+  bool _upstreamDropped = false;
   int _forwardedServerBytes = 0;
 
   int get port => _server.port;
@@ -568,6 +578,7 @@ final class _PausingTcpProxy {
       return;
     }
     _sockets.add(upstream);
+    _upstreamSockets.add(upstream);
     client.listen(
       upstream.add,
       onError: (Object _) => upstream.destroy(),
@@ -583,9 +594,21 @@ final class _PausingTcpProxy {
           _paused.complete();
         }
       },
-      onError: (Object _) => client.destroy(),
-      onDone: () => client.destroy(),
+      onError: (Object _) {
+        if (!_upstreamDropped) client.destroy();
+      },
+      onDone: () {
+        if (!_upstreamDropped) client.destroy();
+      },
     );
+  }
+
+  void dropUpstream() {
+    _upstreamDropped = true;
+    for (final s in _upstreamSockets) {
+      s.destroy();
+    }
+    _upstreamSockets.clear();
   }
 
   Future<void> close() async {
@@ -600,11 +623,12 @@ final class _PausingTcpProxy {
 Future<void> _waitUntil(
   bool Function() predicate, {
   Duration timeout = const Duration(seconds: 2),
+  String label = 'condition',
 }) async {
   final deadline = DateTime.now().add(timeout);
   while (DateTime.now().isBefore(deadline)) {
     if (predicate()) return;
     await Future<void>.delayed(const Duration(milliseconds: 5));
   }
-  throw TimeoutException('condition was not reached');
+  throw TimeoutException('$label was not reached');
 }
