@@ -114,6 +114,69 @@ void main() {
     );
   });
 
+  // A dial-back token admits only the dial-back it was issued for: one per
+  // session, and a claim never matches across the two directions.
+  test('a reverse token is one per session and never passes as forward', () {
+    String reverseToken() => registry.issue(
+      route: '/input',
+      sessionId: 'input-session',
+      peerId: 'peer-a',
+      mediaMacKey: mediaKey,
+      reverse: true,
+      now: now,
+    );
+    final forward = registry.issue(
+      route: '/input',
+      sessionId: 'input-session',
+      peerId: 'peer-a',
+      mediaMacKey: mediaKey,
+      now: now,
+    );
+    final first = reverseToken();
+    final second = reverseToken();
+    SessionUpgradeClaim? lookUp(String token) => registry.lookup(
+      route: '/input',
+      sessionId: 'input-session',
+      token: token,
+      now: now,
+    );
+
+    expect(lookUp(first), isNull, reason: 'the newer one replaced it');
+    expect(lookUp(forward)!.reverse, isFalse);
+    final reverse = lookUp(second)!;
+    expect(reverse.reverse, isTrue);
+    final forwardLike = SessionUpgradeClaim(
+      route: '/input',
+      namespace: 'remote-input',
+      sessionId: 'input-session',
+      peerId: 'peer-a',
+      mediaMacKey: mediaKey,
+      channelBinding: base64Url.decode('$second='),
+    );
+    expect(
+      registry.consume(
+        route: '/input',
+        sessionId: 'input-session',
+        token: second,
+        now: now,
+        expected: forwardLike,
+      ),
+      isNull,
+    );
+    expect(
+      registry
+          .consume(
+            route: '/input',
+            sessionId: 'input-session',
+            token: second,
+            now: now,
+            expected: reverse,
+          )
+          ?.reverse,
+      isTrue,
+    );
+  });
+
   test('expires exactly at the thirty second boundary', () {
     final token = registry.issue(
       route: '/input',

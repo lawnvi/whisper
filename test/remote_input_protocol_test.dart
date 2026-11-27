@@ -32,7 +32,10 @@ void main() {
       );
     }
     for (final action in RemoteInputControlAction.values) {
-      if (action == RemoteInputControlAction.accept) continue;
+      if (action == RemoteInputControlAction.accept ||
+          action == RemoteInputControlAction.dialBack) {
+        continue;
+      }
       expect(
         () => RemoteInputControlMessage.fromJson({
           ...legacy,
@@ -232,7 +235,7 @@ void main() {
       expect(decoded.edgeMappings.single.routeId, 'linux-to-win');
     });
 
-    test('serializes a transport token only for a successful accept', () {
+    test('serializes a transport token only for an accept or a dial back', () {
       const accept = RemoteInputControlMessage(
         action: RemoteInputControlAction.accept,
         sessionId: 'input-1',
@@ -246,8 +249,20 @@ void main() {
         RemoteInputControlMessage.fromJson(accept.toJson()).transportToken,
         'input-token',
       );
+      // The controller's own token and port, in either mode.
+      final dialBack = RemoteInputControlMessage.fromJson(
+        accept
+            .dialBackRequest()
+            .withTransportToken('back-token', port: 10002)
+            .toJson(),
+      );
+      expect(dialBack.action, RemoteInputControlAction.dialBack);
+      expect(dialBack.transportToken, 'back-token');
+      expect(dialBack.transportPort, 10002);
       for (final action in RemoteInputControlAction.values.where(
-        (action) => action != RemoteInputControlAction.accept,
+        (action) =>
+            action != RemoteInputControlAction.accept &&
+            action != RemoteInputControlAction.dialBack,
       )) {
         final control = RemoteInputControlMessage(
           action: action,

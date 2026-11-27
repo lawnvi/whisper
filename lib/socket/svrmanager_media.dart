@@ -59,6 +59,7 @@ extension _MediaChannels on WsSvrManager {
               now: DateTime.now(),
             );
       if (claim == null ||
+          claim.reverse ||
           !_isExpectedMediaPeerClaim(claim) ||
           !_isExpectedAudioUpgradeClaim(claim)) {
         return shelf.Response.unauthorized('Unauthorized');
@@ -91,9 +92,14 @@ extension _MediaChannels on WsSvrManager {
               token: credentials.token,
               now: DateTime.now(),
             );
-      if (claim == null ||
-          !_isExpectedMediaPeerClaim(claim) ||
-          !_remoteInputManager.canAttachClaim(claim)) {
+      // A token this device issued to be dialled back on only reaches the
+      // wait for that dial; any other only the sessions it accepted.
+      bool admits(SessionUpgradeClaim candidate) =>
+          _isExpectedMediaPeerClaim(candidate) &&
+          (candidate.reverse
+              ? _dialBacks.canAttach(candidate)
+              : _remoteInputManager.canAttachClaim(candidate));
+      if (claim == null || !admits(claim)) {
         return shelf.Response.unauthorized('Unauthorized');
       }
       return _handleMediaUpgrade(
@@ -102,14 +108,21 @@ extension _MediaChannels on WsSvrManager {
         sessionId: credentials!.sessionId,
         token: credentials.token,
         provisionalClaim: claim,
-        canAttach: (candidate) =>
-            _isExpectedMediaPeerClaim(candidate) &&
-            _remoteInputManager.canAttachClaim(candidate),
-        attach: (channel, consumed) => _remoteInputManager.attachChannel(
-          channel,
-          claim: consumed,
-          claimValidator: _isExpectedMediaPeerClaim,
-        ),
+        canAttach: admits,
+        attach: (channel, consumed) => consumed.reverse
+            ? _dialBacks.attach(
+                channel,
+                consumed,
+                encoder: () => _dialBackEncoder(
+                  consumed,
+                  maxPayloadBytes: RemoteInputManager.maxPacketPayloadBytes,
+                ),
+              )
+            : _remoteInputManager.attachChannel(
+                channel,
+                claim: consumed,
+                claimValidator: _isExpectedMediaPeerClaim,
+              ),
       );
     }
 
@@ -447,5 +460,150 @@ extension _MediaChannels on WsSvrManager {
         (receiveKey) => action(base, sendKey, receiveKey),
       ),
     );
+  }
+
+  /// The address to dial [session]'s device back at: the one its `/chat`
+  /// came from or went to, never one a message names.
+  String? _mediaDialHost(PeerSocketSession session) {
+    final host = _endpointsBySink[_findSinkForSession(session)]?.host;
+    return host == null || host.isEmpty ? null : plainPeerHost(host);
+  }
+
+  /// A token for [peerId] to dial this device's [route] for [sessionId],
+  /// only while this device waits for that dial (`media_dial_back.dart`).
+  String? _issueDialBackToken(
+    MediaRoute route,
+    String peerId,
+    String sessionId,
+  ) {
+    final session = _sessionsByPeerId[peerId];
+    if (_server == null ||
+        session == null ||
+        !session.isAuthenticated ||
+        !_dialBacks.isWaiting(route, peerId, sessionId)) {
+      return null;
+    }
+    try {
+      return session.withMediaReceiveKey(
+        (mediaReceiveKey) => _sessionUpgradeTokens.issue(
+          route: route.path,
+          namespace: route.namespace,
+          sessionId: sessionId,
+          peerId: peerId,
+          mediaMacKey: mediaReceiveKey,
+          connectionGeneration: session.connectionGeneration,
+          reverse: true,
+          now: DateTime.now(),
+        ),
+      );
+    } on StateError {
+      return null;
+    }
+  }
+
+  /// What this device sends on a channel dialled back to it, under its own
+  /// send key of the connection the token was issued on; null once that
+  /// connection is gone or replaced.
+  AuthenticatedMediaPacketEncoder? _dialBackEncoder(
+    SessionUpgradeClaim claim, {
+    required int maxPayloadBytes,
+  }) {
+    final session = _sessionsByPeerId[claim.peerId];
+    if (session == null ||
+        !session.isAuthenticated ||
+        session.connectionGeneration != claim.connectionGeneration) {
+      return null;
+    }
+    return session.withMediaSendKey(
+      (sendKey) => claim.withMediaPacketContext(
+        (_, binding) => AuthenticatedMediaPacketEncoder(
+          route: claim.route,
+          namespace: claim.namespace,
+          sessionId: claim.sessionId,
+          mediaMacKey: sendKey,
+          channelBinding: binding,
+          maxPayloadBytes: maxPayloadBytes,
+        ),
+      ),
+    );
+  }
+
+  /// The controlled side of [accept]'s session could not be reached: asks
+  /// it to dial this device's `/input` instead.
+  Future<MediaDialedBack?> _askInputDialBack(RemoteInputControlMessage accept) {
+    final peerId = accept.sinkPeerId;
+    return _dialBacks.wait(
+      MediaRoute.input,
+      peerId: peerId,
+      sessionId: accept.sessionId,
+      ask: () => sendRemoteInputControlTo(peerId, accept.dialBackRequest()),
+      onGiveUp: () => _sessionUpgradeTokens.revoke(
+        route: '/input',
+        sessionId: accept.sessionId,
+        peerId: peerId,
+      ),
+    );
+  }
+
+  /// The controlling side could not reach this device's `/input` and sent
+  /// a token for its own: dial it once, for a session this device accepted
+  /// that has no channel yet. Not awaited: the dial must not hold up the
+  /// messages behind it.
+  void _answerInputDialBack(
+    PeerSocketSession session,
+    RemoteInputControlMessage request,
+  ) {
+    final peerId = session.remotePeerId;
+    final input = _remoteInputManager.session(request.sessionId);
+    final host = _mediaDialHost(session);
+    if (input?.state != RemoteInputSessionState.connected ||
+        input?.sourcePeerId != peerId ||
+        _remoteInputManager.hasChannelFor(request.sessionId) ||
+        host == null ||
+        request.transportPort <= 0) {
+      return;
+    }
+    // One way in per session: the token this side gave goes.
+    _sessionUpgradeTokens.revoke(
+      route: '/input',
+      sessionId: request.sessionId,
+      peerId: peerId,
+    );
+    final generation = session.connectionGeneration;
+    unawaited(() async {
+      try {
+        final dialed = await session.withMediaSendKeyAsync(
+          (sendKey) => session.withMediaReceiveKeyAsync(
+            (receiveKey) => dialBackMediaChannel(
+              MediaRoute.input,
+              host: host,
+              port: request.transportPort,
+              sessionId: request.sessionId,
+              token: request.transportToken,
+              localPeerId: session.localProfile.uid,
+              peerId: peerId,
+              connectionGeneration: generation,
+              sendKey: sendKey,
+              receiveKey: receiveKey,
+            ),
+          ),
+        );
+        if (!_remoteInputManager.attachChannel(
+          dialed.channel,
+          claim: dialed.claim,
+          claimValidator: _isExpectedMediaPeerClaim,
+        )) {
+          dialed.claim.destroy();
+        }
+      } on Object {
+        // The controlling side stops waiting and fails as before.
+      }
+    }());
+  }
+
+  /// [peerId]'s tokens and dial-back waits end with its connection.
+  void _forgetPeerMedia(String peerId) {
+    _sessionUpgradeTokens.clearPeer(peerId);
+    _dialBacks.cancelPeer(peerId);
   }
 }

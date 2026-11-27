@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart' as hashes;
+import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:whisper/socket/aead_engine.dart';
 import 'package:whisper/socket/bounded_outbound_queue.dart';
 import 'package:whisper/socket/session_upgrade_token_registry.dart';
@@ -352,10 +354,22 @@ Uri redactedPacketUri(Uri uri) {
 final class PacketWebSocketConnectException implements Exception {
   PacketWebSocketConnectException(Uri uri, Object cause)
     : uri = redactedPacketUri(uri),
-      causeType = cause.runtimeType.toString();
+      causeType = cause.runtimeType.toString(),
+      unreachable = _unreachable(cause);
 
   final Uri uri;
   final String causeType;
+
+  /// Nothing answered: refused, no route, or no answer in time. A refused
+  /// upgrade, a failed proof, 401 or 429 all came from the other side.
+  final bool unreachable;
+
+  static bool _unreachable(Object cause) {
+    final inner = cause is WebSocketChannelException
+        ? cause.inner ?? cause
+        : cause;
+    return inner is SocketException || inner is TimeoutException;
+  }
 
   @override
   String toString() =>

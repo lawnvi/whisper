@@ -18,12 +18,12 @@
 1270 lib/remote_files/mount/mount_tree.dart
 1475 lib/remote_input/mobile_control_screen.dart
 1479 lib/remote_input/remote_clipboard_transfer.dart
-2109 lib/remote_input/remote_input_coordinator.dart
-1817 lib/remote_input/remote_input_workspace_coordinator.dart
+2108 lib/remote_input/remote_input_coordinator.dart
+1816 lib/remote_input/remote_input_workspace_coordinator.dart
 1111 lib/share_links/share_server.dart
 4816 lib/socket/file_transfer_engine.dart
 1093 lib/socket/peer_socket_session.dart
-6208 lib/socket/svrmanager.dart
+6166 lib/socket/svrmanager.dart
 1303 lib/state/desktop_quick_send_inbox.dart
 2286 lib/theme/whisper_ui.dart
 1989 lib/widget/media_message_preview.dart

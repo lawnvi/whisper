@@ -343,9 +343,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
     int? count,
     Object? localError,
   }) {
-    if (!_shouldTraceLifecycle) {
-      return;
-    }
+    if (!_shouldTraceLifecycle) return;
     privacyLog.event(PrivacyEvent.remoteInputDiagnostic, <PrivacyField, Object>{
       PrivacyField.kind: kind,
       if (state != null) PrivacyField.state: state,
@@ -516,6 +514,9 @@ class RemoteInputCoordinator extends ChangeNotifier {
         break;
       case RemoteInputControlAction.routes:
         await _handleRoutes(message);
+        break;
+      // Answered by the server before it gets here.
+      case RemoteInputControlAction.dialBack:
         break;
       case RemoteInputControlAction.stop:
         _trace(
@@ -1308,9 +1309,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
     final acceptedFrames = frames
         .where((frame) => frame.sessionId == message.sessionId)
         .toList(growable: false);
-    if (acceptedFrames.isEmpty) {
-      return;
-    }
+    if (acceptedFrames.isEmpty) return;
     for (final frame in acceptedFrames) {
       if (_appendPendingInjectionFrame(frame)) {
         continue;

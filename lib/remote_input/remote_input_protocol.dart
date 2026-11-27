@@ -11,6 +11,11 @@ enum RemoteInputControlAction {
   stop,
   error,
   textResult,
+
+  /// Controller → controlled, when the accept's `/input` could not be
+  /// reached: a token for this side's own `/input` and its port, to be
+  /// dialled instead (`media_dial_back.dart`).
+  dialBack,
 }
 
 enum RemoteInputMode { edgeTraversal, manual }
@@ -200,6 +205,15 @@ class RemoteInputControlMessage {
   final bool datagrams;
   final int datagramPort;
 
+  /// Asks the controlled side of the session [this] accepts to dial back.
+  RemoteInputControlMessage dialBackRequest() => RemoteInputControlMessage(
+    action: RemoteInputControlAction.dialBack,
+    sessionId: sessionId,
+    sourcePeerId: sourcePeerId,
+    sinkPeerId: sinkPeerId,
+    mode: mode,
+  );
+
   RemoteInputControlMessage withTransportToken(String token, {int? port}) {
     return RemoteInputControlMessage(
       action: action,
@@ -251,11 +265,9 @@ class RemoteInputControlMessage {
     'sinkPeerId': sinkPeerId,
     'transport': transport.name,
     'path': path,
-    if (action == RemoteInputControlAction.accept && transportToken.isNotEmpty)
+    if (_carriesToken(action) && transportToken.isNotEmpty)
       'transportToken': transportToken,
-    if (action == RemoteInputControlAction.accept &&
-        mode == RemoteInputMode.manual &&
-        transportPort != 0)
+    if (_carriesPort(action, mode) && transportPort != 0)
       'transportPort': transportPort,
     if (layoutEdge != null) 'layoutEdge': layoutEdge!.name,
     if (sourceDisplayId.isNotEmpty) 'sourceDisplayId': sourceDisplayId,
@@ -294,9 +306,10 @@ class RemoteInputControlMessage {
               .firstOrNull;
     if (mode == null) throw const FormatException('unknown remote input mode');
     final port = json['transportPort'];
+    final action = RemoteInputControlAction.values.asNameMap()[json['action']];
     if (json.containsKey('transportPort') &&
-        (mode != RemoteInputMode.manual ||
-            json['action'] != RemoteInputControlAction.accept.name ||
+        (action == null ||
+            !_carriesPort(action, mode) ||
             port is! int ||
             port < 1 ||
             port > 65535)) {
@@ -323,7 +336,7 @@ class RemoteInputControlMessage {
       path: json['path'] as String? ?? '/input',
       transportToken: _transportTokenFromJson(
         json,
-        allowed: json['action'] == RemoteInputControlAction.accept.name,
+        allowed: action != null && _carriesToken(action),
       ),
       layoutEdge: nullableEnumByName(
         RemoteInputEdge.values,
@@ -374,6 +387,16 @@ class RemoteInputControlMessage {
     );
   }
 }
+
+bool _carriesToken(RemoteInputControlAction action) =>
+    action == RemoteInputControlAction.accept ||
+    action == RemoteInputControlAction.dialBack;
+
+// An incoming chat connection does not reveal the peer's listening port.
+bool _carriesPort(RemoteInputControlAction action, RemoteInputMode mode) =>
+    action == RemoteInputControlAction.dialBack ||
+    (action == RemoteInputControlAction.accept &&
+        mode == RemoteInputMode.manual);
 
 int _datagramPortFromJson(Map<String, dynamic> json) {
   final port = json['datagramPort'];

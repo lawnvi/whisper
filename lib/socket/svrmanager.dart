@@ -32,7 +32,10 @@ import 'package:whisper/socket/direct_peer_http_client.dart';
 import 'package:whisper/socket/file_browse_trust_cache.dart';
 import 'package:whisper/socket/file_transfer_engine.dart';
 import 'package:whisper/socket/file_transfer_v3.dart';
+import 'package:whisper/socket/media_channel_dial.dart';
+import 'package:whisper/socket/media_dial_back.dart';
 import 'package:whisper/socket/media_upgrade_server.dart';
+import 'package:whisper/socket/packet_byte_transport.dart';
 import 'package:whisper/socket/outgoing_text_retry.dart';
 import 'package:whisper/socket/pairing_attempt_limiter.dart';
 import 'package:whisper/socket/outbound_frame_class.dart';
@@ -74,6 +77,7 @@ import 'package:whisper/remote_input/remote_clipboard_paths.dart';
 import 'package:whisper/remote_input/remote_clipboard_transfer.dart';
 import 'package:whisper/remote_input/remote_input_layout.dart';
 import 'package:whisper/remote_input/remote_input_manager.dart';
+import 'package:whisper/remote_input/remote_input_packet_transport.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
 import 'package:whisper/remote_input/remote_input_workspace_coordinator.dart';
 import 'package:whisper/state/connection_coordinator.dart';
@@ -338,6 +342,7 @@ class WsSvrManager {
   final AudioShareManager _audioManager;
   final RemoteInputManager _remoteInputManager;
   final SessionUpgradeTokenRegistry _sessionUpgradeTokens;
+  final MediaDialBackWaits _dialBacks = MediaDialBackWaits();
   final bool Function(SessionUpgradeClaim claim)? _audioGroupClaimValidator;
   final AudioGroupPacketClaimValidator? _audioGroupPacketValidator;
   final bool Function(SessionUpgradeClaim claim)? _mediaPeerClaimValidator;
@@ -951,7 +956,7 @@ class WsSvrManager {
     _pingTracker.clearPeer(peerId);
     _completeRemoteProfileRefreshWaiters(peerId: peerId);
     _outgoingTextAcknowledgements.disconnectPeer(peerId);
-    _sessionUpgradeTokens.clearPeer(peerId);
+    _forgetPeerMedia(peerId);
     FileBrowseHost.shared.closePeer(peerId);
     RemoteFilesClient.peerGone(peerId, reason: 'offline');
     await _transferEngine.preparePeerSuperseded(peerId);
@@ -1149,7 +1154,7 @@ class WsSvrManager {
     String remoteHost,
   ) async {
     final sink = webSocket.sink;
-    _endpointsBySink[sink] = (host: remoteHost, port: 0);
+    _endpointsBySink[sink] = (host: plainPeerHost(remoteHost), port: 0);
     try {
       final session = await _createSocketSession(
         sink: sink,
@@ -1290,6 +1295,7 @@ class WsSvrManager {
       RemoteFilesClient.sendFile = _sendCopiedFile;
       RemoteFilesClient.sendFolder = _sendCopiedFolder;
       RemoteFilesClient.sendWrite = _sendFileBrowseWrite;
+      RemoteInputWebSocketPacketTransport.dialBack = _askInputDialBack;
       RemoteMounts.shared.peerIdentityKey = remoteIdentityPublicKeyFor;
       TransferPlacements.shared
         ..relocateRecord = _database.relocateCompletedIncomingTransfer
@@ -2847,7 +2853,7 @@ class WsSvrManager {
       return;
     }
     _outgoingTextAcknowledgements.disconnectPeer(peerId);
-    _sessionUpgradeTokens.clearPeer(peerId);
+    _forgetPeerMedia(peerId);
     if (!ownsCleanup()) {
       return;
     }
@@ -4682,6 +4688,11 @@ class WsSvrManager {
                 isIncoming: true,
               )
               .requireAccepted();
+          if (control.action == RemoteInputControlAction.dialBack) {
+            _answerInputDialBack(session, control);
+            await _ackMessage(message);
+            break;
+          }
           final self = await LocalSetting().instance();
           requireCurrentBusiness();
           final remoteDevice = _requireRemoteProfileForSession(session).device;
@@ -5438,6 +5449,14 @@ class WsSvrManager {
         token,
         port: control.mode == RemoteInputMode.manual ? _server?.port : null,
       );
+    } else if (control.action == RemoteInputControlAction.dialBack) {
+      final token = _issueDialBackToken(
+        MediaRoute.input,
+        peerId,
+        control.sessionId,
+      );
+      if (token == null) return Future<bool>.value(false);
+      outgoing = control.withTransportToken(token, port: _server?.port);
     }
     _remoteInputTrace(
       'remote input send control ${_remoteInputControlSummary(control)} '

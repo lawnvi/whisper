@@ -14,6 +14,7 @@ import 'package:whisper/remote_input/remote_input_packet_transport.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
 import 'package:whisper/socket/packet_byte_transport.dart';
 import 'package:whisper/socket/media_channel_dial.dart';
+import 'package:whisper/socket/media_dial_back.dart';
 import 'package:whisper/socket/media_upgrade_proof.dart';
 import 'package:whisper/socket/media_upgrade_server.dart';
 import 'package:whisper/socket/session_upgrade_token_registry.dart';
@@ -143,68 +144,223 @@ Future<String> _nextProvisionalOutcome(StreamIterator<dynamic> events) async {
 }
 
 void main() {
-  // The audio isolate's own port checks the token in the main isolate, so it
-  // learns the token is used up only after the proof passed. It must not
-  // play from the channel before that, nor lose what came meanwhile.
-  test('a proof checked across isolates admits the channel once its token is spent', () async {
-    for (final spent in <bool>[true, false]) {
+  // The controlled side cannot be reached (its firewall, a VPN, AP
+  // isolation): the controller issues a token for its own /input, the
+  // controlled side dials it with that, and input flows as before. Real
+  // dial, proof, packet keys and input manager; only the controller's
+  // Whisper route is a stand-in.
+  test(
+    'input the sink could not be reached for arrives over its dial back',
+    () async {
+      final controllerSend = Uint8List.fromList(List<int>.filled(32, 7));
+      final sinkSend = Uint8List.fromList(List<int>.filled(32, 9));
+      final controllerTokens = SessionUpgradeTokenRegistry();
+      final waits = MediaDialBackWaits(timeout: const Duration(seconds: 3));
       final upgrades = MediaUpgradeServer(
-        maxProvisional: 1,
+        maxProvisional: 2,
         proofTimeout: const Duration(seconds: 2),
       );
-      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-      final tokenSpent = Completer<bool>();
-      final received = Completer<List<int>>();
-      var admitted = false;
-      server.listen((request) async {
+      final controllerServer = await HttpServer.bind(
+        InternetAddress.loopbackIPv4,
+        0,
+      );
+      controllerServer.listen((request) async {
+        final credentials = mediaUpgradeCredentials(request.uri)!;
+        final claim = controllerTokens.lookup(
+          route: '/input',
+          sessionId: credentials.sessionId,
+          token: credentials.token,
+          now: DateTime.now(),
+        );
+        if (claim == null || !waits.canAttach(claim)) {
+          request.response.statusCode = HttpStatus.unauthorized;
+          await request.response.close();
+          return;
+        }
         final slot = upgrades.reserve()!;
         final socket = await WebSocketTransformer.upgrade(request);
         slot.prove(
           IOWebSocketChannel(socket),
-          const MediaUpgradeOffer(
-            route: '/audio',
-            namespace: 'audio-group',
-            sessionId: _audioSessionId,
-            peerId: _sourcePeerId,
-            connectionGeneration: 1,
-            token: 'token-a',
-          ),
-          mediaMacKey: _mediaKey,
-          onProven: (channel) async {
-            if (!await tokenSpent.future) return false;
-            admitted = true;
-            channel.stream.listen((message) {
-              if (!received.isCompleted) received.complete(message as List<int>);
-            });
-            return true;
+          MediaUpgradeOffer.forClaim(claim, credentials.token),
+          mediaMacKey: sinkSend,
+          onProven: (channel) {
+            final consumed = controllerTokens.consume(
+              route: '/input',
+              sessionId: credentials.sessionId,
+              token: credentials.token,
+              now: DateTime.now(),
+              expected: claim,
+            );
+            return consumed != null &&
+                waits.attach(
+                  channel,
+                  consumed,
+                  encoder: () => consumed.withMediaPacketContext(
+                    (_, binding) => AuthenticatedMediaPacketEncoder(
+                      route: '/input',
+                      namespace: 'remote-input',
+                      sessionId: consumed.sessionId,
+                      mediaMacKey: controllerSend,
+                      channelBinding: binding,
+                      maxPayloadBytes: RemoteInputManager.maxPacketPayloadBytes,
+                    ),
+                  ),
+                );
           },
         );
       });
-      final client = await dialMediaChannel(
-        Uri.parse(
-          'ws://127.0.0.1:${server.port}/audio'
-          '?session=$_audioSessionId&token=token-a',
+      final received = <RemoteInputPacketFrame>[];
+      final sink = RemoteInputManager(onPacket: received.add);
+      sink.acceptOffer(
+        const RemoteInputControlMessage(
+          action: RemoteInputControlAction.offer,
+          sessionId: _inputSessionId,
+          sourcePeerId: _sourcePeerId,
+          sinkPeerId: _sinkPeerId,
+          layoutEdge: RemoteInputEdge.right,
         ),
-        MediaRoute.audio,
-        sessionId: _audioSessionId,
-        proverPeerId: _sourcePeerId,
-        proofKey: _mediaKey,
       );
-      final closed = client.stream.drain<void>();
-      // Sent before the main isolate answered about the token.
-      client.sink.add(<int>[1, 2, 3]);
-      expect(upgrades.provisionalCount, 0, reason: 'spent=$spent');
-      tokenSpent.complete(spent);
-      if (spent) {
-        expect(await received.future, <int>[1, 2, 3]);
-        await client.sink.close();
-      } else {
-        await closed.timeout(const Duration(seconds: 2));
-        expect(admitted, isFalse);
+      RemoteInputWebSocketPacketTransport.dialBack = (accept) => waits.wait(
+        MediaRoute.input,
+        peerId: _sinkPeerId,
+        sessionId: accept.sessionId,
+        ask: () {
+          final token = controllerTokens.issue(
+            route: '/input',
+            sessionId: accept.sessionId,
+            peerId: _sinkPeerId,
+            mediaMacKey: sinkSend,
+            reverse: true,
+            now: DateTime.now(),
+          );
+          // The sink, on the dialBack message: dials the controller's /chat
+          // address with the token, as its server would.
+          unawaited(() async {
+            final dialed = await dialBackMediaChannel(
+              MediaRoute.input,
+              host: '127.0.0.1',
+              port: controllerServer.port,
+              sessionId: accept.sessionId,
+              token: token,
+              localPeerId: _sinkPeerId,
+              peerId: _sourcePeerId,
+              connectionGeneration: 0,
+              sendKey: sinkSend,
+              receiveKey: controllerSend,
+            );
+            sink.attachChannel(dialed.channel, claim: dialed.claim);
+          }());
+          return true;
+        },
+      );
+      addTearDown(() async {
+        RemoteInputWebSocketPacketTransport.dialBack = null;
+        await sink.closeChannels();
+        await controllerServer.close(force: true);
+      });
+      // Where the accept said to dial: nothing listens there any more.
+      final closed = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+      final unreachable = closed.port;
+      await closed.close();
+
+      final transport = await RemoteInputWebSocketPacketTransport.connect(
+        _mediaUri(
+          unreachable,
+          '/input',
+          sessionId: _inputSessionId,
+          token: base64Url.encode(Uint8List(32)).replaceAll('=', ''),
+        ),
+        mediaMacKey: controllerSend,
+        accept: const RemoteInputControlMessage(
+          action: RemoteInputControlAction.accept,
+          sessionId: _inputSessionId,
+          sourcePeerId: _sourcePeerId,
+          sinkPeerId: _sinkPeerId,
+        ),
+      );
+      transport.send(
+        RemoteInputPacketFrame(
+          sessionId: _inputSessionId,
+          sequence: 1,
+          timestampMicros: 1,
+          eventType: RemoteInputEventType.key,
+          payload: Uint8List.fromList(utf8.encode('{}')),
+        ),
+      );
+      await _waitFor(() => received.isNotEmpty);
+      expect(received.single.sequence, 1);
+      expect(sink.activeChannelCount, 1);
+      await transport.close();
+    },
+  );
+
+  // The audio isolate's own port checks the token in the main isolate, so it
+  // learns the token is used up only after the proof passed. It must not
+  // play from the channel before that, nor lose what came meanwhile.
+  test(
+    'a proof checked across isolates admits the channel once its token is spent',
+    () async {
+      for (final spent in <bool>[true, false]) {
+        final upgrades = MediaUpgradeServer(
+          maxProvisional: 1,
+          proofTimeout: const Duration(seconds: 2),
+        );
+        final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+        final tokenSpent = Completer<bool>();
+        final received = Completer<List<int>>();
+        var admitted = false;
+        server.listen((request) async {
+          final slot = upgrades.reserve()!;
+          final socket = await WebSocketTransformer.upgrade(request);
+          slot.prove(
+            IOWebSocketChannel(socket),
+            const MediaUpgradeOffer(
+              route: '/audio',
+              namespace: 'audio-group',
+              sessionId: _audioSessionId,
+              peerId: _sourcePeerId,
+              connectionGeneration: 1,
+              token: 'token-a',
+            ),
+            mediaMacKey: _mediaKey,
+            onProven: (channel) async {
+              if (!await tokenSpent.future) return false;
+              admitted = true;
+              channel.stream.listen((message) {
+                if (!received.isCompleted) {
+                  received.complete(message as List<int>);
+                }
+              });
+              return true;
+            },
+          );
+        });
+        final client = await dialMediaChannel(
+          Uri.parse(
+            'ws://127.0.0.1:${server.port}/audio'
+            '?session=$_audioSessionId&token=token-a',
+          ),
+          MediaRoute.audio,
+          sessionId: _audioSessionId,
+          proverPeerId: _sourcePeerId,
+          proofKey: _mediaKey,
+        );
+        final closed = client.stream.drain<void>();
+        // Sent before the main isolate answered about the token.
+        client.sink.add(<int>[1, 2, 3]);
+        expect(upgrades.provisionalCount, 0, reason: 'spent=$spent');
+        tokenSpent.complete(spent);
+        if (spent) {
+          expect(await received.future, <int>[1, 2, 3]);
+          await client.sink.close();
+        } else {
+          await closed.timeout(const Duration(seconds: 2));
+          expect(admitted, isFalse);
+        }
+        await server.close(force: true);
       }
-      await server.close(force: true);
-    }
-  });
+    },
+  );
 
   late SessionUpgradeTokenRegistry tokens;
   late AudioShareManager audioManager;
@@ -258,6 +414,34 @@ void main() {
   tearDown(() async {
     await server.closeGracefully(closeServer: true, forceServerClose: true);
   });
+
+  // A token issued for a dial back must only reach the wait for that dial:
+  // never a session this device accepted the forward way, on any route.
+  test(
+    'a dial-back token nothing waits for is refused on every route',
+    () async {
+      for (final route in <String>['/input', '/audio']) {
+        final sessionId = route == '/input' ? _inputSessionId : _audioSessionId;
+        final token = tokens.issue(
+          route: route,
+          sessionId: sessionId,
+          peerId: _sourcePeerId,
+          mediaMacKey: _mediaKey,
+          reverse: true,
+          now: DateTime.now(),
+        );
+        expect(
+          await _upgradeStatus(
+            _mediaUri(port, route, sessionId: sessionId, token: token),
+          ),
+          HttpStatus.unauthorized,
+          reason: route,
+        );
+      }
+      expect(inputManager.activeChannelCount, 0);
+      expect(audioManager.activeChannelCount, 0);
+    },
+  );
 
   test('rejects non-positive media proof resource limits', () {
     expect(
@@ -518,7 +702,10 @@ void main() {
       expect(audioManager.activeChannelCount, 0);
       expect(tokens.length, 2);
 
-      final valid = await _connectMediaChannel(secondUri, namespace: 'audio-group');
+      final valid = await _connectMediaChannel(
+        secondUri,
+        namespace: 'audio-group',
+      );
       expect(server.debugProvisionalMediaSocketCount, 0);
       expect(audioManager.activeChannelCount, 1);
       expect(tokens.length, 1);
@@ -627,7 +814,10 @@ void main() {
       );
       expect(await _upgradeStatus(duplicatedTokenUri), HttpStatus.unauthorized);
 
-      final socket = await _connectMediaChannel(validUri, namespace: 'audio-group');
+      final socket = await _connectMediaChannel(
+        validUri,
+        namespace: 'audio-group',
+      );
       await socket.sink.close();
       expect(await _upgradeStatus(validUri), HttpStatus.unauthorized);
     },
@@ -899,7 +1089,10 @@ void main() {
       );
     }
 
-    final first = await _connectMediaChannel(issueUri(), namespace: 'audio-group');
+    final first = await _connectMediaChannel(
+      issueUri(),
+      namespace: 'audio-group',
+    );
     await _waitFor(() => audioManager.activeChannelCount == 1);
     final duplicate = await WebSocket.connect(issueUri().toString())
         .then<Object>((socket) async {
@@ -983,15 +1176,14 @@ void main() {
       );
       final socket = await _connectMediaChannel(uri, namespace: 'audio-group');
       final closed = socket.stream.listen((_) {}).asFuture<void>();
-      final encoded =
-          AuthenticatedMediaPacketEncoder(
-            route: '/audio',
-            namespace: 'audio-group',
-            sessionId: _audioSessionId,
-            mediaMacKey: _mediaKey,
-            channelBinding: _mediaChannelBinding(token),
-            maxPayloadBytes: AudioShareManager.maxPacketPayloadBytes,
-          ).encode(_groupPacket(<int>[1]).encode());
+      final encoded = AuthenticatedMediaPacketEncoder(
+        route: '/audio',
+        namespace: 'audio-group',
+        sessionId: _audioSessionId,
+        mediaMacKey: _mediaKey,
+        channelBinding: _mediaChannelBinding(token),
+        maxPayloadBytes: AudioShareManager.maxPacketPayloadBytes,
+      ).encode(_groupPacket(<int>[1]).encode());
       encoded.last ^= 0xff;
       socket.sink.add(encoded);
 

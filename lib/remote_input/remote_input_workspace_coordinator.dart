@@ -631,6 +631,7 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
         return _enqueueRouting(() => _handleRelease(message));
       case RemoteInputControlAction.textResult:
       case RemoteInputControlAction.routes:
+      case RemoteInputControlAction.dialBack:
         return false;
       case RemoteInputControlAction.stop:
       case RemoteInputControlAction.reject:
@@ -648,9 +649,7 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
       return;
     }
     final target = _targets[peerId];
-    if (target == null) {
-      return;
-    }
+    if (target == null) return;
     _onlinePeerIds.remove(peerId);
     await _closeControllerTarget(
       target,

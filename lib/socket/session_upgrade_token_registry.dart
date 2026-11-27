@@ -13,6 +13,7 @@ final class SessionUpgradeClaim {
     required Uint8List mediaMacKey,
     required Uint8List channelBinding,
     this.connectionGeneration = 0,
+    this.reverse = false,
   }) : _mediaMacKey = Uint8List.fromList(mediaMacKey),
        _channelBinding = Uint8List.fromList(channelBinding) {
     if (mediaMacKey.length != 32 || channelBinding.length != 32) {
@@ -25,6 +26,11 @@ final class SessionUpgradeClaim {
   final String sessionId;
   final String peerId;
   final int connectionGeneration;
+
+  /// Issued by the side that could not reach [peerId] for it to dial this
+  /// side instead (`dialBack`): such a token only admits that dial, and a
+  /// forward token never admits it.
+  final bool reverse;
   final Uint8List _mediaMacKey;
   final Uint8List _channelBinding;
   bool _destroyed = false;
@@ -105,6 +111,7 @@ final class SessionUpgradeTokenRegistry {
     required String peerId,
     required Uint8List mediaMacKey,
     int connectionGeneration = 0,
+    bool reverse = false,
     required DateTime now,
   }) {
     final normalizedRoute = normalizeMediaRoute(route);
@@ -123,6 +130,16 @@ final class SessionUpgradeTokenRegistry {
       );
     }
     _purgeExpired(now);
+    if (reverse) {
+      // At most one dial back per session waits.
+      _removeWhereAndDestroy(
+        (entry) =>
+            entry.reverse &&
+            entry.route == normalizedRoute &&
+            entry.sessionId == sessionId &&
+            entry.peerId == peerId,
+      );
+    }
     if (_entries.length >= maxEntries) {
       throw StateError('session upgrade token registry is full');
     }
@@ -147,6 +164,7 @@ final class SessionUpgradeTokenRegistry {
           peerId: peerId,
           mediaMacKey: Uint8List.fromList(mediaMacKey),
           connectionGeneration: connectionGeneration,
+          reverse: reverse,
           expiresAt: now.add(timeToLive),
         ),
       );
@@ -230,6 +248,7 @@ final class SessionUpgradeTokenRegistry {
       mediaMacKey: entry.mediaMacKey,
       channelBinding: entry.tokenBytes,
       connectionGeneration: entry.connectionGeneration,
+      reverse: entry.reverse,
     );
   }
 
@@ -390,6 +409,7 @@ final class _SessionUpgradeEntry {
     required this.peerId,
     required this.mediaMacKey,
     required this.connectionGeneration,
+    required this.reverse,
     required this.expiresAt,
   });
 
@@ -400,6 +420,7 @@ final class _SessionUpgradeEntry {
   final String peerId;
   final Uint8List mediaMacKey;
   final int connectionGeneration;
+  final bool reverse;
   final DateTime expiresAt;
 
   void destroy() {
@@ -414,6 +435,7 @@ bool _entryMatchesClaim(_SessionUpgradeEntry entry, SessionUpgradeClaim claim) {
       entry.sessionId == claim.sessionId &&
       entry.peerId == claim.peerId &&
       entry.connectionGeneration == claim.connectionGeneration &&
+      entry.reverse == claim.reverse &&
       claim.matchesMediaMacKey(entry.mediaMacKey) &&
       claim.matchesChannelBinding(entry.tokenBytes);
 }

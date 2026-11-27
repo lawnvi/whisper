@@ -8,6 +8,7 @@ import 'package:whisper/remote_input/remote_input_lane.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
 import 'package:whisper/socket/bounded_outbound_queue.dart';
 import 'package:whisper/socket/media_channel_dial.dart';
+import 'package:whisper/socket/media_dial_back.dart';
 import 'package:whisper/socket/packet_byte_transport.dart';
 
 abstract class RemoteInputPacketTransport {
@@ -116,21 +117,42 @@ class RemoteInputWebSocketPacketTransport extends RemoteInputPacketByteTransport
     );
   }
 
+  /// Asks the controlled side of [accept]'s session to dial this device
+  /// instead, set by the server (`media_dial_back.dart`); null: no asking.
+  static Future<MediaDialedBack?> Function(RemoteInputControlMessage accept)?
+  dialBack;
+
   /// Connects for the session [accept] answers, with the UDP lane beside
-  /// it when the accept named a port (`remote_input_lane.dart`).
+  /// it when the accept named a port (`remote_input_lane.dart`). When that
+  /// side cannot be reached at all, it is asked to dial here instead
+  /// ([dialBack]); that channel goes without the lane, which would not get
+  /// through either.
   static Future<RemoteInputObservablePacketTransport> connect(
     Uri uri, {
     required Uint8List mediaMacKey,
     required RemoteInputControlMessage accept,
     bool preserveMouseMoves = false,
   }) async {
-    final transport = await _connectSocket(
-      uri,
-      mediaMacKey: mediaMacKey,
-      sessionId: accept.sessionId,
-      peerId: accept.sourcePeerId,
-      preserveMouseMoves: preserveMouseMoves,
-    );
+    final RemoteInputWebSocketPacketTransport transport;
+    try {
+      transport = await _connectSocket(
+        uri,
+        mediaMacKey: mediaMacKey,
+        sessionId: accept.sessionId,
+        peerId: accept.sourcePeerId,
+        preserveMouseMoves: preserveMouseMoves,
+      );
+    } catch (error) {
+      final ask = dialBack;
+      if (ask == null || !mediaPeerUnreachable(error)) rethrow;
+      final dialed = await ask(accept);
+      if (dialed == null) rethrow;
+      return RemoteInputWebSocketPacketTransport.forChannel(
+        dialed.channel,
+        packetEncoder: dialed.encoder,
+        preserveMouseMoves: preserveMouseMoves,
+      );
+    }
     final lane = preserveMouseMoves
         ? null
         : RemoteInputDatagrams.dial(
