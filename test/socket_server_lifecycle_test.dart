@@ -6,7 +6,6 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
-import 'package:whisper/audio/audio_protocol.dart';
 import 'package:whisper/audio/audio_share_manager.dart';
 import 'package:whisper/remote_input/remote_input_manager.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
@@ -34,24 +33,6 @@ ConnectionAttemptRequest _attemptRequest(String requestId, int port) =>
       endpoint: PeerEndpoint.loopbackForTesting(port: port),
       mode: ConnectionAttemptMode.interactive,
     );
-
-void _activateAudioSession(AudioShareManager manager) {
-  manager.acceptOffer(
-    const AudioControlMessage(
-      action: AudioControlAction.offer,
-      sessionId: _audioSessionId,
-      sourcePeerId: _sourcePeerId,
-      sinkPeerId: _sinkPeerId,
-      format: AudioStreamFormat(
-        codec: AudioCodecKind.opus,
-        sampleRate: 48000,
-        channels: 2,
-        frameDurationMs: 20,
-        bitRate: 128000,
-      ),
-    ),
-  );
-}
 
 void _activateInputSession(RemoteInputManager manager) {
   manager.acceptOffer(
@@ -325,14 +306,13 @@ void main() {
       final audioManager = AudioShareManager();
       final inputManager = RemoteInputManager();
       final tokens = SessionUpgradeTokenRegistry();
-      _activateAudioSession(audioManager);
       _activateInputSession(inputManager);
       final isolated = WsSvrManager.forTesting(
         admission: admission,
         audioManager: audioManager,
         remoteInputManager: inputManager,
         sessionUpgradeTokens: tokens,
-        audioGroupClaimValidator: (_) => false,
+        audioGroupClaimValidator: (claim) => claim.sessionId == _audioSessionId,
         mediaPeerClaimValidator: (_) => true,
       );
       addTearDown(
@@ -347,7 +327,7 @@ void main() {
           sessionId: _audioSessionId,
           tokens: tokens,
         ),
-        namespace: 'audio',
+        namespace: 'audio-group',
       );
       final input = await _connectAuthorizedMedia(
         uri: _authorizedMediaUri(
@@ -378,11 +358,10 @@ void main() {
   test('manager-only media channels are awaited by graceful close', () async {
     final audioManager = AudioShareManager();
     final tokens = SessionUpgradeTokenRegistry();
-    _activateAudioSession(audioManager);
     final isolated = WsSvrManager.forTesting(
       audioManager: audioManager,
       sessionUpgradeTokens: tokens,
-      audioGroupClaimValidator: (_) => false,
+      audioGroupClaimValidator: (claim) => claim.sessionId == _audioSessionId,
       mediaPeerClaimValidator: (_) => true,
     );
     addTearDown(
@@ -396,7 +375,7 @@ void main() {
         sessionId: _audioSessionId,
         tokens: tokens,
       ),
-      namespace: 'audio',
+      namespace: 'audio-group',
     );
     final remoteClosed = audio.stream.listen((_) {}).asFuture<void>();
     await _waitFor(() => audioManager.activeChannelCount == 1);
@@ -422,13 +401,12 @@ void main() {
     final audioManager = AudioShareManager();
     final inputManager = RemoteInputManager();
     final tokens = SessionUpgradeTokenRegistry();
-    _activateAudioSession(audioManager);
     _activateInputSession(inputManager);
     final isolated = WsSvrManager.forTesting(
       audioManager: audioManager,
       remoteInputManager: inputManager,
       sessionUpgradeTokens: tokens,
-      audioGroupClaimValidator: (_) => false,
+      audioGroupClaimValidator: (claim) => claim.sessionId == _audioSessionId,
       mediaPeerClaimValidator: (_) => true,
     );
     addTearDown(
@@ -443,7 +421,7 @@ void main() {
         sessionId: _audioSessionId,
         tokens: tokens,
       ),
-      namespace: 'audio',
+      namespace: 'audio-group',
     );
     final audioClosed = audio.stream.listen((_) {}).asFuture<void>();
     audio.sink.add(
@@ -514,11 +492,10 @@ void main() {
     () async {
       final audioManager = _BlockingAudioManager();
       final tokens = SessionUpgradeTokenRegistry();
-      _activateAudioSession(audioManager);
       final isolated = WsSvrManager.forTesting(
         audioManager: audioManager,
         sessionUpgradeTokens: tokens,
-        audioGroupClaimValidator: (_) => false,
+        audioGroupClaimValidator: (claim) => claim.sessionId == _audioSessionId,
         mediaPeerClaimValidator: (_) => true,
       );
       addTearDown(() {
@@ -553,11 +530,10 @@ void main() {
     () async {
       final audioManager = _BlockingAudioManager();
       final tokens = SessionUpgradeTokenRegistry();
-      _activateAudioSession(audioManager);
       final isolated = WsSvrManager.forTesting(
         audioManager: audioManager,
         sessionUpgradeTokens: tokens,
-        audioGroupClaimValidator: (_) => false,
+        audioGroupClaimValidator: (claim) => claim.sessionId == _audioSessionId,
         mediaPeerClaimValidator: (_) => true,
       );
       addTearDown(() {
@@ -577,7 +553,7 @@ void main() {
           sessionId: _audioSessionId,
           tokens: tokens,
         ),
-        namespace: 'audio',
+        namespace: 'audio-group',
       );
       final existingClosed = existing.stream.listen((_) {}).asFuture<void>();
       await _waitFor(() => audioManager.activeChannelCount == 1);
@@ -600,7 +576,7 @@ void main() {
           sessionId: _audioSessionId,
           tokens: tokens,
         ),
-        namespace: 'audio',
+        namespace: 'audio-group',
       );
       await reopened.sink.close();
     },

@@ -9,7 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:whisper/new_ui/shell/shell_diagnostics.dart';
-import 'package:whisper/audio/audio_share_coordinator.dart';
+import 'package:whisper/audio/audio_group_coordinator.dart';
 import 'package:whisper/helper/android_background.dart';
 import 'package:whisper/helper/android_privacy_permission.dart';
 import 'package:whisper/helper/app_update.dart';
@@ -872,7 +872,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _commitPlaybackGain(double value) async {
     await LocalSetting().setAudioSharePlaybackGain(value);
-    AudioShareCoordinator.shared.updatePlaybackGain(value);
+    AudioGroupCoordinator.shared.updatePlaybackGain(value);
     if (!mounted) {
       return;
     }

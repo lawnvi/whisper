@@ -3276,9 +3276,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get soundMemberBusy => 'Está reproduciendo otro sonido';
 
   @override
-  String get soundMemberSoloOnly => 'Solo puede sonar por separado';
-
-  @override
   String get soundPermissionNeeded =>
       'Necesita Grabación de pantalla y audio del sistema';
 

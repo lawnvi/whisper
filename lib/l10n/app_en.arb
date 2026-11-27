@@ -2137,7 +2137,6 @@
     }
   },
   "soundMemberBusy": "It's playing other sound",
-  "soundMemberSoloOnly": "Can only play on its own",
   "soundPermissionNeeded": "Needs Screen & System Audio Recording",
   "soundCheckLabel": "Play sound on {device}",
   "@soundCheckLabel": {

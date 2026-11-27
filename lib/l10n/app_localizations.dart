@@ -5488,12 +5488,6 @@ abstract class AppLocalizations {
   /// **'正在播放其他来源'**
   String get soundMemberBusy;
 
-  /// No description provided for @soundMemberSoloOnly.
-  ///
-  /// In zh, this message translates to:
-  /// **'只能单独播放'**
-  String get soundMemberSoloOnly;
-
   /// No description provided for @soundPermissionNeeded.
   ///
   /// In zh, this message translates to:

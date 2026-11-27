@@ -121,10 +121,6 @@ void main() {
         throwsFormatException,
       );
       expect(
-        () => decoder(namespace: 'audio-group').decode(encoded),
-        throwsFormatException,
-      );
-      expect(
         () => decoder(sessionId: 'session-b').decode(encoded),
         throwsFormatException,
       );

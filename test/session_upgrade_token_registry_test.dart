@@ -27,7 +27,7 @@ void main() {
   test('issues a canonical single-use token bound to the complete claim', () {
     final token = registry.issue(
       route: 'audio',
-      namespace: 'audio',
+      namespace: 'audio-group',
       sessionId: 'audio-session',
       peerId: 'peer-a',
       mediaMacKey: mediaKey,
@@ -44,7 +44,7 @@ void main() {
 
     expect(claim, isNotNull);
     expect(claim!.route, '/audio');
-    expect(claim.namespace, 'audio');
+    expect(claim.namespace, 'audio-group');
     expect(claim.sessionId, 'audio-session');
     expect(claim.peerId, 'peer-a');
     claim.withMediaMacKey((key) {
@@ -64,56 +64,6 @@ void main() {
       isNull,
     );
   });
-
-  test(
-    'namespace revocation preserves another audio type sharing the tuple',
-    () {
-      final direct = registry.issue(
-        route: '/audio',
-        namespace: 'audio',
-        sessionId: 'shared-session',
-        peerId: 'peer-a',
-        mediaMacKey: mediaKey,
-        now: now,
-      );
-      final group = registry.issue(
-        route: '/audio',
-        namespace: 'audio-group',
-        sessionId: 'shared-session',
-        peerId: 'peer-a',
-        mediaMacKey: mediaKey,
-        now: now,
-      );
-
-      registry.revoke(
-        route: '/audio',
-        namespace: 'audio',
-        sessionId: 'shared-session',
-        peerId: 'peer-a',
-      );
-
-      expect(
-        registry.consume(
-          route: '/audio',
-          sessionId: 'shared-session',
-          token: direct,
-          now: now,
-        ),
-        isNull,
-      );
-      expect(
-        registry
-            .consume(
-              route: '/audio',
-              sessionId: 'shared-session',
-              token: group,
-              now: now,
-            )
-            ?.namespace,
-        'audio-group',
-      );
-    },
-  );
 
   test('wrong route, session, and token never consume the valid claim', () {
     final token = registry.issue(
@@ -292,7 +242,7 @@ void main() {
   test('claim key material is unavailable after explicit destruction', () {
     final claim = SessionUpgradeClaim(
       route: '/audio',
-      namespace: 'audio',
+      namespace: 'audio-group',
       sessionId: 'session-a',
       peerId: 'peer-a',
       mediaMacKey: Uint8List(32),

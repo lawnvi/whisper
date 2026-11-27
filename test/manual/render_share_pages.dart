@@ -110,18 +110,6 @@ final _soundScenes = <String, (_Scene, SoundWorld Function(), String?)>{
     () => SoundWorld(denied: true),
     null,
   ),
-  'old-device': (
-    (world) async {},
-    () => SoundWorld(solo: {thinkPadDevice.uid}),
-    null,
-  ),
-  'old-device-picked': (
-    (world) async {
-      await world.controller.toggle(thinkPadDevice.uid);
-    },
-    () => SoundWorld(solo: {thinkPadDevice.uid}),
-    null,
-  ),
   'sink': (
     (world) async {
       await world.offerFrom(imacDevice.uid);

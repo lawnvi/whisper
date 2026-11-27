@@ -11,7 +11,6 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:whisper/socket/backpressure_web_socket.dart';
 import 'package:whisper/debug/automation_hooks.dart' show DebugPairingRequests;
 import 'package:whisper/audio/audio_group_coordinator.dart';
-import 'package:whisper/audio/audio_share_coordinator.dart';
 import 'package:whisper/audio/audio_protocol.dart';
 import 'package:whisper/audio/audio_share_manager.dart';
 import 'package:whisper/clipboard/clipboard_sync_coordinator.dart';
@@ -136,9 +135,6 @@ class WsSvrManager {
       _maxFileDataPayloadBytes + WhisperFrameV3.headerLength;
   static const int _authenticatedFrameOverhead =
       AuthenticatedFrameCodec.overheadBytes;
-  static final Set<String> _audioControlActions = AudioControlAction.values
-      .map((action) => action.name)
-      .toSet();
   static final Set<String> _audioGroupControlActions = AudioGroupControlAction
       .values
       .map((action) => action.name)
@@ -2994,7 +2990,6 @@ class WsSvrManager {
       persistRecoverable: hadAuthenticatedConnection,
     );
     if (hadAuthenticatedConnection && _manageSharedCoordinators) {
-      await AudioShareCoordinator.shared.stopLocal();
       await AudioGroupCoordinator.shared.stopLocal();
       await RemoteInputWorkspaceCoordinator.shared.stopControllerWorkspace(
         sendControlTo: sendRemoteInputControlTo,
@@ -3229,11 +3224,6 @@ class WsSvrManager {
 
   Map<String, Set<String>> _preservedControlSessionsForPeer(String peerId) {
     final preserved = <String, Set<String>>{};
-    final audioState = AudioShareCoordinator.shared.state;
-    if (audioState.isForPeer(peerId) && audioState.sessionId.isNotEmpty) {
-      preserved['audio'] = <String>{audioState.sessionId};
-    }
-
     final group = AudioGroupCoordinator.shared.session;
     final groupSessionIds = <String>{};
     if (group != null) {
@@ -4752,70 +4742,9 @@ class WsSvrManager {
         // WSP2 可续传控制协议已删除,枚举值保留以兼容历史存储数据。
         break;
       case MessageEnum.AudioControl:
-        {
-          final json =
-              jsonDecode(message.content ?? "{}") as Map<String, dynamic>;
-          WireInputPolicy.validateControlEnvelope(
-            json,
-            allowedActions: _audioControlActions,
-          ).requireAccepted();
-          final control = AudioControlMessage.fromJson(json);
-          WireInputPolicy.validateControlSessionId(
-            messageId: message.uuid,
-            sessionId: control.sessionId,
-          ).requireAccepted();
-          WireInputPolicy.validatePeerPair(
-            sourcePeerId: control.sourcePeerId,
-            sinkPeerId: control.sinkPeerId,
-            authenticatedPeerId: session.remotePeerId,
-            localPeerId: session.localProfile.uid,
-          ).requireAccepted();
-          _wireControlSessions
-              .validateAndRemember(
-                namespace: 'audio',
-                sessionId: control.sessionId,
-                sourcePeerId: control.sourcePeerId,
-                sinkPeerId: control.sinkPeerId,
-                authenticatedPeerId: session.remotePeerId,
-                localPeerId: session.localProfile.uid,
-                isInitialOffer: control.action == AudioControlAction.offer,
-                isIncoming: true,
-              )
-              .requireAccepted();
-          final self = await LocalSetting().instance();
-          requireCurrentBusiness();
-          final remoteDevice = _requireRemoteProfileForSession(session).device;
-          final isTerminal =
-              control.action == AudioControlAction.reject ||
-              control.action == AudioControlAction.stop ||
-              control.action == AudioControlAction.error;
-          try {
-            await session.withMediaSendKeyAsync(
-              (mediaSendKey) =>
-                  AudioShareCoordinator.shared.handleControlMessage(
-                    control,
-                    localPeerId: self.uid,
-                    remoteHost: remoteDevice.host,
-                    remotePort: remoteDevice.port,
-                    mediaSendKey: mediaSendKey,
-                    sendControl: (control) =>
-                        sendAudioControlTo(session.remotePeerId, control),
-                  ),
-            );
-          } finally {
-            if (isTerminal) {
-              await _releaseTerminalControl(
-                namespace: 'audio',
-                route: '/audio',
-                peerId: session.remotePeerId,
-                sessionId: control.sessionId,
-              );
-            }
-          }
-          requireCurrentBusiness();
-          await _ackMessage(message);
-          break;
-        }
+        // The one-to-one sound of protocol 15 and earlier; the enum value
+        // stays for stored rows. Sound is AudioGroupControl only.
+        break;
       case MessageEnum.WindowStreamControl:
         {
           final json =
@@ -5701,10 +5630,6 @@ class WsSvrManager {
     });
   }
 
-  Future<bool> sendAudioControl(AudioControlMessage control) {
-    return sendAudioControlTo(receiver, control);
-  }
-
   /// Runs [action] with this device's media send key for [peerId], or
   /// returns null when that peer has no authenticated session.
   T? _withMediaSendKeyFor<T>(String peerId, T Function(Uint8List key) action) {
@@ -5938,61 +5863,6 @@ class WsSvrManager {
       (sendKey) => session.withMediaReceiveKey(
         (receiveKey) => action(base, sendKey, receiveKey),
       ),
-    );
-  }
-
-  Future<bool> sendAudioControlTo(String peerId, AudioControlMessage control) {
-    if (!_validateOutgoingControlSession(
-      namespace: 'audio',
-      peerId: peerId,
-      sessionId: control.sessionId,
-      sourcePeerId: control.sourcePeerId,
-      sinkPeerId: control.sinkPeerId,
-      isInitialOffer: control.action == AudioControlAction.offer,
-    )) {
-      return Future<bool>.value(false);
-    }
-    var outgoing = control.withTransportToken('');
-    if (control.action == AudioControlAction.accept) {
-      final acceptedSession = _audioManager.session(control.sessionId);
-      if (acceptedSession?.state != AudioShareSessionState.connected ||
-          acceptedSession?.sourcePeerId != control.sourcePeerId ||
-          acceptedSession?.sinkPeerId != control.sinkPeerId) {
-        return Future<bool>.value(false);
-      }
-      final token = _issueSessionUpgradeToken(
-        route: '/audio',
-        namespace: 'audio',
-        peerId: peerId,
-        sessionId: control.sessionId,
-        sourcePeerId: control.sourcePeerId,
-        sinkPeerId: control.sinkPeerId,
-      );
-      if (token == null) {
-        return Future<bool>.value(false);
-      }
-      outgoing = control.withTransportToken(token);
-    }
-    final message = _buildMessage(
-      MessageEnum.AudioControl,
-      jsonEncode(outgoing.toJson()),
-      "",
-      "",
-      0,
-      false,
-      uid: control.sessionId,
-      receiverOverride: peerId,
-    );
-    return _sendControlWithLifecycle(
-      send: _sendMessageData(message, peerId: peerId),
-      isTerminal:
-          control.action == AudioControlAction.reject ||
-          control.action == AudioControlAction.stop ||
-          control.action == AudioControlAction.error,
-      namespace: 'audio',
-      route: '/audio',
-      peerId: peerId,
-      sessionId: control.sessionId,
     );
   }
 

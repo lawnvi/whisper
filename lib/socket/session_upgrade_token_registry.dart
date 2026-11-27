@@ -323,13 +323,12 @@ String? _tryNormalizeMediaNamespace(
   final trimmed = namespace.trim();
   if (trimmed.isEmpty) {
     return switch (normalizedRoute) {
-      '/audio' => 'audio',
+      '/audio' => 'audio-group',
       '/window' => 'window-stream',
       _ => 'remote-input',
     };
   }
   return switch ((normalizedRoute, trimmed)) {
-    ('/audio', 'audio') => 'audio',
     ('/audio', 'audio-group') => 'audio-group',
     ('/input', 'remote-input') => 'remote-input',
     ('/window', 'window-stream') => 'window-stream',

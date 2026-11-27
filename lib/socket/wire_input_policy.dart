@@ -377,7 +377,6 @@ abstract final class WireInputPolicy {
       MessageEnum.Heartbeat ||
       MessageEnum.Text ||
       MessageEnum.Notification ||
-      MessageEnum.AudioControl ||
       MessageEnum.RemoteInputControl ||
       MessageEnum.AudioGroupControl ||
       MessageEnum.WindowStreamControl ||

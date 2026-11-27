@@ -10,8 +10,6 @@ import 'package:whisper/audio/audio_codec.dart';
 import 'package:whisper/audio/audio_group_coordinator.dart';
 import 'package:whisper/audio/audio_platform.dart';
 import 'package:whisper/audio/audio_protocol.dart';
-import 'package:whisper/audio/audio_share_coordinator.dart';
-import 'package:whisper/audio/audio_share_manager.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/new_ui/input/input_controller.dart';
 import 'package:whisper/new_ui/sound/sound_controller.dart';
@@ -102,12 +100,10 @@ final ubuntuDevice = shareDevice(
 class SoundWorld {
   SoundWorld({
     Set<String>? connected,
-    Set<String>? solo,
     bool canRejoin = true,
     bool denied = false,
   }) : connected =
            connected ?? {imacDevice.uid, thinkPadDevice.uid, xiaomiDevice.uid},
-       solo = solo ?? {},
        _canRejoin = canRejoin,
        _denied = denied {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -122,21 +118,13 @@ class SoundWorld {
       codecFactory: (format) async =>
           PcmPassthroughAudioCodec(AudioCodecConfig.fromStreamFormat(format)),
     );
-    single = AudioShareCoordinator(
-      manager: AudioShareManager(),
-      platform: platform,
-      playbackGainProvider: () async => 1,
-    );
     controller = ShellSoundController(
       group: group,
-      single: single,
       platform: platform,
       backend: SoundBackend(
         isConnected: this.connected.contains,
-        supportsGroupSink: (peer) => !this.solo.contains(peer),
         canRejoinFrom: (_) => _canRejoin,
         sendGroupControl: (peer, control) => sentGroup.add((peer, control)),
-        sendSingleControl: (peer, control) => sentSingle.add((peer, control)),
         deviceFor: (peer) => devices[peer],
         selfPeerId: () async => selfMac.uid,
         captureDenied: () => _denied,
@@ -148,19 +136,16 @@ class SoundWorld {
   }
 
   final Set<String> connected;
-  final Set<String> solo;
   final bool _canRejoin;
   bool _denied;
   final calls = <MethodCall>[];
   final sentGroup = <(String, AudioGroupControlMessage)>[];
-  final sentSingle = <(String, AudioControlMessage)>[];
   final devices = <String, DeviceData>{
     for (final d in [imacDevice, thinkPadDevice, xiaomiDevice, redmiDevice])
       d.uid: d,
   };
   late final AudioPlatform platform;
   late final AudioGroupCoordinator group;
-  late final AudioShareCoordinator single;
   late final ShellSoundController controller;
   int permissionAsked = 0;
   double loadedGain = 1;

@@ -19,7 +19,6 @@ import 'package:whisper/new_ui/capture/capture_flow.dart';
 import 'package:whisper/state/self_notes.dart';
 import 'package:whisper/state/conversation_history_pager.dart';
 import 'package:whisper/state/message_deletion.dart';
-import 'package:whisper/audio/audio_share_coordinator.dart';
 import 'package:whisper/helper/android_background.dart';
 import 'package:whisper/helper/android_document_picker.dart';
 import 'package:whisper/helper/desktop_clipboard_image.dart';
@@ -141,7 +140,6 @@ class _SendMessageScreen extends State<SendMessageScreen>
 
   final db = LocalDatabase();
   final socketManager = WsSvrManager();
-  final AudioShareCoordinator _audioCoordinator = AudioShareCoordinator.shared;
   final AudioGroupCoordinator _audioGroupCoordinator =
       AudioGroupCoordinator.shared;
   final RemoteInputCoordinator _remoteInputCoordinator =
@@ -256,7 +254,6 @@ class _SendMessageScreen extends State<SendMessageScreen>
   void initState() {
     WidgetsBinding.instance.addObserver(this);
     socketManager.registerEvent(this);
-    _audioCoordinator.addListener(_handleAudioShareChanged);
     _audioGroupCoordinator.addListener(_handleAudioGroupChanged);
     _remoteInputCoordinator.addListener(_handleRemoteInputChanged);
     _web.addListener(_historyChanged);
@@ -291,7 +288,6 @@ class _SendMessageScreen extends State<SendMessageScreen>
     WidgetsBinding.instance.removeObserver(this);
     _connectionAttempts.cancelAll();
     socketManager.unregisterEvent(this);
-    _audioCoordinator.removeListener(_handleAudioShareChanged);
     _audioGroupCoordinator.removeListener(_handleAudioGroupChanged);
     _remoteInputCoordinator.removeListener(_handleRemoteInputChanged);
     _web.removeListener(_historyChanged);
@@ -303,13 +299,6 @@ class _SendMessageScreen extends State<SendMessageScreen>
     _textController.dispose();
     _composerHeight.dispose();
     super.dispose();
-  }
-
-  void _handleAudioShareChanged() {
-    unawaited(_syncAndroidKeepAliveService());
-    if (mounted) {
-      setState(() {});
-    }
   }
 
   void _handleAudioGroupChanged() {
@@ -1297,33 +1286,22 @@ class _SendMessageScreen extends State<SendMessageScreen>
       );
     }
     if (_shouldShowAudioShareAction) {
-      final audioState = _audioCoordinator.state;
       final audioGroupSession = _audioGroupCoordinator.session;
-      final isCurrentAudioSession = audioState.isForPeer(device.uid);
-      final isCurrentAudioGroup =
+      final isActive =
           _audioGroupCoordinator.isForPeer(device.uid) &&
           audioGroupSession?.isLive == true;
-      final isActive =
-          (isCurrentAudioSession && audioState.isActive) || isCurrentAudioGroup;
-      final isBusy = isCurrentAudioSession && audioState.isBusy;
-      final role = isCurrentAudioSession
-          ? audioState.role
-          : isCurrentAudioGroup && _audioGroupCoordinator.isPlaybackActive
-          ? AudioShareRuntimeRole.sink
-          : AudioShareRuntimeRole.source;
+      final playing = isActive && _audioGroupCoordinator.isPlaybackActive;
       actions.add(
         IconButton(
           padding: actionPadding,
           constraints: actionConstraints,
           visualDensity: actionVisualDensity,
-          onPressed: isBusy ? null : _toggleAudioShare,
-          tooltip: _audioShareTooltip(role, isActive: isActive, isBusy: isBusy),
-          icon: Icon(_audioShareIcon(role)),
-          color: _audioShareIconColor(
-            isActive: isActive,
-            isBusy: isBusy,
-            isDark: isDark,
+          onPressed: _toggleAudioShare,
+          tooltip: _audioShareTooltip(playing: playing, isActive: isActive),
+          icon: Icon(
+            playing ? Icons.volume_up_rounded : Icons.volume_up_outlined,
           ),
+          color: isActive ? context.wc.accentText : context.wc.ink2,
         ),
       );
     }
@@ -1491,7 +1469,6 @@ class _SendMessageScreen extends State<SendMessageScreen>
   }
 
   bool get _shouldShowAudioShareAction {
-    final audioState = _audioCoordinator.state;
     final audioGroupSession = _audioGroupCoordinator.session;
     final isCurrentAudioGroup =
         _audioGroupCoordinator.isForPeer(device.uid) &&
@@ -1499,7 +1476,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
     return !_isLocalhost &&
         _isConnectedSession &&
         !isDesktop() &&
-        (audioState.isForPeer(device.uid) || isCurrentAudioGroup);
+        isCurrentAudioGroup;
   }
 
   bool get _shouldShowRemoteInputAction {
@@ -1511,42 +1488,11 @@ class _SendMessageScreen extends State<SendMessageScreen>
         socketManager.supportsRemoteInputFor(device.uid);
   }
 
-  IconData _audioShareIcon(AudioShareRuntimeRole role) {
-    switch (role) {
-      case AudioShareRuntimeRole.source:
-        return Icons.volume_up_outlined;
-      case AudioShareRuntimeRole.sink:
-        return Icons.volume_up_rounded;
-      case AudioShareRuntimeRole.none:
-        return Icons.volume_up_outlined;
-    }
-  }
-
-  Color _audioShareIconColor({
-    required bool isActive,
-    required bool isBusy,
-    required bool isDark,
-  }) {
-    if (!isActive && !isBusy) {
-      return context.wc.ink2;
-    }
-    return context.wc.accentText;
-  }
-
-  String _audioShareTooltip(
-    AudioShareRuntimeRole role, {
-    required bool isActive,
-    required bool isBusy,
-  }) {
-    if (isBusy) {
-      return role == AudioShareRuntimeRole.source
-          ? l10n.audioShareCaptureConnecting
-          : l10n.audioSharePlaybackPreparing;
-    }
+  String _audioShareTooltip({required bool playing, required bool isActive}) {
     if (isActive) {
-      return role == AudioShareRuntimeRole.source
-          ? l10n.audioShareCaptureActiveStop
-          : l10n.audioSharePlaybackActiveStop;
+      return playing
+          ? l10n.audioSharePlaybackActiveStop
+          : l10n.audioShareCaptureActiveStop;
     }
     return l10n.audioShareStart;
   }
@@ -2066,8 +2012,6 @@ class _SendMessageScreen extends State<SendMessageScreen>
       return;
     }
     final l10n = this.l10n;
-    final audioState = _audioCoordinator.state;
-    final isCurrentAudioSession = audioState.isForPeer(device.uid);
     final audioGroupSession = _audioGroupCoordinator.session;
     final isCurrentAudioGroup =
         _audioGroupCoordinator.isForPeer(device.uid) &&
@@ -2076,12 +2020,6 @@ class _SendMessageScreen extends State<SendMessageScreen>
       if (isCurrentAudioGroup) {
         await _audioGroupCoordinator.stopGroup(
           sendControl: socketManager.sendAudioGroupControlTo,
-        );
-        return;
-      }
-      if (isCurrentAudioSession) {
-        await _audioCoordinator.stopSharing(
-          sendControl: socketManager.sendAudioControl,
         );
         return;
       }
@@ -2096,8 +2034,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
       final groupCandidates = socketManager.connectedAudioGroupSinkDevices(
         preferredPeerId: device.uid,
       );
-      if (socketManager.supportsAudioGroupSinkFor(device.uid) &&
-          groupCandidates.isNotEmpty) {
+      if (groupCandidates.isNotEmpty) {
         final Map<String, AudioChannelRole> sinks;
         if (groupCandidates.length == 1) {
           sinks = <String, AudioChannelRole>{
@@ -2119,18 +2056,11 @@ class _SendMessageScreen extends State<SendMessageScreen>
         _audioGroupCoordinator.startGroup(
           sourcePeerId: self.uid,
           sinks: sinks,
-          format: AudioShareCoordinator.defaultFormat,
+          format: AudioStreamFormat.group,
           sendControl: socketManager.sendAudioGroupControlTo,
         );
         return;
       }
-      await _audioCoordinator.startSharingToConnectedPeer(
-        sourcePeerId: self.uid,
-        sinkPeerId: device.uid,
-        sinkHost: device.host,
-        sinkPort: device.port,
-        sendControl: socketManager.sendAudioControl,
-      );
     } catch (error) {
       final reason = audioFailureReasonFor(
         error,

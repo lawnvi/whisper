@@ -1223,7 +1223,6 @@
     }
   },
   "soundMemberBusy": "Está reproduciendo otro sonido",
-  "soundMemberSoloOnly": "Solo puede sonar por separado",
   "soundPermissionNeeded": "Necesita Grabación de pantalla y audio del sistema",
   "soundCheckLabel": "Reproducir sonido en {device}",
   "@soundCheckLabel": {

@@ -11,7 +11,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:whisper/audio/audio_group_coordinator.dart';
 import 'package:whisper/audio/audio_protocol.dart';
-import 'package:whisper/audio/audio_share_coordinator.dart';
 import 'package:whisper/cast_receiver/cast_receiver_manager.dart';
 import 'package:whisper/cast_receiver/playback_window.dart';
 import 'package:whisper/share_links/share_link_store.dart';
@@ -267,7 +266,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
     implements ISocketEvent, TrayListener, WindowListener {
   final db = LocalDatabase();
   final socketManager = WsSvrManager();
-  final AudioShareCoordinator _audioCoordinator = AudioShareCoordinator.shared;
   final AudioGroupCoordinator _audioGroupCoordinator =
       AudioGroupCoordinator.shared;
   final RemoteInputCoordinator _remoteInputCoordinator =
@@ -359,7 +357,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
     unawaited(_requestPermission());
     _desktopSearchFocusNode.addListener(_handleDesktopSearchFocusChanged);
     AppHealth.shared.addListener(_healthChanged);
-    _audioCoordinator.addListener(_handleDesktopAudioChanged);
     _audioGroupCoordinator.addListener(_handleDesktopAudioChanged);
     ShellSoundController.shared.onMemberStopped = _noteSoundMemberStopped;
     _remoteInputCoordinator.addListener(
@@ -674,7 +671,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
     unawaited(_clipboardChanges?.cancel());
     socketManager.unregisterEvent(this);
     _desktopSearchFocusNode.removeListener(_handleDesktopSearchFocusChanged);
-    _audioCoordinator.removeListener(_handleDesktopAudioChanged);
     AppHealth.shared.removeListener(_healthChanged);
     _audioGroupCoordinator.removeListener(_handleDesktopAudioChanged);
     ShellSoundController.shared.onMemberStopped = null;
@@ -2469,7 +2465,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
     };
     final activity = _inputActivityForPeer(uid);
     final groupSink = _audioGroupCoordinator.session?.sinks[uid];
-    final audio = _audioCoordinator.state;
     final playingFromIt =
         _audioGroupCoordinator.isPlaybackActive &&
         _audioGroupCoordinator.playbackSourcePeerId == uid;
@@ -2495,14 +2490,10 @@ class _DeviceListScreen extends State<DeviceListScreen>
       transferPercent: moving && transfer!.size > 0
           ? (transfer.committedBytes * 100 ~/ transfer.size).clamp(0, 100)
           : null,
-      soundHere:
-          playingFromIt ||
-          (audio.isForPeer(uid) && audio.role == AudioShareRuntimeRole.sink),
+      soundHere: playingFromIt,
       controllingThis: activity?.phase == RemoteInputPeerPhase.receiving,
       pointerThere: activity?.phase == RemoteInputPeerPhase.controlling,
-      playingOurs:
-          (groupSink != null && !groupSink.isTerminal) ||
-          (audio.isForPeer(uid) && audio.role == AudioShareRuntimeRole.source),
+      playingOurs: groupSink != null && !groupSink.isTerminal,
       flowWindows: WindowStreamCoordinator.shared.sessions
           .where(
             (s) =>

@@ -3,7 +3,6 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/audio/audio_protocol.dart';
 import 'package:whisper/model/LocalDatabase.dart';
-import 'package:whisper/model/message.dart';
 import 'package:whisper/state/peer_profile.dart';
 
 void main() {
@@ -72,120 +71,6 @@ void main() {
       expect(profile.capabilities.speakerSinkV1, isFalse);
       expect(profile.capabilities.remoteInputSourceV1, isFalse);
       expect(profile.capabilities.remoteInputSinkV1, isFalse);
-    });
-  });
-
-  group('AudioControlMessage', () {
-    test('uses an appended message enum value for backward compatibility', () {
-      expect(MessageEnum.AudioControl.index,
-          MessageEnum.TransferControl.index + 1);
-    });
-
-    test('round-trips offer fields and audio format', () {
-      const format = AudioStreamFormat(
-        codec: AudioCodecKind.opus,
-        sampleRate: 48000,
-        channels: 2,
-        frameDurationMs: 20,
-        bitRate: 128000,
-      );
-      const message = AudioControlMessage(
-        action: AudioControlAction.offer,
-        sessionId: 'audio-1',
-        sourcePeerId: 'peer-a',
-        sinkPeerId: 'peer-b',
-        format: format,
-        transport: AudioTransport.websocket,
-        path: '/audio',
-      );
-
-      final decoded = AudioControlMessage.fromJson(message.toJson());
-
-      expect(decoded.action, AudioControlAction.offer);
-      expect(decoded.sessionId, 'audio-1');
-      expect(decoded.sourcePeerId, 'peer-a');
-      expect(decoded.sinkPeerId, 'peer-b');
-      expect(decoded.format, format);
-      expect(decoded.transport, AudioTransport.websocket);
-      expect(decoded.path, '/audio');
-
-      // A peer's offer with channels -1 trapped the Mac player
-      // (AVAudioChannelCount), and a huge rate × frame length sized the
-      // buffers that conceal lost packets.
-      for (final bad in <Map<String, Object>>[
-        {'channels': -1},
-        {'channels': 0},
-        {'channels': 9},
-        {'sampleRate': 4000},
-        {'sampleRate': 1 << 30},
-        {'frameDurationMs': 0},
-        {'frameDurationMs': 100000},
-      ]) {
-        final json = message.toJson();
-        json['format'] = {...format.toJson(), ...bad};
-        expect(
-          () => AudioControlMessage.fromJson(json),
-          throwsFormatException,
-          reason: '$bad',
-        );
-      }
-    });
-
-    test('round-trips error messages without a format', () {
-      const message = AudioControlMessage(
-        action: AudioControlAction.error,
-        sessionId: 'audio-1',
-        sourcePeerId: 'peer-a',
-        sinkPeerId: 'peer-b',
-        errorMessage: 'capture permission denied',
-      );
-
-      final decoded = AudioControlMessage.fromJson(message.toJson());
-
-      expect(decoded.action, AudioControlAction.error);
-      expect(decoded.format, isNull);
-      expect(decoded.errorMessage, 'capture permission denied');
-    });
-
-    test('serializes a transport token only for a successful accept', () {
-      const accept = AudioControlMessage(
-        action: AudioControlAction.accept,
-        sessionId: 'audio-1',
-        sourcePeerId: 'peer-a',
-        sinkPeerId: 'peer-b',
-        transportToken: 'single-use-token',
-      );
-
-      expect(accept.toJson()['transportToken'], 'single-use-token');
-      expect(
-        AudioControlMessage.fromJson(accept.toJson()).transportToken,
-        'single-use-token',
-      );
-      for (final action in AudioControlAction.values
-          .where((action) => action != AudioControlAction.accept)) {
-        final message = AudioControlMessage(
-          action: action,
-          sessionId: 'audio-1',
-          sourcePeerId: 'peer-a',
-          sinkPeerId: 'peer-b',
-          transportToken: 'must-not-leak',
-        );
-        expect(message.toJson(), isNot(contains('transportToken')));
-        expect(
-          () => AudioControlMessage.fromJson(<String, dynamic>{
-            ...message.toJson(),
-            'transportToken': 'unexpected',
-          }),
-          throwsFormatException,
-        );
-      }
-      expect(
-        () => AudioControlMessage.fromJson(<String, dynamic>{
-          ...accept.toJson(),
-          'transportToken': '',
-        }),
-        throwsFormatException,
-      );
     });
   });
 

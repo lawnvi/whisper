@@ -472,33 +472,6 @@ void main() {
     });
   });
 
-  group('a device that can only play alone', () {
-    late SoundWorld world;
-
-    setUp(() => world = SoundWorld(solo: {thinkPadDevice.uid}));
-    tearDown(() => world.dispose());
-
-    test('checking it clears the others and goes one to one', () async {
-      await world.controller.toggle(imacDevice.uid);
-      await world.controller.toggle(thinkPadDevice.uid);
-
-      expect(world.group.session, isNull);
-      expect(world.controller.selection.keys, [thinkPadDevice.uid]);
-      expect(world.single.state.peerId, thinkPadDevice.uid);
-      expect(world.sentSingle.single.$2.action, AudioControlAction.offer);
-      expect(world.controller.rowFor(thinkPadDevice).channel, isNull);
-    });
-
-    test('checking another device stops it first', () async {
-      await world.controller.toggle(thinkPadDevice.uid);
-      await world.controller.toggle(imacDevice.uid);
-
-      expect(world.single.state.peerId, isEmpty);
-      expect(world.controller.selection.keys, [imacDevice.uid]);
-      expect(world.group.session, isNotNull);
-    });
-  });
-
   group('without permission', () {
     test('the list can be checked, but nothing starts', () async {
       final world = SoundWorld(denied: true);

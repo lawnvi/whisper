@@ -585,8 +585,6 @@ class _MemberText extends StatelessWidget {
     final sink = row.sink;
     final (String? below, bool warnBelow) = switch (row.phase) {
       SoundRowPhase.stopped => (l10n.soundMemberStopped, false),
-      SoundRowPhase.soloOnly ||
-      SoundRowPhase.soloPlaying => (l10n.soundMemberSoloOnly, false),
       SoundRowPhase.disconnected => (l10n.soundMemberStoppedThere, false),
       SoundRowPhase.failed => (
         l10n.soundMemberFailed(_failureDetail(l10n, row.failure)),

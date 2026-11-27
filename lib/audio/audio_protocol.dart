@@ -26,14 +26,6 @@ enum AudioChannelMask {
   right,
 }
 
-enum AudioControlAction {
-  offer,
-  accept,
-  reject,
-  stop,
-  error,
-}
-
 enum AudioGroupControlAction {
   groupOffer,
   groupAccept,
@@ -64,6 +56,15 @@ class AudioStreamFormat {
     required this.frameDurationMs,
     required this.bitRate,
   });
+
+  /// What a group's sound is encoded as.
+  static const AudioStreamFormat group = AudioStreamFormat(
+    codec: AudioCodecKind.opus,
+    sampleRate: 48000,
+    channels: 2,
+    frameDurationMs: 20,
+    bitRate: 128000,
+  );
 
   final AudioCodecKind codec;
   final int sampleRate;
@@ -125,85 +126,6 @@ class AudioStreamFormat {
         frameDurationMs,
         bitRate,
       );
-}
-
-class AudioControlMessage {
-  const AudioControlMessage({
-    required this.action,
-    required this.sessionId,
-    required this.sourcePeerId,
-    required this.sinkPeerId,
-    this.format,
-    this.transport = AudioTransport.websocket,
-    this.path = '',
-    this.transportToken = '',
-    this.errorMessage = '',
-  });
-
-  final AudioControlAction action;
-  final String sessionId;
-  final String sourcePeerId;
-  final String sinkPeerId;
-  final AudioStreamFormat? format;
-  final AudioTransport transport;
-  final String path;
-  final String transportToken;
-  final String errorMessage;
-
-  AudioControlMessage withTransportToken(String token) {
-    return AudioControlMessage(
-      action: action,
-      sessionId: sessionId,
-      sourcePeerId: sourcePeerId,
-      sinkPeerId: sinkPeerId,
-      format: format,
-      transport: transport,
-      path: path,
-      transportToken: token,
-      errorMessage: errorMessage,
-    );
-  }
-
-  Map<String, dynamic> toJson() => <String, dynamic>{
-        'action': action.name,
-        'sessionId': sessionId,
-        'sourcePeerId': sourcePeerId,
-        'sinkPeerId': sinkPeerId,
-        if (format != null) 'format': format!.toJson(),
-        'transport': transport.name,
-        'path': path,
-        if (action == AudioControlAction.accept && transportToken.isNotEmpty)
-          'transportToken': transportToken,
-        'errorMessage': errorMessage,
-      };
-
-  factory AudioControlMessage.fromJson(Map<String, dynamic> json) {
-    final formatJson = json['format'];
-    return AudioControlMessage(
-      action: enumByName(
-        AudioControlAction.values,
-        json['action'] as String?,
-        AudioControlAction.error,
-      ),
-      sessionId: json['sessionId'] as String? ?? '',
-      sourcePeerId: json['sourcePeerId'] as String? ?? '',
-      sinkPeerId: json['sinkPeerId'] as String? ?? '',
-      format: formatJson is Map
-          ? AudioStreamFormat.fromJson(Map<String, dynamic>.from(formatJson))
-          : null,
-      transport: enumByName(
-        AudioTransport.values,
-        json['transport'] as String?,
-        AudioTransport.websocket,
-      ),
-      path: json['path'] as String? ?? '',
-      transportToken: _transportTokenFromJson(
-        json,
-        allowed: json['action'] == AudioControlAction.accept.name,
-      ),
-      errorMessage: json['errorMessage'] as String? ?? '',
-    );
-  }
 }
 
 class AudioGroupControlMessage {

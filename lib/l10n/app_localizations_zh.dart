@@ -3057,9 +3057,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get soundMemberBusy => '正在播放其他来源';
 
   @override
-  String get soundMemberSoloOnly => '只能单独播放';
-
-  @override
   String get soundPermissionNeeded => '需要允许屏幕与系统录音';
 
   @override

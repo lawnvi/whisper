@@ -6,7 +6,6 @@ import 'package:whisper/audio/audio_group_coordinator.dart';
 import 'package:whisper/audio/audio_group_session.dart';
 import 'package:whisper/audio/audio_platform.dart';
 import 'package:whisper/audio/audio_protocol.dart';
-import 'package:whisper/audio/audio_share_coordinator.dart';
 import 'package:whisper/helper/local.dart';
 import 'package:whisper/helper/macos_permissions.dart';
 import 'package:whisper/model/LocalDatabase.dart';
@@ -18,10 +17,8 @@ import 'package:whisper/socket/svrmanager.dart';
 class SoundBackend {
   const SoundBackend({
     required this.isConnected,
-    required this.supportsGroupSink,
     required this.canRejoinFrom,
     required this.sendGroupControl,
-    required this.sendSingleControl,
     required this.deviceFor,
     required this.selfPeerId,
     required this.captureDenied,
@@ -35,15 +32,12 @@ class SoundBackend {
     final socket = WsSvrManager();
     return SoundBackend(
       isConnected: socket.isConnectedTo,
-      supportsGroupSink: socket.supportsAudioGroupSinkFor,
       canRejoinFrom: (peerId) =>
           peerId.isNotEmpty &&
           socket.remoteProfileFor(peerId)?.capabilities.audioGroupRejoinV1 ==
               true,
       sendGroupControl: (peerId, control) =>
           unawaited(socket.sendAudioGroupControlTo(peerId, control)),
-      sendSingleControl: (peerId, control) =>
-          unawaited(socket.sendAudioControlTo(peerId, control)),
       deviceFor: (peerId) => socket.remoteProfileFor(peerId)?.device,
       selfPeerId: () async => (await LocalSetting().instance()).uid,
       captureDenied: () =>
@@ -59,11 +53,8 @@ class SoundBackend {
   }
 
   final bool Function(String peerId) isConnected;
-  final bool Function(String peerId) supportsGroupSink;
   final bool Function(String peerId) canRejoinFrom;
   final AudioGroupControlSender sendGroupControl;
-  final void Function(String peerId, AudioControlMessage control)
-  sendSingleControl;
   final DeviceData? Function(String peerId) deviceFor;
   final Future<String> Function() selfPeerId;
 
@@ -81,9 +72,6 @@ class SoundBackend {
 enum SoundRowPhase {
   /// Connected, not checked: only its name.
   idle,
-
-  /// Connected, not checked, cannot join a group: "只能单独放".
-  soloOnly,
 
   /// Nearby but not connected, dimmed.
 
@@ -103,9 +91,6 @@ enum SoundRowPhase {
   quiet,
   failed,
   disconnected,
-
-  /// Checked and playing one to one, which measures no sync.
-  soloPlaying,
 }
 
 @immutable
@@ -123,7 +108,7 @@ class SoundRow {
   final SoundRowPhase phase;
   final bool checked;
 
-  /// Null when it has no channel control: not checked, or one to one.
+  /// Null when it has no channel control: not checked, or alone.
   final AudioChannelRole? channel;
 
   /// The numbers, while it is in a group.
@@ -138,8 +123,7 @@ class SoundRow {
     SoundRowPhase.fair ||
     SoundRowPhase.unstable ||
     SoundRowPhase.unheard ||
-    SoundRowPhase.quiet ||
-    SoundRowPhase.soloPlaying => true,
+    SoundRowPhase.quiet => true,
     _ => false,
   };
 
@@ -187,32 +171,26 @@ class SoundSinkView {
 class ShellSoundController extends ChangeNotifier {
   ShellSoundController({
     required AudioGroupCoordinator group,
-    required AudioShareCoordinator single,
     required SoundBackend backend,
     AudioPlatform? platform,
   }) : _group = group,
-       _single = single,
        _backend = backend,
        _platform = platform ?? AudioPlatform.shared {
     _group.addListener(_sync);
-    _single.addListener(_sync);
     _sync();
   }
 
   static final ShellSoundController shared = ShellSoundController(
     group: AudioGroupCoordinator.shared,
-    single: AudioShareCoordinator.shared,
     backend: SoundBackend.live(),
   );
 
   final AudioGroupCoordinator _group;
-  final AudioShareCoordinator _single;
   final SoundBackend _backend;
   final AudioPlatform _platform;
 
   final SoundMembers _members = SoundMembers();
   bool _on = false;
-  String _soloPeer = '';
   bool _wasLive = false;
   int _applying = 0;
   Future<void> _queue = Future<void>.value();
@@ -241,7 +219,6 @@ class ShellSoundController extends ChangeNotifier {
   /// device may have stopped playing it.
   bool isSending(String peerId) {
     if (!on || !_members.contains(peerId)) return false;
-    if (peerId == _soloPeer) return _singleLive;
     final sink = _group.session?.sinks[peerId];
     return sink == null ? _backend.isConnected(peerId) : !sink.isTerminal;
   }
@@ -306,8 +283,7 @@ class ShellSoundController extends ChangeNotifier {
   // ---- This device as the source ----
 
   /// Check or uncheck a device. Checking starts playing: there is no separate
-  /// start. An old device plays one to one, so checking one replaces the others
-  /// and checking another device replaces it.
+  /// start.
   Future<void> toggle(String peerId) => _run(() async {
     if (sinkView != null) return;
     if (_left.remove(peerId)) {
@@ -353,7 +329,7 @@ class ShellSoundController extends ChangeNotifier {
     if (on) {
       await _apply();
     } else {
-      await _stopAll();
+      await _stopGroup();
     }
   });
 
@@ -370,20 +346,7 @@ class ShellSoundController extends ChangeNotifier {
       _left.forEach(_members.remove);
       _left.clear();
     }
-    if (!_backend.supportsGroupSink(peerId)) {
-      await _stopAll();
-      _members
-        ..clear()
-        ..add(peerId);
-      _soloPeer = peerId;
-    } else {
-      if (_soloPeer.isNotEmpty) {
-        await _stopSolo();
-        _members.clear();
-        _soloPeer = '';
-      }
-      _members.add(peerId);
-    }
+    _members.add(peerId);
     _on = true;
     notifyListeners();
     await _apply();
@@ -391,15 +354,11 @@ class ShellSoundController extends ChangeNotifier {
 
   Future<void> _remove(String peerId) async {
     _failure = null;
-    final solo = peerId == _soloPeer;
     _members.remove(peerId);
-    if (solo) _soloPeer = '';
     final none = _members.isEmpty;
     if (none) _on = false;
     notifyListeners();
-    if (solo) {
-      await _stopSolo();
-    } else if (none) {
+    if (none) {
       await _stopGroup();
     } else if (_on) {
       await _apply();
@@ -408,10 +367,6 @@ class ShellSoundController extends ChangeNotifier {
 
   Future<void> _apply() async {
     if (permissionNeeded) return;
-    if (_soloPeer.isNotEmpty) {
-      await _startSolo(_soloPeer);
-      return;
-    }
     final session = _group.session;
     final live =
         session != null &&
@@ -442,48 +397,14 @@ class ShellSoundController extends ChangeNotifier {
     _group.startGroup(
       sourcePeerId: await _backend.selfPeerId(),
       sinks: sinks,
-      format: AudioShareCoordinator.defaultFormat,
+      format: AudioStreamFormat.group,
       sendControl: _backend.sendGroupControl,
     );
-  }
-
-  Future<void> _startSolo(String peerId) async {
-    final state = _single.state;
-    if (state.isForPeer(peerId) &&
-        state.status != AudioShareRuntimeStatus.failed) {
-      return;
-    }
-    final device = _backend.deviceFor(peerId);
-    if (device == null) return;
-    await _single.startSharingToConnectedPeer(
-      sourcePeerId: await _backend.selfPeerId(),
-      sinkPeerId: peerId,
-      sinkHost: device.host,
-      sinkPort: device.port,
-      sendControl: (control) => _backend.sendSingleControl(peerId, control),
-    );
-  }
-
-  Future<void> _stopAll() async {
-    await _stopSolo();
-    await _stopGroup();
   }
 
   Future<void> _stopGroup() async {
     if (_group.session == null || _sinkMode) return;
     await _group.stopGroup(sendControl: _backend.sendGroupControl);
-  }
-
-  Future<void> _stopSolo() async {
-    final state = _single.state;
-    if (state.status == AudioShareRuntimeStatus.idle ||
-        state.role == AudioShareRuntimeRole.sink) {
-      return;
-    }
-    final peerId = state.peerId;
-    await _single.stopSharing(
-      sendControl: (control) => _backend.sendSingleControl(peerId, control),
-    );
   }
 
   /// Changes go one at a time: updating a group awaits, and a second check while
@@ -508,11 +429,6 @@ class ShellSoundController extends ChangeNotifier {
   }
 
   bool get _sinkMode => _group.isPlaybackActive || _group.canRejoinAsSink;
-
-  bool get _singleLive =>
-      _single.state.role == AudioShareRuntimeRole.source &&
-      _single.state.status != AudioShareRuntimeStatus.idle &&
-      _single.state.status != AudioShareRuntimeStatus.failed;
 
   /// Who went from playing to stopped. Only the other device does that: here,
   /// stopping takes the sink or the whole group away.
@@ -556,16 +472,6 @@ class ShellSoundController extends ChangeNotifier {
           for (final sink in session.sinks.values)
             sink.sinkPeerId: sink.channelRole,
         }, keep: (peer) => !_backend.isConnected(peer));
-        _soloPeer = '';
-        _on = true;
-      } else if (_singleLive) {
-        final peer = _single.state.peerId;
-        if (!_members.contains(peer)) {
-          _members
-            ..clear()
-            ..add(peer);
-        }
-        _soloPeer = peer;
         _on = true;
       } else if (_wasLive &&
           (session == null || session.state == AudioGroupState.stopped)) {
@@ -575,7 +481,7 @@ class ShellSoundController extends ChangeNotifier {
         // sound again.
         _on = false;
       }
-      _wasLive = groupLive || _singleLive;
+      _wasLive = groupLive;
       _settleLeft(_sinkMode ? null : session);
     }
     if (_group.isPlaybackActive || !_group.canRejoinAsSink) {
@@ -588,7 +494,7 @@ class ShellSoundController extends ChangeNotifier {
   void _permissionChanged() {
     notifyListeners();
     // Allowed now: what was checked meanwhile starts.
-    if (_on && !permissionNeeded && _group.session == null && !_singleLive) {
+    if (_on && !permissionNeeded && _group.session == null) {
       unawaited(_run(_apply));
     }
   }
@@ -596,11 +502,9 @@ class ShellSoundController extends ChangeNotifier {
   /// The row for one device. [connected] comes from the device list.
   SoundRow rowFor(DeviceData device) {
     final peer = device.uid;
-    final group = _backend.supportsGroupSink(peer);
     final checked = isSelected(peer);
     // A channel only means something between two or more devices.
-    final channel =
-        checked && group && peer != _soloPeer && _members.length >= 2
+    final channel = checked && _members.length >= 2
         ? _members.roleOf(peer)
         : null;
     SoundRow row(
@@ -620,23 +524,8 @@ class ShellSoundController extends ChangeNotifier {
     if (_left.contains(peer)) return row(SoundRowPhase.disconnected);
     // Unchecked as nothing goes there; the switch plays to it again.
     if (!_on && _members.contains(peer)) return row(SoundRowPhase.stopped);
-    if (!checked) {
-      return row(group ? SoundRowPhase.idle : SoundRowPhase.soloOnly);
-    }
+    if (!checked) return row(SoundRowPhase.idle);
     if (permissionNeeded) return row(SoundRowPhase.stopped);
-    if (peer == _soloPeer) {
-      final state = _single.state;
-      if (state.peerId != peer) return row(SoundRowPhase.connecting);
-      if (state.status == AudioShareRuntimeStatus.failed) {
-        return row(
-          SoundRowPhase.failed,
-          failure: audioFailureReasonFromWire(state.errorMessage),
-        );
-      }
-      return row(
-        state.isActive ? SoundRowPhase.soloPlaying : SoundRowPhase.connecting,
-      );
-    }
     final sink = _group.session?.sinks[peer];
     if (sink == null) return row(SoundRowPhase.connecting);
     // Its last numbers stay until it reports again: not shown as good when
@@ -699,17 +588,6 @@ class ShellSoundController extends ChangeNotifier {
         canResume: _backend.canRejoinFrom(source),
       );
     }
-    final single = _single.state;
-    if (single.role == AudioShareRuntimeRole.sink &&
-        single.status != AudioShareRuntimeStatus.idle &&
-        single.status != AudioShareRuntimeStatus.failed) {
-      return SoundSinkView(
-        sourcePeerId: single.peerId,
-        phase: SoundSinkPhase.playing,
-        canPause: false,
-        canResume: false,
-      );
-    }
     return null;
   }
 
@@ -744,17 +622,6 @@ class ShellSoundController extends ChangeNotifier {
   }
 
   Future<void> disconnect() async {
-    final view = sinkView;
-    if (view != null &&
-        !_group.isPlaybackActive &&
-        !_group.canRejoinAsSink &&
-        _single.state.role == AudioShareRuntimeRole.sink) {
-      final peer = view.sourcePeerId;
-      await _single.stopSharing(
-        sendControl: (control) => _backend.sendSingleControl(peer, control),
-      );
-      return;
-    }
     final control = _platform.onMediaControl;
     if (control != null) {
       control('disconnect');
@@ -763,11 +630,10 @@ class ShellSoundController extends ChangeNotifier {
     }
   }
 
-  /// While the slider moves: heard at once, on either kind of playback.
+  /// While the slider moves: heard at once.
   void setGain(double gain) {
     _gain = gain;
     _group.updatePlaybackGain(gain);
-    _single.updatePlaybackGain(gain);
     notifyListeners();
   }
 
@@ -781,7 +647,6 @@ class ShellSoundController extends ChangeNotifier {
   void dispose() {
     _resumeTimeout?.cancel();
     _group.removeListener(_sync);
-    _single.removeListener(_sync);
     if (_attached > 0) {
       _backend.permissions?.removeListener(_permissionChanged);
     }

@@ -4,7 +4,6 @@ import 'package:flutter/cupertino.dart';
 
 import '../../../audio/audio_group_coordinator.dart';
 import '../../../audio/audio_platform.dart';
-import '../../../audio/audio_share_coordinator.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../socket/svrmanager.dart';
 import '../island_activity.dart';
@@ -32,24 +31,20 @@ class IslandAudioActions {
 class AudioIslandSource extends ChangeNotifier implements IslandSource {
   AudioIslandSource({
     AudioGroupCoordinator? group,
-    AudioShareCoordinator? single,
     AudioPlatform? platform,
     String Function(String peerId)? deviceName,
     bool Function(String peerId)? canRejoin,
     IslandClock clock = const IslandClock(),
   }) : _group = group ?? AudioGroupCoordinator.shared,
-       _single = single ?? AudioShareCoordinator.shared,
        _platform = platform ?? AudioPlatform.shared,
        _deviceName = deviceName ?? _liveDeviceName,
        _canRejoin = canRejoin ?? _liveCanRejoin,
        _clock = clock {
     _group.addListener(_update);
-    _single.addListener(_update);
     _update();
   }
 
   final AudioGroupCoordinator _group;
-  final AudioShareCoordinator _single;
   final AudioPlatform _platform;
   final String Function(String peerId) _deviceName;
   final bool Function(String peerId) _canRejoin;
@@ -72,7 +67,6 @@ class AudioIslandSource extends ChangeNotifier implements IslandSource {
   IslandAudioState? _state;
   String _peerId = '';
   String _name = '';
-  bool _legacy = false;
   DateTime _since = DateTime.fromMillisecondsSinceEpoch(0);
   bool _resuming = false;
   Timer? _resumeTimeout;
@@ -102,13 +96,8 @@ class AudioIslandSource extends ChangeNotifier implements IslandSource {
           device: _name,
           state: state,
           actions: IslandAudioActions(
-            pause: !_legacy && state == IslandAudioState.playing
-                ? _pause
-                : null,
-            resume:
-                !_legacy &&
-                    state == IslandAudioState.paused &&
-                    _canRejoin(_peerId)
+            pause: state == IslandAudioState.playing ? _pause : null,
+            resume: state == IslandAudioState.paused && _canRejoin(_peerId)
                 ? _resume
                 : null,
             disconnect: _disconnect,
@@ -121,7 +110,6 @@ class AudioIslandSource extends ChangeNotifier implements IslandSource {
   void _update() {
     IslandAudioState? next;
     var peer = '';
-    var legacy = false;
     if (_group.isPlaybackActive) {
       next = IslandAudioState.playing;
       peer = _group.session?.sourcePeerId ?? _group.rejoinSourcePeerId;
@@ -132,16 +120,6 @@ class AudioIslandSource extends ChangeNotifier implements IslandSource {
       peer = _group.rejoinSourcePeerId;
     } else {
       _resuming = false;
-      final single = _single.state;
-      if (single.role == AudioShareRuntimeRole.sink &&
-          single.status != AudioShareRuntimeStatus.idle &&
-          single.status != AudioShareRuntimeStatus.failed) {
-        next = single.isActive
-            ? IslandAudioState.playing
-            : IslandAudioState.starting;
-        peer = single.peerId;
-        legacy = true;
-      }
     }
     final before = _state;
     if (next == null) {
@@ -157,7 +135,7 @@ class AudioIslandSource extends ChangeNotifier implements IslandSource {
       _round++;
       _since = _clock.now();
     }
-    var changed = next != before || legacy != _legacy;
+    var changed = next != before;
     if (peer.isNotEmpty) {
       changed = changed || peer != _peerId;
       _peerId = peer;
@@ -167,7 +145,6 @@ class AudioIslandSource extends ChangeNotifier implements IslandSource {
         changed = true;
       }
     }
-    _legacy = legacy;
     _state = next;
     if (changed) {
       notifyListeners();
@@ -208,14 +185,6 @@ class AudioIslandSource extends ChangeNotifier implements IslandSource {
   }
 
   Future<void> _disconnect() async {
-    if (_legacy) {
-      final peer = _single.state.peerId;
-      await _single.stopSharing(
-        sendControl: (control) =>
-            unawaited(WsSvrManager().sendAudioControlTo(peer, control)),
-      );
-      return;
-    }
     final control = _platform.onMediaControl;
     if (control != null) {
       control('disconnect');
@@ -244,7 +213,6 @@ class AudioIslandSource extends ChangeNotifier implements IslandSource {
   void dispose() {
     _resumeTimeout?.cancel();
     _group.removeListener(_update);
-    _single.removeListener(_update);
     super.dispose();
   }
 }
