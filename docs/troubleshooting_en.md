@@ -64,7 +64,7 @@ xattr -dr com.apple.quarantine /Applications/Whisper.app
 - Many phone brands add their own background limits. Find Whisper in the system's app management, set its battery use to "Unrestricted" or allow background activity, and allow it to start automatically.
 - Locking Whisper in the recent apps list also helps.
 
-**Mac sleep**: before a Mac sleeps, Whisper disconnects on purpose, so another computer can't move its pointer onto a sleeping Mac. After it wakes, it reconnects by itself if Settings → Connection → "Auto-connect paired devices" is on.
+**Computer sleep**: before a Mac, Windows or Linux computer sleeps, Whisper disconnects on purpose, so another computer can't move its pointer onto a sleeping one. After it wakes, it reconnects by itself if Settings → Connection → "Auto-connect paired devices" is on. Windows goes to sleep without waiting for apps, so now and then there is no time to disconnect, and other devices take a few dozen seconds to notice it is gone. Linux needs logind, which most distributions have.
 
 **On Windows the pointer stutters, or transfers speed up and slow down**: check Settings → System → Projecting to this PC. While it is on, the Wi-Fi adapter also keeps a Wi-Fi Direct network up, and Wi-Fi slows down every few seconds. If you don't project to this PC, set it to "Always Off".
 

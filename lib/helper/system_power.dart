@@ -4,9 +4,17 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:whisper/socket/svrmanager.dart';
 
+/// What the system is doing, for subsystems that keep their own devices,
+/// clocks or timers across sleep.
+enum SystemPowerEvent { willSleep, didWake }
+
 /// Lets peers go before the system sleeps and takes them back once it is
-/// awake. Only macOS reports these today, and it holds sleep until the
-/// `willSleep` call has been answered.
+/// awake, and tells [events] listeners about both.
+///
+/// The native side differs per platform: macOS holds sleep until `willSleep`
+/// has been answered (at most 2 seconds), Linux holds it with a logind delay
+/// lock for as long, and Windows does not wait for anyone, so there peers may
+/// only be let go once the system is awake again.
 class SystemPowerBridge {
   SystemPowerBridge({
     Future<void> Function()? prepareForSleep,
@@ -21,6 +29,13 @@ class SystemPowerBridge {
 
   static const String channelName = 'com.vireen.whisper/system_power';
 
+  static final StreamController<SystemPowerEvent> _events =
+      StreamController<SystemPowerEvent>.broadcast(sync: true);
+
+  /// Sleep and wake as the system reports them. `willSleep` comes before
+  /// peers are let go and `didWake` after they are let back in.
+  static Stream<SystemPowerEvent> get events => _events.stream;
+
   final Future<void> Function() _prepareForSleep;
   final void Function() _resumeFromSleep;
   final MethodChannel _channel;
@@ -31,7 +46,7 @@ class SystemPowerBridge {
   Timer? _missedWake;
 
   void attach() {
-    if (!Platform.isMacOS) {
+    if (!Platform.isMacOS && !Platform.isWindows && !Platform.isLinux) {
       return;
     }
     _channel.setMethodCallHandler(handle);
@@ -45,6 +60,7 @@ class SystemPowerBridge {
         // peers are not refused for good.
         _missedWake?.cancel();
         _missedWake = Timer(missedWakeTimeout, _resume);
+        _events.add(SystemPowerEvent.willSleep);
         await _prepareForSleep();
       case 'didWake':
         _resume();
@@ -57,5 +73,6 @@ class SystemPowerBridge {
     _missedWake?.cancel();
     _missedWake = null;
     _resumeFromSleep();
+    _events.add(SystemPowerEvent.didWake);
   }
 }

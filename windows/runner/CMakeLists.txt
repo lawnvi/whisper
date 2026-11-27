@@ -19,6 +19,7 @@ add_executable(${BINARY_NAME} WIN32
   "remote_input_plugin.cpp"
   "screenshot_plugin.cpp"
   "single_instance.cpp"
+  "system_power_plugin.cpp"
   "utils.cpp"
   "window_theme_plugin.cpp"
   "win32_window.cpp"

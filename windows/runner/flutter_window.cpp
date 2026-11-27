@@ -11,6 +11,7 @@
 #include "remote_input_plugin.h"
 #include "screenshot_plugin.h"
 #include "single_instance.h"
+#include "system_power_plugin.h"
 #include "window_theme_plugin.h"
 #include "screen_retriever_windows/screen_retriever_windows_plugin_c_api.h"
 #include "window_manager/window_manager_plugin.h"
@@ -97,6 +98,9 @@ bool FlutterWindow::OnCreate() {
   WindowThemePluginRegisterWithRegistrar(
       flutter_controller_->engine()->GetRegistrarForPlugin("WindowThemePlugin"),
       GetHandle());
+  SystemPowerPluginRegisterWithRegistrar(
+      flutter_controller_->engine()->GetRegistrarForPlugin("SystemPowerPlugin"),
+      GetHandle());
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
@@ -123,6 +127,7 @@ LRESULT
 FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               WPARAM const wparam,
                               LPARAM const lparam) noexcept {
+  SystemPowerPluginObserveWindowMessage(message, wparam);
   if (message == WM_COPYDATA) {
     std::vector<std::string> arguments;
     if (ReadQuickSendCopyData(

@@ -92,6 +92,7 @@ add_executable(${BINARY_NAME}
   "private_tmpdir.cc"
   "remote_input_plugin.cc"
   "screenshot_plugin.cc"
+  "system_power_plugin.cc"
   "${FLUTTER_MANAGED_DIR}/generated_plugin_registrant.cc"
 )
 
@@ -116,6 +117,12 @@ if(X11_REMOTE_INPUT_FOUND)
     target_compile_definitions(${BINARY_NAME} PRIVATE HAVE_XRANDR_REMOTE_INPUT=1)
     target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::XRANDR_REMOTE_INPUT)
   endif()
+endif()
+# The sleep notices need logind's inhibitor descriptor, which comes in a
+# GUnixFDList. Without gio-unix the app simply gets no sleep notices.
+if(GIO_UNIX_REMOTE_INPUT_FOUND)
+  target_compile_definitions(${BINARY_NAME} PRIVATE HAVE_GIO_UNIX=1)
+  target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::GIO_UNIX_REMOTE_INPUT)
 endif()
 if(LIBEI_REMOTE_INPUT_FOUND AND GIO_UNIX_REMOTE_INPUT_FOUND)
   target_compile_definitions(${BINARY_NAME} PRIVATE HAVE_LIBEI_REMOTE_INPUT=1)

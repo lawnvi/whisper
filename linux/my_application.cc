@@ -10,6 +10,7 @@
 #include "desktop_multi_window/desktop_multi_window_plugin.h"
 #include "remote_input_plugin.h"
 #include "screenshot_plugin.h"
+#include "system_power_plugin.h"
 
 #include <vector>
 
@@ -153,6 +154,7 @@ static void my_application_activate(GApplication* application) {
   screenshot_plugin_register(FL_PLUGIN_REGISTRY(view));
   desktop_quick_send_plugin_register(FL_PLUGIN_REGISTRY(view));
   file_manager_plugin_register(FL_PLUGIN_REGISTRY(view));
+  system_power_plugin_register(FL_PLUGIN_REGISTRY(view));
   window_theme_channel_register(view);
 
   gtk_widget_grab_focus(GTK_WIDGET(view));
