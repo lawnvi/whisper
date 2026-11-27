@@ -30,6 +30,36 @@ class _AutoGate extends FileBrowseGate {
   }
 }
 
+/// Blocks `list` until [releaseList] completes, to verify that slow directory
+/// listings do not stall concurrent mounted-folder `read` requests.
+class _SlowListFiles extends FsHostFiles {
+  _SlowListFiles({required super.resolver});
+
+  final listStarted = Completer<void>();
+  final releaseList = Completer<void>();
+
+  @override
+  Future<FsPage> list(
+    String rootId,
+    String relative, {
+    int offset = 0,
+    int limit = FsHostFiles.pageSize,
+    bool showHidden = false,
+  }) async {
+    if (!listStarted.isCompleted) {
+      listStarted.complete();
+    }
+    await releaseList.future;
+    return super.list(
+      rootId,
+      relative,
+      offset: offset,
+      limit: limit,
+      showHidden: showHidden,
+    );
+  }
+}
+
 void main() {
   late Directory sandbox;
   late FileBrowseHost host;
@@ -510,4 +540,89 @@ void main() {
       'hello world',
     );
   });
+
+  // Regression: serializing every FileBrowseHost request per peer blocked
+  // mounted-folder `read` calls behind a slow `list`/`thumb`/`fetch`, which
+  // could hit the OS mount timeout (e.g. macOS NFS deadtimeout=10).
+  test(
+    'a slow list does not block concurrent reads from the same peer',
+    () async {
+      final slowFiles = _SlowListFiles(
+        resolver: FsPathResolver([FsRoot(id: 'home', directory: sandbox.path)]),
+      );
+      final readCompleted = Completer<Uint8List>();
+      final replies = <FileBrowseMessage>[];
+      final testHost =
+          FileBrowseHost(
+              files: slowFiles,
+              gate: _AutoGate(FileBrowseDecision.once),
+              placements: TransferPlacements(),
+            )
+            ..sender = (peerId, msg) async {
+              replies.add(msg);
+              return true;
+            }
+            ..sendData = (peerId, sessionId, requestId, offset, data) async {
+              if (!readCompleted.isCompleted) {
+                readCompleted.complete(data);
+              }
+              return true;
+            };
+
+      const sid = '5a4f1f0e-1c2b-4d3e-8f9a-0b1c2d3e4f52';
+      await testHost.handle(
+        const FileBrowseMessage(
+          action: FileBrowseAction.open,
+          sessionId: sid,
+          clientPeerId: 'peer-a',
+          hostPeerId: 'host',
+        ),
+        remotePeerId: 'peer-a',
+        deviceName: 'Peer A',
+      );
+
+      final listFuture = testHost.handle(
+        const FileBrowseMessage(
+          action: FileBrowseAction.list,
+          sessionId: sid,
+          clientPeerId: 'peer-a',
+          hostPeerId: 'host',
+          requestId: 1,
+          payload: {'root': 'home', 'path': 'Documents'},
+        ),
+        remotePeerId: 'peer-a',
+        deviceName: 'Peer A',
+      );
+      await slowFiles.listStarted.future;
+
+      // Issue a read from the exact same peer and session while `list` is stuck.
+      await testHost
+          .handle(
+            const FileBrowseMessage(
+              action: FileBrowseAction.read,
+              sessionId: sid,
+              clientPeerId: 'peer-a',
+              hostPeerId: 'host',
+              requestId: 2,
+              payload: {
+                'root': 'home',
+                'path': 'Documents/a.txt',
+                'offset': 0,
+                'length': 1,
+              },
+            ),
+            remotePeerId: 'peer-a',
+            deviceName: 'Peer A',
+          )
+          .timeout(const Duration(seconds: 2));
+      final data = await readCompleted.future.timeout(
+        const Duration(seconds: 2),
+      );
+      expect(utf8.decode(data), 'a');
+
+      slowFiles.releaseList.complete();
+      await listFuture;
+      expect(replies.any((m) => m.requestId == 1), isTrue);
+    },
+  );
 }
