@@ -1511,13 +1511,13 @@ class WsSvrManager {
       cause: cause,
       cleanupSteps: _disconnectCleanupSteps,
     );
-    if (!stillOwns) {
-      return;
+    if (!stillOwns) return;
+    if (_peers.connectedPeerIds.isEmpty) {
+      _setRemoteProfile(null);
+    } else {
+      _completeRemoteProfileRefreshWaiters(peerId: peerId);
     }
-    _completeRemoteProfileRefreshWaiters(peerId: peerId);
     if (_peers.removedBindingOwnsPeerState(binding)) {
-      // 会话生命周期终点:不论断因都结算稳定性复位,
-      // 稳定连接挣得的退避复位不因手动断开等断因而丢失。
       _dialer.onPeerSessionClosed(peerId);
       _dispatchToAll((event) => event.onClose());
     }

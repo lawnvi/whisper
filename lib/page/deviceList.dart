@@ -1521,7 +1521,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     final sessions = ChatSessionListBuilder.build(
       devices: newArr,
       latestMessages: latestMessages,
-      activePeerId: ConnectionCoordinator().snapshot.activePeerId,
+      activePeerId: socketManager.connectedPeerIds.contains(ConnectionCoordinator().snapshot.activePeerId) ? ConnectionCoordinator().snapshot.activePeerId : null,
       connectedPeerIds: socketManager.connectedPeerIds,
       webOnline: WebTransferCoordinator.shared.onlineUids,
       selectedPeerId: _selectedDesktopPeerId,
