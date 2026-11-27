@@ -192,6 +192,7 @@ class ConnectionCoordinator extends ChangeNotifier {
   Future<void> updateDiscovery(
     DeviceData device, {
     required bool discovered,
+    bool autoConnectEligible = true,
     List<String> remoteTrustedPeerIds = const [],
     bool remoteAutoConnectEnabled = true,
   }) async {
@@ -214,6 +215,7 @@ class ConnectionCoordinator extends ChangeNotifier {
       locallyTrusted: trustedPeerIds.contains(device.uid),
       remotelyTrusted: remotelyTrusted,
       lastSeenAt: DateTime.now(),
+      autoConnectEligible: autoConnectEligible,
       lastError: previous?.lastError,
     );
 
@@ -347,6 +349,7 @@ class ConnectionCoordinator extends ChangeNotifier {
       remotelyTrusted: existing?.remotelyTrusted ?? false,
       lastSeenAt: existing?.lastSeenAt ??
           DateTime.fromMillisecondsSinceEpoch(device.lastTime * 1000),
+      autoConnectEligible: existing?.autoConnectEligible ?? true,
       lastError: existing?.lastError,
     );
   }

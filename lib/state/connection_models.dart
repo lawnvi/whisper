@@ -24,6 +24,7 @@ class DevicePresence {
     required this.locallyTrusted,
     required this.remotelyTrusted,
     required this.lastSeenAt,
+    this.autoConnectEligible = true,
     this.lastError,
   });
 
@@ -37,6 +38,7 @@ class DevicePresence {
   final bool locallyTrusted;
   final bool remotelyTrusted;
   final DateTime lastSeenAt;
+  final bool autoConnectEligible;
   final String? lastError;
 
   DevicePresence copyWith({
@@ -50,6 +52,7 @@ class DevicePresence {
     bool? locallyTrusted,
     bool? remotelyTrusted,
     DateTime? lastSeenAt,
+    bool? autoConnectEligible,
     String? lastError,
   }) {
     return DevicePresence(
@@ -63,6 +66,7 @@ class DevicePresence {
       locallyTrusted: locallyTrusted ?? this.locallyTrusted,
       remotelyTrusted: remotelyTrusted ?? this.remotelyTrusted,
       lastSeenAt: lastSeenAt ?? this.lastSeenAt,
+      autoConnectEligible: autoConnectEligible ?? this.autoConnectEligible,
       lastError: lastError ?? this.lastError,
     );
   }

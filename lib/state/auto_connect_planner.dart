@@ -25,6 +25,7 @@ class AutoConnectPlanner {
         .where(
           (candidate) =>
               candidate.discovered &&
+              candidate.autoConnectEligible &&
               isLocallyTrusted(candidate) &&
               !connected.contains(candidate.peerId),
         )

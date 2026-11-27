@@ -88,6 +88,7 @@ import 'package:whisper/state/connection_diagnostic.dart';
 import 'package:whisper/state/connection_coordinator.dart';
 import 'package:whisper/state/connection_attempt.dart';
 import 'package:whisper/state/discovery_endpoint_resolver.dart';
+import 'package:whisper/state/discovery_identity.dart';
 import 'package:whisper/state/discovery_resolve_limiter.dart';
 import 'package:whisper/state/discovery_service_presence.dart';
 import 'package:whisper/state/desktop_quick_send_inbox.dart';
@@ -1384,18 +1385,17 @@ class _DeviceListScreen extends State<DeviceListScreen>
     await _stopBroadcast(close: false);
     if (!mounted) return;
     final name = device?.name ?? await deviceName();
+    final identity = await DeviceIdentityStore().loadOrCreate();
     if (!mounted) return;
-    BonsoirService service = BonsoirService(
+    final discoveryId = DiscoveryIdentity.fromPublicKey(identity.publicKeyBase64Url);
+    final service = BonsoirService(
       name: buildWhisperServiceName(serviceName, device?.uid ?? ""),
       type: serviceType,
       port: 10004,
-      attributes: {
-        'host': wifiIP,
-        'port': (port ?? device?.port ?? 10002).toString(),
-        'name': name,
-        'platform': device?.platform ?? "未知",
-        'uid': device?.uid ?? "",
-      },
+      attributes: discoveryId.buildBroadcastAttributes(
+        host: wifiIP, port: (port is int ? port : null) ?? device?.port ?? 10002,
+        name: name, platform: device?.platform ?? "未知", uid: device?.uid ?? "",
+      ),
     );
 
     // And now we can broadcast it :
@@ -1565,6 +1565,9 @@ class _DeviceListScreen extends State<DeviceListScreen>
             await ConnectionCoordinator().updateDiscovery(
               visibleDevice,
               discovered: !isLost,
+              autoConnectEligible: !isLost && DiscoveryIdentity.allowsAutoConnect(
+                attributes: svr.attributes, storedIdentityPublicKey: temp?.identityPublicKey,
+              ),
             );
             if (!mounted || !identical(_discovery, discovery)) return;
             if (!isLost && host != null) {
@@ -1576,21 +1579,15 @@ class _DeviceListScreen extends State<DeviceListScreen>
             }
             setState(() {
               devices.removeWhere((item) => item.uid == uid);
-              if (!isLost) {
-                devices.insert(0, visibleDevice);
-              }
+              if (!isLost) devices.insert(0, visibleDevice);
             });
             unawaited(_refreshDevice());
-            if (!isLost) {
-              await _attemptAutoConnect();
-            }
+            if (!isLost) await _attemptAutoConnect();
             break;
-          case BonsoirDiscoveryServiceResolveFailedEvent():
-          // TODO: Handle this case.
-          case BonsoirDiscoveryStoppedEvent():
-          // TODO: Handle this case.
-          case BonsoirDiscoveryUnknownEvent():
-          // TODO: Handle this case.
+          case BonsoirDiscoveryServiceResolveFailedEvent() ||
+              BonsoirDiscoveryStoppedEvent() ||
+              BonsoirDiscoveryUnknownEvent():
+            break;
         }
       }
     });
