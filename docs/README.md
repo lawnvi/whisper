@@ -62,5 +62,8 @@
 - [2026-11-13 安全审计与加固](records/2026-11-13-security-audit.md)
 - [2026-11-13 提权专项审计](records/2026-11-13-privilege-escalation-audit.md)
 - [2026-11-14 共享的目录和锁屏服务自更新的攻防](records/2026-11-14-shared-folders-audit.md)
+- [2026-11-27 网络架构、协议与各场景技术方案全局评估](records/2026-11-27-architecture-protocol-review.md)
+- [2026-11-27 网络架构、协议和各场景方案评估（Claude）](records/2026-11-27-network-architecture-review-claude.md)
+- [2026-11-27 网络架构评估：两份结论的协商稿](records/2026-11-27-network-architecture-consensus.md)
 
 各子系统的设计稿和计划在 [superpowers/specs](superpowers/specs) 和 [superpowers/plans](superpowers/plans)，按日期命名。它们记录的是当时的打算，代码和上面的开发文档以现在为准。
