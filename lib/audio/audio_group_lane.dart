@@ -1,11 +1,12 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:whisper/audio/audio_fanout_transport.dart';
 import 'package:whisper/audio/audio_protocol.dart';
 import 'package:whisper/socket/datagram_endpoint.dart';
 import 'package:whisper/socket/datagram_seal.dart';
+import 'package:whisper/socket/media_channel_dial.dart';
+import 'package:whisper/socket/media_datagrams.dart';
 import 'package:whisper/socket/packet_byte_transport.dart';
 
 /// Sound over UDP beside its WebSocket, in the audio isolate. On a weak
@@ -19,8 +20,6 @@ import 'package:whisper/socket/packet_byte_transport.dart';
 /// lost on the way still plays from the next; the sink plays each once and
 /// fills in what never came (`AudioGroupPlaybackPipeline`).
 abstract final class AudioGroupDatagrams {
-  static const String namespace = 'audio-group';
-
   // Static fields belong to their isolate: these are the audio isolate's.
   static DatagramEndpoint? _answering;
   static Future<DatagramEndpoint?>? _dialing;
@@ -58,26 +57,16 @@ abstract final class AudioGroupDatagrams {
       sessionId: sessionId,
       peerId: peerId,
     );
-    final address = InternetAddress.tryParse(uri.host);
-    final endpoint = mediaPort ? await _dialer() : null;
-    if (endpoint == null ||
-        address == null ||
-        address.type != InternetAddressType.IPv4) {
-      return socket;
-    }
-    final lane = DatagramLane(
-      endpoint: endpoint,
-      keys: DatagramKeys.derive(
-        mediaKey: mediaMacKey,
-        channelBinding: mediaPacketChannelBindingFromUri(uri),
-        namespace: namespace,
-        sessionId: sessionId,
-      ),
-      dialer: true,
-      peer: address,
-      peerPort: uri.port,
-      onData: (_) {},
+    final lane = MediaDatagrams.dial(
+      mediaPort ? await _dialer() : null,
+      MediaRoute.audio,
+      uri: uri,
+      mediaKey: mediaMacKey,
+      sessionId: sessionId,
+      // The sink listens by UDP on its media port's number.
+      port: uri.port,
     );
+    if (lane == null) return socket;
     return AudioGroupLaneTransport(socket, lane);
   }
 
@@ -88,17 +77,12 @@ abstract final class AudioGroupDatagrams {
     required String sessionId,
     required void Function(AudioGroupPacketFrame packet) onPacket,
   }) {
-    final endpoint = _answering;
-    if (endpoint == null || endpoint.isClosed) return null;
-    return DatagramLane(
-      endpoint: endpoint,
-      keys: DatagramKeys.derive(
-        mediaKey: mediaKey,
-        channelBinding: channelBinding,
-        namespace: namespace,
-        sessionId: sessionId,
-      ),
-      dialer: false,
+    return MediaDatagrams.answer(
+      _answering,
+      MediaRoute.audio,
+      mediaKey: mediaKey,
+      channelBinding: channelBinding,
+      sessionId: sessionId,
       onData: (payload) {
         for (final bytes in unpackAudioDatagram(payload)) {
           final AudioGroupPacketFrame packet;
