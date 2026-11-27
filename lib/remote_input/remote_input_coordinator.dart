@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:whisper/helper/helper.dart';
 import 'package:whisper/helper/local.dart';
 import 'package:whisper/helper/privacy_log.dart';
+import 'package:whisper/remote_input/remote_input_controller_watch.dart';
 import 'package:whisper/remote_input/remote_input_failure_reason.dart';
 import 'package:whisper/remote_input/remote_input_key_translation.dart';
 import 'package:whisper/remote_input/remote_input_layout.dart';
@@ -15,10 +16,13 @@ import 'package:whisper/remote_input/remote_input_manager.dart';
 import 'package:whisper/remote_input/remote_input_packet_transport.dart';
 import 'package:whisper/remote_input/remote_input_platform.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
+import 'package:whisper/remote_input/remote_input_runtime_state.dart';
 import 'package:whisper/remote_input/remote_clipboard_paste_watch.dart';
 import 'package:whisper/remote_input/remote_clipboard_transfer.dart';
 import 'package:whisper/remote_input/remote_input_scroll.dart';
 import 'package:whisper/socket/packet_byte_transport.dart';
+
+export 'package:whisper/remote_input/remote_input_runtime_state.dart';
 
 typedef RemoteInputControlSender =
     void Function(RemoteInputControlMessage control);
@@ -44,85 +48,6 @@ typedef RemoteClipboardPasteDeferrer =
       Future<PasteFolder?>? folder,
     });
 
-enum RemoteInputRuntimeRole { none, source, sink }
-
-enum RemoteInputRuntimeStatus {
-  idle,
-  offering,
-  armed,
-  connecting,
-  active,
-  failed,
-}
-
-enum RemoteInputDiagnosticKind {
-  startRequested,
-  startRejected,
-  offerCreated,
-  controlReceived,
-  controlStopped,
-  controlError,
-  stopped,
-  offerIgnored,
-  offerRejected,
-  offerBusy,
-  offerAcceptFailed,
-  injectionStarting,
-  acceptSent,
-  injectionFailed,
-  captureStarting,
-  captureFailed,
-  injectionStarted,
-  earlyReleaseIgnored,
-  injectionBlocked,
-  platformError,
-  platformDiagnostic,
-  packetObserved,
-  injectionActive,
-  captureMissingEdge,
-  transportConnecting,
-  transportConnected,
-  captureStarted,
-  transportClosed,
-  staleReleaseIgnored,
-  settingFallback,
-  stateChanged,
-}
-
-enum RemoteInputTraceDirection { source, sink }
-
-class RemoteInputRuntimeState {
-  const RemoteInputRuntimeState({
-    required this.status,
-    required this.role,
-    this.sessionId = '',
-    this.peerId = '',
-    this.errorMessage = '',
-  });
-
-  const RemoteInputRuntimeState.idle()
-    : status = RemoteInputRuntimeStatus.idle,
-      role = RemoteInputRuntimeRole.none,
-      sessionId = '',
-      peerId = '',
-      errorMessage = '';
-
-  final RemoteInputRuntimeStatus status;
-  final RemoteInputRuntimeRole role;
-  final String sessionId;
-  final String peerId;
-  final String errorMessage;
-
-  bool get isActive => status == RemoteInputRuntimeStatus.active;
-  bool get isBusy =>
-      status == RemoteInputRuntimeStatus.offering ||
-      status == RemoteInputRuntimeStatus.connecting;
-
-  bool isForPeer(String peerId) {
-    return this.peerId == peerId && status != RemoteInputRuntimeStatus.idle;
-  }
-}
-
 final class _PendingInjectionEntry {
   _PendingInjectionEntry({required this.frame, required this.byteLength});
 
@@ -141,6 +66,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
     RemoteClipboardPastePreparer? remoteClipboardPastePreparer,
     RemoteClipboardSessionCleaner? remoteClipboardSessionCleaner,
     Duration nativeInjectionTimeout = const Duration(seconds: 2),
+    this.controllerQuietFor = const Duration(seconds: 3),
   }) : _manager = manager ?? RemoteInputManager.shared,
        _platform = platform ?? RemoteInputPlatform(),
        _transportFactory = transportFactory,
@@ -174,6 +100,10 @@ class RemoteInputCoordinator extends ChangeNotifier {
   final RemoteInputPlatformKindProvider _platformKindProvider;
   final RemoteInputScrollMultiplierProvider _scrollMultiplierProvider;
   final Duration _nativeInjectionTimeout;
+
+  /// See [RemoteInputControllerWatch.quietFor].
+  final Duration controllerQuietFor;
+  RemoteInputControllerWatch? _controllerWatch;
   RemoteClipboardPastePreparer? _remoteClipboardPastePreparer;
   RemoteClipboardPasteDeferrer? _remoteClipboardPasteDeferrer;
 
@@ -229,6 +159,28 @@ class RemoteInputCoordinator extends ChangeNotifier {
 
   RemoteInputRuntimeState get state => _state;
   RemoteInputPlatform get platform => _platform;
+
+  void _watchController(String sessionId) {
+    _controllerWatch?.cancel();
+    _controllerWatch = RemoteInputControllerWatch(
+      laneHealthy: () => _manager.controllerLaneHealthy(sessionId),
+      controlled: () =>
+          _state.sessionId == sessionId &&
+          _state.status == RemoteInputRuntimeStatus.active,
+      onGone: () {
+        if (_state.sessionId != sessionId) return;
+        _trace(
+          RemoteInputDiagnosticKind.transportClosed,
+          role: RemoteInputRuntimeRole.sink,
+          reason: RemoteInputFailureReason.transport,
+        );
+        // As when the WebSocket closes: stopping lets go of every key and
+        // button held here.
+        unawaited(stopLocal());
+      },
+      quietFor: controllerQuietFor,
+    );
+  }
 
   void _armManualDeadline(Duration duration) {
     _manualDeadline?.cancel();
@@ -636,8 +588,10 @@ class RemoteInputCoordinator extends ChangeNotifier {
     final wasManual = isManual;
     _manualHeartbeat?.cancel();
     _manualDeadline?.cancel();
+    _controllerWatch?.cancel();
     _manualHeartbeat = null;
     _manualDeadline = null;
+    _controllerWatch = null;
     final pendingText = _pendingText;
     _pendingText = null;
     if (pendingText != null && !pendingText.isCompleted) {
@@ -1046,7 +1000,11 @@ class RemoteInputCoordinator extends ChangeNotifier {
       }
     });
     _beginInjectionQueue(message.sessionId);
-    if (isManual) _armManualDeadline(const Duration(seconds: 5));
+    if (isManual) {
+      _armManualDeadline(const Duration(seconds: 5));
+    } else {
+      _watchController(message.sessionId);
+    }
     _manager.onSessionClosed = _sessionClosedHandler = (sessionId) {
       if (_state.sessionId == sessionId) {
         // Release held keys and cancel pending paste before the socket waits

@@ -30,6 +30,8 @@
 
 连接、边缘释放、路由更新和粘贴准备等异步操作在返回后核对任务代次，失效操作不得重新启用状态或覆盖新会话的数据。
 
+主控端无声无息地消失（睡眠、断网，连接没有关）时，被控端只能等 WebSocket 的 ping 超时，15 到 30 秒，这期间主控端按着的键一直按在被控端。手机控制有心跳截止（`_armManualDeadline`）；电脑之间的控制在指针停着时什么都不发，所以由 `RemoteInputControllerWatch` 看 UDP 通道：通道答过一次以后，指针在本机期间连续 3 秒没收到对方的保活（每秒四个），就按 WebSocket 关闭处理，调 `stopLocal`，原生层释放所有按住的键和鼠标键。没有 UDP 通道，或通道从没答过，仍由 WebSocket 决定。被控端停下后主控端看到连接关闭，走原来的目标断开流程。UDP 单独断了而 TCP 还通、又恰好指针在本机时也会这样停下，代价是重新开始一次共享。测试在 `test/remote_input_coordinator_test.dart`（“sink lets go once a heard controller lane goes quiet”）；真机上让主控电脑睡眠没测。
+
 每个对端的停止、断线、拒绝、错误与移出工作区共用资源清理流程；`stopSession` 先将协议会话标记为停止，再关闭通道和清理剪贴板，并按会话编号合并重复清理。
 
 ## 手机手动控制

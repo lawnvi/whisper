@@ -273,6 +273,7 @@ Pointer movement goes over a separate encrypted UDP channel, so a packet lost no
 - Either the controlling or the controlled device can stop sharing.
 - While the pointer is on another device you cannot click the local stop button. Press `Ctrl+Alt+Esc` on the controlling device (`Control+Option+Esc` on macOS) and keyboard and mouse return to it immediately. The keyboard and mouse page shows the shortcut at the bottom when no screen is selected.
 - When the other device disconnects, the pointer returns to the controlling device on its own.
+- If the controlling computer suddenly sleeps or drops off the network, the controlled one stops by itself after about 3 seconds and lets go of the keys and mouse buttons held from the other side, so Ctrl or Command does not stay stuck. This needs UDP between the two; without it the connection timeout decides (within half a minute).
 - A device has one role at a time: a device that is being controlled cannot start sharing. Stop the current session before switching.
 
 ### Permissions and platform limits

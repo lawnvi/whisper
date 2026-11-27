@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:shelf/shelf.dart' as shelf;
 import 'package:shelf_web_socket/shelf_web_socket.dart' as shelf_ws;
 import 'package:uuid/uuid.dart';
@@ -12,6 +13,7 @@ import 'package:whisper/remote_input/remote_input_lane_report.dart';
 import 'package:whisper/remote_input/remote_input_lifecycle.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
 import 'package:whisper/socket/bounded_binary_websocket_session.dart';
+import 'package:whisper/socket/datagram_endpoint.dart';
 import 'package:whisper/socket/packet_byte_transport.dart';
 import 'package:whisper/socket/session_upgrade_token_registry.dart';
 
@@ -79,6 +81,26 @@ class RemoteInputManager {
 
   /// Sessions this side accepted with a UDP lane.
   final Set<String> _datagramSessions = <String>{};
+
+  /// The lanes of those sessions, once their WebSocket is attached.
+  final Map<String, DatagramPath> _answerLanes = <String, DatagramPath>{};
+
+  /// Whether the controlling side's UDP lane for [sessionId] is answering;
+  /// null when that session has none. See `RemoteInputControllerWatch`.
+  bool? controllerLaneHealthy(String sessionId) =>
+      _answerLanes[sessionId]?.healthy;
+
+  @visibleForTesting
+  void debugSetControllerLane(String sessionId, DatagramPath lane) =>
+      _answerLanes[sessionId] = lane;
+
+  void _forgetLane(String sessionId, DatagramPath? lane) {
+    if (lane != null && identical(_answerLanes[sessionId], lane)) {
+      _answerLanes.remove(sessionId);
+    }
+    lane?.close();
+  }
+
   final Map<BoundedBinaryWebSocketSession, SessionUpgradeClaim> _channels =
       <BoundedBinaryWebSocketSession, SessionUpgradeClaim>{};
   final Map<BoundedBinaryWebSocketSession, Future<void>> _channelCloses =
@@ -445,6 +467,7 @@ class RemoteInputManager {
             ),
           )
         : null;
+    if (lane != null) _answerLanes[claim.sessionId] = lane;
     try {
       late final BoundedBinaryWebSocketSession binding;
       binding = BoundedBinaryWebSocketSession(
@@ -464,7 +487,7 @@ class RemoteInputManager {
         onClosed: () {
           report.close();
           _logLane(merger, withLane: lane != null);
-          lane?.close();
+          _forgetLane(claim.sessionId, lane);
           packetDecoder.destroy();
           _channels.remove(binding)?.destroy();
         },
@@ -476,7 +499,7 @@ class RemoteInputManager {
       return true;
     } catch (_) {
       report.close();
-      lane?.close();
+      _forgetLane(claim.sessionId, lane);
       packetDecoder.destroy();
       rethrow;
     }

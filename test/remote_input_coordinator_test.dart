@@ -11,6 +11,7 @@ import 'package:whisper/remote_input/remote_input_packet_transport.dart';
 import 'package:whisper/remote_input/remote_input_platform.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
 import 'package:whisper/socket/bounded_receive_queue.dart';
+import 'package:whisper/socket/datagram_endpoint.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -1739,6 +1740,58 @@ void main() {
       expect(coordinator.state.status, RemoteInputRuntimeStatus.idle);
     });
 
+    // A controlling computer that slept or left the network closed nothing:
+    // the controlled one waited 15 to 30 seconds for its WebSocket pings
+    // with every key the controller had down still held here.
+    test('sink lets go once a heard controller lane goes quiet', () async {
+      final manager = RemoteInputManager();
+      final coordinator = RemoteInputCoordinator(
+        manager: manager,
+        platform: platform,
+        transportFactory: (_) async => _FakeRemoteInputTransport(),
+        controllerQuietFor: const Duration(milliseconds: 60),
+      );
+      const offer = RemoteInputControlMessage(
+        action: RemoteInputControlAction.offer,
+        sessionId: 'input-quiet-1',
+        sourcePeerId: 'mac',
+        sinkPeerId: 'win',
+        layoutEdge: RemoteInputEdge.right,
+        releaseHotkey: 'ctrl+alt+esc',
+      );
+      await coordinator.handleControlMessage(
+        offer,
+        localPeerId: 'win',
+        remoteHost: 'mac.local',
+        remotePort: 10002,
+        isMutuallyTrusted: true,
+        localCanInject: true,
+        sendControl: (_) {},
+      );
+      await _deliverPacket(manager, _eventFrameBytes(
+        sessionId: offer.sessionId,
+        sequence: 1,
+        eventType: RemoteInputEventType.mouseMove,
+        payload: const {'activeStart': true},
+      ));
+      expect(coordinator.state.status, RemoteInputRuntimeStatus.active);
+      Future<void> later() =>
+          Future<void>.delayed(const Duration(milliseconds: 150));
+
+      // Without a lane, or while it answers, the WebSocket decides.
+      await later();
+      final lane = _FakeLane();
+      manager.debugSetControllerLane(offer.sessionId, lane);
+      await later();
+      expect(coordinator.state.status, RemoteInputRuntimeStatus.active);
+      expect(calls.map((call) => call.method), isNot(contains('stopInjection')));
+
+      lane.healthy = false;
+      await later();
+      expect(calls.map((call) => call.method), contains('stopInjection'));
+      expect(coordinator.state.status, RemoteInputRuntimeStatus.idle);
+    });
+
     test('sink ignores an edge release immediately after entry activation',
         () async {
       final sentControls = <RemoteInputControlMessage>[];
@@ -2482,4 +2535,13 @@ class _ObservableFakeRemoteInputTransport
     closed = true;
     await _doneController.close();
   }
+}
+
+class _FakeLane implements DatagramPath {
+  @override
+  bool healthy = true;
+  @override
+  bool send(Uint8List payload) => false;
+  @override
+  void close() {}
 }
