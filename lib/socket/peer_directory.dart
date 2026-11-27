@@ -534,7 +534,12 @@ class PeerDirectory {
   bool debugSendMalformedTransportFrame(String peerId) {
     final sink = findSinkForPeer(peerId);
     if (sink == null) return false;
-    sink.add(Uint8List.fromList(const <int>[0]));
+    // Through the outbound queue, unsealed. A direct add while the queue's
+    // addStream is still writing is refused by dart:io, and on Windows the
+    // write before it is often still going: the byte never left.
+    unawaited(
+      sendBytesOnSink(sink, Uint8List.fromList(const <int>[0]), rawAuth: true),
+    );
     return true;
   }
 
