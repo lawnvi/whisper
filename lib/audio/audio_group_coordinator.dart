@@ -48,12 +48,12 @@ class AudioGroupCoordinator extends ChangeNotifier {
             LocalAudioGroupMedia(
               platform: platform ?? AudioPlatform(),
               codecFactory: codecFactory ?? createDefaultAudioGroupCodec,
-              clockMicros: clockMicros ?? _wallClockMicros,
+              clockMicros: clockMicros ?? audioWallClockMicros,
               transportFactory: transportFactory,
             ),
         _playbackGainProvider =
             playbackGainProvider ?? LocalSetting().audioSharePlaybackGain,
-        _clockMicros = clockMicros ?? _wallClockMicros,
+        _clockMicros = clockMicros ?? audioWallClockMicros,
         _groupIdFactory = groupIdFactory ?? const Uuid().v4,
         _streamIdFactory = streamIdFactory ?? const Uuid().v4,
         _sessionIdFactory = sessionIdFactory ?? const Uuid().v4 {
@@ -73,7 +73,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
     final local = LocalAudioGroupMedia(
       platform: AudioPlatform.shared,
       codecFactory: createDefaultAudioGroupCodec,
-      clockMicros: _wallClockMicros,
+      clockMicros: audioWallClockMicros,
     );
     if (!Platform.isMacOS && !Platform.isWindows && !Platform.isLinux) {
       return local;
@@ -177,7 +177,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
     final sent = capture.lastSentAtMicros > _captureStartedAtMicros
         ? capture.lastSentAtMicros
         : _captureStartedAtMicros;
-    return _clockMicros() - sent >= _silentAfterMicros;
+    return audioMonotonicMicros() - sent >= _silentAfterMicros;
   }
 
   /// A member this device's sound does not reach: it has not reported while
@@ -201,7 +201,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
     if (_lastQuietAtMicros > since) {
       since = _lastQuietAtMicros;
     }
-    return _clockMicros() - since > _unheardAfterMicros;
+    return audioMonotonicMicros() - since > _unheardAfterMicros;
   }
 
   /// Playing another device's sound, of which nothing has come for a while.
@@ -212,7 +212,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
     final since = _playbackHeardAtMicros > _playbackStartedAtMicros
         ? _playbackHeardAtMicros
         : _playbackStartedAtMicros;
-    return _clockMicros() - since > _starvedAfterMicros;
+    return audioMonotonicMicros() - since > _starvedAfterMicros;
   }
 
   void _checkHealth() {
@@ -231,7 +231,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
     final silent = sourceSilent;
     if (silent || _captureSource == null) {
       // Members get a while to report again once there is sound.
-      _lastQuietAtMicros = _clockMicros();
+      _lastQuietAtMicros = audioMonotonicMicros();
     }
     final signature = [
       silent,
@@ -920,7 +920,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
       final transport = connectedTransport;
       if (transport != null) {
         _media.attachSink(accept.sinkPeerId, transport);
-        _sinkHeardAtMicros[accept.sinkPeerId] = _clockMicros();
+        _sinkHeardAtMicros[accept.sinkPeerId] = audioMonotonicMicros();
       }
     } catch (error) {
       await _ignoreGroupTransportClose(connectedTransport);
@@ -1186,7 +1186,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
         !current.sinks.containsKey(report.sinkPeerId)) {
       return;
     }
-    _sinkHeardAtMicros[report.sinkPeerId] = _clockMicros();
+    _sinkHeardAtMicros[report.sinkPeerId] = audioMonotonicMicros();
     final next = current.markSink(
       report.sinkPeerId,
       clockOffsetMicros: report.clockOffsetMicros,
@@ -1328,7 +1328,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
       },
     );
     _captureSource = captureSource;
-    _captureStartedAtMicros = _clockMicros();
+    _captureStartedAtMicros = audioMonotonicMicros();
     _lastQuietAtMicros = _captureStartedAtMicros;
     try {
       await captureSource.start();
@@ -1483,7 +1483,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
         ),
         onReport: (report) {
           if (identical(_playback, playback)) {
-            _playbackHeardAtMicros = _clockMicros();
+            _playbackHeardAtMicros = audioMonotonicMicros();
             _sendPlaybackLatencyReport(report);
           }
         },
@@ -1511,7 +1511,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
       return false;
     }
     _playback = playback;
-    _playbackStartedAtMicros = _clockMicros();
+    _playbackStartedAtMicros = audioMonotonicMicros();
     _playbackHeardAtMicros = 0;
     _checkHealth();
     return true;
@@ -1603,6 +1603,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
           (_sinkAcceptGenerations[sinkPeerId] ?? 0) + 1;
       unawaited(_media.disconnectSink(sinkPeerId).catchError((Object _) {}));
     }
+    _clockSyncEstimators.remove(sinkPeerId); // a new session syncs afresh
     final sessionId = _sessionIdFactory();
     _awaitAnswer(sinkPeerId, sessionId);
     sendControl(
@@ -1775,8 +1776,6 @@ class _SinkRejoinContext {
   final int targetLatencyMs;
   final AudioGroupControlSender sendControl;
 }
-
-int _wallClockMicros() => DateTime.now().microsecondsSinceEpoch;
 
 Future<AudioCodec> createDefaultAudioGroupCodec(
   AudioStreamFormat format,

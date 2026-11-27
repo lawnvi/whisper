@@ -1,4 +1,4 @@
-# 声音共享：谁负责接着放
+# 声音共享：谁负责接着放、按什么时钟
 
 协议 16 起只有组播放：一台来源（`AudioGroupCoordinator` 里 `sourcePeerId` 是本机的那一端）把声音放给一台或多台播放端。本文说明连接出问题之后由谁、在什么时候把声音接回来。代码在 `lib/audio/audio_group_coordinator.dart` 和 `lib/audio/audio_group_recovery.dart`。
 
@@ -25,6 +25,14 @@
 
 来源在任意一台播放端完成时钟同步（`rttMicros > 0`）后就开始采集，延迟按已同步的那些算。以前要等所有勾选的设备都同步，一台连不上，其余的也都不响。
 
-## 测试
+## 时钟
 
-`test/audio_group_coordinator_test.dart` 的“the source alone brings a lost sink back”一组覆盖断开再连上、暂停后不主动放、`sinkJoinRequest` 总被应答、不认识的组回停止。没在真机上测：电脑睡眠醒来后声音自动接回、Wi-Fi 短暂断开、Android 做播放端。
+两种时钟分开用（`lib/audio/audio_clock_sync.dart`）：
+
+- **墙上时钟**（`audioWallClockMicros`）：设备之间传的播放时间、时钟探测的时间戳。安卓原生播放器也拿它和 `System.currentTimeMillis` 比，判断一帧是否过期，所以跨设备的部分不换。
+- **单调时钟**（`audioMonotonicMicros`，即 `Timeline.now`，同一进程的各个 isolate 共用同一个起点）：本机算间隔的地方，包括上报节流、健康检查（来源没声音、播放端听不到、播放端断粮）和迟到包统计。以前用墙上时钟，时间往回调多少，上报就停多久。
+
+墙上时钟被调整时（网络对时、手动改），`AudioClockSyncEstimator` 会把旧样本全部丢掉：一个样本给出的偏差离真值不超过它来回时间的一半，所以时钟不变的两个样本相差不会超过两者来回时间之和的一半；超过这个界限再加 20 ms 余量，就说明时钟被调过了。以前旧样本来回时间更短，会在最优样本里留十几次探测，这期间每个包都按错的时间播放。重新 offer 时，那台播放端的估计也会从头算。
+
+
+`test/audio_group_coordinator_test.dart` 的“the source alone brings a lost sink back”一组覆盖断开再连上、暂停后不主动放、`sinkJoinRequest` 总被应答、不认识的组回停止；`test/audio_clock_sync_estimator_test.dart` 覆盖时钟被调整后重新估计、网络抖动时不重来。没在真机上测：电脑睡眠醒来后声音自动接回、Wi-Fi 短暂断开、Android 做播放端、播放中手动改系统时间。

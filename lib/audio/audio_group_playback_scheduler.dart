@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:whisper/audio/audio_clock_sync.dart';
 import 'package:whisper/audio/audio_protocol.dart';
 
 typedef AudioGroupClock = int Function();
@@ -78,7 +79,7 @@ class AudioGroupPlaybackScheduler {
 
   AudioGroupPlaybackReport get report {
     final now = _clockMicros();
-    _pruneLatePacketTimestamps(now);
+    _pruneLatePacketTimestamps(audioMonotonicMicros());
     final isWaitingForClock =
         requireClockOffsetBeforePlayback && _targetClockOffsetMicros == null;
     final nextPacketDelayMicros = _queue.isEmpty || isWaitingForClock
@@ -130,7 +131,7 @@ class AudioGroupPlaybackScheduler {
         _localTargetPlaybackTimeMicros(packet, now);
     if (targetPlaybackTimeMicros != null &&
         targetPlaybackTimeMicros + lateToleranceMicros < now) {
-      _recordLatePacket(now);
+      _recordLatePacket();
       return;
     }
     final item = _QueuedAudioGroupPacket(
@@ -176,7 +177,7 @@ class AudioGroupPlaybackScheduler {
     while (_queue.isNotEmpty &&
         _queue.first.targetPlaybackTimeMicros + lateToleranceMicros < now) {
       _removeFirst();
-      _recordLatePacket(now);
+      _recordLatePacket();
     }
     while (_queue.isNotEmpty &&
         _queue.first.targetPlaybackTimeMicros <= now + outputLeadMicros) {
@@ -283,7 +284,8 @@ class AudioGroupPlaybackScheduler {
   /// Every packet that came too late to play, since the start.
   int lateTotal = 0;
 
-  void _recordLatePacket(int now) {
+  void _recordLatePacket() {
+    final now = audioMonotonicMicros();
     lateTotal += 1;
     _latePacketTimestamps.add(now);
     _pruneLatePacketTimestamps(now);

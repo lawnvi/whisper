@@ -1,3 +1,14 @@
+import 'dart:developer' show Timeline;
+
+/// Microseconds on a clock that only moves forward, the same in every isolate
+/// of this process. For how long something took or since when; times sent to
+/// another device stay on the wall clock, which both sides share.
+int audioMonotonicMicros() => Timeline.now;
+
+/// Microseconds on the wall clock: what playback times sent between devices
+/// are counted in.
+int audioWallClockMicros() => DateTime.now().microsecondsSinceEpoch;
+
 class AudioClockSyncSample {
   const AudioClockSyncSample({
     required this.sourceSentAtMicros,
@@ -60,10 +71,15 @@ class AudioClockSyncEstimator {
   AudioClockSyncEstimator({
     this.maxSamples = 12,
     this.maxUsableRttMicros = 100000,
+    this.driftToleranceMicros = 20000,
   });
 
   final int maxSamples;
   final int maxUsableRttMicros;
+
+  /// How far two samples may disagree beyond what their round trips allow
+  /// before the clocks count as stepped.
+  final int driftToleranceMicros;
   final List<AudioClockSyncSample> _samples = <AudioClockSyncSample>[];
 
   void addSample(AudioClockSyncSample sample) {
@@ -72,6 +88,21 @@ class AudioClockSyncEstimator {
     }
     if (sample.rttMicros > maxUsableRttMicros) {
       return;
+    }
+    // A sample puts the offset within half its round trip of the truth, so
+    // two samples of steady clocks never differ by more than half their round
+    // trips together. Further apart, a wall clock was set (by the network
+    // time service, by hand): the older samples describe clocks that are gone
+    // and, with their shorter round trips, would win for a dozen probes while
+    // every packet played at the wrong time.
+    for (final earlier in _samples) {
+      final apart = (sample.clockOffsetMicros - earlier.clockOffsetMicros)
+          .abs();
+      if (apart >
+          (sample.rttMicros + earlier.rttMicros) ~/ 2 + driftToleranceMicros) {
+        _samples.clear();
+        break;
+      }
     }
     _samples.add(sample);
     if (_samples.length > maxSamples) {

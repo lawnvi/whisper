@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:whisper/audio/audio_capture_source.dart';
+import 'package:whisper/audio/audio_clock_sync.dart';
 import 'package:whisper/audio/audio_codec.dart';
 import 'package:whisper/audio/audio_fanout_transport.dart';
 import 'package:whisper/audio/audio_group_playback_scheduler.dart';
@@ -241,7 +242,6 @@ class AudioGroupPlaybackPipeline {
   }) : _spec = spec,
        _onClosed = onClosed,
        _codec = codec,
-       _clockMicros = clockMicros,
        _onReport = onReport,
        _onFailure = onFailure,
        _gain = spec.gain {
@@ -264,7 +264,6 @@ class AudioGroupPlaybackPipeline {
 
   final AudioGroupPlaybackSpec _spec;
   final AudioCodec _codec;
-  final AudioGroupClock _clockMicros;
   final AudioGroupPlaybackReportSink _onReport;
   final void Function(Object error) _onFailure;
   late final AudioGroupPlaybackScheduler _scheduler;
@@ -346,7 +345,7 @@ class AudioGroupPlaybackPipeline {
   }
 
   void _maybeReport() {
-    final now = _clockMicros();
+    final now = audioMonotonicMicros();
     if (_lastReportAtMicros != 0 &&
         now - _lastReportAtMicros < _reportIntervalMicros) {
       return;
@@ -622,7 +621,7 @@ class _LocalCapture implements AudioGroupCapture {
         if (target == null) {
           return;
         }
-        lastSentAtMicros = _media._clockMicros();
+        lastSentAtMicros = audioMonotonicMicros();
         _media._fanout.send(
           audioGroupPacketFrame(
             _spec,

@@ -11,6 +11,7 @@ import 'package:sodium/sodium.dart';
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:whisper/audio/audio_capture_source.dart';
+import 'package:whisper/audio/audio_clock_sync.dart';
 import 'package:whisper/audio/audio_codec.dart';
 import 'package:whisper/audio/audio_failure_reason.dart';
 import 'package:whisper/audio/audio_fanout_transport.dart';
@@ -832,7 +833,7 @@ class _AudioRuntime {
     final pipeline = AudioGroupPlaybackPipeline(
       spec: command.spec,
       codec: codec,
-      clockMicros: _wallClockMicros,
+      clockMicros: audioWallClockMicros,
       writePcm: (pcm, _) async {
         // False only once the native player is no longer this one: the main
         // isolate stops this playback right after.
@@ -956,8 +957,6 @@ class _AudioRuntime {
   AudioShareDiagnostics get diagnostics => _diagnostics;
 }
 
-int _wallClockMicros() => DateTime.now().microsecondsSinceEpoch;
-
 AudioCodec _createCodec(AudioStreamFormat format) {
   final config = AudioCodecConfig.fromStreamFormat(format);
   switch (format.codec) {
@@ -1010,7 +1009,7 @@ class _IsolateCapture {
   }) {
     var reportedAtMicros = 0;
     final schedule = AudioGroupSourceSchedule(
-      clockMicros: _wallClockMicros,
+      clockMicros: audioWallClockMicros,
       targetLatencyMs: _spec.targetLatencyMs,
       frameDurationMs: _spec.format.frameDurationMs,
     );
@@ -1034,7 +1033,7 @@ class _IsolateCapture {
             durationMicros: schedule.durationMicros,
           ),
         );
-        final now = _wallClockMicros();
+        final now = audioMonotonicMicros();
         if (now - reportedAtMicros >= sentReportMicros) {
           reportedAtMicros = now;
           onSent(now);
