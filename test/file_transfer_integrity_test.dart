@@ -1922,8 +1922,6 @@ FileTransferEngine _engine(
   remoteProfileFor: (_) => null,
   isConnectedTo: (_) => true,
   connectedPeerIds: () => const <String>{'peer-a'},
-  defaultPeerId: () => '',
-  hasLegacySinkFor: (_) => false,
   localPeerIdFor: (_) => 'local',
   buildMessage:
       (

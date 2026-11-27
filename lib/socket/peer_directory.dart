@@ -147,115 +147,46 @@ class PeerDirectory {
   String? remoteIdentityPublicKeyFor(String peerId) =>
       _activeByPeerId[peerId]?.session?.remoteIdentityPublicKey;
 
-  PeerProfile? remoteProfileFor(
-    String peerId, {
-    String legacyReceiver = '',
-    PeerProfile? legacyProfile,
-  }) {
-    return _remoteProfilesByPeerId[peerId] ??
-        (peerId == legacyReceiver ? legacyProfile : null);
-  }
+  PeerProfile? remoteProfileFor(String peerId) =>
+      _remoteProfilesByPeerId[peerId];
 
-  bool canBrowseFilesOf(
-    String peerId, {
-    String legacyReceiver = '',
-    PeerProfile? legacyProfile,
-  }) =>
+  bool canBrowseFilesOf(String peerId) =>
       sessionForPeer(peerId)?.isAuthenticated == true &&
-      remoteProfileFor(
-            peerId,
-            legacyReceiver: legacyReceiver,
-            legacyProfile: legacyProfile,
-          )?.capabilities.remoteFilesV1 ==
-          true;
+      remoteProfileFor(peerId)?.capabilities.remoteFilesV1 == true;
 
-  bool supportsRemoteInputFor(
-    String peerId, {
-    String legacyReceiver = '',
-    PeerProfile? legacyProfile,
-  }) {
-    final profile = remoteProfileFor(
-      peerId,
-      legacyReceiver: legacyReceiver,
-      legacyProfile: legacyProfile,
-    );
+  bool supportsRemoteInputFor(String peerId) {
+    final profile = remoteProfileFor(peerId);
     return profile?.capabilities.remoteInputSourceV1 == true &&
         profile?.capabilities.remoteInputSinkV1 == true;
   }
 
-  bool supportsManualInputFor(
-    String peerId, {
-    String legacyReceiver = '',
-    PeerProfile? legacyProfile,
-  }) {
-    final profile = remoteProfileFor(
-      peerId,
-      legacyReceiver: legacyReceiver,
-      legacyProfile: legacyProfile,
-    );
+  bool supportsManualInputFor(String peerId) {
+    final profile = remoteProfileFor(peerId);
     return profile?.capabilities.remoteInputManualSinkV1 == true;
   }
 
-  bool supportsRemoteInputTopologyFor(
-    String peerId, {
-    String legacyReceiver = '',
-    PeerProfile? legacyProfile,
-  }) {
-    final profile = remoteProfileFor(
-      peerId,
-      legacyReceiver: legacyReceiver,
-      legacyProfile: legacyProfile,
-    );
-    return supportsRemoteInputFor(
-          peerId,
-          legacyReceiver: legacyReceiver,
-          legacyProfile: legacyProfile,
-        ) &&
+  bool supportsRemoteInputTopologyFor(String peerId) {
+    final profile = remoteProfileFor(peerId);
+    return supportsRemoteInputFor(peerId) &&
         profile?.capabilities.remoteInputTopologyV1 == true &&
         profile?.displayTopology?.isNotEmpty == true;
   }
 
-  bool supportsRemoteInputWorkspaceGraphFor(
-    String peerId, {
-    String legacyReceiver = '',
-    PeerProfile? legacyProfile,
-  }) {
-    final profile = remoteProfileFor(
-      peerId,
-      legacyReceiver: legacyReceiver,
-      legacyProfile: legacyProfile,
-    );
-    return supportsRemoteInputTopologyFor(
-          peerId,
-          legacyReceiver: legacyReceiver,
-          legacyProfile: legacyProfile,
-        ) &&
+  bool supportsRemoteInputWorkspaceGraphFor(String peerId) {
+    final profile = remoteProfileFor(peerId);
+    return supportsRemoteInputTopologyFor(peerId) &&
         profile?.capabilities.remoteInputWorkspaceGraphV1 == true;
   }
 
-  RemoteInputTopology? remoteDisplayTopologyFor(
-    String peerId, {
-    String legacyReceiver = '',
-    PeerProfile? legacyProfile,
-  }) => remoteProfileFor(
-    peerId,
-    legacyReceiver: legacyReceiver,
-    legacyProfile: legacyProfile,
-  )?.displayTopology;
+  RemoteInputTopology? remoteDisplayTopologyFor(String peerId) =>
+      remoteProfileFor(peerId)?.displayTopology;
 
   List<DeviceData> connectedAudioGroupSinkDevices({
     String preferredPeerId = '',
-    String legacyReceiver = '',
-    PeerProfile? legacyProfile,
   }) {
     final devices = <DeviceData>[];
     for (final peerId in connectedPeerIds) {
-      final profile = remoteProfileFor(
-        peerId,
-        legacyReceiver: legacyReceiver,
-        legacyProfile: legacyProfile,
-      );
-      final device = profile?.device;
+      final device = remoteProfileFor(peerId)?.device;
       if (device != null) {
         devices.add(device);
       }
@@ -264,26 +195,13 @@ class PeerDirectory {
     return devices;
   }
 
-  List<DeviceData> connectedRemoteInputDevices({
-    String preferredPeerId = '',
-    String legacyReceiver = '',
-    PeerProfile? legacyProfile,
-  }) {
+  List<DeviceData> connectedRemoteInputDevices({String preferredPeerId = ''}) {
     final devices = <DeviceData>[];
     for (final peerId in connectedPeerIds) {
-      if (!supportsRemoteInputFor(
-        peerId,
-        legacyReceiver: legacyReceiver,
-        legacyProfile: legacyProfile,
-      )) {
+      if (!supportsRemoteInputFor(peerId)) {
         continue;
       }
-      final profile = remoteProfileFor(
-        peerId,
-        legacyReceiver: legacyReceiver,
-        legacyProfile: legacyProfile,
-      );
-      final device = profile?.device;
+      final device = remoteProfileFor(peerId)?.device;
       if (device != null) {
         devices.add(device);
       }
@@ -382,16 +300,6 @@ class PeerDirectory {
     TransferConnectionBinding binding,
     Object payload,
   ) => connections.sendToAwaitedIfCurrent(binding, payload);
-
-  Future<bool> sendTargetedOrDefault({
-    required String? peerId,
-    required Object message,
-    required Future<bool> Function() sendDefault,
-  }) => connections.sendTargetedOrDefault(
-    peerId: peerId,
-    message: message,
-    sendDefault: sendDefault,
-  );
 
   Future<bool> registerConnection({
     required String peerId,

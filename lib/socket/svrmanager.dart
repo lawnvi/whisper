@@ -290,7 +290,6 @@ class WsSvrManager {
     await server.close(force: force);
   }
 
-  WebSocketSink? _sink;
   late final PeerDirectory _peers = PeerDirectory(
     socketCloseTimeout: _socketCloseTimeout,
     maxPreAuthMessageBytes: _maxPreAuthMessageBytes,
@@ -374,7 +373,6 @@ class WsSvrManager {
   final Set<ISocketEvent> _listeners = <ISocketEvent>{};
   ISocketEvent? _primaryEvent;
   bool started = false;
-  String receiver = "";
   String sender = "";
   Future<void>? _closeFuture;
   bool _closeServerRequested = false;
@@ -388,7 +386,6 @@ class WsSvrManager {
   bool _systemSleeping = false;
   final Set<String> _systemSleepReconnectPeerIds = <String>{};
   HttpServer? _serverClosing;
-  PeerProfile? _remoteProfile;
   final TransferAckWatchdog? _transferAckWatchdog;
   final List<Duration>? _transferRetryDelays;
   late final FileTransferEngine _transferEngine = FileTransferEngine(
@@ -429,8 +426,6 @@ class WsSvrManager {
     remoteProfileFor: remoteProfileFor,
     isConnectedTo: isConnectedTo,
     connectedPeerIds: () => _peers.connectedPeerIds,
-    defaultPeerId: () => receiver,
-    hasLegacySinkFor: (peerId) => peerId == receiver && _sink != null,
     localPeerIdFor: _peers.localPeerIdFor,
     buildMessage: _buildMessage,
     dispatchOutgoingMessage: _dispatchOutgoingMessage,
@@ -473,9 +468,6 @@ class WsSvrManager {
   _WorkspaceClipboardOrigin? _workspaceClipboardOrigin;
   int _workspaceClipboardRevision = 0;
 
-  PeerProfile? get _selectedRemoteProfile =>
-      _peers.remoteProfileFor(receiver, legacyReceiver: receiver, legacyProfile: _remoteProfile);
-
   Set<String> get connectedPeerIds => _peers.connectedPeerIds;
 
   /// Which connection to [peerId] this is (a new one after a reconnect);
@@ -490,81 +482,34 @@ class WsSvrManager {
 
   /// This device's peer id on [peerId]'s authenticated session.
   String localPeerIdFor(String peerId) => _peers.localPeerIdFor(peerId);
-  bool get isConnected =>
-      _sink != null || _peers.connectedPeerIds.isNotEmpty;
-  bool get supportsFileTransferV3 =>
-      _selectedRemoteProfile?.capabilities.fileTransferV3 == true;
-  bool get supportsRemoteInput =>
-      _selectedRemoteProfile?.capabilities.remoteInputSourceV1 == true &&
-      _selectedRemoteProfile?.capabilities.remoteInputSinkV1 == true;
-  bool get supportsRemoteInputTopology =>
-      supportsRemoteInput &&
-      _selectedRemoteProfile?.capabilities.remoteInputTopologyV1 == true &&
-      _selectedRemoteProfile?.displayTopology?.isNotEmpty == true;
-  RemoteInputTopology? get remoteDisplayTopology =>
-      _selectedRemoteProfile?.displayTopology;
+  bool get isConnected => _peers.connectedPeerIds.isNotEmpty;
 
-  bool supportsRemoteInputFor(String peerId) => _peers.supportsRemoteInputFor(
-    peerId,
-    legacyReceiver: receiver,
-    legacyProfile: _remoteProfile,
-  );
+  bool supportsRemoteInputFor(String peerId) =>
+      _peers.supportsRemoteInputFor(peerId);
 
-  bool supportsManualInputFor(String peerId) => _peers.supportsManualInputFor(
-    peerId,
-    legacyReceiver: receiver,
-    legacyProfile: _remoteProfile,
-  );
+  bool supportsManualInputFor(String peerId) =>
+      _peers.supportsManualInputFor(peerId);
 
-  PeerProfile? remoteProfileFor(String peerId) => _peers.remoteProfileFor(
-    peerId,
-    legacyReceiver: receiver,
-    legacyProfile: _remoteProfile,
-  );
+  PeerProfile? remoteProfileFor(String peerId) =>
+      _peers.remoteProfileFor(peerId);
 
   /// Every connected device whose profile has come: from protocol 16 all of
   /// them can play a group's sound.
   List<DeviceData> connectedAudioGroupSinkDevices({
     String preferredPeerId = '',
-  }) => _peers.connectedAudioGroupSinkDevices(
-    preferredPeerId: preferredPeerId,
-    legacyReceiver: receiver,
-    legacyProfile: _remoteProfile,
-  );
+  }) => _peers.connectedAudioGroupSinkDevices(preferredPeerId: preferredPeerId);
 
   List<DeviceData> connectedRemoteInputDevices({String preferredPeerId = ''}) =>
-      _peers.connectedRemoteInputDevices(
-        preferredPeerId: preferredPeerId,
-        legacyReceiver: receiver,
-        legacyProfile: _remoteProfile,
-      );
+      _peers.connectedRemoteInputDevices(preferredPeerId: preferredPeerId);
 
   bool supportsRemoteInputTopologyFor(String peerId) =>
-      _peers.supportsRemoteInputTopologyFor(
-        peerId,
-        legacyReceiver: receiver,
-        legacyProfile: _remoteProfile,
-      );
+      _peers.supportsRemoteInputTopologyFor(peerId);
 
   bool supportsRemoteInputWorkspaceGraphFor(String peerId) =>
-      _peers.supportsRemoteInputWorkspaceGraphFor(
-        peerId,
-        legacyReceiver: receiver,
-        legacyProfile: _remoteProfile,
-      );
+      _peers.supportsRemoteInputWorkspaceGraphFor(peerId);
 
   RemoteInputTopology? remoteDisplayTopologyFor(String peerId) =>
-      _peers.remoteDisplayTopologyFor(
-        peerId,
-        legacyReceiver: receiver,
-        legacyProfile: _remoteProfile,
-      );
-
-  bool remoteTrustsPeer(String peerId) {
-    final selectedPeerId = _selectedRemoteProfile?.device.uid ?? receiver;
-    return peerId == sender &&
-        _peers.sessionForPeer(selectedPeerId)?.isAuthenticated == true;
-  }
+      _peers.remoteDisplayTopologyFor(peerId);
 
   bool remotePeerTrustsPeer(String remotePeerId, String trustedPeerId) {
     return trustedPeerId == sender &&
@@ -576,21 +521,9 @@ class WsSvrManager {
   bool isCurrentConnectionGeneration(String peerId, int generation) =>
       _peers.isCurrent(peerId, generation);
 
-  void selectPeer(String peerId) {
-    if (!_peers.isConnectedTo(peerId)) {
-      return;
-    }
-    receiver = peerId;
-    final foundSink = _peers.findSinkForPeer(peerId);
-    if (foundSink != null) {
-      _sink = foundSink;
-    }
-    _setSelectedRemoteProfile(_peers.remoteProfileFor(peerId));
-  }
-
   @visibleForTesting
-  Future<PeerProfile?> debugWaitForSelectedProfileUpdate() =>
-      _peers.profileRefreshTracker.waitForNextUpdate(receiver);
+  Future<PeerProfile?> debugWaitForProfileUpdateFor(String peerId) =>
+      _peers.profileRefreshTracker.waitForNextUpdate(peerId);
 
   @visibleForTesting
   Future<void> debugSendProfileHeartbeatTo(String peerId) =>
@@ -750,16 +683,7 @@ class WsSvrManager {
   Future<void> debugRegisterPeerConnection(
     String peerId,
     PeerConnection connection,
-  ) async {
-    await _peers.connections.register(
-      connection,
-      afterRegister: (_) {
-        if (receiver.isEmpty) {
-          receiver = peerId;
-        }
-      },
-    );
-  }
+  ) => _peers.connections.register(connection);
 
   @visibleForTesting
   bool debugSendMalformedTransportFrame(String peerId) =>
@@ -780,11 +704,6 @@ class WsSvrManager {
     session: session,
     onSupersededPreRegister: _handlePeerSupersededPreRegister,
     onRegistered: (_) {
-      if (session.role == PeerSocketRole.server &&
-          (receiver.isEmpty || receiver == peerId)) {
-        receiver = peerId;
-        _sink = sink;
-      }
       _setRemoteProfile(profile, peerId: peerId);
     },
   );
@@ -831,9 +750,6 @@ class WsSvrManager {
     final peerId = link?.registeredPeerId;
     link?.registeredPeerId = null;
     if (peerId == null) {
-      if (identical(_sink, sink)) {
-        _sink = null;
-      }
       return;
     }
     // Wait for any already-verified replacement session for this peer to
@@ -1395,11 +1311,10 @@ class WsSvrManager {
       if (context.isCurrent &&
           storedDevice != null &&
           _peers.isCurrent(result.peerId, result.generation)) {
-        final shouldSelect = receiver.isEmpty || receiver == result.peerId;
-        if (shouldSelect) {
-          selectPeer(result.peerId);
-        }
         if (_manageSharedCoordinators) {
+          final activePeerId = ConnectionCoordinator().snapshot.activePeerId;
+          final shouldSelect =
+              activePeerId == null || activePeerId == result.peerId;
           ConnectionCoordinator().markConnected(
             storedDevice,
             select: shouldSelect,
@@ -2298,7 +2213,6 @@ class WsSvrManager {
               });
     }
     final hadActiveConnection = AuthSocketLifecycle.hasConnectionWork(
-      hasSelectedSink: _sink != null,
       hasClientTimer: _pingTracker.hasActiveKeepalives,
       hasPendingSessions:
           _peers.hasAnySessions ||
@@ -2309,7 +2223,6 @@ class WsSvrManager {
           _remoteInputManager.hasActiveChannels,
       hasPendingResults: _authResultsBySink.isNotEmpty,
       hasPeerConnections: _peers.connectedPeerIds.isNotEmpty,
-      hasReceiver: receiver.isNotEmpty,
     );
     if (!hadActiveConnection && !closeServer) {
       if (_server != null && !_closeServerRequested) {
@@ -2427,7 +2340,6 @@ class WsSvrManager {
     for (final session in authenticatedSessions) {
       await session.drainOutbound();
     }
-    _sink = null;
     await _peers.connections.disconnectAll();
     for (final link in authenticatedLinks) {
       await _handlePeerSocketDoneQueued(link.sink);
@@ -2448,9 +2360,7 @@ class WsSvrManager {
       }
       _acceptingOutgoingConnections = true;
     }
-    _remoteProfile = null;
     _completeRemoteProfileRefreshWaiters();
-    receiver = "";
     logger.i("服务已关闭");
     _dispatchToAll((event) => event.onClose());
   }
@@ -2631,17 +2541,6 @@ class WsSvrManager {
     if (!stillOwns) {
       return;
     }
-    if (receiver == peerId) {
-      receiver = _peers.connectedPeerIds.isEmpty
-          ? ''
-          : _peers.connectedPeerIds.first;
-      if (receiver.isEmpty) {
-        _sink = null;
-        _setRemoteProfile(null);
-      } else {
-        selectPeer(receiver);
-      }
-    }
     _completeRemoteProfileRefreshWaiters(peerId: peerId);
     if (_peers.removedBindingOwnsPeerState(binding)) {
       // 会话生命周期终点:不论断因都结算稳定性复位,
@@ -2719,29 +2618,14 @@ class WsSvrManager {
     if (sink != null) {
       return _sendBytesOnSink(sink, payload, rawAuth: rawAuth);
     }
-    return _peers.sendTargetedOrDefault(
-      peerId: peerId,
-      message: payload,
-      sendDefault: () => _send(encodeWireMessage(message)),
-    );
+    if (peerId == null || peerId.isEmpty) {
+      return false;
+    }
+    return _peers.sendToAwaited(peerId, payload);
   }
 
   void _dispatchOutgoingMessage(MessageData message) {
     _dispatchToAll((event) => event.onMessage(message));
-  }
-
-  Future<bool> _send(String message) async {
-    final payload = encodeMessageFrame(
-      Uint8List.fromList(utf8.encode(message)),
-    );
-    if (_peers.isConnectedTo(receiver)) {
-      return _peers.sendToAwaited(receiver, payload);
-    }
-    final sink = _sink;
-    if (sink != null) {
-      return _sendBytesOnSink(sink, payload);
-    }
-    return false;
   }
 
   /// [asServer] 是本条 socket 的角色(服务端接入=true/本机拨出=false),
@@ -3896,7 +3780,7 @@ class WsSvrManager {
     MessageData message = MessageData(
       id: 0,
       sender: sender,
-      receiver: receiver,
+      receiver: '',
       name: "",
       clipboard: false,
       size: 0,
@@ -4459,7 +4343,7 @@ class WsSvrManager {
             'signedSession=${authenticatedSession?.isAuthenticated == true} '
             'mutualTrust=$isMutuallyTrusted '
             'localCanInject=$localCanInject '
-            'remoteSupports=$supportsRemoteInput',
+            'remoteSupports=${supportsRemoteInputFor(remoteDevice.uid)}',
           );
           final isTerminal =
               control.action == RemoteInputControlAction.reject ||
@@ -4558,7 +4442,7 @@ class WsSvrManager {
     String? senderOverride,
     String? receiverOverride,
   }) {
-    final resolvedReceiver = receiverOverride ?? receiver;
+    final resolvedReceiver = receiverOverride ?? '';
     final resolvedSender =
         senderOverride ??
         _peers.sessionForPeer(resolvedReceiver)?.localProfile.uid ??
@@ -4625,19 +4509,18 @@ class WsSvrManager {
   }
 
   Future<PeerProfile?> requestRemoteProfileRefresh({
-    String? peerId,
+    required String peerId,
     Duration timeout = const Duration(milliseconds: 1200),
   }) async {
-    final targetPeerId = peerId ?? receiver;
-    if (!isConnectedTo(targetPeerId)) {
-      return remoteProfileFor(targetPeerId);
+    if (peerId.isEmpty || !isConnectedTo(peerId)) {
+      return remoteProfileFor(peerId);
     }
     return _peers.profileRefreshTracker.request(
-      peerId: targetPeerId,
+      peerId: peerId,
       timeout: timeout,
       sendRequest: () => _heartBeat(
         profileRefreshRequest: true,
-        peerId: targetPeerId,
+        peerId: peerId,
       ),
       currentProfile: remoteProfileFor,
     );
@@ -4690,14 +4573,7 @@ class WsSvrManager {
       _peers.clearStoredRemoteProfiles();
     }
 
-    if (!hasPeerId || peerId == receiver) {
-      _setSelectedRemoteProfile(profile);
-    }
     _completeRemoteProfileRefreshWaiters(peerId: hasPeerId ? peerId : null);
-  }
-
-  void _setSelectedRemoteProfile(PeerProfile? profile) {
-    _remoteProfile = profile;
   }
 
   void _completeRemoteProfileRefreshWaiters({String? peerId}) {
@@ -4715,7 +4591,7 @@ class WsSvrManager {
     try {
       final resolvedPeerId = peerId ?? message.sender;
       final previousProfile = resolvedPeerId.isEmpty
-          ? _remoteProfile
+          ? null
           : _peers.remoteProfileFor(resolvedPeerId);
       final profile = PeerProfileRefreshTracker.decodeHeartbeatProfile(
         message.content,
@@ -4737,7 +4613,8 @@ class WsSvrManager {
             _peers.isConnectedTo(profile.device.uid)) {
           ConnectionCoordinator().markConnected(
             profile.device,
-            select: resolvedPeerId == receiver,
+            select: ConnectionCoordinator().snapshot.activePeerId ==
+                resolvedPeerId,
           );
         }
         if (profileDeviceChanged) {
@@ -4832,8 +4709,6 @@ class WsSvrManager {
   }) async {
     final targetPeerId = peerId?.isNotEmpty == true
         ? peerId!
-        : sink == null
-        ? receiver
         : _peerIdForSink(sink) ?? '';
     if (targetPeerId.isEmpty) return;
     if (sink != null && !_isCurrentSinkForPeer(sink, targetPeerId)) return;
@@ -4850,20 +4725,22 @@ class WsSvrManager {
     );
   }
 
-  Future<void> refreshConnectionLiveness() async {
-    if (receiver.isEmpty) return;
-    await _pingTracker.dispatchPing(
-      peerId: receiver,
-      sendPing: (payload) =>
-          _sendHeartbeatControl(heartbeatPingTag, payload, receiver),
-    );
+  Future<void> refreshConnectionLiveness([String? peerId]) async {
+    final targets = peerId != null
+        ? (peerId.isNotEmpty && isConnectedTo(peerId)
+              ? <String>[peerId]
+              : const <String>[])
+        : connectedPeerIds.toList(growable: false);
+    for (final targetPeerId in targets) {
+      await _pingTracker.dispatchPing(
+        peerId: targetPeerId,
+        sendPing: (payload) =>
+            _sendHeartbeatControl(heartbeatPingTag, payload, targetPeerId),
+      );
+    }
   }
 
   Future<void> broadcastLocalProfileUpdate() async {
-    if (connectedPeerIds.isEmpty) {
-      await _heartBeat();
-      return;
-    }
     for (final peerId in connectedPeerIds) {
       await _heartBeat(peerId: peerId);
     }
@@ -4899,11 +4776,7 @@ class WsSvrManager {
   }
 
   /// [peerId] is connected and speaks the file-browse protocol.
-  bool canBrowseFilesOf(String peerId) => _peers.canBrowseFilesOf(
-    peerId,
-    legacyReceiver: receiver,
-    legacyProfile: _remoteProfile,
-  );
+  bool canBrowseFilesOf(String peerId) => _peers.canBrowseFilesOf(peerId);
 
   /// Sends a file-browse control message (see [FileBrowseMessage]).
   Future<bool> sendFileBrowseControlTo(
@@ -5071,10 +4944,6 @@ class WsSvrManager {
     );
   }
 
-  Future<bool> sendAudioGroupControl(AudioGroupControlMessage control) {
-    return sendAudioGroupControlTo(receiver, control);
-  }
-
   Future<bool> sendAudioGroupControlTo(
     String peerId,
     AudioGroupControlMessage control,
@@ -5145,10 +5014,6 @@ class WsSvrManager {
     );
   }
 
-  Future<bool> sendRemoteInputControl(RemoteInputControlMessage control) {
-    return sendRemoteInputControlTo(receiver, control);
-  }
-
   Future<bool> sendRemoteInputControlTo(
     String peerId,
     RemoteInputControlMessage control,
@@ -5204,7 +5069,7 @@ class WsSvrManager {
     _remoteInputTrace(
       'remote input send control ${_remoteInputControlSummary(control)} '
       'sender=$sender receiver=$peerId connected=$isConnected '
-      'remoteSupports=$supportsRemoteInput',
+      'remoteSupports=${supportsRemoteInputFor(peerId)}',
     );
     final message = _buildMessage(
       MessageEnum.RemoteInputControl,
@@ -5227,10 +5092,6 @@ class WsSvrManager {
       peerId: peerId,
       sessionId: control.sessionId,
     );
-  }
-
-  Future<bool> sendMessage(String content, {clipboard = false}) {
-    return sendMessageTo(receiver, content, clipboard: clipboard);
   }
 
   Future<bool> sendMessageTo(
@@ -5278,10 +5139,9 @@ class WsSvrManager {
     required String expectedPublicKeyHash,
     required Duration acknowledgementTimeout,
   }) async {
-    final canUseLegacySink = peerId == receiver && _sink != null;
     if (peerId.isEmpty ||
         acknowledgementTimeout <= Duration.zero ||
-        (!isConnectedTo(peerId) && !canUseLegacySink) ||
+        !isConnectedTo(peerId) ||
         content.trim().isEmpty ||
         !isCanonicalTransferId(messageId)) {
       return false;
@@ -5449,8 +5309,7 @@ class WsSvrManager {
     String content, {
     required bool clipboard,
   }) async {
-    final canUseLegacySink = peerId == receiver && _sink != null;
-    if (peerId.isEmpty || (!isConnectedTo(peerId) && !canUseLegacySink)) {
+    if (peerId.isEmpty || !isConnectedTo(peerId)) {
       return false;
     }
     if (clipboard && content.isEmpty) {
@@ -5512,7 +5371,8 @@ class WsSvrManager {
     String? title,
     String? text,
   ) async {
-    if (_sink == null || package == null && title == null && text == null) {
+    final targets = connectedPeerIds.toList(growable: false);
+    if (targets.isEmpty || (package == null && title == null && text == null)) {
       return;
     }
     var content = {
@@ -5521,20 +5381,19 @@ class WsSvrManager {
       "title": title,
       "text": text,
     };
-
-    var message = _buildMessage(
-      MessageEnum.Notification,
-      jsonEncode(content),
-      "",
-      "",
-      0,
-      false,
-    );
-    await _send(encodeWireMessage(message));
-  }
-
-  Future<bool> sendFile(String path) async {
-    return sendFileTo(receiver, path);
+    final encodedContent = jsonEncode(content);
+    for (final peerId in targets) {
+      final message = _buildMessage(
+        MessageEnum.Notification,
+        encodedContent,
+        "",
+        "",
+        0,
+        false,
+        receiverOverride: peerId,
+      );
+      await _sendMessageData(message, peerId: peerId);
+    }
   }
 
   Future<bool> publishRemoteClipboard({

@@ -258,12 +258,10 @@ void main() {
 
       expect(
         AuthSocketLifecycle.hasConnectionWork(
-          hasSelectedSink: false,
           hasClientTimer: false,
           hasPendingSessions: true,
           hasPendingResults: true,
           hasPeerConnections: false,
-          hasReceiver: false,
         ),
         isTrue,
       );

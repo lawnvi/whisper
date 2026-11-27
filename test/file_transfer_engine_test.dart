@@ -56,8 +56,6 @@ FileTransferEngine _engine({
     remoteProfileFor: (_) => supportsV3 ? _capablePeer() : null,
     isConnectedTo: (_) => true,
     connectedPeerIds: () => connectedPeerIds,
-    defaultPeerId: () => '',
-    hasLegacySinkFor: (_) => false,
     localPeerIdFor: (_) => 'local',
     buildMessage:
         buildMessage ??

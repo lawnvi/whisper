@@ -96,12 +96,9 @@ void main() {
       expect(storedServer?.identityPublicKey, isNotEmpty);
       expect(storedClient?.auth, isTrue);
       expect(storedClient?.identityPublicKey, isNotEmpty);
-      expect(harness.client.receiver, isEmpty);
+      expect(harness.client.isConnectedTo(result.peerId), isTrue);
       expect(harness.clientEvents.afterAuthCount, 0);
       expect(harness.serverEvents.afterAuthCount, 1);
-
-      harness.client.selectPeer(result.peerId);
-      expect(harness.client.receiver, 'server-peer');
     },
   );
 
@@ -582,7 +579,7 @@ void main() {
       await harness.clientReconnects.fireNext();
       await _waitUntil(() => harness.client.isConnectedTo('server-peer'));
 
-      expect(harness.client.receiver, 'server-peer');
+      expect(harness.client.isConnectedTo('server-peer'), isTrue);
       expect(harness.clientReconnects.activeTimerCount, 0);
     },
   );
@@ -605,7 +602,6 @@ void main() {
       final harness = await _HandshakeHarness.start();
       final connected = await harness.connect('endpoint-refresh-heartbeat');
       expect(connected.isAuthenticated, isTrue);
-      harness.client.selectPeer('server-peer');
 
       harness.client.updateReconnectEndpoint(
         'server-peer',
@@ -1108,8 +1104,7 @@ void main() {
         ),
       );
       expect(connectedA.isAuthenticated, isTrue);
-      hub.selectPeer('peer-a');
-      final selectedWaiter = hub.debugWaitForSelectedProfileUpdate();
+      final selectedWaiter = hub.debugWaitForProfileUpdateFor('peer-a');
       var waiterCompleted = false;
       unawaited(selectedWaiter.then<void>((_) => waiterCompleted = true));
 
@@ -1123,7 +1118,7 @@ void main() {
       );
       expect(connectedB.isAuthenticated, isTrue);
       await pumpEventQueue();
-      expect(hub.receiver, 'peer-a');
+      expect(hub.isConnectedTo('peer-a'), isTrue);
       expect(hub.remoteProfileFor('peer-b')?.device.uid, 'peer-b');
       expect(waiterCompleted, isFalse);
 
@@ -1153,7 +1148,7 @@ void main() {
       expect(refreshB?.displayTopology?.displays.length, 1);
       expect(refreshACompleted, isFalse);
       expect(hub.remoteDisplayTopologyFor('peer-a')?.displays.length, 1);
-      expect(hub.receiver, 'peer-a');
+      expect(hub.isConnectedTo('peer-a'), isTrue);
 
       profileGateA.complete();
       expect((await refreshA)?.displayTopology?.displays.length, 2);
@@ -1482,11 +1477,10 @@ void main() {
     expect(serverToClient!.inMilliseconds, lessThan(2000));
 
     // Unchanged profile heartbeat should not re-trigger onConnect churn.
-    harness.client.selectPeer('server-peer');
     var connectEvents = 0;
     final countingEvents = _CountingConnectEvents(() => connectEvents += 1);
     harness.client.setEvent(countingEvents);
-    final waiter = harness.client.debugWaitForSelectedProfileUpdate();
+    final waiter = harness.client.debugWaitForProfileUpdateFor('server-peer');
     await harness.server.debugSendProfileHeartbeatTo('client-peer');
     await waiter.timeout(const Duration(seconds: 2));
     await pumpEventQueue();

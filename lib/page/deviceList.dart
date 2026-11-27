@@ -1521,9 +1521,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     final sessions = ChatSessionListBuilder.build(
       devices: newArr,
       latestMessages: latestMessages,
-      activePeerId: socketManager.receiver.isEmpty
-          ? null
-          : socketManager.receiver,
+      activePeerId: ConnectionCoordinator().snapshot.activePeerId,
       connectedPeerIds: socketManager.connectedPeerIds,
       webOnline: WebTransferCoordinator.shared.onlineUids,
       selectedPeerId: _selectedDesktopPeerId,
@@ -2411,9 +2409,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
   late final ShellActions _shellActions = ShellActions(
     select: (uid) {
-      if (uid != null && socketManager.isConnectedTo(uid)) {
-        socketManager.selectPeer(uid);
-      }
       setState(() {
         _selectedDesktopPeerId = uid;
         _shellPlace = ShellPlace.device;
@@ -3139,7 +3134,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
             )) {
           return;
         }
-        socketManager.selectPeer(result.peerId);
         try {
           final working = PeerEndpoint(
             host: connectedDevice.host,

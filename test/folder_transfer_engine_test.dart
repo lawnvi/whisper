@@ -135,8 +135,6 @@ final class _Device {
     remoteProfileFor: (peerId) => _profile(peerId),
     isConnectedTo: (_) => linked,
     connectedPeerIds: () => linked ? <String>{other.uid} : <String>{},
-    defaultPeerId: () => '',
-    hasLegacySinkFor: (_) => false,
     localPeerIdFor: (_) => uid,
     buildMessage:
         (

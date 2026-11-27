@@ -56,19 +56,15 @@ final class AuthSocketLifecycle {
   }
 
   static bool hasConnectionWork({
-    required bool hasSelectedSink,
     required bool hasClientTimer,
     required bool hasPendingSessions,
     required bool hasPendingResults,
     required bool hasPeerConnections,
-    required bool hasReceiver,
   }) {
-    return hasSelectedSink ||
-        hasClientTimer ||
+    return hasClientTimer ||
         hasPendingSessions ||
         hasPendingResults ||
-        hasPeerConnections ||
-        hasReceiver;
+        hasPeerConnections;
   }
 
   static void closePendingAuth({

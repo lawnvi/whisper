@@ -153,7 +153,6 @@ void main() {
                     'connect ${result.status.name}: ${result.reason.name}',
                   );
                 }
-                manager.selectPeer(peerId);
                 events.emit('authenticated', {
                   'protocol': manager.remoteProfileFor(peerId)?.protocolVersion,
                 });

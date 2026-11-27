@@ -326,7 +326,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
       case AppLifecycleState.hidden:
       case AppLifecycleState.paused:
         _resumeReconnectPending = _isConnectedSession;
-        socketManager.refreshConnectionLiveness();
+        socketManager.refreshConnectionLiveness(device.uid);
         break;
       case AppLifecycleState.resumed:
         final shouldReconnect =
@@ -337,7 +337,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
           return;
         }
         if (_isConnectedSession) {
-          socketManager.refreshConnectionLiveness();
+          socketManager.refreshConnectionLiveness(device.uid);
         }
         break;
       case AppLifecycleState.detached:
@@ -1826,7 +1826,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
     final shouldReconnectAfterPicker = _isConnectedSession;
     _pickerReconnectPending = shouldReconnectAfterPicker;
     if (_isConnectedSession) {
-      await socketManager.refreshConnectionLiveness();
+      await socketManager.refreshConnectionLiveness(device.uid);
     }
     setState(() {
       _isLoading = true;
@@ -1953,7 +1953,6 @@ class _SendMessageScreen extends State<SendMessageScreen>
             )) {
           return false;
         }
-        socketManager.selectPeer(result.peerId);
         ConnectionCoordinator().markConnected(stored);
         setState(() {
           device = stored;
@@ -2221,7 +2220,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
     try {
       if (isCurrentInputSession) {
         await _remoteInputCoordinator.stopSharing(
-          sendControl: socketManager.sendRemoteInputControl,
+          sendControl: (c) => socketManager.sendRemoteInputControlTo(device.uid, c),
         );
         return;
       }
@@ -2337,7 +2336,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
         releaseHotkey: layout.releaseHotkey,
         isMutuallyTrusted: isMutuallyTrusted,
         remoteCanInject: socketManager.supportsRemoteInputFor(device.uid),
-        sendControl: socketManager.sendRemoteInputControl,
+        sendControl: (c) => socketManager.sendRemoteInputControlTo(device.uid, c),
         sourceDisplayId: resolvedTopologyLayout?.sourceDisplay.displayId ?? '',
         sourceEdge: resolvedTopologyLayout?.sharedSegment.sourceEdge,
         sourceSegmentStart: sourceSegmentStart,

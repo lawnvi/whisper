@@ -81,8 +81,6 @@ class FileTransferEngine {
     required PeerProfile? Function(String peerId) remoteProfileFor,
     required bool Function(String peerId) isConnectedTo,
     required Set<String> Function() connectedPeerIds,
-    required String Function() defaultPeerId,
-    required bool Function(String peerId) hasLegacySinkFor,
     required String Function(String authenticatedPeerId) localPeerIdFor,
     required TransferMessageBuilder buildMessage,
     required void Function(MessageData message) dispatchOutgoingMessage,
@@ -127,8 +125,6 @@ class FileTransferEngine {
        _remoteProfileFor = remoteProfileFor,
        _isConnectedTo = isConnectedTo,
        _connectedPeerIds = connectedPeerIds,
-       _defaultPeerId = defaultPeerId,
-       _hasLegacySinkFor = hasLegacySinkFor,
        _localPeerIdFor = localPeerIdFor,
        _buildMessage = buildMessage,
        _dispatchOutgoingMessage = dispatchOutgoingMessage,
@@ -192,8 +188,6 @@ class FileTransferEngine {
   final PeerProfile? Function(String peerId) _remoteProfileFor;
   final bool Function(String peerId) _isConnectedTo;
   final Set<String> Function() _connectedPeerIds;
-  final String Function() _defaultPeerId;
-  final bool Function(String peerId) _hasLegacySinkFor;
   final String Function(String authenticatedPeerId) _localPeerIdFor;
   final TransferMessageBuilder _buildMessage;
   final void Function(MessageData message) _dispatchOutgoingMessage;
@@ -554,10 +548,7 @@ class FileTransferEngine {
     )) {
       return false;
     }
-    final canUseLegacySink = _hasLegacySinkFor(peerId);
-    if (existing == null &&
-        (connection == null ||
-            (!_isConnectedTo(peerId) && !canUseLegacySink))) {
+    if (existing == null && (connection == null || !_isConnectedTo(peerId))) {
       return false;
     }
     if (existing == null && !_supportsFileTransferV3For(peerId)) {
@@ -685,10 +676,7 @@ class FileTransferEngine {
     )) {
       return false;
     }
-    final canUseLegacySink = _hasLegacySinkFor(peerId);
-    if (existing == null &&
-        (connection == null ||
-            (!_isConnectedTo(peerId) && !canUseLegacySink))) {
+    if (existing == null && (connection == null || !_isConnectedTo(peerId))) {
       return false;
     }
     if (!isAndroidContentUri(uri)) {
@@ -784,8 +772,7 @@ class FileTransferEngine {
     if (_blockedOutgoingPeers.contains(peerId)) {
       return FolderSendOutcome.rejected;
     }
-    if (_currentConnectionBinding(peerId) == null ||
-        (!_isConnectedTo(peerId) && !_hasLegacySinkFor(peerId))) {
+    if (_currentConnectionBinding(peerId) == null || !_isConnectedTo(peerId)) {
       return FolderSendOutcome.notConnected;
     }
     if (!_supportsFileTransferV3For(peerId)) {
@@ -2535,8 +2522,7 @@ class FileTransferEngine {
     required int offset,
     bool armWatchdog = true,
   }) async {
-    if (!_isConnectedTo(transfer.peerUid) &&
-        transfer.peerUid != _defaultPeerId()) {
+    if (!_isConnectedTo(transfer.peerUid)) {
       return null;
     }
     if (_transferRuntime.activeOutgoingFor(transfer.peerUid) !=
@@ -4477,7 +4463,6 @@ class FileTransferEngine {
     final peerIds = <String>{
       if (peerId?.isNotEmpty ?? false) peerId!,
       ..._connectedPeerIds(),
-      if (_defaultPeerId().isNotEmpty) _defaultPeerId(),
     };
     for (final candidatePeerId in peerIds) {
       if (_transferRuntime.activeIncomingFor(candidatePeerId) != null) {
@@ -4777,10 +4762,7 @@ class FileTransferEngine {
   /// 原 svrmanager `_resumeRecoverableOutgoingTransfers`:
   /// 显式请求恢复时重新对可恢复的 outgoing 传输发 offer。
   Future<void> resumeRecoverableOutgoing() async {
-    final peerIds = <String>{
-      ..._connectedPeerIds(),
-      if (_defaultPeerId().isNotEmpty) _defaultPeerId(),
-    };
+    final peerIds = _connectedPeerIds();
     for (final peerId in peerIds) {
       if (!_supportsFileTransferV3For(peerId)) continue;
       final connection = _currentConnectionBinding(peerId);
