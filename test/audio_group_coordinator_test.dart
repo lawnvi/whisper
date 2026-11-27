@@ -52,6 +52,104 @@ void main() {
       );
     });
 
+    group('the source alone brings a lost sink back', () {
+      // Before, each sink rejoined on its own with five flags of state, and a
+      // source that had not yet seen the old link go dropped its request: the
+      // speaker stayed silent until someone restarted the group.
+      late List<_SentGroupControl> sent;
+      late AudioGroupCoordinator coordinator;
+      var sessions = 0;
+
+      setUp(() {
+        sent = <_SentGroupControl>[];
+        sessions = 0;
+        coordinator = AudioGroupCoordinator(
+          groupIdFactory: () => 'group-1',
+          streamIdFactory: () => 'stream-1',
+          sessionIdFactory: () => 'session-${++sessions}',
+        );
+        coordinator.startGroup(
+          sourcePeerId: 'mac',
+          sinks: const {'pc': AudioChannelRole.stereo},
+          format: format,
+          sendControl: (peer, control) =>
+              sent.add(_SentGroupControl(peer, control)),
+        );
+        sent.clear();
+      });
+      tearDown(() => coordinator.dispose());
+
+      Future<void> fromPc(
+        AudioGroupControlAction action, {
+        String sessionId = 'session-1',
+        String groupId = 'group-1',
+      }) => coordinator.handleControlMessage(
+        AudioGroupControlMessage(
+          action: action,
+          groupId: groupId,
+          streamId: 'stream-1',
+          sessionId: sessionId,
+          sourcePeerId: 'mac',
+          sinkPeerId: 'pc',
+        ),
+        localPeerId: 'mac',
+        remoteHost: '',
+        remotePort: 0,
+        sendControl: (peer, control) =>
+            sent.add(_SentGroupControl(peer, control)),
+      );
+
+      test('a sink whose peer went is offered again when it is back', () async {
+        await fromPc(AudioGroupControlAction.groupAccept);
+        sent.clear(); // its clock probe
+        coordinator.peerDisconnected('pc');
+        expect(
+          coordinator.session!.sinks['pc']!.state,
+          AudioGroupSinkState.failed,
+        );
+        expect(sent, isEmpty);
+
+        coordinator.peerConnected('pc');
+        expect(sent.single.control.action, AudioGroupControlAction.groupOffer);
+        expect(sent.single.control.sessionId, 'session-2');
+        expect(
+          coordinator.session!.sinks['pc']!.state,
+          AudioGroupSinkState.offered,
+        );
+        // A profile refresh is not a second reconnect.
+        coordinator.peerConnected('pc');
+        expect(sent, hasLength(1));
+      });
+
+      test('a sink that paused is left alone until it asks', () async {
+        await fromPc(AudioGroupControlAction.groupAccept);
+        await fromPc(AudioGroupControlAction.groupStop);
+        sent.clear(); // its clock probe
+        coordinator.peerDisconnected('pc');
+        coordinator.peerConnected('pc');
+        expect(sent, isEmpty);
+
+        // Asking is always answered, even for a sink the source still thinks
+        // is playing.
+        await fromPc(AudioGroupControlAction.sinkJoinRequest);
+        expect(sent.single.control.action, AudioGroupControlAction.groupOffer);
+        sent.clear();
+        await fromPc(
+          AudioGroupControlAction.sinkJoinRequest,
+          sessionId: 'session-2',
+        );
+        expect(sent.single.control.action, AudioGroupControlAction.groupOffer);
+        expect(sent.single.control.sessionId, 'session-3');
+      });
+
+      test('asking a source without the group gets a stop back', () async {
+        await fromPc(AudioGroupControlAction.sinkJoinRequest, groupId: 'old');
+        expect(sent.single.peerId, 'pc');
+        expect(sent.single.control.action, AudioGroupControlAction.groupStop);
+        expect(sent.single.control.groupId, 'old');
+      });
+    });
+
     late MethodChannel channel;
     late List<MethodCall> calls;
     late AudioPlatform platform;
@@ -212,7 +310,12 @@ void main() {
           remotePort: 10002,
           sendControl: (_, __) {},
         );
-        expect(calls.where((call) => call.method == 'startCapture'), isEmpty);
+        // One synchronised sink is enough to start; the other joins the
+        // stream already going.
+        expect(
+          calls.where((call) => call.method == 'startCapture'),
+          hasLength(1),
+        );
 
         await coordinator.handleControlMessage(
           const AudioGroupControlMessage(
@@ -695,15 +798,21 @@ void main() {
         sendControl: (_, __) {},
       );
 
-      await report('left');
-      final rightReport = report('right');
+      // The first sink ready starts capture; reports arriving while it starts
+      // share that one start.
+      final leftReport = report('left');
       await codecRequested.future;
+      final rightReport = report('right');
       final crossingReport = report('left');
       await Future<void>.delayed(Duration.zero);
 
       expect(codecCalls, 1);
       releaseCodec.complete();
-      await Future.wait(<Future<void>>[rightReport, crossingReport]);
+      await Future.wait(<Future<void>>[
+        leftReport,
+        rightReport,
+        crossingReport,
+      ]);
       expect(
         calls.where((call) => call.method == 'startCapture'),
         hasLength(1),
@@ -1791,6 +1900,7 @@ void main() {
       );
       await coordinator.pausePlaybackAsSink();
       expect(coordinator.canRejoinAsSink, isTrue);
+      expect(await coordinator.requestRejoinAsSink(), isTrue);
       sent.clear();
 
       await _offerSinkPlayback(

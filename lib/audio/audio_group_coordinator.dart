@@ -7,6 +7,8 @@ import 'package:whisper/audio/audio_clock_sync.dart';
 import 'package:whisper/audio/audio_codec.dart';
 import 'package:whisper/audio/audio_failure_reason.dart';
 import 'package:whisper/audio/audio_group_media.dart';
+import 'package:whisper/audio/audio_group_messages.dart';
+import 'package:whisper/audio/audio_group_recovery.dart';
 import 'package:whisper/audio/audio_media_isolate.dart';
 import 'package:whisper/audio/audio_group_playback_scheduler.dart';
 import 'package:whisper/audio/audio_group_session.dart';
@@ -117,21 +119,19 @@ class AudioGroupCoordinator extends ChangeNotifier {
   int _playbackGeneration = 0;
   _SinkRejoinContext? _sinkRejoinContext;
 
-  /// Playback stopped because the connection dropped (the computers slept,
-  /// Wi-Fi went), not because the user paused: once that source is connected
-  /// again, this side asks to rejoin by itself. See [peerConnected].
-  String _autoRejoinSourcePeerId = '';
-  int _autoRejoinAttempts = 0;
-  static const _maxAutoRejoinAttempts = 3;
+  /// As a sink: the group the user just paused or left. The first offer of
+  /// it within [_crossingWindowMicros] crossed the stop (an answer to an
+  /// earlier join, or a re-offer the source had already sent) and is
+  /// declined; a later one is the source's user playing here again.
+  String _pausedGroupId = '';
+  int _pausedAtMicros = 0;
+  static const int _crossingWindowMicros = 5000000;
+  static final Stopwatch _monotonic = Stopwatch()..start();
 
-  /// 在途 sinkJoinRequest 所属 group;应答 offer 到达或流程终止时清空。
-  String _pendingSinkJoinGroupId = '';
-
-  /// pause/disconnect 取消在途 join 后,一次性拒绝其交错到达的应答 offer:
-  /// offer 到达时本地会话已清空,若照常自动接受会回到无声的"播放中"。
-  /// 仅针对被取消的 join,源端主动 re-offer 不受影响;requestRejoinAsSink
-  /// 重新放行。
-  String _declinedOfferGroupId = '';
+  /// As the source: who to offer the sound again, and how it was sent.
+  final AudioGroupRecovery _recovery = AudioGroupRecovery();
+  AudioGroupControlSender? _sourceSendControl;
+  String _localSourcePeerId = '';
   double _playbackGain = 1.0;
 
   // Whether sound really goes out and comes in, which the session alone does
@@ -280,6 +280,9 @@ class AudioGroupCoordinator extends ChangeNotifier {
     _captureGeneration += 1;
     _captureFailure = null;
     _captureRetries = 0;
+    _recovery.clear();
+    _sourceSendControl = sendControl;
+    _localSourcePeerId = sourcePeerId;
     final groupId = _groupIdFactory();
     final streamId = _streamIdFactory();
     var nextSession = AudioGroupSession.offering(
@@ -300,19 +303,11 @@ class AudioGroupCoordinator extends ChangeNotifier {
       _awaitAnswer(sinkPeerId, sessionId);
       sendControl(
         sinkPeerId,
-        AudioGroupControlMessage(
-          action: AudioGroupControlAction.groupOffer,
-          groupId: groupId,
-          streamId: streamId,
+        nextSession.offerTo(
+          sinkPeerId,
           sessionId: sessionId,
-          sourcePeerId: sourcePeerId,
-          sinkPeerId: sinkPeerId,
-          sinkPeerIds: sinks.keys.toList(growable: false),
-          format: format,
-          transport: AudioTransport.websocket,
-          path: '/audio',
           channelRole: entry.value,
-          targetLatencyMs: targetLatencyMs,
+          sinkPeerIds: sinks.keys.toList(growable: false),
         ),
       );
     }
@@ -337,6 +332,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
     }
     final nextSinks = Map<String, AudioGroupSink>.from(current.sinks);
     final requestedPeerIds = sinks.keys.toSet();
+    _sourceSendControl = sendControl;
 
     for (final sink in current.sinks.values) {
       if (requestedPeerIds.contains(sink.sinkPeerId)) {
@@ -347,19 +343,11 @@ class AudioGroupCoordinator extends ChangeNotifier {
       if (!sink.isTerminal) {
         sendControl(
           sink.sinkPeerId,
-          AudioGroupControlMessage(
-            action: AudioGroupControlAction.groupStop,
-            groupId: current.groupId,
-            streamId: current.streamId,
-            sessionId: sink.sessionId,
-            sourcePeerId: current.sourcePeerId,
-            sinkPeerId: sink.sinkPeerId,
-            channelRole: sink.channelRole,
-            targetLatencyMs: current.targetLatencyMs,
-          ),
+          current.stopFor(sink),
         );
       }
       await _media.disconnectSink(sink.sinkPeerId);
+      _recovery.settle(sink.sinkPeerId);
       nextSinks.remove(sink.sinkPeerId);
     }
 
@@ -378,19 +366,11 @@ class AudioGroupCoordinator extends ChangeNotifier {
         _awaitAnswer(sinkPeerId, sessionId);
         sendControl(
           sinkPeerId,
-          AudioGroupControlMessage(
-            action: AudioGroupControlAction.groupOffer,
-            groupId: current.groupId,
-            streamId: current.streamId,
+          current.offerTo(
+            sinkPeerId,
             sessionId: sessionId,
-            sourcePeerId: current.sourcePeerId,
-            sinkPeerId: sinkPeerId,
-            sinkPeerIds: sinks.keys.toList(growable: false),
-            format: current.format,
-            transport: AudioTransport.websocket,
-            path: '/audio',
             channelRole: channelRole,
-            targetLatencyMs: current.targetLatencyMs,
+            sinkPeerIds: sinks.keys.toList(growable: false),
           ),
         );
         continue;
@@ -404,19 +384,12 @@ class AudioGroupCoordinator extends ChangeNotifier {
       }
       sendControl(
         sinkPeerId,
-        AudioGroupControlMessage(
+        current.offerTo(
+          sinkPeerId,
           action: AudioGroupControlAction.groupUpdate,
-          groupId: current.groupId,
-          streamId: current.streamId,
           sessionId: existing.sessionId,
-          sourcePeerId: current.sourcePeerId,
-          sinkPeerId: sinkPeerId,
-          sinkPeerIds: sinks.keys.toList(growable: false),
-          format: current.format,
-          transport: AudioTransport.websocket,
-          path: '/audio',
           channelRole: channelRole,
-          targetLatencyMs: current.targetLatencyMs,
+          sinkPeerIds: sinks.keys.toList(growable: false),
         ),
       );
     }
@@ -450,18 +423,17 @@ class AudioGroupCoordinator extends ChangeNotifier {
     }
 
     final current = _session;
-    if (current == null) {
+    if (current == null || current.groupId != message.groupId) {
       if (message.action == AudioGroupControlAction.groupStop &&
           _sinkRejoinContext?.groupId == message.groupId) {
+        // The source has no such group any more: nothing to resume.
         _sinkRejoinContext = null;
-        if (_pendingSinkJoinGroupId == message.groupId) {
-          _pendingSinkJoinGroupId = ''; // 源端已停组,在途 join 作废
-        }
+        _pausedGroupId = '';
         notifyListeners();
+      } else if (message.action == AudioGroupControlAction.sinkJoinRequest &&
+          message.sourcePeerId == localPeerId) {
+        sendControl(message.sinkPeerId, message.stopReply());
       }
-      return current;
-    }
-    if (current.groupId != message.groupId) {
       return current;
     }
     switch (message.action) {
@@ -479,6 +451,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
       case AudioGroupControlAction.groupReject:
       case AudioGroupControlAction.error:
         final failureReason = audioFailureReasonFromWire(message.errorMessage);
+        _recovery.settle(message.sinkPeerId);
         _setSession(current.markSink(
           message.sinkPeerId,
           state: AudioGroupSinkState.failed,
@@ -493,6 +466,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
           _sinkAcceptGenerations[message.sinkPeerId] =
               (_sinkAcceptGenerations[message.sinkPeerId] ?? 0) + 1;
           await _media.disconnectSink(message.sinkPeerId);
+          _recovery.settle(message.sinkPeerId);
           final next = current.markSink(
             message.sinkPeerId,
             state: AudioGroupSinkState.stopped,
@@ -505,40 +479,12 @@ class AudioGroupCoordinator extends ChangeNotifier {
       case AudioGroupControlAction.groupOffer:
         break;
       case AudioGroupControlAction.sinkJoinRequest:
-        final requestedSink = current.sinks[message.sinkPeerId];
-        if (current.sourcePeerId == localPeerId && requestedSink != null) {
-          final sinks = <String, AudioChannelRole>{
-            for (final sink in current.sinks.values)
-              if (!sink.isTerminal ||
-                  sink.sinkPeerId == requestedSink.sinkPeerId)
-                sink.sinkPeerId: sink.channelRole,
-          };
-          if (requestedSink.isTerminal) {
-            final sessionId = _sessionIdFactory();
-            sendControl(
-              requestedSink.sinkPeerId,
-              AudioGroupControlMessage(
-                action: AudioGroupControlAction.groupOffer,
-                groupId: current.groupId,
-                streamId: current.streamId,
-                sessionId: sessionId,
-                sourcePeerId: current.sourcePeerId,
-                sinkPeerId: requestedSink.sinkPeerId,
-                sinkPeerIds: sinks.keys.toList(growable: false),
-                format: current.format,
-                transport: AudioTransport.websocket,
-                path: '/audio',
-                channelRole: requestedSink.channelRole,
-                targetLatencyMs: current.targetLatencyMs,
-              ),
-            );
-            _setSession(current.markSink(
-              requestedSink.sinkPeerId,
-              state: AudioGroupSinkState.offered,
-              sessionId: sessionId,
-              channelRole: requestedSink.channelRole,
-            ));
-          }
+        // Always honoured, whatever state the source thinks the sink is in:
+        // it may not have noticed yet that the old link is gone.
+        if (current.sourcePeerId == localPeerId &&
+            current.sinks.containsKey(message.sinkPeerId)) {
+          _recovery.settle(message.sinkPeerId);
+          _reofferSink(current, message.sinkPeerId, sendControl);
         }
         break;
       case AudioGroupControlAction.clockProbe:
@@ -601,16 +547,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
       if (sink.isTerminal) continue;
       sendControl(
         sink.sinkPeerId,
-        AudioGroupControlMessage(
-          action: AudioGroupControlAction.groupStop,
-          groupId: current.groupId,
-          streamId: current.streamId,
-          sessionId: sink.sessionId,
-          sourcePeerId: current.sourcePeerId,
-          sinkPeerId: sink.sinkPeerId,
-          channelRole: sink.channelRole,
-          targetLatencyMs: current.targetLatencyMs,
-        ),
+        current.stopFor(sink),
       );
     }
     await stopLocal();
@@ -626,30 +563,44 @@ class AudioGroupCoordinator extends ChangeNotifier {
     if (resolved == null) {
       return;
     }
-    _armOfferDeclineIfJoinPending(resolved.groupId);
+    _pausedGroupId = resolved.groupId;
+    _pausedAtMicros = _monotonic.elapsedMicroseconds;
     _sinkRejoinContext = resolved;
-    _autoRejoinSourcePeerId = '';
     resolved.sendControl(resolved.sourcePeerId, _sinkStopMessage(resolved));
     await _stopPlaybackOnly();
     _setSession(null);
   }
 
-  /// The connection to [peerId] is up, or its profile was refreshed. Playback
-  /// from it that the connection, not the user, stopped asks to rejoin.
+  /// The connection to [peerId] is up, or its profile was refreshed. As the
+  /// source, a sink the connection lost gets the sound offered again.
   void peerConnected(String peerId) {
-    if (peerId.isEmpty || _autoRejoinSourcePeerId != peerId) {
-      return;
+    if (peerId.isNotEmpty && _recovery.takeReconnect(peerId)) {
+      _reofferLostSink(peerId);
     }
-    _autoRejoinSourcePeerId = '';
-    _autoRejoinAttempts += 1;
-    // The control channel settles right after the connection is registered.
-    Timer(const Duration(seconds: 1), () {
-      if (_sinkRejoinContext?.sourcePeerId != peerId ||
-          _pendingSinkJoinGroupId.isNotEmpty) {
-        return;
-      }
-      unawaited(requestRejoinAsSink());
-    });
+  }
+
+  /// The connection to [peerId] went. As the source, its sink is lost until
+  /// it connects again; as its sink, playback stops and waits for the source
+  /// to offer again.
+  void peerDisconnected(String peerId) {
+    final current = _session;
+    if (current == null || peerId.isEmpty) return;
+    if (_isLocalSource(current)) {
+      final sink = current.sinks[peerId];
+      if (sink == null || sink.isTerminal) return;
+      _sinkAcceptGenerations[peerId] = (_sinkAcceptGenerations[peerId] ?? 0) + 1;
+      unawaited(_media.disconnectSink(peerId).catchError((Object _) {}));
+      _recovery.lost(peerId);
+      final next = current.markSink(
+        peerId,
+        state: AudioGroupSinkState.failed,
+        lastError: AudioFailureReason.transport.name,
+      );
+      _setSession(next);
+      _stopCaptureIfNoActiveSinks(next);
+    } else if (_playbackSourcePeerId == peerId) {
+      _failPlaybackAsSink(AudioFailureReason.transport);
+    }
   }
 
   /// 播放=重新加入:向源端请求 re-offer,后续复用现有 offer/accept 流程。
@@ -671,18 +622,20 @@ class AudioGroupCoordinator extends ChangeNotifier {
         targetLatencyMs: context.targetLatencyMs,
       ),
     );
-    _pendingSinkJoinGroupId = context.groupId;
-    _declinedOfferGroupId = ''; // 用户重新播放,放行后续 offer
+    _pausedGroupId = '';
     return true;
   }
 
   Future<void> disconnectPlaybackAsSink() async {
     final resolved = _resolveSinkControlContext();
     if (resolved != null) {
-      _armOfferDeclineIfJoinPending(resolved.groupId);
       resolved.sendControl(resolved.sourcePeerId, _sinkStopMessage(resolved));
     }
     await stopLocal();
+    if (resolved != null) {
+      _pausedGroupId = resolved.groupId;
+      _pausedAtMicros = _monotonic.elapsedMicroseconds;
+    }
   }
 
   /// pause/disconnect 共用的控制上下文解析:优先取活播字段,
@@ -745,13 +698,6 @@ class AudioGroupCoordinator extends ChangeNotifier {
     );
   }
 
-  void _armOfferDeclineIfJoinPending(String groupId) {
-    if (_pendingSinkJoinGroupId == groupId) {
-      _declinedOfferGroupId = groupId;
-      _pendingSinkJoinGroupId = '';
-    }
-  }
-
   Future<void> stopLocal() async {
     for (final timer in _offerTimers.values) {
       timer.cancel();
@@ -777,8 +723,10 @@ class AudioGroupCoordinator extends ChangeNotifier {
     _playbackTargetLatencyMs = _defaultTargetLatencyMs;
     _playbackSendControl = null;
     _sinkRejoinContext = null;
-    _autoRejoinSourcePeerId = '';
-    _pendingSinkJoinGroupId = '';
+    _pausedGroupId = '';
+    _recovery.clear();
+    _sourceSendControl = null;
+    _localSourcePeerId = '';
     _captureFailure = null;
     _sinkHeardAtMicros.clear();
     await _stopCaptureSource(captureSource);
@@ -796,39 +744,21 @@ class AudioGroupCoordinator extends ChangeNotifier {
     if (offer.sinkPeerId != localPeerId) {
       return;
     }
-    if (offer.groupId == _pendingSinkJoinGroupId) {
-      _pendingSinkJoinGroupId = ''; // 在途 join 已被应答
-    }
-    if (offer.groupId == _declinedOfferGroupId) {
-      // 这是已被暂停/断开取消的 join 的迟到应答:一次性拒收,回 groupStop
-      // 让源端按停止语义标记本 sink(源端多半已处理过 stop,幂等)。
-      _declinedOfferGroupId = '';
+    if (offer.groupId == _pausedGroupId &&
+        _monotonic.elapsedMicroseconds - _pausedAtMicros <
+            _crossingWindowMicros) {
+      _pausedGroupId = '';
       sendControl(
         offer.sourcePeerId,
-        AudioGroupControlMessage(
-          action: AudioGroupControlAction.groupStop,
-          groupId: offer.groupId,
-          streamId: offer.streamId,
-          sessionId: offer.sessionId,
-          sourcePeerId: offer.sourcePeerId,
-          sinkPeerId: offer.sinkPeerId,
-          channelRole: offer.channelRole,
-          targetLatencyMs: offer.targetLatencyMs,
-        ),
+        offer.stopReply(),
       );
       return;
     }
     if (hasLiveSession && _session?.groupId != offer.groupId) {
       sendControl(
         offer.sourcePeerId,
-        AudioGroupControlMessage(
-          action: AudioGroupControlAction.groupReject,
-          groupId: offer.groupId,
-          streamId: offer.streamId,
-          sessionId: offer.sessionId,
-          sourcePeerId: offer.sourcePeerId,
-          sinkPeerId: offer.sinkPeerId,
-          channelRole: offer.channelRole,
+        offer.reply(
+          AudioGroupControlAction.groupReject,
           errorMessage: AudioFailureReason.busy.name,
         ),
       );
@@ -838,13 +768,8 @@ class AudioGroupCoordinator extends ChangeNotifier {
     if (format == null) {
       sendControl(
         offer.sourcePeerId,
-        AudioGroupControlMessage(
-          action: AudioGroupControlAction.groupReject,
-          groupId: offer.groupId,
-          streamId: offer.streamId,
-          sessionId: offer.sessionId,
-          sourcePeerId: offer.sourcePeerId,
-          sinkPeerId: offer.sinkPeerId,
+        offer.reply(
+          AudioGroupControlAction.groupReject,
           errorMessage: AudioFailureReason.protocol.name,
         ),
       );
@@ -859,8 +784,6 @@ class AudioGroupCoordinator extends ChangeNotifier {
       _playbackSendControl = sendControl;
       _playbackLocalPeerId = localPeerId;
       _sinkRejoinContext = null;
-      _autoRejoinSourcePeerId = '';
-      _autoRejoinAttempts = 0;
       _setSession(AudioGroupSession.offering(
         groupId: offer.groupId,
         streamId: offer.streamId,
@@ -901,14 +824,8 @@ class AudioGroupCoordinator extends ChangeNotifier {
       }
       sendControl(
         offer.sourcePeerId,
-        AudioGroupControlMessage(
-          action: AudioGroupControlAction.error,
-          groupId: offer.groupId,
-          streamId: offer.streamId,
-          sessionId: offer.sessionId,
-          sourcePeerId: offer.sourcePeerId,
-          sinkPeerId: offer.sinkPeerId,
-          channelRole: offer.channelRole,
+        offer.reply(
+          AudioGroupControlAction.error,
           errorMessage: failureReason.name,
         ),
       );
@@ -999,6 +916,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
         port: remotePort,
       );
       _setSession(next);
+      _recovery.settle(accept.sinkPeerId);
       final transport = connectedTransport;
       if (transport != null) {
         _media.attachSink(accept.sinkPeerId, transport);
@@ -1209,14 +1127,19 @@ class AudioGroupCoordinator extends ChangeNotifier {
     if (sinks.isEmpty) {
       return;
     }
-    final allSinksSynchronized = sinks.every(
-      (sink) => sink.state == AudioGroupSinkState.active && sink.rttMicros > 0,
-    );
-    if (!allSinksSynchronized) {
+    // One sink ready is enough: a sink still connecting, or one that never
+    // answers, must not keep the others silent.
+    final synchronized = sinks
+        .where(
+          (sink) =>
+              sink.state == AudioGroupSinkState.active && sink.rttMicros > 0,
+        )
+        .toList(growable: false);
+    if (synchronized.isEmpty) {
       return;
     }
     final targetLatencyMs = _targetLatencyMsForSinks(
-      sinks,
+      synchronized,
       floorLatencyMs: session.targetLatencyMs,
     );
     final nextSession = targetLatencyMs == session.targetLatencyMs
@@ -1633,7 +1556,74 @@ class AudioGroupCoordinator extends ChangeNotifier {
       );
       _setSession(next);
       _stopCaptureIfNoActiveSinks(next);
+      _lose(sinkPeerId);
     });
+  }
+
+  bool _isLocalSource(AudioGroupSession session) =>
+      _localSourcePeerId.isNotEmpty &&
+      session.sourcePeerId == _localSourcePeerId;
+
+  /// The link to [sinkPeerId] failed while its peer may still be there:
+  /// offered again after a wait, a few times.
+  void _lose(String sinkPeerId) {
+    final current = _session;
+    if (current == null || !_isLocalSource(current)) return;
+    _recovery.lost(sinkPeerId);
+    _recovery.schedule(sinkPeerId, () => _reofferLostSink(sinkPeerId));
+  }
+
+  void _reofferLostSink(String sinkPeerId) {
+    final current = _session;
+    final sendControl = _sourceSendControl;
+    final sink = current?.sinks[sinkPeerId];
+    if (current == null ||
+        sendControl == null ||
+        !_isLocalSource(current) ||
+        current.state == AudioGroupState.stopped) {
+      return;
+    }
+    if (sink == null) {
+      _recovery.settle(sinkPeerId);
+      return;
+    }
+    if (sink.isTerminal) _reofferSink(current, sinkPeerId, sendControl);
+  }
+
+  /// Offers the sound to [sinkPeerId] again under a new session id, dropping
+  /// whatever link it had.
+  void _reofferSink(
+    AudioGroupSession current,
+    String sinkPeerId,
+    AudioGroupControlSender sendControl,
+  ) {
+    final sink = current.sinks[sinkPeerId]!;
+    if (!sink.isTerminal) {
+      _sinkAcceptGenerations[sinkPeerId] =
+          (_sinkAcceptGenerations[sinkPeerId] ?? 0) + 1;
+      unawaited(_media.disconnectSink(sinkPeerId).catchError((Object _) {}));
+    }
+    final sessionId = _sessionIdFactory();
+    _awaitAnswer(sinkPeerId, sessionId);
+    sendControl(
+      sinkPeerId,
+      current.offerTo(
+        sinkPeerId,
+        sessionId: sessionId,
+        channelRole: sink.channelRole,
+        sinkPeerIds: <String>[
+          for (final other in current.sinks.values)
+            if (!other.isTerminal || other.sinkPeerId == sinkPeerId)
+              other.sinkPeerId,
+        ],
+      ),
+    );
+    _setSession(current.markSink(
+      sinkPeerId,
+      state: AudioGroupSinkState.offered,
+      sessionId: sessionId,
+      channelRole: sink.channelRole,
+    ));
   }
 
   void _markSinkFailed(String sinkPeerId, Object error) {
@@ -1651,6 +1641,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
     );
     _setSession(next);
     _stopCaptureIfNoActiveSinks(next);
+    _lose(sinkPeerId);
   }
 
   void _stopCaptureIfNoActiveSinks(AudioGroupSession session) {
@@ -1696,12 +1687,9 @@ class AudioGroupCoordinator extends ChangeNotifier {
     final stoppingPlayback = _stopPlaybackOnly();
     _playbackSendControl = null;
     _playbackLocalPeerId = '';
+    // Kept so the user can resume; the source offers again by itself when
+    // the connection comes back.
     _sinkRejoinContext = rejoinContext;
-    if (failureReason == AudioFailureReason.transport &&
-        rejoinContext != null &&
-        _autoRejoinAttempts < _maxAutoRejoinAttempts) {
-      _autoRejoinSourcePeerId = rejoinContext.sourcePeerId;
-    }
     _setSession(
       current.markSink(
         localPeerId,
@@ -1727,6 +1715,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
     }
     _offerTimers.clear();
     _captureRetry?.cancel();
+    _recovery.clear();
     _removeChannelLifecycleListener?.call();
     _removeChannelLifecycleListener = null;
     super.dispose();

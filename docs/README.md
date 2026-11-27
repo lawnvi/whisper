@@ -41,6 +41,7 @@
 - [网页传输](internals/web-transfer.md)
 - [电脑共享的目录和底线](internals/shared-folders.md)
 - [剪贴板同步：发给谁、哪些不发](internals/clipboard-sync.md)
+- [声音共享：谁负责接着放](internals/audio-group-recovery.md)
 - 界面：[design/README.md](design/README.md)
 
 **记录**

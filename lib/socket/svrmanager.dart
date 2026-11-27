@@ -3295,6 +3295,7 @@ class WsSvrManager {
     if (!_manageSharedCoordinators) {
       return;
     }
+    AudioGroupCoordinator.shared.peerDisconnected(peerId);
     await RemoteInputWorkspaceCoordinator.shared.handlePeerDisconnected(peerId);
     if (!ownsCleanup()) {
       return;

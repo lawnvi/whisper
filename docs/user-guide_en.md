@@ -316,6 +316,8 @@ On desktop, select the speaker at the top of the sidebar, check one or more conn
 
 When another device plays its sound here, this page shows that device instead, with gain, pause, and disconnect. After pausing or disconnecting there, the source unchecks that device and says it stopped playing; resuming there checks it again, and so does checking it on the source. A check means sound is going there: once sharing stops nothing stays checked, the devices just played to say Stopped, and the play button plays to them again.
 
+Sound starts as soon as one of the checked devices is ready; the others join when they are. If a device drops off because it slept or lost the network, the source plays to it again once it reconnects; a device paused or disconnected there is left alone.
+
 Between computers, sound goes over UDP like the keyboard and mouse (0.0.60 or later on both). A short piece lost now and then is filled in instead of cutting out. Sound played on an Android phone still uses the original connection.
 
 ## Screenshots
