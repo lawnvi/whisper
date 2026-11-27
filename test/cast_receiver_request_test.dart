@@ -44,18 +44,17 @@ void main() {
     },
   );
 
-  test(
-    'auto acceptance waits five seconds after the prompt is presented',
-    () async {
-      final gate = CastRequestGate()..open();
-      addTearDown(gate.dispose);
-      final response = gate.authorize('192.168.1.10');
-      final request = gate.pending!;
-      expect(request.secondsRemaining, 5);
-      gate.presented(request);
-      expect(await response.timeout(const Duration(seconds: 7)), isTrue);
-      expect(request.secondsRemaining, 0);
-      expect(gate.pending, isNull);
-    },
-  );
+  test('unanswered prompt auto-declines after five seconds', () async {
+    final gate = CastRequestGate()..open();
+    addTearDown(gate.dispose);
+    final response = gate.authorize('192.168.1.10');
+    final request = gate.pending!;
+    expect(request.secondsRemaining, 5);
+    gate.presented(request);
+    expect(await response.timeout(const Duration(seconds: 7)), isFalse);
+    expect(request.secondsRemaining, 0);
+    expect(gate.pending, isNull);
+    expect(gate.allows('192.168.1.10'), isFalse);
+    expect(await gate.authorize('192.168.1.10'), isFalse);
+  });
 }

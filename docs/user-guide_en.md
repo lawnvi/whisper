@@ -335,7 +335,7 @@ After granting the notification access permission on Android, choose which apps 
 
 ## TV casting
 
-With "TV casting" turned on in desktop Settings, video apps on the same network can cast to this computer without Whisper pairing. The feature is experimental and off by default; see the [TV casting notes (Chinese)](internals/cast-receiver.md).
+With "TV casting" turned on in desktop Settings, video apps on the same network can cast to this computer without Whisper pairing. The first cast from a sender asks for confirmation on this computer and declines automatically if unanswered. The feature is experimental and off by default; see the [TV casting notes (Chinese)](internals/cast-receiver.md).
 
 ## Updates
 

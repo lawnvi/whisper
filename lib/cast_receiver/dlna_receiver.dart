@@ -37,8 +37,10 @@ class DlnaReceiver {
     this.interface, {
     required this.name,
     this.requests,
-  });
+    Future<Set<String>> Function()? localAddressesProvider,
+  }) : _localAddressesProvider = localAddressesProvider;
   final CastRequestGate? requests;
+  final Future<Set<String>> Function()? _localAddressesProvider;
   final CastPlayer player;
   final InternetAddress address;
   final NetworkInterface interface;
@@ -177,6 +179,11 @@ class DlnaReceiver {
         charset: 'utf-8',
       );
       if (request.method == 'GET' && path == '/status') {
+        final peer = request.connectionInfo?.remoteAddress.address;
+        if (requests != null && (peer == null || !requests!.allows(peer))) {
+          response.statusCode = HttpStatus.forbidden;
+          return;
+        }
         response.headers.contentType = ContentType.json;
         response.write(
           jsonEncode({
@@ -300,7 +307,8 @@ class DlnaReceiver {
         if (uri == null ||
             !['http', 'https'].contains(uri.scheme) ||
             uri.host.isEmpty ||
-            uri.userInfo.isNotEmpty) {
+            uri.userInfo.isNotEmpty ||
+            await _isForbiddenMediaHost(uri.host)) {
           throw const ControlError(716, 'Resource not found');
         }
         await player.command('load', {
@@ -530,6 +538,124 @@ class DlnaReceiver {
       // flight, with no later playback tick to flush the latest state.
       if (identical(subscriptions[sub.id], sub)) notifySubscribers();
     }
+  }
+
+  Future<bool> _isForbiddenMediaHost(String rawHost) async {
+    final host = _normalizeHost(rawHost);
+    if (host.isEmpty || host == 'localhost' || host.endsWith('.localhost')) {
+      return true;
+    }
+    if (_looksLikeNonCanonicalIpv4(host)) {
+      return true;
+    }
+    final parsed = InternetAddress.tryParse(host);
+    if (parsed != null) {
+      if (_isForbiddenAddress(parsed)) {
+        return true;
+      }
+      final locals = await _localAddresses();
+      final canonical = _canonicalIp(parsed);
+      if (locals.contains(canonical)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  static String _normalizeHost(String rawHost) {
+    var host = rawHost.trim().toLowerCase();
+    if (host.startsWith('[') && host.endsWith(']')) {
+      host = host.substring(1, host.length - 1);
+    }
+    final zone = host.indexOf('%');
+    if (zone != -1) {
+      host = host.substring(0, zone);
+    }
+    while (host.endsWith('.')) {
+      host = host.substring(0, host.length - 1);
+    }
+    return host;
+  }
+
+  /// Blocks shorthand/hex/octal numeric IPv4 forms (e.g. `2130706433`,
+  /// `0x7f000001`, `0177.0.0.1`, `127.1`) that libmpv/OS resolvers accept.
+  static bool _looksLikeNonCanonicalIpv4(String host) {
+    final parts = host.split('.');
+    if (parts.isEmpty || parts.length > 4) return false;
+    final allNumeric = parts.every(
+      (part) => RegExp(r'^(?:0x[0-9a-f]+|[0-9]+)$').hasMatch(part),
+    );
+    if (!allNumeric) return false;
+    if (parts.length != 4) return true;
+    return parts.any(
+      (part) =>
+          part.startsWith('0x') || (part.length > 1 && part.startsWith('0')),
+    );
+  }
+
+  static bool _isForbiddenAddress(InternetAddress ip) {
+    final v4 = _extractIpv4Bytes(ip);
+    if (v4 != null) {
+      final a = v4[0];
+      final b = v4[1];
+      // Unspecified 0.0.0.0/8, loopback 127.0.0.0/8, link-local 169.254.0.0/16,
+      // multicast/reserved >= 224.0.0.0.
+      return a == 0 || a == 127 || (a == 169 && b == 254) || a >= 224;
+    }
+    if (ip.type == InternetAddressType.IPv6) {
+      final bytes = ip.rawAddress;
+      if (ip.isLoopback || ip.isLinkLocal || ip.isMulticast) return true;
+      // Unspecified ::
+      if (bytes.every((b) => b == 0)) return true;
+    }
+    return false;
+  }
+
+  static List<int>? _extractIpv4Bytes(InternetAddress ip) {
+    if (ip.type == InternetAddressType.IPv4) return ip.rawAddress;
+    final bytes = ip.rawAddress;
+    if (bytes.length == 16 &&
+        bytes.take(10).every((b) => b == 0) &&
+        bytes[10] == 0xff &&
+        bytes[11] == 0xff) {
+      return bytes.sublist(12, 16);
+    }
+    return null;
+  }
+
+  static String _canonicalIp(InternetAddress ip) {
+    final v4 = _extractIpv4Bytes(ip);
+    if (v4 != null) return '${v4[0]}.${v4[1]}.${v4[2]}.${v4[3]}';
+    return ip.address.toLowerCase();
+  }
+
+  Future<Set<String>> _localAddresses() async {
+    final result = <String>{
+      _canonicalIp(address),
+      for (final a in interface.addresses) _canonicalIp(a),
+    };
+    final provider = _localAddressesProvider;
+    if (provider != null) {
+      for (final raw in await provider()) {
+        final ip = InternetAddress.tryParse(_normalizeHost(raw));
+        result.add(ip != null ? _canonicalIp(ip) : _normalizeHost(raw));
+      }
+      return result;
+    }
+    try {
+      final interfaces = await NetworkInterface.list(
+        includeLoopback: true,
+        includeLinkLocal: true,
+      );
+      for (final iface in interfaces) {
+        for (final addr in iface.addresses) {
+          result.add(_canonicalIp(addr));
+        }
+      }
+    } on Object {
+      // Fall back to the receiver's own bound address and interface.
+    }
+    return result;
   }
 
   Future<void> close() async {

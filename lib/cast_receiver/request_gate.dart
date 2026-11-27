@@ -60,7 +60,7 @@ class CastRequestGate extends ChangeNotifier {
     _presentationTimeout = null;
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (--request.secondsRemaining <= 0) {
-        decide(request, true);
+        decide(request, false);
       } else {
         notifyListeners();
       }

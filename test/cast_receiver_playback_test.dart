@@ -72,6 +72,94 @@ void main() {
     }
   });
 
+  test(
+    'SetAVTransportURI rejects loopback, link-local, and local host addresses',
+    () async {
+      await receiver.close();
+      receiver = DlnaReceiver(
+        player,
+        InternetAddress('192.168.1.50'),
+        _Interface(),
+        name: 'Test',
+        localAddressesProvider: () async => {'192.168.1.50', '10.0.0.5'},
+      );
+      const blocked = <String>[
+        'http://127.0.0.1:10003/a',
+        'http://localhost:10003/a',
+        'http://foo.localhost/a',
+        'http://[::1]:10003/a',
+        'http://[::ffff:127.0.0.1]/a',
+        'http://0.0.0.0/a',
+        'http://[::]/a',
+        'http://169.254.169.254/latest/meta-data',
+        'http://[fe80::1]/a',
+        'http://[::ffff:169.254.1.1]/a',
+        'http://192.168.1.50:10003/a',
+        'http://10.0.0.5/a',
+        'http://2130706433/a',
+        'http://0x7f000001/a',
+        'http://127.1/a',
+      ];
+      for (final url in blocked) {
+        await expectLater(
+          control('SetAVTransportURI', {
+            'CurrentURI': url,
+            'CurrentURIMetaData': '',
+          }),
+          throwsA(isA<ControlError>()),
+          reason: 'should reject $url',
+        );
+      }
+      // Another LAN peer's address or public CDN host remains allowed.
+      for (final url in [
+        'http://192.168.1.99:8080/video.mp4',
+        'https://example.com/video.mp4',
+      ]) {
+        await control('SetAVTransportURI', {
+          'CurrentURI': url,
+          'CurrentURIMetaData': '',
+        });
+        expect(player.uri, url);
+      }
+    },
+  );
+
+  test('/status requires approval from CastRequestGate', () async {
+    final gate = CastRequestGate()..open();
+    addTearDown(gate.dispose);
+    await receiver.close();
+    receiver = DlnaReceiver(
+      player,
+      InternetAddress.loopbackIPv4,
+      _Interface(),
+      name: 'Test',
+      requests: gate,
+    );
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    server.listen((req) => unawaited(receiver.handle(req)));
+
+    final client = HttpClient();
+    addTearDown(() => client.close(force: true));
+
+    Future<int> getStatus() async {
+      final req = await client.get(
+        InternetAddress.loopbackIPv4.address,
+        server.port,
+        '/status',
+      );
+      final res = await req.close();
+      await res.drain<void>();
+      return res.statusCode;
+    }
+
+    expect(await getStatus(), HttpStatus.forbidden);
+    final auth = gate.authorize('127.0.0.1');
+    gate.decide(gate.pending!, true);
+    expect(await auth, isTrue);
+    expect(await getStatus(), HttpStatus.ok);
+  });
+
   test('late engine creation is released when reception is disabled', () async {
     await player.close();
     player.dispose();
