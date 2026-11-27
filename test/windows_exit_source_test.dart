@@ -16,9 +16,17 @@ void main() {
       source,
       'Future<void> _shutdownDesktopResources() {',
     );
-    expect(resources, contains('if (!Platform.isWindows) _stopDiscovery,'));
+    expect(resources, contains('_lanDiscovery.stopAll,'));
+    final discovery = memberSource(
+      readSource('lib/state/lan_discovery_service.dart'),
+      'Future<void> stopAll({bool stopDiscoveryOnWindows = false}) async {',
+    );
+    expect(
+      discovery,
+      contains('if (!Platform.isWindows || stopDiscoveryOnWindows) {'),
+    );
+    expect(discovery, contains('await stopBroadcast();'));
     for (final step in <String>[
-      '_stopBroadcast,',
       '_stopSocketServer,',
       '_closeDatabase,',
       '_destroyTray,',
