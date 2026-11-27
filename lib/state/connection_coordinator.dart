@@ -128,6 +128,7 @@ class ConnectionCoordinator extends ChangeNotifier {
   final LocalSetting _settings = LocalSetting();
 
   final Map<String, DevicePresence> _presenceByPeerId = {};
+  final Map<String, List<PeerEndpoint>> _candidateEndpointsByPeerId = {};
   final Map<String, NearbyCandidatePresentation> _nearbyCandidatesByPkh = {};
   ConnectionSnapshot _snapshot = const ConnectionSnapshot();
   String _localPeerId = '';
@@ -187,6 +188,44 @@ class ConnectionCoordinator extends ChangeNotifier {
       );
     }
     notifyListeners();
+  }
+
+  void updatePeerCandidates(String peerId, List<PeerEndpoint> endpoints) {
+    if (peerId.isEmpty || endpoints.isEmpty) return;
+    final deduped = <PeerEndpoint>[];
+    for (final ep in endpoints) {
+      if (!deduped.contains(ep) && deduped.length < 4) {
+        deduped.add(ep);
+      }
+    }
+    _candidateEndpointsByPeerId[peerId] = List<PeerEndpoint>.unmodifiable(
+      deduped,
+    );
+  }
+
+  void rememberWorkingEndpoint(String peerId, PeerEndpoint endpoint) {
+    if (peerId.isEmpty) return;
+    final existing =
+        _candidateEndpointsByPeerId[peerId] ?? const <PeerEndpoint>[];
+    updatePeerCandidates(peerId, <PeerEndpoint>[endpoint, ...existing]);
+  }
+
+  List<PeerEndpoint> candidateEndpointsFor(
+    String peerId, {
+    PeerEndpoint? primary,
+  }) {
+    final result = <PeerEndpoint>[];
+    void add(PeerEndpoint? ep) {
+      if (ep == null || result.contains(ep) || result.length >= 4) return;
+      result.add(ep);
+    }
+
+    add(primary);
+    for (final ep
+        in _candidateEndpointsByPeerId[peerId] ?? const <PeerEndpoint>[]) {
+      add(ep);
+    }
+    return List<PeerEndpoint>.unmodifiable(result);
   }
 
   Future<void> updateDiscovery(

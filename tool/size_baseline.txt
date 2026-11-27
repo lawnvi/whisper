@@ -9,7 +9,7 @@
 1002 lib/new_ui/settings/settings_layout.dart
 1034 lib/new_ui/tray/tray_panel.dart
 2909 lib/page/conversation.dart
-3821 lib/page/deviceList.dart
+3602 lib/page/deviceList.dart
 2211 lib/page/remote_files/files_desktop.dart
 1495 lib/page/remote_files/files_model.dart
 1362 lib/page/settings.dart

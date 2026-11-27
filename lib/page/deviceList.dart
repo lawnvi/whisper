@@ -4,7 +4,6 @@ import 'dart:io';
 import 'dart:isolate';
 import 'dart:ui';
 import 'package:whisper/state/peer_aliases.dart';
-import 'package:bonsoir/bonsoir.dart';
 import 'package:dbus/dbus.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:file_picker/file_picker.dart';
@@ -86,11 +85,15 @@ import 'package:whisper/state/device_list_rules.dart';
 import 'package:whisper/state/connection_diagnostic.dart';
 import 'package:whisper/state/connection_coordinator.dart';
 import 'package:whisper/state/connection_attempt.dart';
-import 'package:whisper/state/discovery_endpoint_resolver.dart';
 import 'package:whisper/state/discovery_identity.dart';
-import 'package:whisper/state/discovery_resolve_limiter.dart';
-import 'package:whisper/state/discovery_service_presence.dart';
+import 'package:whisper/state/lan_discovery_service.dart';
 import 'package:whisper/state/desktop_quick_send_inbox.dart';
+
+export 'package:whisper/state/lan_discovery_service.dart'
+    show
+        DiscoveryDiagnosticKind,
+        DiscoveryEventState,
+        buildWhisperServiceName;
 import 'package:whisper/state/notification_app_registry.dart';
 import 'package:whisper/state/peer_endpoint.dart';
 import 'package:whisper/state/connection_models.dart';
@@ -135,51 +138,6 @@ enum DeviceListOperationKind {
   clipboardWatcher,
 }
 
-enum DiscoveryDiagnosticKind {
-  broadcastEvent,
-  discoveryEvent,
-  serviceFound,
-  discoveryStarted,
-  serviceSkipped,
-  serviceResolved,
-  serviceLost,
-}
-
-/// What a discovery or broadcast event was, for the diagnostic log.
-enum DiscoveryEventState {
-  started,
-  serviceFound,
-  serviceResolved,
-  serviceUpdated,
-  serviceResolveFailed,
-  serviceLost,
-  nameAlreadyExists,
-  stopped,
-  unknown;
-
-  static DiscoveryEventState ofDiscovery(BonsoirDiscoveryEvent event) {
-    return switch (event) {
-      BonsoirDiscoveryStartedEvent() => started,
-      BonsoirDiscoveryServiceFoundEvent() => serviceFound,
-      BonsoirDiscoveryServiceResolvedEvent() => serviceResolved,
-      BonsoirDiscoveryServiceUpdatedEvent() => serviceUpdated,
-      BonsoirDiscoveryServiceResolveFailedEvent() => serviceResolveFailed,
-      BonsoirDiscoveryServiceLostEvent() => serviceLost,
-      BonsoirDiscoveryStoppedEvent() => stopped,
-      BonsoirDiscoveryUnknownEvent() => unknown,
-    };
-  }
-
-  static DiscoveryEventState ofBroadcast(BonsoirBroadcastEvent event) {
-    return switch (event) {
-      BonsoirBroadcastStartedEvent() => started,
-      BonsoirBroadcastNameAlreadyExistsEvent() => nameAlreadyExists,
-      BonsoirBroadcastStoppedEvent() => stopped,
-      _ => unknown,
-    };
-  }
-}
-
 const String _androidNotificationPortName =
     'whisper.android.notification.forwarding';
 ReceivePort? _androidNotificationReceivePort;
@@ -220,21 +178,6 @@ void _logDeviceListFailure(DeviceListOperationKind kind, Object error) {
     PrivacyField.success: false,
     PrivacyField.errorType: privacyLog.errorType(error),
   });
-}
-
-void _logDiscovery(DiscoveryDiagnosticKind kind, {Enum? state}) {
-  privacyLog.event(PrivacyEvent.discoveryState, <PrivacyField, Object>{
-    PrivacyField.kind: kind,
-    if (state != null) PrivacyField.state: state,
-  });
-}
-
-String buildWhisperServiceName(String baseName, String uid) {
-  final normalizedUid = uid.trim();
-  if (normalizedUid.isEmpty) {
-    return baseName;
-  }
-  return "$baseName-$normalizedUid";
 }
 
 /// What a golden test shows in [DeviceListScreen] instead of starting the
@@ -282,21 +225,26 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
   final DeviceListServerStart _serverStart = DeviceListServerStart();
   List<DeviceData> devices = [];
-  BonsoirBroadcast? _broadcast;
-  BonsoirDiscovery? _discovery;
-  StreamSubscription<BonsoirBroadcastEvent>? _broadcastSubscription;
-  StreamSubscription<BonsoirDiscoveryEvent>? _discoverySubscription;
-  final serviceName = "whisper";
-  final serviceType = "_whisper._tcp";
-  bool _isBroadcasting = false;
-  bool _isDiscovering = false;
-  bool _didBootstrapDiscovery = false;
-  Timer? _broadcastRestartTimer;
-  final DiscoveryResolveLimiter _resolveLimiter = DiscoveryResolveLimiter(
-    minimumInterval: const Duration(seconds: 5),
+  late final LanDiscoveryService _lanDiscovery = LanDiscoveryService(
+    loadBroadcastConfig: () async {
+      if (!mounted) return null;
+      return LanBroadcastConfig(
+        uid: device?.uid ?? '',
+        name: device?.name ?? await deviceName(),
+        platform: device?.platform ?? '未知',
+        port: device?.port ?? 10002,
+      );
+    },
+    onPeerEvent: _handleDiscoveredPeer,
+    onNetworkChanged: () async {
+      if (!mounted) return;
+      _readLan();
+    },
+    onError: (error, stack) =>
+        AppHealth.shared.report(AppProblem.discovery, error, stack),
+    onDiscoveryReady: () => AppHealth.shared.clear(AppProblem.discovery),
   );
-  final DiscoveryServicePresenceTracker _discoveryPresence =
-      DiscoveryServicePresenceTracker();
+  bool _didBootstrapDiscovery = false;
   late final Future<void> _localNetworkPermissionBootstrap;
   final DesktopClipboardFileReader _clipboardFileReader =
       const DesktopClipboardFileReader();
@@ -660,11 +608,9 @@ class _DeviceListScreen extends State<DeviceListScreen>
     TransferPlacements.shared.removeListener(_onCopiesChanged);
     _webRequests.detach();
     // 在这里执行一些清理操作，比如取消订阅、关闭流、释放资源等
-    _broadcastRestartTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _connectionAttempts.cancelAll();
-    unawaited(_stopDiscovery());
-    unawaited(_stopBroadcast());
+    unawaited(_lanDiscovery.stopAll());
     _windowsTrayIcon.stop();
     trayManager.removeListener(this);
     windowManager.removeListener(this);
@@ -693,6 +639,12 @@ class _DeviceListScreen extends State<DeviceListScreen>
     _quickSendTargets.dispose();
     unawaited(ClipboardSyncCoordinator.shared.stop());
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (widget.debugPreview != null) return;
+    _lanDiscovery.setBackgrounded(state != AppLifecycleState.resumed);
   }
 
   @override
@@ -1312,14 +1264,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
     });
   }
 
-  String _serviceResolveKey(BonsoirService service) {
-    return '${service.name}|${service.type}';
-  }
-
-  bool _shouldResolveService(BonsoirService service) {
-    return _resolveLimiter.shouldResolve(_serviceResolveKey(service));
-  }
-
   Future<void> _stopSocketServer() async {
     await AndroidBackgroundKeepAliveCoordinator.shared.setReason(
       AndroidKeepAliveReason.lanServer,
@@ -1347,8 +1291,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
       // Left running on Windows: the process ends right after the rest,
       // and with older versions of the plugin the stop itself crashed. See
       // [endWindowsProcess].
-      if (!Platform.isWindows) _stopDiscovery,
-      _stopBroadcast,
+      _lanDiscovery.stopAll,
       _stopClipboardWatcher,
       _stopSocketServer,
       _closeDatabase,
@@ -1369,239 +1312,73 @@ class _DeviceListScreen extends State<DeviceListScreen>
     await windowManager.destroy();
   }
 
-  Future<void> _broadcastService({port}) async {
-    final wifiIP = await getLocalIpAddress();
+  Future<void> _handleDiscoveredPeer(LanDiscoveredPeerEvent event) async {
     if (!mounted) return;
-
-    if (wifiIP == "127.0.0.1") {
-      _isBroadcasting = false;
-      return;
-    }
-
-    await _stopBroadcast(close: false);
-    if (!mounted) return;
-    final name = device?.name ?? await deviceName();
-    final identity = await DeviceIdentityStore().loadOrCreate();
-    if (!mounted) return;
-    final discoveryId = DiscoveryIdentity.fromPublicKey(identity.publicKeyBase64Url);
-    final service = BonsoirService(
-      name: buildWhisperServiceName(serviceName, device?.uid ?? ""),
-      type: serviceType,
-      port: 10004,
-      attributes: discoveryId.buildBroadcastAttributes(
-        host: wifiIP, port: (port is int ? port : null) ?? device?.port ?? 10002,
-        name: name, platform: device?.platform ?? "未知", uid: device?.uid ?? "",
-      ),
-    );
-
-    // And now we can broadcast it :
-    final broadcast = BonsoirBroadcast(service: service);
-    _broadcast = broadcast;
-    await broadcast.initialize();
-    if (!mounted || !identical(_broadcast, broadcast)) {
-      await broadcast.stop();
-      return;
-    }
-
-    unawaited(_broadcastSubscription?.cancel());
-    _broadcastSubscription = broadcast.eventStream!.listen((event) {
-      _logDiscovery(
-        DiscoveryDiagnosticKind.broadcastEvent,
-        state: DiscoveryEventState.ofBroadcast(event),
-      );
-    });
-
-    await broadcast.start();
-    if (mounted && identical(_broadcast, broadcast)) _isBroadcasting = true;
-  }
-
-  Future<void> _stopBroadcast({bool close = true}) async {
-    _broadcastRestartTimer?.cancel();
-    _broadcastRestartTimer = null;
-    final subscription = _broadcastSubscription;
-    final broadcast = _broadcast;
-    _broadcastSubscription = null;
-    _broadcast = null;
-    _isBroadcasting = !close;
-    await subscription?.cancel();
-    await broadcast?.stop();
-  }
-
-  Future<void> _discoverService() async {
-    await _stopDiscovery();
-    if (!mounted) return;
-    // This is the type of service we're looking for :
-
-    // Once defined, we can start the discovery :
-    final discovery = BonsoirDiscovery(type: serviceType, printLogs: false);
-    _discovery = discovery;
-    await discovery.initialize();
-    if (!mounted || !identical(_discovery, discovery)) {
-      await discovery.stop();
-      return;
-    }
-
-    // If you want to listen to the discovery :
-    unawaited(_discoverySubscription?.cancel());
-    _discoverySubscription = discovery.eventStream!.listen((event) async {
-      if (!mounted || !identical(_discovery, discovery)) return;
-      _logDiscovery(
-        DiscoveryDiagnosticKind.discoveryEvent,
-        state: DiscoveryEventState.ofDiscovery(event),
-      );
-      // `eventStream` is not null as the discovery instance is "ready" !
-      final service = event.service;
-      if (service != null) {
-        switch (event) {
-          case BonsoirDiscoveryServiceFoundEvent():
-            _logDiscovery(DiscoveryDiagnosticKind.serviceFound);
-            if (service.name.startsWith(serviceName) &&
-                _shouldResolveService(service)) {
-              unawaited(service.resolve(discovery.serviceResolver));
-            }
-            break;
-          case BonsoirDiscoveryStartedEvent():
-            _logDiscovery(DiscoveryDiagnosticKind.discoveryStarted);
-            break;
-          // An update carries what changed since the service was resolved,
-          // its TXT record or its addresses, and is taken the same way.
-          case BonsoirDiscoveryServiceResolvedEvent() ||
-              BonsoirDiscoveryServiceUpdatedEvent() ||
-              BonsoirDiscoveryServiceLostEvent():
-            final svr = service;
-            final isLost = event is BonsoirDiscoveryServiceLostEvent;
-            final serviceKey = _serviceResolveKey(svr);
-            final advertisedUid = svr.attributes['uid'];
-            final String uid;
-            if (isLost) {
-              _resolveLimiter.clear(serviceKey);
-              final loss = _discoveryPresence.lost(
-                serviceKey: serviceKey,
-                peerIdHint: advertisedUid,
-              );
-              if (loss == null) {
-                _logDiscovery(DiscoveryDiagnosticKind.serviceSkipped);
-                return;
-              }
-              if (loss.stillDiscovered) {
-                return;
-              }
-              uid = loss.peerId;
-            } else {
-              if (advertisedUid == null || advertisedUid.isEmpty) {
-                _logDiscovery(DiscoveryDiagnosticKind.serviceSkipped);
-                return;
-              }
-              uid = advertisedUid;
-              _discoveryPresence.resolved(serviceKey: serviceKey, peerId: uid);
-            }
-            var host = svr.attributes["host"];
-            final port =
-                int.tryParse(svr.attributes["port"] ?? "10002") ?? 10002;
-            if (!isLost) {
-              host = await resolveDiscoveryEndpointHost(
-                resolvedHost: svr.hostname,
-                resolvedAddresses: svr.hostAddresses,
-                advertisedHost: host,
-                port: port,
-              );
-              if (!mounted || !identical(_discovery, discovery)) return;
-              if (host == null) {
-                _logDiscovery(DiscoveryDiagnosticKind.serviceSkipped);
-                return;
-              }
-            }
-            final name = svr.attributes["name"];
-            final platform = svr.attributes["platform"];
-            _logDiscovery(
-              isLost
-                  ? DiscoveryDiagnosticKind.serviceLost
-                  : DiscoveryDiagnosticKind.serviceResolved,
-            );
-            if (uid == device?.uid) {
-              return;
-            }
-            if (socketManager.shouldSuppressDiscoveredPeer(uid)) {
-              if (isLost) {
-                socketManager.releaseDeletedPeerDiscoverySuppression(uid);
-              }
-              if (mounted) {
-                setState(() {
-                  devices.removeWhere((item) => item.uid == uid);
-                  _sessionItems = _sessionItems
-                      .where((item) => item.device.uid != uid)
-                      .toList(growable: false);
-                  if (_selectedDesktopPeerId == uid) {
-                    _selectedDesktopPeerId = null;
-                  }
-                });
-              }
-              return;
-            }
-            final temp = await db.fetchDevice(uid);
-            if (!mounted || !identical(_discovery, discovery)) return;
-            if (isLost && temp == null) return;
-            final resolvedDevice = buildDevice(
-              uid: uid,
-              name: temp?.name ?? name ?? '',
-              port: port,
-              host: host ?? temp?.host ?? '',
-              platform: platform ?? temp?.platform ?? '',
-              around: !isLost,
-            );
-            final visibleDevice = mergeStoredDeviceWithDiscovery(
-              temp,
-              resolvedDevice,
-            );
-            if (!isLost) {
-              await db.upsertDevice(visibleDevice);
-              if (temp == null) await db.pruneStrangers();
-            }
-            await db.setDeviceDiscoveryPresence(uid, !isLost);
-            await ConnectionCoordinator().updateDiscovery(
-              visibleDevice,
-              discovered: !isLost,
-              autoConnectEligible: !isLost && DiscoveryIdentity.allowsAutoConnect(
-                attributes: svr.attributes, storedIdentityPublicKey: temp?.identityPublicKey,
-              ),
-            );
-            if (!mounted || !identical(_discovery, discovery)) return;
-            if (!isLost && host != null) {
-              try {
-                socketManager.updateReconnectEndpoint(uid, host, port);
-              } on ArgumentError {
-                // Invalid discovery endpoints are never promoted to retries.
-              }
-            }
-            setState(() {
-              devices.removeWhere((item) => item.uid == uid);
-              if (!isLost) devices.insert(0, visibleDevice);
-            });
-            unawaited(_refreshDevice());
-            if (!isLost) await _attemptAutoConnect();
-            break;
-          case BonsoirDiscoveryServiceResolveFailedEvent() ||
-              BonsoirDiscoveryStoppedEvent() ||
-              BonsoirDiscoveryUnknownEvent():
-            break;
-        }
+    final uid = event.peerId;
+    final isLost = event.isLost;
+    final host = event.primaryHost;
+    final port = event.port;
+    if (uid == device?.uid) return;
+    if (socketManager.shouldSuppressDiscoveredPeer(uid)) {
+      if (isLost) socketManager.releaseDeletedPeerDiscoverySuppression(uid);
+      if (mounted) {
+        setState(() {
+          devices.removeWhere((item) => item.uid == uid);
+          _sessionItems = _sessionItems
+              .where((item) => item.device.uid != uid)
+              .toList(growable: false);
+          if (_selectedDesktopPeerId == uid) _selectedDesktopPeerId = null;
+        });
       }
+      return;
+    }
+    final temp = await db.fetchDevice(uid);
+    if (!mounted) return;
+    if (isLost && temp == null) return;
+    final resolvedDevice = buildDevice(
+      uid: uid,
+      name: temp?.name ?? event.name ?? '',
+      port: port,
+      host: host ?? temp?.host ?? '',
+      platform: event.platform ?? temp?.platform ?? '',
+      around: !isLost,
+    );
+    final visibleDevice = mergeStoredDeviceWithDiscovery(temp, resolvedDevice);
+    if (!isLost) {
+      await db.upsertDevice(visibleDevice);
+      if (temp == null) await db.pruneStrangers();
+      if (event.candidateEndpoints.isNotEmpty) {
+        ConnectionCoordinator().updatePeerCandidates(
+          uid,
+          event.candidateEndpoints,
+        );
+      }
+    }
+    await db.setDeviceDiscoveryPresence(uid, !isLost);
+    await ConnectionCoordinator().updateDiscovery(
+      visibleDevice,
+      discovered: !isLost,
+      autoConnectEligible:
+          !isLost &&
+          DiscoveryIdentity.allowsAutoConnect(
+            attributes: event.attributes,
+            storedIdentityPublicKey: temp?.identityPublicKey,
+          ),
+    );
+    if (!mounted) return;
+    if (!isLost && host != null) {
+      try {
+        socketManager.updateReconnectEndpoint(uid, host, port);
+      } on ArgumentError {
+        // Invalid discovery endpoints are never promoted to retries.
+      }
+    }
+    setState(() {
+      devices.removeWhere((item) => item.uid == uid);
+      if (!isLost) devices.insert(0, visibleDevice);
     });
-
-    // Start discovery **after** having listened to discovery events :
-    await discovery.start();
-    if (mounted && identical(_discovery, discovery)) _isDiscovering = true;
-  }
-
-  Future<void> _stopDiscovery() async {
-    final subscription = _discoverySubscription;
-    final discovery = _discovery;
-    _discoverySubscription = null;
-    _discovery = null;
-    _discoveryPresence.clear();
-    _isDiscovering = false;
-    await subscription?.cancel();
-    await discovery?.stop();
+    unawaited(_refreshDevice());
+    if (!isLost) await _attemptAutoConnect();
   }
 
   DeviceData buildDevice({
@@ -1783,24 +1560,14 @@ class _DeviceListScreen extends State<DeviceListScreen>
     if (localProfileUpdate) {
       unawaited(socketManager.broadcastLocalProfileUpdate());
     }
-    if (!_isBroadcasting || serverPortUpdate || localProfileUpdate) {
-      _isBroadcasting = true;
-      _broadcastRestartTimer?.cancel();
-      _broadcastRestartTimer = Timer(const Duration(milliseconds: 100), () {
-        _broadcastRestartTimer = null;
-        unawaited(
-          _broadcastService().catchError(
-            (Object error, StackTrace stack) =>
-                AppHealth.shared.report(AppProblem.discovery, error, stack),
-          ),
-        );
-      });
+    if (!_lanDiscovery.isBroadcasting || serverPortUpdate || localProfileUpdate) {
+      _lanDiscovery.scheduleBroadcastRestart();
     }
-    if (isFirst && !_isDiscovering) {
+    if (isFirst && !_lanDiscovery.isDiscovering) {
+      unawaited(_lanDiscovery.startNetworkWatch());
       unawaited(
-        _discoverService().then(
-          (_) => AppHealth.shared.clear(AppProblem.discovery),
-          onError: (Object error, StackTrace stack) =>
+        _lanDiscovery.startDiscovery().catchError(
+          (Object error, StackTrace stack) =>
               AppHealth.shared.report(AppProblem.discovery, error, stack),
         ),
       );
@@ -3334,10 +3101,14 @@ class _DeviceListScreen extends State<DeviceListScreen>
       ConnectionAttemptResult result;
       try {
         final endpoint = PeerEndpoint(host: host, port: port);
+        final candidates = peerId != null && peerId.isNotEmpty
+            ? _lanDiscovery.candidateEndpointsFor(peerId, primary: endpoint)
+            : <PeerEndpoint>[endpoint];
         result = await socketManager.connectToServer(
           ConnectionAttemptRequest(
             requestId: '$targetKey:$attemptGeneration',
-            endpoint: endpoint,
+            endpoint: candidates.first,
+            fallbackEndpoints: candidates.skip(1).toList(growable: false),
             expectedPeerId: peerId ?? '',
             expectedPublicKeyHash: publicKeyHash ?? '',
             mode: ConnectionAttemptMode.interactive,
@@ -3369,6 +3140,16 @@ class _DeviceListScreen extends State<DeviceListScreen>
           return;
         }
         socketManager.selectPeer(result.peerId);
+        try {
+          final working = PeerEndpoint(
+            host: connectedDevice.host,
+            port: connectedDevice.port,
+          );
+          _lanDiscovery.rememberWorkingEndpoint(result.peerId, working);
+          ConnectionCoordinator().rememberWorkingEndpoint(result.peerId, working);
+        } on ArgumentError {
+          // Ignore non-routable stored endpoints.
+        }
         ConnectionCoordinator().markConnected(connectedDevice);
         _pendingAutoConnectPeerId = null;
         await _refreshDevice();
