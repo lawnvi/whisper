@@ -159,11 +159,14 @@ class RemoteFilesClient {
     }
   }
 
-  /// The browsed device disconnected.
-  static void peerGone(String peerId) {
+  /// The browsed device disconnected or lost permission.
+  ///
+  /// [reason] is `'offline'` for transient transport drops (eligible for mount
+  /// grace-period resume) or `'revoked'` / `'closed'` for immediate teardown.
+  static void peerGone(String peerId, {String reason = 'offline'}) {
     for (final client in _clients.values.toList()) {
       if (client.peerId == peerId) {
-        client._fail(const RemoteFsException('offline'));
+        client._fail(RemoteFsException(reason));
       }
     }
   }
@@ -184,14 +187,24 @@ class RemoteFilesClient {
   }
 
   /// Asks the other device; its user may take a while to answer.
-  Future<RemoteFsInfo> open() async {
+  ///
+  /// When [resume] is true (background mount reconnect during grace period),
+  /// the host only re-opens if the peer is still always-allowed and refuses
+  /// immediately without popping a prompt otherwise.
+  Future<RemoteFsInfo> open({bool resume = false}) async {
     final existing = info;
     if (existing != null) {
       return existing;
     }
     final opening = _opening ??= Completer<RemoteFsInfo>();
     _clients[sessionId] = this;
-    final sent = await sender?.call(peerId, _message(FileBrowseAction.open));
+    final sent = await sender?.call(
+      peerId,
+      _message(
+        FileBrowseAction.open,
+        payload: resume ? const <String, Object?>{'resume': true} : const {},
+      ),
+    );
     if (sent != true) {
       _opening = null;
       _clients.remove(sessionId);

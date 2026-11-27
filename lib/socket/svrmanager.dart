@@ -1240,6 +1240,7 @@ class WsSvrManager {
       RemoteFilesClient.sendFile = _sendCopiedFile;
       RemoteFilesClient.sendFolder = _sendCopiedFolder;
       RemoteFilesClient.sendWrite = _sendFileBrowseWrite;
+      RemoteMounts.shared.peerIdentityKey = remoteIdentityPublicKeyFor;
       TransferPlacements.shared
         ..relocateRecord = _database.relocateCompletedIncomingTransfer
         ..forgetRecord = _forgetCopiedTransfer
@@ -2236,6 +2237,7 @@ class WsSvrManager {
       await pendingCancellation;
       await _waitForPeerAuthentication(peerId);
       await removal;
+      await _revokeRemoteFilesForPeer(peerId);
       return true;
     }
     final stored = await _database.fetchDevice(peerId);
@@ -2290,6 +2292,7 @@ class WsSvrManager {
     await pendingCancellation;
     await _waitForPeerAuthentication(peerId);
     await removal;
+    await _revokeRemoteFilesForPeer(peerId);
     // With this device's own id, 本机: everything it ever sent also has that
     // id as its sender, and only the notes are to go.
     await _database.clearDevices(<String>[peerId], localPeerId: sender);
@@ -2993,7 +2996,7 @@ class WsSvrManager {
       await _remoteClipboardTransfer.clearPeer(peerId);
       WindowStreamViewer.shared.peerDisconnected(peerId);
       FileBrowseHost.shared.closePeer(peerId);
-      RemoteFilesClient.peerGone(peerId);
+      RemoteFilesClient.peerGone(peerId, reason: 'closed');
     }
     _fileBrowseTrustCache.clear();
     for (final session in authenticatedSessions) {
@@ -3168,8 +3171,7 @@ class WsSvrManager {
       return;
     }
     await _handlePeerDisconnected(
-      peerId,
-      stillOwnsCleanup: () => _removedBindingOwnsPeerState(binding),
+      peerId, cause: cause, stillOwnsCleanup: () => _removedBindingOwnsPeerState(binding),
     );
     if (!_removedBindingOwnsPeerState(binding)) {
       return;
@@ -3238,6 +3240,7 @@ class WsSvrManager {
 
   Future<void> _handlePeerDisconnected(
     String peerId, {
+    PeerDisconnectCause cause = PeerDisconnectCause.network,
     bool Function()? stillOwnsCleanup,
   }) async {
     _pingTracker.clearPeer(peerId);
@@ -3268,8 +3271,14 @@ class WsSvrManager {
     ]);
     WindowStreamViewer.shared.peerDisconnected(peerId);
     _fileBrowseTrustCache.invalidate(peerId);
-    FileBrowseHost.shared.closePeer(peerId);
-    RemoteFilesClient.peerGone(peerId);
+    final transientDisconnect = cause == PeerDisconnectCause.network ||
+        cause == PeerDisconnectCause.watchdog || cause == PeerDisconnectCause.systemSleep;
+    if (transientDisconnect) {
+      FileBrowseHost.shared.closePeer(peerId);
+      RemoteFilesClient.peerGone(peerId, reason: 'offline');
+    } else {
+      await _revokeRemoteFilesForPeer(peerId);
+    }
     if (!ownsCleanup()) {
       return;
     }
@@ -3290,9 +3299,17 @@ class WsSvrManager {
     }
   }
 
-  Future<void> close({bool closeServer = false}) {
-    return closeGracefully(closeServer: closeServer);
+  String? remoteIdentityPublicKeyFor(String peerId) =>
+      _sessionsByPeerId[peerId]?.remoteIdentityPublicKey;
+
+  Future<void> _revokeRemoteFilesForPeer(String peerId) async {
+    FileBrowseHost.shared.closePeer(peerId);
+    RemoteFilesClient.peerGone(peerId, reason: 'revoked');
+    if (_manageSharedCoordinators) await RemoteMounts.shared.peerRevoked(peerId);
   }
+
+  Future<void> close({bool closeServer = false}) =>
+      closeGracefully(closeServer: closeServer);
 
   Future<bool> _sendBytesOnSink(
     WebSocketSink sink,
@@ -5289,10 +5306,14 @@ class WsSvrManager {
             takesWindows: profile.capabilities.windowStreamOfferV1,
           ),
         );
-        if (profile.capabilities.remoteFilesV1 && _manageSharedCoordinators) {
-          // "挂载到本机" on for it: its files show in the file manager again.
+        if (_manageSharedCoordinators) {
           unawaited(
-            RemoteMounts.shared.peerConnected(peerId, profile.device.label),
+            profile.capabilities.remoteFilesV1
+                ? RemoteMounts.shared.peerConnected(
+                    peerId, profile.device.label,
+                    identityPublicKey: remoteIdentityPublicKeyFor(peerId),
+                  )
+                : RemoteMounts.shared.peerRevoked(peerId),
           );
         }
         if (profile.capabilities.windowStreamSourceV1 &&

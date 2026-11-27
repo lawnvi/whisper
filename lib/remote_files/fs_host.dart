@@ -562,9 +562,17 @@ class FileBrowseHost {
     String peerId,
     String deviceName,
   ) async {
+    final isResume = message.payload['resume'] == true;
     var allowed =
-        _allowedThisConnection.contains(peerId) ||
+        (!isResume && _allowedThisConnection.contains(peerId)) ||
         await permissions.isAlways(peerId);
+    if (!allowed && isResume) {
+      await sender?.call(
+        peerId,
+        message.reply(FileBrowseAction.denied, const {'reason': 'revoked'}),
+      );
+      return;
+    }
     if (!allowed) {
       final request = FileBrowseRequest(peerId: peerId, deviceName: deviceName);
       _asking[message.sessionId] = request;
@@ -818,9 +826,26 @@ class FileBrowseHost {
   }
 
   /// Takes back "始终允许": [peerId] is asked again next time, and what it
-  /// has open now closes, so the change holds at once.
+  /// has open now closes immediately with a denial notice so any active mount
+  /// unmounts without entering a disconnect grace period.
   Future<void> revokeAlways(String peerId) async {
     await permissions.setAlways(peerId, false);
+    final activeSessions = [
+      for (final MapEntry(key: id, value: session) in _sessions.entries)
+        if (session.peerId == peerId) (id: id, hostPeerId: session.hostPeerId),
+    ];
+    for (final s in activeSessions) {
+      await sender?.call(
+        peerId,
+        FileBrowseMessage(
+          action: FileBrowseAction.denied,
+          sessionId: s.id,
+          clientPeerId: peerId,
+          hostPeerId: s.hostPeerId,
+          payload: const {'reason': 'revoked'},
+        ),
+      );
+    }
     closePeer(peerId);
   }
 }

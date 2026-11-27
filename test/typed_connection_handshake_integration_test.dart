@@ -13,6 +13,7 @@ import 'package:whisper/remote_files/fs_client.dart';
 import 'package:whisper/remote_files/fs_host.dart';
 import 'package:whisper/remote_files/fs_placement.dart';
 import 'package:whisper/remote_files/fs_protocol.dart';
+import 'package:whisper/remote_files/mount/remote_mounts.dart';
 import 'package:whisper/remote_input/remote_input_layout.dart';
 import 'package:whisper/window_stream/core/window_stream_models.dart';
 import 'package:whisper/window_stream/remote/remote_peer_source.dart';
@@ -1492,6 +1493,99 @@ void main() {
       isNull,
     );
   });
+
+  test('F5: mount survives transient socket drop on same key and unmounts on trust revoke', () async {
+    SharedPreferences.setMockInitialValues({});
+    final harness = await _HandshakeHarness.start(remoteFiles: true);
+    final connected = await harness.connect('f5-initial');
+    expect(connected.isAuthenticated, isTrue);
+
+    final prevHostSender = FileBrowseHost.shared.sender;
+    final prevHostSendData = FileBrowseHost.shared.sendData;
+    final prevClientSender = RemoteFilesClient.sender;
+    final prevClientLocal = RemoteFilesClient.localPeerId;
+    addTearDown(() {
+      FileBrowseHost.shared.sender = prevHostSender;
+      FileBrowseHost.shared.sendData = prevHostSendData;
+      RemoteFilesClient.sender = prevClientSender;
+      RemoteFilesClient.localPeerId = prevClientLocal;
+    });
+
+    FileBrowseHost.shared.sender = harness.server.sendFileBrowseControlTo;
+    FileBrowseHost.shared.sendData = (_, sessionId, requestId, offset, data) async {
+      scheduleMicrotask(
+        () => RemoteFilesClient.handleData(
+          remotePeerId: 'server-peer',
+          sessionId: sessionId,
+          requestId: requestId,
+          data: Uint8List.fromList(data),
+        ),
+      );
+      return true;
+    };
+    await FileBrowseHost.shared.permissions.setAlways('client-peer', true);
+    RemoteFilesClient.sender = harness.client.sendFileBrowseControlTo;
+    RemoteFilesClient.localPeerId = harness.client.localPeerIdFor;
+
+    var starts = 0;
+    var stops = 0;
+    late String mountedRootId;
+    final mounts = RemoteMounts(
+      gracePeriod: const Duration(seconds: 5),
+      reconnectWait: const Duration(milliseconds: 200),
+      peerIdentityKey: harness.client.remoteIdentityPublicKeyFor,
+      startMount: (source, roots, peerId, name) async {
+        starts++;
+        mountedRootId = roots.first.id;
+        return (
+          path: '/fake/f5/$peerId',
+          stop: () async {
+            stops++;
+          },
+        );
+      },
+    );
+    addTearDown(mounts.unmountAll);
+
+    await mounts.mount('server-peer', 'Server');
+    final source = mounts.sourceOf('server-peer')!;
+    expect(starts, 1);
+    expect(await source.stat(mountedRootId, ''), isNotNull);
+
+    // Transient drop: mount enters grace period instead of unmounting.
+    expect(
+      await harness.client.debugDropPeerTransport('server-peer'),
+      isTrue,
+    );
+    await _waitUntil(() => mounts.isSuspended('server-peer'));
+    expect(mounts.of('server-peer'), isNotNull);
+    expect(stops, 0);
+
+    // Reconnect over real socket with same identity key -> resumes without stop.
+    final reconnected = await harness.connect('f5-reconnect');
+    expect(reconnected.isAuthenticated, isTrue);
+    await mounts.peerConnected(
+      'server-peer',
+      'Server',
+      identityPublicKey:
+          harness.client.remoteIdentityPublicKeyFor('server-peer'),
+    );
+    expect(mounts.isSuspended('server-peer'), isFalse);
+    expect(starts, 1);
+    expect(stops, 0);
+    expect(await source.stat(mountedRootId, ''), isNotNull);
+
+    // Drop into grace, then revoke trust -> immediately unmounts.
+    expect(
+      await harness.client.debugDropPeerTransport('server-peer'),
+      isTrue,
+    );
+    await _waitUntil(() => mounts.isSuspended('server-peer'));
+    await harness.client.setPeerTrust('server-peer', false);
+    await mounts.peerRevoked('server-peer');
+    expect(mounts.of('server-peer'), isNull);
+    expect(stops, 1);
+  });
 }
 
 final class _CountingConnectEvents extends _ApprovingEvents {
@@ -1629,6 +1723,7 @@ final class _HandshakeHarness {
     ConnectionAuthCommitBarrier? serverBarrier,
     AuthEnvelopeObserver? clientAuthObserver,
     AuthEnvelopeObserver? serverAuthObserver,
+    bool remoteFiles = false,
   }) async {
     final database = LocalDatabase.forTesting(NativeDatabase.memory());
     addTearDown(database.close);
@@ -1639,7 +1734,8 @@ final class _HandshakeHarness {
     final server = WsSvrManager.forTesting(
       database: database,
       identityStore: _identityStore(1),
-      localPeerProfileLoader: () async => _profile('server-peer'),
+      localPeerProfileLoader: () async =>
+          _profile('server-peer', remoteFiles: remoteFiles),
       autoConnectEnabled: () async => true,
       reconnectControllerFactory: serverReconnects.create,
       manageSharedCoordinators: false,
@@ -1649,7 +1745,8 @@ final class _HandshakeHarness {
     final client = WsSvrManager.forTesting(
       database: database,
       identityStore: _identityStore(33),
-      localPeerProfileLoader: () async => _profile('client-peer'),
+      localPeerProfileLoader: () async =>
+          _profile('client-peer', remoteFiles: remoteFiles),
       autoConnectEnabled: () async => true,
       reconnectControllerFactory: clientReconnects.create,
       manageSharedCoordinators: false,
@@ -1736,7 +1833,11 @@ DeviceIdentityStore _identityStore(int seedStart) => DeviceIdentityStore(
   ),
 );
 
-PeerProfile _profile(String uid, {int displayCount = 0}) => PeerProfile(
+PeerProfile _profile(
+  String uid, {
+  int displayCount = 0,
+  bool remoteFiles = false,
+}) => PeerProfile(
   device: DeviceData(
     id: 0,
     uid: uid,
@@ -1758,6 +1859,7 @@ PeerProfile _profile(String uid, {int displayCount = 0}) => PeerProfile(
   protocolVersion: PeerSocketSession.protocolVersion,
   capabilities: PeerCapabilities(
     fileTransferV3: true,
+    remoteFilesV1: remoteFiles,
     remoteInputSourceV1: displayCount > 0,
     remoteInputSinkV1: displayCount > 0,
     remoteInputTopologyV1: displayCount > 0,

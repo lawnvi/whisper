@@ -1241,4 +1241,228 @@ void main() {
     expect(KdePlaces.without(added, (mark) => mark == '/other'), isNull);
     expect(KdePlaces.without(xbel, (_) => true), isNull);
   });
+
+  group('mount disconnect grace period (F5)', () {
+    late Directory sandbox;
+    late FileBrowseHost host;
+    var online = true;
+    var workerStarts = 0;
+    var workerStops = 0;
+
+    setUp(() async {
+      SharedPreferences.setMockInitialValues({});
+      sandbox = await Directory.systemTemp.createTemp('whisper-mount-f5-');
+      await File(p.join(sandbox.path, 'doc.txt')).writeAsString('hello-f5');
+      online = true;
+      workerStarts = 0;
+      workerStops = 0;
+      host = FileBrowseHost(
+        files: FsHostFiles(
+          resolver: FsPathResolver([
+            FsRoot(id: 'home', directory: sandbox.path),
+          ]),
+        ),
+        gate: _AllowGate(),
+      );
+      await host.permissions.setAlways('client', true);
+      FileBrowseMessage copy(FileBrowseMessage m) => FileBrowseMessage.fromJson(
+        jsonDecode(jsonEncode(m.toJson())) as Map<String, dynamic>,
+      );
+      host.sender = (peerId, message) async {
+        if (!online) return false;
+        final reply = copy(message);
+        scheduleMicrotask(
+          () => RemoteFilesClient.handle(reply, remotePeerId: 'host'),
+        );
+        return true;
+      };
+      host.sendData = (peerId, sessionId, requestId, offset, data) async {
+        if (!online) return false;
+        scheduleMicrotask(
+          () => RemoteFilesClient.handleData(
+            remotePeerId: 'host',
+            sessionId: sessionId,
+            requestId: requestId,
+            data: Uint8List.fromList(data),
+          ),
+        );
+        return true;
+      };
+      RemoteFilesClient.localPeerId = (_) => 'client';
+      RemoteFilesClient.sender = (peerId, message) async {
+        if (!online) return false;
+        final req = copy(message);
+        scheduleMicrotask(
+          () => host.handle(req, remotePeerId: 'client', deviceName: 'Mac'),
+        );
+        return true;
+      };
+      RemoteFilesClient.sendWrite =
+          (peerId, transferId, requestId, offset, data) async {
+            if (!online) return false;
+            scheduleMicrotask(
+              () => host.handleWrite(
+                remotePeerId: 'client',
+                transferId: transferId,
+                requestId: requestId,
+                offset: offset,
+                data: data,
+              ),
+            );
+            return true;
+          };
+    });
+
+    tearDown(() => sandbox.delete(recursive: true));
+
+    RemoteMounts makeMounts({
+      Duration grace = const Duration(seconds: 10),
+      Duration wait = const Duration(milliseconds: 60),
+      String currentKey = 'key-A',
+    }) {
+      return RemoteMounts(
+        gracePeriod: grace,
+        reconnectWait: wait,
+        peerIdentityKey: (_) => currentKey,
+        startMount: (source, roots, peerId, name) async {
+          workerStarts++;
+          return (
+            path: '/fake/mount/$peerId',
+            stop: () async {
+              workerStops++;
+            },
+          );
+        },
+      );
+    }
+
+    test(
+      'transient drop enters grace, bounds read wait, fails partial upload, and resumes on same key',
+      () async {
+        final mounts = makeMounts();
+        addTearDown(mounts.unmountAll);
+        await mounts.mount('host', 'Host');
+        final source = mounts.sourceOf('host')!;
+        expect(workerStarts, 1);
+
+        // Start a partial upload before disconnecting.
+        final upload = await source.writeOpen(
+          'home',
+          'doc.txt',
+          truncate: true,
+        );
+        await source.write(upload.id, 0, utf8.encode('half'));
+
+        // Transient disconnect.
+        online = false;
+        host.closePeer('client');
+        RemoteFilesClient.peerGone('host', reason: 'offline');
+        await pumpEventQueue();
+        expect(mounts.of('host'), isNotNull);
+        expect(mounts.isSuspended('host'), isTrue);
+        expect(workerStops, 0);
+
+        // Read during grace waits bounded reconnectWait (~60ms), not 10s grace.
+        final watch = Stopwatch()..start();
+        await expectLater(
+          source.read('home', 'doc.txt', 0, 8),
+          throwsA(
+            isA<MountException>().having(
+              (e) => e.error,
+              'error',
+              MountError.io,
+            ),
+          ),
+        );
+        expect(watch.elapsedMilliseconds, lessThan(1000));
+
+        // Reconnect with the same identity key within grace resumes seamlessly.
+        online = true;
+        await mounts.peerConnected('host', 'Host', identityPublicKey: 'key-A');
+        expect(mounts.of('host'), isNotNull);
+        expect(mounts.isSuspended('host'), isFalse);
+        expect(workerStarts, 1);
+        expect(workerStops, 0);
+
+        // Reads work again on the same mount, and the old upload cannot resume or commit.
+        expect(
+          utf8.decode(await source.read('home', 'doc.txt', 0, 8)),
+          'hello-f5',
+        );
+        await expectLater(
+          source.writeClose(upload.id, commit: true),
+          throwsA(
+            isA<MountException>().having(
+              (e) => e.error,
+              'error',
+              MountError.io,
+            ),
+          ),
+        );
+        expect(
+          await File(p.join(sandbox.path, 'doc.txt')).readAsString(),
+          'hello-f5',
+        );
+      },
+    );
+
+    test(
+      'unmounts on grace expiry, identity mismatch, host revoke, or trust revoke during grace',
+      () async {
+        // 1. Grace expiry unmounts.
+        final expiring = makeMounts(
+          grace: const Duration(milliseconds: 50),
+          wait: const Duration(milliseconds: 20),
+        );
+        addTearDown(expiring.unmountAll);
+        await expiring.mount('host', 'Host');
+        online = false;
+        host.closePeer('client');
+        RemoteFilesClient.peerGone('host', reason: 'offline');
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+        expect(expiring.of('host'), isNull);
+        expect(workerStops, 1);
+
+        // 2. Different identity key on reconnect unmounts immediately.
+        online = true;
+        final mismatch = makeMounts();
+        addTearDown(mismatch.unmountAll);
+        await mismatch.mount('host', 'Host');
+        online = false;
+        host.closePeer('client');
+        RemoteFilesClient.peerGone('host', reason: 'offline');
+        await pumpEventQueue();
+        expect(mismatch.isSuspended('host'), isTrue);
+        online = true;
+        await mismatch.peerConnected(
+          'host',
+          'Host',
+          identityPublicKey: 'key-B',
+        );
+        expect(mismatch.of('host'), isNull);
+
+        // 3. Host revoking permission while connected unmounts immediately (no grace).
+        final hostRevoke = makeMounts();
+        addTearDown(hostRevoke.unmountAll);
+        await hostRevoke.mount('host', 'Host');
+        await host.revokeAlways('client');
+        await pumpEventQueue();
+        expect(hostRevoke.of('host'), isNull);
+        expect(hostRevoke.isSuspended('host'), isFalse);
+
+        // 4. Local trust revocation during grace unmounts immediately.
+        await host.permissions.setAlways('client', true);
+        final trustRevoke = makeMounts();
+        addTearDown(trustRevoke.unmountAll);
+        await trustRevoke.mount('host', 'Host');
+        online = false;
+        host.closePeer('client');
+        RemoteFilesClient.peerGone('host', reason: 'offline');
+        await pumpEventQueue();
+        expect(trustRevoke.isSuspended('host'), isTrue);
+        await trustRevoke.peerRevoked('host');
+        expect(trustRevoke.of('host'), isNull);
+      },
+    );
+  });
 }
