@@ -23,6 +23,10 @@ struct ClipboardPayload {
 
 FlMethodChannel* g_clipboard_watcher_channel = nullptr;
 bool g_clipboard_watching = false;
+// Changes made by other programs. GTK reports this process's own writes too,
+// but only after the write has returned, so they are left out here instead
+// of being matched up later in Dart.
+gint64 g_foreign_changes = 0;
 
 GtkTargetEntry kFileClipboardTargets[] = {
     {const_cast<gchar*>("text/uri-list"), 0, kUriListTarget},
@@ -90,6 +94,9 @@ bool WriteClipboardPayload(GtkClipboard* clipboard, ClipboardPayload* payload) {
 }
 
 void NotifyClipboardChanged(GtkClipboard*, GdkEvent*, gpointer) {
+  if (gdk_selection_owner_get(GDK_SELECTION_CLIPBOARD) == nullptr) {
+    g_foreign_changes += 1;
+  }
   if (g_clipboard_watcher_channel == nullptr || !g_clipboard_watching) {
     return;
   }
@@ -207,6 +214,13 @@ void MethodCallCallback(FlMethodChannel*,
     g_autoptr(FlValue) paths = ReadFilePaths();
     g_autoptr(FlMethodResponse) response =
         FL_METHOD_RESPONSE(fl_method_success_response_new(paths));
+    fl_method_call_respond(method_call, response, nullptr);
+    return;
+  }
+  if (std::strcmp(method, "changeToken") == 0) {
+    g_autoptr(FlValue) value = fl_value_new_int(g_foreign_changes);
+    g_autoptr(FlMethodResponse) response =
+        FL_METHOD_RESPONSE(fl_method_success_response_new(value));
     fl_method_call_respond(method_call, response, nullptr);
     return;
   }

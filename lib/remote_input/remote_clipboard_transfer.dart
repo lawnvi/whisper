@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
+import 'package:whisper/clipboard/clipboard_ledger.dart';
 import 'package:whisper/helper/desktop_clipboard_image.dart';
 import 'package:whisper/helper/helper.dart' show getClipboardText;
 import 'package:whisper/helper/privacy_log.dart';
@@ -247,14 +248,6 @@ final class RemoteClipboardTransferEngine {
   final RemoteClipboardKeeper? _keepClipboard;
   final Map<String, Future<void> Function()> _restores =
       <String, Future<void> Function()>{};
-  DateTime _ownWriteUntil = DateTime(0);
-
-  /// The clipboard changed because of this: not something the user copied.
-  bool get writingClipboard => DateTime.now().isBefore(_ownWriteUntil);
-
-  void _markOwnWrite() {
-    _ownWriteUntil = DateTime.now().add(const Duration(milliseconds: 1500));
-  }
 
   /// The files each paste put on the clipboard, by what was copied (its
   /// offer id, the paste's key).
@@ -286,8 +279,9 @@ final class RemoteClipboardTransferEngine {
     final restore = _restores.remove(key);
     if (restore == null) return;
     Timer(const Duration(milliseconds: 1500), () {
-      _markOwnWrite();
-      unawaited(restore().catchError((Object _) {}));
+      unawaited(
+        ClipboardLedger.shared.ownWrite(restore).catchError((Object _) {}),
+      );
     });
   }
 
@@ -508,16 +502,14 @@ final class RemoteClipboardTransferEngine {
         final restore = await _keepClipboard?.call();
         if (restore != null) _restores[offer.offerId] = restore;
       }
-      _markOwnWrite();
       // The last few: only a paste still being followed asks for them.
       _prepared.remove(offer.offerId);
       _prepared[offer.offerId] = cached.paths;
       while (_prepared.length > 16) {
         _prepared.remove(_prepared.keys.first);
       }
-      written = await _writer.writeFilePaths(
-        cached.paths,
-        asImage: cached.asImage,
+      written = await ClipboardLedger.shared.ownWrite(
+        () => _writer.writeFilePaths(cached.paths, asImage: cached.asImage),
       );
     } finally {
       final mine = turn;

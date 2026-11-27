@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../clipboard/clipboard_ledger.dart';
 import '../../helper/desktop_clipboard_image.dart';
 import '../../helper/helper.dart';
 
@@ -152,18 +153,17 @@ class FilesSystemClipboard {
     DesktopClipboardImageReader.channelName,
   );
 
-  Future<bool> write(List<String> paths) {
-    // Clipboard sync must not send these to another device.
-    markOwnClipboardFiles(paths);
-    return const DesktopClipboardFileWriter().writeFilePaths(paths);
-  }
+  // Clipboard sync must not send these to another device.
+  Future<bool> write(List<String> paths) => ClipboardLedger.shared.ownWrite(
+    () => const DesktopClipboardFileWriter().writeFilePaths(paths),
+  );
 
   /// Another device's files, each fetched when an app pastes it (see
-  /// [filesVirtualClipboard]).
-  Future<bool> writeFetched(
-    FilesController controller,
-    List<FilesItem> items,
-  ) => writeFetchedToClipboard(controller, items);
+  /// [filesVirtualClipboard]). Not synced either.
+  Future<bool> writeFetched(FilesController controller, List<FilesItem> it) =>
+      ClipboardLedger.shared.ownWrite(
+        () => writeFetchedToClipboard(controller, it),
+      );
 
   Future<List<String>> read() async {
     try {

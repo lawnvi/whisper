@@ -6,7 +6,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:logger/logger.dart';
-import 'package:whisper/helper/clipboard_write_suppression.dart';
 import 'package:whisper/helper/local_network_permission.dart';
 import 'package:whisper/helper/privacy_log.dart';
 import 'package:whisper/helper/windows_network_interfaces.dart';
@@ -17,10 +16,6 @@ import 'package:uuid/uuid.dart';
 
 var logger = Logger();
 const LocalUuid = Uuid();
-final ClipboardWriteCoordinator _clipboardWriteCoordinator =
-    ClipboardWriteCoordinator(
-      writer: (content) => Clipboard.setData(ClipboardData(text: content)),
-    );
 
 enum LocalOperationKind { localhostCheck, clipboardRead, filePicker }
 
@@ -315,38 +310,16 @@ Future<String?> getClipboardText() async {
   }
 }
 
-Future<void> copyToClipboard(
-  String content, {
-  bool suppressWatcher = false,
-  String? sourcePeerId,
-}) async {
+/// Puts [content] on the clipboard, as the user copying it would: clipboard
+/// sync sends it on. Text another device sent goes through
+/// `ClipboardSyncCoordinator.applyRemoteText` instead.
+Future<void> copyToClipboard(String content) async {
   try {
-    await _clipboardWriteCoordinator.write(
-      content,
-      sourcePeerId: suppressWatcher ? sourcePeerId : null,
-    );
+    await Clipboard.setData(ClipboardData(text: content));
   } catch (_) {
     // Clipboard failures are non-fatal and retain the existing best-effort API.
   }
 }
-
-bool shouldIgnoreClipboardSync(String content) {
-  return _clipboardWriteCoordinator.suppressions.takeExact(content) != null;
-}
-
-Set<String> _ownClipboardFiles = const {};
-
-/// Files Whisper itself put on the clipboard (the file manager's copy) so
-/// another app can paste them. Not a clipboard change to sync to another
-/// device.
-void markOwnClipboardFiles(Iterable<String> paths) {
-  _ownClipboardFiles = paths.toSet();
-}
-
-/// The clipboard's files are (some of) what [markOwnClipboardFiles] put
-/// there; folders are left out of what clipboard sync reads.
-bool isOwnClipboardFiles(List<String> paths) =>
-    paths.isNotEmpty && paths.every(_ownClipboardFiles.contains);
 
 final RegExp _verificationKeywordPattern = RegExp(
   r'验证码|驗證碼|校验码|校驗碼|动态码|動態碼|'

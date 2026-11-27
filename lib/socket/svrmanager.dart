@@ -14,6 +14,7 @@ import 'package:whisper/audio/audio_group_coordinator.dart';
 import 'package:whisper/audio/audio_share_coordinator.dart';
 import 'package:whisper/audio/audio_protocol.dart';
 import 'package:whisper/audio/audio_share_manager.dart';
+import 'package:whisper/clipboard/clipboard_sync_coordinator.dart';
 import 'package:whisper/helper/clipboard_sync.dart';
 import 'package:whisper/helper/connection_request_notifications.dart';
 import 'package:whisper/helper/folder_transfer_store.dart';
@@ -498,10 +499,6 @@ class WsSvrManager {
         place: _remoteClipboardTransfer.placeInto,
       );
 
-  /// The clipboard just changed because a paste went in or was undone: not
-  /// a copy to sync.
-  bool get remoteClipboardWritingNow =>
-      _remoteClipboardTransfer.writingClipboard;
   Future<void> _workspaceClipboardSerial = Future<void>.value();
   _WorkspaceClipboardOrigin? _workspaceClipboardOrigin;
   int _workspaceClipboardRevision = 0;
@@ -4705,10 +4702,8 @@ class WsSvrManager {
                 sourcePeerId: session.remotePeerId,
               );
               requireCurrentBusiness();
-              await copyToClipboard(
+              await ClipboardSyncCoordinator.shared.applyRemoteText(
                 message.content ?? "",
-                suppressWatcher: true,
-                sourcePeerId: session.remotePeerId,
               );
             }
             requireCurrentBusiness();

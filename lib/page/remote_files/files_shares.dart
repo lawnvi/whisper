@@ -5,6 +5,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../clipboard/clipboard_ledger.dart';
 import '../../helper/helper.dart' show copyToClipboard;
 import '../../l10n/app_localizations.dart';
 import '../../remote_files/fs_host_files.dart' show FsEntry;
@@ -450,11 +451,10 @@ class _LinkRowState extends State<_LinkRow> {
         FilesMenuItem(
           label: text.shareLinkCopy,
           icon: CupertinoIcons.doc_on_doc,
+          // For a browser here, not for the other devices.
           onSelected: () => unawaited(
-            copyToClipboard(
-              store.urlFor(link),
-              suppressWatcher: true,
-              sourcePeerId: 'share-link',
+            ClipboardLedger.shared.ownWrite(
+              () => copyToClipboard(store.urlFor(link)),
             ),
           ),
         ),

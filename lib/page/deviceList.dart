@@ -5,7 +5,6 @@ import 'dart:isolate';
 import 'dart:ui';
 import 'package:whisper/state/peer_aliases.dart';
 import 'package:bonsoir/bonsoir.dart';
-import 'package:clipboard_watcher/clipboard_watcher.dart';
 import 'package:dbus/dbus.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:file_picker/file_picker.dart';
@@ -62,7 +61,7 @@ import 'package:flutter_notification_listener_plus/flutter_notification_listener
 import 'package:intl/intl.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:tray_manager/tray_manager.dart';
-import 'package:whisper/helper/clipboard_sync.dart';
+import 'package:whisper/clipboard/clipboard_sync_coordinator.dart';
 import 'package:whisper/helper/desktop_clipboard_image.dart';
 import 'package:whisper/helper/desktop_quick_send_hotkey.dart';
 import 'package:whisper/helper/desktop_window_attention.dart';
@@ -74,7 +73,6 @@ import 'package:whisper/helper/privacy_log.dart';
 import 'package:whisper/helper/whisper_file_picker.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/file_transfer.dart';
-import 'package:whisper/remote_input/remote_clipboard_transfer.dart';
 import 'package:whisper/remote_input/remote_input_coordinator.dart';
 import 'package:whisper/remote_input/remote_input_peer_activity.dart';
 import 'package:whisper/remote_input/remote_input_platform.dart';
@@ -265,7 +263,7 @@ class DeviceListScreen extends StatefulWidget {
 
 class _DeviceListScreen extends State<DeviceListScreen>
     with WidgetsBindingObserver
-    implements ISocketEvent, TrayListener, WindowListener, ClipboardListener {
+    implements ISocketEvent, TrayListener, WindowListener {
   final db = LocalDatabase();
   final socketManager = WsSvrManager();
   final AudioShareCoordinator _audioCoordinator = AudioShareCoordinator.shared;
@@ -301,12 +299,9 @@ class _DeviceListScreen extends State<DeviceListScreen>
   final DiscoveryServicePresenceTracker _discoveryPresence =
       DiscoveryServicePresenceTracker();
   late final Future<void> _localNetworkPermissionBootstrap;
-  var _clipboardText = "";
-  var _clipboardSyncGeneration = 0;
   final DesktopClipboardFileReader _clipboardFileReader =
       const DesktopClipboardFileReader();
-  final DesktopClipboardImageReader _clipboardImageReader =
-      const DesktopClipboardImageReader();
+  StreamSubscription<void>? _clipboardChanges;
   final TextEditingController _desktopSearchController =
       TextEditingController();
   final FocusNode _desktopSearchFocusNode = FocusNode();
@@ -412,37 +407,18 @@ class _DeviceListScreen extends State<DeviceListScreen>
       _desktopQuickSendInbox.addListener(_handleDesktopQuickSendChanged);
       unawaited(_initializeDesktopQuickSend());
     }
-    clipboardWatcher.addListener(this);
-    unawaited(_syncClipboardWatcher());
+    _clipboardChanges = ClipboardSyncCoordinator.shared.changes.listen(
+      (_) => unawaited(_recordClipboard()),
+    );
+    unawaited(_startClipboardSync());
     super.initState();
   }
 
-  int _clipboardWatcherGeneration = 0;
-  bool? _iosClipboardWatching;
-
-  Future<void> _syncClipboardWatcher() async {
+  Future<void> _startClipboardSync() async {
     try {
-      if (!Platform.isIOS) {
-        await clipboardWatcher.start();
-        return;
-      }
-      final generation = ++_clipboardWatcherGeneration;
-      final enabled = await LocalSetting().clipboardAutoSync();
-      if (!mounted ||
-          generation != _clipboardWatcherGeneration ||
-          enabled == _iosClipboardWatching) {
-        return;
-      }
-      _iosClipboardWatching = enabled;
-      // The iOS plugin reads the pasteboard as soon as watching starts.
-      // Only do that when the user has enabled automatic clipboard sync.
-      if (enabled) {
-        await clipboardWatcher.start();
-      } else {
-        await clipboardWatcher.stop();
-      }
+      await ClipboardSyncCoordinator.shared.start();
+      await ClipboardSyncCoordinator.shared.syncWatcher();
     } catch (error) {
-      _iosClipboardWatching = null;
       _logDeviceListFailure(DeviceListOperationKind.clipboardWatcher, error);
     }
   }
@@ -503,10 +479,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
       }
       await initPlatformState();
       unawaited(notifyExistingDownloadsVisibleToAndroidPickers());
-    }
-
-    if (await LocalSetting().clipboardAutoSync()) {
-      _clipboardText = await getClipboardText() ?? '';
     }
   }
 
@@ -689,7 +661,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
     }
     TransferPlacements.shared.removeListener(_onCopiesChanged);
     _webRequests.detach();
-    ++_clipboardWatcherGeneration;
     // 在这里执行一些清理操作，比如取消订阅、关闭流、释放资源等
     _broadcastRestartTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
@@ -699,7 +670,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     _windowsTrayIcon.stop();
     trayManager.removeListener(this);
     windowManager.removeListener(this);
-    clipboardWatcher.removeListener(this);
+    unawaited(_clipboardChanges?.cancel());
     socketManager.unregisterEvent(this);
     _desktopSearchFocusNode.removeListener(_handleDesktopSearchFocusChanged);
     _audioCoordinator.removeListener(_handleDesktopAudioChanged);
@@ -723,8 +694,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     _desktopSearchController.dispose();
     _desktopSearchFocusNode.dispose();
     _quickSendTargets.dispose();
-    // stop watch
-    unawaited(clipboardWatcher.stop());
+    unawaited(ClipboardSyncCoordinator.shared.stop());
     super.dispose();
   }
 
@@ -755,10 +725,8 @@ class _DeviceListScreen extends State<DeviceListScreen>
     return AppExitResponse.exit;
   }
 
-  Future<void> _stopClipboardWatcher() async {
-    clipboardWatcher.removeListener(this);
-    await clipboardWatcher.stop();
-  }
+  Future<void> _stopClipboardWatcher() =>
+      ClipboardSyncCoordinator.shared.stop();
 
   Future<void> _destroyTray() async {
     _windowsTrayIcon.stop();
@@ -1700,7 +1668,9 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
   Future<void> _refreshDevice({isFirst = false}) async {
     if (!mounted) return;
-    if (Platform.isIOS) unawaited(_syncClipboardWatcher());
+    if (Platform.isIOS) {
+      unawaited(ClipboardSyncCoordinator.shared.syncWatcher());
+    }
     if (isFirst) {
       await _localNetworkPermissionBootstrap;
       if (!mounted) {
@@ -3859,309 +3829,5 @@ class _DeviceListScreen extends State<DeviceListScreen>
   @override
   void onWindowUnmaximize() {
     // TODO: implement onWindowUnmaximize
-  }
-
-  @override
-  void onClipboardChanged() async {
-    // A paste's files going in, or what was copied coming back after it.
-    if (socketManager.remoteClipboardWritingNow) return;
-    unawaited(_recordClipboard());
-    final generation = ++_clipboardSyncGeneration;
-    final inputState = _remoteInputCoordinator.state;
-    final workspace = _remoteInputWorkspaceCoordinator.snapshot;
-    final remoteClipboardTargets = <({String peerId, String sessionId})>{};
-    if (isDesktop() &&
-        inputState.role == RemoteInputRuntimeRole.source &&
-        inputState.sessionId.isNotEmpty &&
-        inputState.peerId.isNotEmpty) {
-      remoteClipboardTargets.add((
-        peerId: inputState.peerId,
-        sessionId: inputState.sessionId,
-      ));
-    }
-    if (isDesktop() &&
-        inputState.role == RemoteInputRuntimeRole.sink &&
-        inputState.sessionId.isNotEmpty &&
-        inputState.peerId.isNotEmpty) {
-      remoteClipboardTargets.add((
-        peerId: inputState.peerId,
-        sessionId: inputState.sessionId,
-      ));
-    }
-    if (isDesktop() && workspace.isControllerLive) {
-      for (final target in workspace.targets.values) {
-        if (target.isConnected) {
-          remoteClipboardTargets.add((
-            peerId: target.peerId,
-            sessionId: target.sessionId,
-          ));
-        }
-      }
-    }
-    final clipboardAutoSyncEnabled = await LocalSetting().clipboardAutoSync();
-    if (isMobile() && !clipboardAutoSyncEnabled) {
-      logClipboardSync(
-        ClipboardSyncStep.skipped,
-        reason: ClipboardSyncReason.autoSyncOff,
-      );
-      return;
-    }
-    if (generation != _clipboardSyncGeneration) {
-      return;
-    }
-    final canPublishRemotePayload =
-        remoteClipboardTargets.isNotEmpty && clipboardAutoSyncEnabled;
-    final fileDrafts = isDesktop()
-        ? await _clipboardFileReader.readFileDrafts()
-        : const <ClipboardFileDraft>[];
-    traceRemoteClipboard(
-      'clipboard_changed',
-      count: fileDrafts.length,
-      success: canPublishRemotePayload,
-      reason: canPublishRemotePayload
-          ? 'source_ready'
-          : '${inputState.role.name}:${inputState.status.name}',
-    );
-    if (generation != _clipboardSyncGeneration) {
-      return;
-    }
-    final paths = fileDrafts.map((draft) => draft.path).toList(growable: false);
-    if (paths.isNotEmpty) {
-      // The text synced last is no longer on the clipboard: copying the same
-      // text again has to sync again.
-      _clipboardText = '';
-    }
-    if (isOwnClipboardFiles(paths)) {
-      // The file manager's copy, there for pasting in other apps.
-      logClipboardSync(
-        ClipboardSyncStep.skipped,
-        reason: ClipboardSyncReason.ownFiles,
-      );
-      return;
-    }
-    if (paths.isNotEmpty) {
-      for (final target in remoteClipboardTargets) {
-        if (socketManager.remoteClipboardOwnsPaths(
-          sessionId: target.sessionId,
-          paths: paths,
-        )) {
-          logClipboardSync(
-            ClipboardSyncStep.skipped,
-            reason: ClipboardSyncReason.sessionFiles,
-          );
-          return;
-        }
-      }
-    }
-    if (canPublishRemotePayload) {
-      socketManager.markLocalWorkspaceClipboard();
-    }
-    if (isDesktop() && canPublishRemotePayload) {
-      for (final target in remoteClipboardTargets) {
-        await socketManager.clearRemoteClipboardSession(
-          peerId: target.peerId,
-          sessionId: target.sessionId,
-        );
-      }
-      if (generation != _clipboardSyncGeneration) {
-        return;
-      }
-    }
-    if (fileDrafts.isNotEmpty) {
-      // Files go only to a keyboard and mouse sharing session.
-      logClipboardSync(
-        ClipboardSyncStep.skipped,
-        reason: ClipboardSyncReason.files,
-        count: canPublishRemotePayload ? remoteClipboardTargets.length : 0,
-      );
-      if (canPublishRemotePayload) {
-        final items = fileDrafts
-            .map(RemoteClipboardLocalItem.file)
-            .toList(growable: false);
-        for (final target in remoteClipboardTargets) {
-          await _publishRemoteClipboardItems(
-            generation: generation,
-            peerId: target.peerId,
-            sessionId: target.sessionId,
-            items: items,
-          );
-        }
-      }
-      return;
-    }
-    final text = await readClipboardTextForSync(
-      fileDraftsProvider: () async => const <ClipboardFileDraft>[],
-    );
-    if (generation != _clipboardSyncGeneration) {
-      return;
-    }
-    if (canPublishRemotePayload && (text == null || text.isEmpty)) {
-      final image = await _clipboardImageReader.readImageBytes();
-      if (generation != _clipboardSyncGeneration) {
-        return;
-      }
-      if (image != null && image.isNotEmpty) {
-        _clipboardText = '';
-        logClipboardSync(
-          ClipboardSyncStep.skipped,
-          reason: ClipboardSyncReason.image,
-          count: remoteClipboardTargets.length,
-        );
-        final items = <RemoteClipboardLocalItem>[
-          RemoteClipboardLocalItem.bytes('Clipboard Image.png', image),
-        ];
-        for (final target in remoteClipboardTargets) {
-          await _publishRemoteClipboardItems(
-            generation: generation,
-            peerId: target.peerId,
-            sessionId: target.sessionId,
-            items: items,
-          );
-        }
-        return;
-      }
-    }
-    if (text == null) {
-      _clipboardText = '';
-      logClipboardSync(
-        ClipboardSyncStep.skipped,
-        reason: ClipboardSyncReason.empty,
-      );
-      return;
-    }
-    if (canPublishRemotePayload) {
-      for (final target in remoteClipboardTargets) {
-        await socketManager.clearRemoteClipboardSession(
-          peerId: target.peerId,
-          sessionId: target.sessionId,
-          notifyPeer: true,
-        );
-      }
-    }
-    if (shouldIgnoreClipboardSync(text)) {
-      // What another device just sent, coming back from this clipboard.
-      _clipboardText = text;
-      logClipboardSync(
-        ClipboardSyncStep.skipped,
-        reason: ClipboardSyncReason.echo,
-      );
-      return;
-    }
-    // The text last sent. Only a send counts: copied while sync was off or
-    // nothing was connected, the same text has to go out the next time.
-    if (_clipboardText == text) {
-      logClipboardSync(
-        ClipboardSyncStep.skipped,
-        reason: ClipboardSyncReason.unchanged,
-      );
-      return;
-    }
-    if (!clipboardAutoSyncEnabled) {
-      logClipboardSync(
-        ClipboardSyncStep.skipped,
-        reason: ClipboardSyncReason.autoSyncOff,
-      );
-      return;
-    }
-    if (generation != _clipboardSyncGeneration) {
-      return;
-    }
-    final syncsWorkspace = workspace.isControllerLive;
-    final syncsControlledPeer =
-        !syncsWorkspace &&
-        inputState.role == RemoteInputRuntimeRole.sink &&
-        inputState.peerId.isNotEmpty;
-    final textPeerIds = syncsWorkspace
-        ? workspace.connectedTargetPeerIds.toList(growable: false)
-        : syncsControlledPeer
-        ? <String>[inputState.peerId]
-        : <String>[socketManager.receiver];
-    var sent = 0;
-    for (final peerId in textPeerIds.toSet()) {
-      if (peerId.isEmpty || !socketManager.isConnectedTo(peerId)) {
-        continue;
-      }
-      if (!syncsWorkspace &&
-          !syncsControlledPeer &&
-          socketManager.receiver != peerId) {
-        continue;
-      }
-      final target = await db.fetchDevice(peerId);
-      final currentInputState = _remoteInputCoordinator.state;
-      final targetIsCurrent = syncsWorkspace
-          ? _remoteInputWorkspaceCoordinator
-                    .snapshot
-                    .targets[peerId]
-                    ?.isConnected ==
-                true
-          : syncsControlledPeer
-          ? currentInputState.role == RemoteInputRuntimeRole.sink &&
-                currentInputState.peerId == peerId &&
-                currentInputState.sessionId == inputState.sessionId
-          : socketManager.receiver == peerId;
-      if (generation != _clipboardSyncGeneration ||
-          !targetIsCurrent ||
-          !socketManager.isConnectedTo(peerId) ||
-          target == null ||
-          !target.auth ||
-          !target.clipboard ||
-          target.identityPublicKey.isEmpty) {
-        continue;
-      }
-      // Before the await: Windows often reports one copy twice.
-      _clipboardText = text;
-      await socketManager.sendMessageTo(peerId, text, clipboard: true);
-      sent += 1;
-    }
-    logClipboardSync(
-      sent > 0 ? ClipboardSyncStep.sent : ClipboardSyncStep.skipped,
-      reason: sent > 0 ? null : ClipboardSyncReason.noTarget,
-      count: sent,
-    );
-  }
-
-  Future<void> _publishRemoteClipboardItems({
-    required int generation,
-    required String peerId,
-    required String sessionId,
-    required List<RemoteClipboardLocalItem> items,
-  }) async {
-    // The widest limits: the engine applies the narrower ones of frames when
-    // the files can't go as transfers.
-    if (items.isEmpty ||
-        items.length > remoteClipboardTransferMaxItems ||
-        items.any((item) => item.size > remoteClipboardTransferMaxFileBytes) ||
-        items.fold<int>(0, (sum, item) => sum + item.size) >
-            remoteClipboardTransferMaxBatchBytes) {
-      traceRemoteClipboard('publish_skipped', reason: 'settings_or_limits');
-      return;
-    }
-    final target = await db.fetchDevice(peerId);
-    final legacyState = _remoteInputCoordinator.state;
-    final workspaceTarget =
-        _remoteInputWorkspaceCoordinator.snapshot.targets[peerId];
-    final sessionIsLive =
-        ((legacyState.role == RemoteInputRuntimeRole.source ||
-                legacyState.role == RemoteInputRuntimeRole.sink) &&
-            legacyState.peerId == peerId &&
-            legacyState.sessionId == sessionId) ||
-        (workspaceTarget?.isConnected == true &&
-            workspaceTarget?.sessionId == sessionId);
-    if (generation != _clipboardSyncGeneration ||
-        !sessionIsLive ||
-        target == null ||
-        !target.auth ||
-        !target.clipboard ||
-        target.identityPublicKey.isEmpty ||
-        !socketManager.isConnectedTo(peerId)) {
-      traceRemoteClipboard('publish_skipped', reason: 'peer_or_session');
-      return;
-    }
-    final published = await socketManager.publishRemoteClipboard(
-      peerId: peerId,
-      sessionId: sessionId,
-      items: items,
-    );
-    traceRemoteClipboard('publish_done', success: published);
   }
 }

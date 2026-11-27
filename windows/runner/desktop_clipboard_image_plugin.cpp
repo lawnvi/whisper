@@ -28,9 +28,22 @@ using Microsoft::WRL::ComPtr;
 constexpr char kDesktopClipboardImageChannel[] =
     "com.vireen.whisper/desktop_clipboard_image";
 
+// Another program often has the clipboard open right after a copy: everyone
+// watching it looks at the same moment. Wait for it a little.
+bool OpenClipboardPatiently(HWND window) {
+  for (int attempt = 0; attempt < 10; ++attempt) {
+    if (OpenClipboard(window)) {
+      return true;
+    }
+    Sleep(15);
+  }
+  return false;
+}
+
 class ScopedClipboard {
  public:
-  explicit ScopedClipboard(HWND window) : opened_(OpenClipboard(window)) {}
+  explicit ScopedClipboard(HWND window)
+      : opened_(OpenClipboardPatiently(window)) {}
   ~ScopedClipboard() {
     if (opened_) {
       CloseClipboard();
@@ -582,6 +595,12 @@ class DesktopClipboardImagePlugin : public flutter::Plugin {
         values.emplace_back(path);
       }
       result->Success(flutter::EncodableValue(std::move(values)));
+      return;
+    }
+    if (call.method_name() == "changeToken") {
+      // Grows with every change of the clipboard, by any program.
+      result->Success(flutter::EncodableValue(
+          static_cast<int64_t>(GetClipboardSequenceNumber())));
       return;
     }
     if (call.method_name() == "clearFilePaths") {
