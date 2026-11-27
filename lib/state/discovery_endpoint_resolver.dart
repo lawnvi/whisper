@@ -26,6 +26,40 @@ Future<String?> resolveDiscoveryEndpointHost({
   DiscoveryAddressLookup? lookup,
   Duration timeout = const Duration(seconds: 2),
 }) async {
+  final candidates = await resolveDiscoveryCandidateHosts(
+    resolvedHost: resolvedHost,
+    resolvedAddresses: resolvedAddresses,
+    advertisedHost: advertisedHost,
+    port: port,
+    lookup: lookup,
+    timeout: timeout,
+  );
+  return candidates.isEmpty ? null : candidates.first;
+}
+
+/// Returns up to [maxCandidates] ordered, deduplicated endpoint hosts for a
+/// discovered mDNS service so outgoing dials can race candidate addresses when
+/// a peer has multiple network interfaces or stale cached IPs.
+Future<List<String>> resolveDiscoveryCandidateHosts({
+  required String? resolvedHost,
+  List<String> resolvedAddresses = const <String>[],
+  required String? advertisedHost,
+  required int port,
+  DiscoveryAddressLookup? lookup,
+  Duration timeout = const Duration(seconds: 2),
+  int maxCandidates = 4,
+}) async {
+  final ordered = <String>[];
+  void addHost(String? host) {
+    if (host == null ||
+        host.isEmpty ||
+        ordered.contains(host) ||
+        ordered.length >= maxCandidates) {
+      return;
+    }
+    ordered.add(host);
+  }
+
   final hasResolvedHost = resolvedHost?.isNotEmpty == true;
   final normalizedResolved = _normalizeEndpointHost(
     hasResolvedHost ? resolvedHost! : advertisedHost,
@@ -54,17 +88,21 @@ Future<String?> resolveDiscoveryEndpointHost({
     if (advertised != null &&
         (resolvedIpv4.contains(advertised) ||
             resolvedIpv6.contains(advertised))) {
-      return advertised;
+      addHost(advertised);
     }
     for (final address in resolvedIpv4) {
       if (!Ipv4AddressPolicy.isBenchmarking(address)) {
-        return address;
+        addHost(address);
       }
     }
-    // Only IPv6 or fake-IP answers: the same choice as for a single numeric
-    // target below.
-    return advertisedFallback ??
-        (resolvedIpv4.isNotEmpty ? resolvedIpv4.first : resolvedIpv6.first);
+    addHost(advertisedFallback);
+    for (final address in resolvedIpv4) {
+      addHost(address);
+    }
+    for (final address in resolvedIpv6) {
+      addHost(address);
+    }
+    return List<String>.unmodifiable(ordered);
   }
   if (normalizedResolved == null) {
     // Android NSD advertises names such as Android_XXXX.local. They are valid
@@ -74,22 +112,28 @@ Future<String?> resolveDiscoveryEndpointHost({
     if (resolvedHost?.contains('_') == true &&
         localServiceName != null &&
         _normalizeEndpointHost(localServiceName, port) != null) {
-      return advertisedFallback;
+      addHost(advertisedFallback);
     }
-    return null;
+    return List<String>.unmodifiable(ordered);
   }
   if (_isNumericHost(normalizedResolved)) {
     // Whisper currently listens on IPv4. Some Bonjour implementations return
     // a scoped link-local IPv6 address even though the peer advertises the
     // IPv4 endpoint that its chat server actually accepts.
     if (!_isIpv4Host(normalizedResolved) && advertisedFallback != null) {
-      return advertisedFallback;
+      addHost(advertisedFallback);
+      addHost(normalizedResolved);
+      return List<String>.unmodifiable(ordered);
     }
     if (Ipv4AddressPolicy.isBenchmarking(normalizedResolved) &&
         advertisedFallback != null) {
-      return advertisedFallback;
+      addHost(advertisedFallback);
+      addHost(normalizedResolved);
+      return List<String>.unmodifiable(ordered);
     }
-    return normalizedResolved;
+    addHost(normalizedResolved);
+    addHost(advertisedFallback);
+    return List<String>.unmodifiable(ordered);
   }
 
   final resolver = lookup ?? InternetAddress.lookup;
@@ -97,7 +141,9 @@ Future<String?> resolveDiscoveryEndpointHost({
   try {
     addresses = await resolver(normalizedResolved).timeout(timeout);
   } on Object {
-    return advertisedFallback ?? normalizedResolved;
+    addHost(advertisedFallback);
+    addHost(normalizedResolved);
+    return List<String>.unmodifiable(ordered);
   }
 
   final ipv4 = <String>[];
@@ -115,7 +161,7 @@ Future<String?> resolveDiscoveryEndpointHost({
 
   if (advertised != null &&
       (ipv4.contains(advertised) || ipv6.contains(advertised))) {
-    return advertised;
+    addHost(advertised);
   }
 
   final nonBenchmarkIpv4 = ipv4
@@ -127,18 +173,22 @@ Future<String?> resolveDiscoveryEndpointHost({
     // 198.18.0.0/15 is reserved for benchmarking and is also commonly used
     // by proxy fake-IP DNS. In that case the .local lookup did not provide a
     // usable mDNS address, so fall back to Whisper's numeric TXT endpoint.
-    return advertisedFallback;
+    addHost(advertisedFallback);
   }
-  if (nonBenchmarkIpv4.isNotEmpty) {
-    return nonBenchmarkIpv4.first;
+  for (final address in nonBenchmarkIpv4) {
+    addHost(address);
   }
-  if (ipv4.isNotEmpty) {
-    return ipv4.first;
+  addHost(advertisedFallback);
+  for (final address in ipv4) {
+    addHost(address);
   }
-  if (ipv6.isNotEmpty) {
-    return ipv6.first;
+  for (final address in ipv6) {
+    addHost(address);
   }
-  return advertisedFallback ?? normalizedResolved;
+  if (ordered.isEmpty) {
+    addHost(normalizedResolved);
+  }
+  return List<String>.unmodifiable(ordered);
 }
 
 String? _normalizeEndpointHost(String? host, int port) {

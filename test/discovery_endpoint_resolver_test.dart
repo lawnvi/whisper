@@ -139,4 +139,28 @@ void main() {
       expect(host, isNull);
     },
   );
+
+  test(
+    'resolveDiscoveryCandidateHosts returns ordered deduplicated candidates up to cap',
+    () async {
+      final candidates = await resolveDiscoveryCandidateHosts(
+        resolvedHost: 'macbook.local.',
+        resolvedAddresses: const <String>[
+          '192.168.1.20',
+          '192.168.1.16',
+          '10.0.0.5',
+          '198.18.0.14',
+          '172.16.0.8',
+        ],
+        advertisedHost: '192.168.1.16',
+        port: 10002,
+      );
+      expect(candidates, const <String>[
+        '192.168.1.16',
+        '192.168.1.20',
+        '10.0.0.5',
+        '172.16.0.8',
+      ]);
+    },
+  );
 }

@@ -51,6 +51,7 @@ final class ConnectionAttemptRequest {
     required ConnectionAttemptMode mode,
     String expectedPeerId = '',
     String expectedPublicKeyHash = '',
+    List<PeerEndpoint> fallbackEndpoints = const <PeerEndpoint>[],
   }) {
     final normalizedRequestId = requestId.trim();
     final normalizedPeerId = expectedPeerId.trim();
@@ -66,14 +67,20 @@ final class ConnectionAttemptRequest {
       );
     }
     if (normalizedPublicKeyHash.isNotEmpty &&
-        !DiscoveryIdentity.isCanonicalPublicKeyHash(
-          normalizedPublicKeyHash,
-        )) {
+        !DiscoveryIdentity.isCanonicalPublicKeyHash(normalizedPublicKeyHash)) {
       throw ArgumentError.value(
         expectedPublicKeyHash,
         'expectedPublicKeyHash',
         'must be a canonical SHA-256 base64url hash',
       );
+    }
+    final normalizedFallbacks = <PeerEndpoint>[];
+    for (final candidate in fallbackEndpoints) {
+      if (candidate == endpoint || normalizedFallbacks.contains(candidate)) {
+        continue;
+      }
+      normalizedFallbacks.add(candidate);
+      if (normalizedFallbacks.length >= 3) break;
     }
     return ConnectionAttemptRequest._(
       requestId: normalizedRequestId,
@@ -81,6 +88,7 @@ final class ConnectionAttemptRequest {
       expectedPeerId: normalizedPeerId,
       expectedPublicKeyHash: normalizedPublicKeyHash,
       mode: mode,
+      fallbackEndpoints: List<PeerEndpoint>.unmodifiable(normalizedFallbacks),
     );
   }
 
@@ -90,6 +98,7 @@ final class ConnectionAttemptRequest {
     required this.expectedPeerId,
     required this.expectedPublicKeyHash,
     required this.mode,
+    required this.fallbackEndpoints,
   });
 
   final String requestId;
@@ -97,6 +106,12 @@ final class ConnectionAttemptRequest {
   final String expectedPeerId;
   final String expectedPublicKeyHash;
   final ConnectionAttemptMode mode;
+  final List<PeerEndpoint> fallbackEndpoints;
+
+  /// Ordered deduplicated endpoints for this attempt (primary first, up to 4).
+  List<PeerEndpoint> get candidateEndpoints => fallbackEndpoints.isEmpty
+      ? <PeerEndpoint>[endpoint]
+      : <PeerEndpoint>[endpoint, ...fallbackEndpoints];
 
   bool get isAutomatic => mode == ConnectionAttemptMode.automatic;
 }
@@ -128,32 +143,29 @@ final class ConnectionAttemptResult {
   factory ConnectionAttemptResult.cancelled({
     required String requestId,
     ConnectionAttemptReason reason = ConnectionAttemptReason.requestCancelled,
-  }) =>
-      ConnectionAttemptResult._terminal(
-        requestId: requestId,
-        status: ConnectionAttemptStatus.cancelled,
-        reason: reason,
-      );
+  }) => ConnectionAttemptResult._terminal(
+    requestId: requestId,
+    status: ConnectionAttemptStatus.cancelled,
+    reason: reason,
+  );
 
   factory ConnectionAttemptResult.rejected({
     required String requestId,
     ConnectionAttemptReason reason = ConnectionAttemptReason.peerRejected,
-  }) =>
-      ConnectionAttemptResult._terminal(
-        requestId: requestId,
-        status: ConnectionAttemptStatus.rejected,
-        reason: reason,
-      );
+  }) => ConnectionAttemptResult._terminal(
+    requestId: requestId,
+    status: ConnectionAttemptStatus.rejected,
+    reason: reason,
+  );
 
   factory ConnectionAttemptResult.networkFailure({
     required String requestId,
     ConnectionAttemptReason reason = ConnectionAttemptReason.networkUnavailable,
-  }) =>
-      ConnectionAttemptResult._terminal(
-        requestId: requestId,
-        status: ConnectionAttemptStatus.networkFailure,
-        reason: reason,
-      );
+  }) => ConnectionAttemptResult._terminal(
+    requestId: requestId,
+    status: ConnectionAttemptStatus.networkFailure,
+    reason: reason,
+  );
 
   factory ConnectionAttemptResult._terminal({
     required String requestId,
