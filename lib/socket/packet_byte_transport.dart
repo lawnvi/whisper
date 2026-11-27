@@ -3,14 +3,10 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart' as hashes;
-import 'package:web_socket_channel/io.dart';
-import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:whisper/socket/aead_engine.dart';
 import 'package:whisper/socket/bounded_outbound_queue.dart';
-import 'package:whisper/socket/media_upgrade_proof.dart';
 import 'package:whisper/socket/session_upgrade_token_registry.dart';
 import 'package:whisper/socket/transport_close_guard.dart';
-import 'package:whisper/socket/direct_peer_http_client.dart';
 
 enum PacketSendResult { sent, dropped, closed, transportFailure }
 
@@ -710,99 +706,4 @@ Uint8List _mediaPacketAad({
   offset += sessionBytes.length;
   input.setRange(offset, input.length, header);
   return input;
-}
-
-typedef PacketWebSocketConnection = ({
-  Future<void> Function(Stream<Object>) addStream,
-  Future<void> Function() closeSink,
-});
-typedef PacketWebSocketConnector =
-    Future<PacketWebSocketConnection> Function(Uri uri);
-
-/// Connects a `WebSocketChannel` to [uri] and wraps it in a
-/// [PacketByteTransport]. Channel establishment (`IOWebSocketChannel.connect`
-/// + `await channel.ready`) is taken as-is from the prior
-/// `AudioWebSocketPacketTransport.connect` implementation; a failed
-/// `channel.ready` propagates to the caller, which owns any diagnostics/retry.
-Future<PacketByteTransport> connectPacketWebSocket(
-  Uri uri, {
-  PacketWebSocketConnector? connector,
-  AuthenticatedMediaPacketEncoder? packetEncoder,
-  MediaUpgradeClientContext? mediaUpgradeContext,
-  int remoteInputMaxItems = 128,
-  int remoteInputMaxBytes = 256 * 1024,
-}) async {
-  var unownedPacketEncoder = packetEncoder;
-  var unownedMediaUpgradeContext = mediaUpgradeContext;
-  try {
-    final PacketWebSocketConnection connection;
-    Stream<dynamic>? incoming;
-    if (connector == null) {
-      WebSocketChannel channel = IOWebSocketChannel.connect(
-        uri,
-        customClient: newDirectPeerHttpClient(),
-      );
-      await channel.ready;
-      if (unownedMediaUpgradeContext case final context?) {
-        try {
-          channel = await context.withMediaMacKey(
-            (mediaMacKey) => authenticateMediaWebSocketClient(
-              channel,
-              uri: uri,
-              route: uri.path,
-              namespace: context.namespace,
-              sessionId: context.sessionId,
-              peerId: context.peerId,
-              mediaMacKey: mediaMacKey,
-              timeout: context.timeout,
-            ),
-          );
-        } finally {
-          context.destroy();
-          unownedMediaUpgradeContext = null;
-        }
-      }
-      incoming = channel.stream;
-      connection = (
-        addStream: channel.sink.addStream,
-        closeSink: () => channel.sink.close(),
-      );
-    } else {
-      if (unownedMediaUpgradeContext != null) {
-        throw UnsupportedError(
-          'custom packet websocket connectors cannot skip media proof',
-        );
-      }
-      connection = await connector(uri);
-    }
-    final PacketByteTransport transport;
-    if (uri.path == '/input') {
-      transport = PacketByteTransport.remoteInput(
-        addStream: connection.addStream,
-        closeSink: connection.closeSink,
-        maxItems: remoteInputMaxItems,
-        maxBytes: remoteInputMaxBytes,
-        packetEncoder: unownedPacketEncoder,
-      );
-    } else {
-      transport = PacketByteTransport.audio(
-        addStream: connection.addStream,
-        closeSink: connection.closeSink,
-        incoming: incoming,
-        packetEncoder: unownedPacketEncoder,
-      );
-    }
-    unownedPacketEncoder = null;
-    return transport;
-  } catch (error, stackTrace) {
-    Error.throwWithStackTrace(
-      error is PacketWebSocketConnectException
-          ? error
-          : PacketWebSocketConnectException(uri, error),
-      stackTrace,
-    );
-  } finally {
-    unownedMediaUpgradeContext?.destroy();
-    unownedPacketEncoder?.destroy();
-  }
 }

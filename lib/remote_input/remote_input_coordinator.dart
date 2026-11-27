@@ -20,7 +20,7 @@ import 'package:whisper/remote_input/remote_input_runtime_state.dart';
 import 'package:whisper/remote_input/remote_clipboard_paste_watch.dart';
 import 'package:whisper/remote_input/remote_clipboard_transfer.dart';
 import 'package:whisper/remote_input/remote_input_scroll.dart';
-import 'package:whisper/socket/packet_byte_transport.dart';
+import 'package:whisper/socket/media_channel_dial.dart';
 
 export 'package:whisper/remote_input/remote_input_runtime_state.dart';
 
@@ -1642,14 +1642,13 @@ class RemoteInputCoordinator extends ChangeNotifier {
       );
       return;
     }
-    final uri = _inputUri(
+    final uri = MediaRoute.input.uri(
       host: remoteHost,
       port: isManual && message.transportPort != 0
           ? message.transportPort
           : remotePort,
-      path: message.path,
       sessionId: message.sessionId,
-      transportToken: message.transportToken,
+      token: message.transportToken,
     );
     _trace(RemoteInputDiagnosticKind.transportConnecting);
     _setState(
@@ -2077,25 +2076,6 @@ class RemoteInputCoordinator extends ChangeNotifier {
       case null:
         return null;
     }
-  }
-
-  Uri _inputUri({
-    required String host,
-    required int port,
-    required String path,
-    required String sessionId,
-    required String transportToken,
-  }) {
-    final normalizedPath = path.isEmpty ? '/input' : path;
-    return buildPeerPacketUri(
-      host: host,
-      port: port,
-      path: normalizedPath,
-      queryParameters: <String, String>{
-        if (transportToken.isNotEmpty) 'session': sessionId,
-        if (transportToken.isNotEmpty) 'token': transportToken,
-      },
-    );
   }
 
   RemoteInputPlatformKind _effectiveRemotePlatform(

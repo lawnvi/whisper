@@ -13,7 +13,9 @@ import 'package:whisper/remote_input/remote_input_manager.dart';
 import 'package:whisper/remote_input/remote_input_packet_transport.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
 import 'package:whisper/socket/packet_byte_transport.dart';
+import 'package:whisper/socket/media_channel_dial.dart';
 import 'package:whisper/socket/media_upgrade_proof.dart';
+import 'package:whisper/socket/media_upgrade_server.dart';
 import 'package:whisper/socket/session_upgrade_token_registry.dart';
 import 'package:whisper/socket/svrmanager.dart';
 
@@ -141,17 +143,67 @@ Future<String> _nextProvisionalOutcome(StreamIterator<dynamic> events) async {
 }
 
 void main() {
-  test('destroyed media upgrade context cannot expose a zeroed key', () {
-    final context = MediaUpgradeClientContext(
-      namespace: 'audio-group',
-      sessionId: _audioSessionId,
-      peerId: _sourcePeerId,
-      mediaMacKey: _mediaKey,
-    );
-
-    context.destroy();
-
-    expect(() => context.withMediaMacKey<void>((_) {}), throwsStateError);
+  // The audio isolate's own port checks the token in the main isolate, so it
+  // learns the token is used up only after the proof passed. It must not
+  // play from the channel before that, nor lose what came meanwhile.
+  test('a proof checked across isolates admits the channel once its token is spent', () async {
+    for (final spent in <bool>[true, false]) {
+      final upgrades = MediaUpgradeServer(
+        maxProvisional: 1,
+        proofTimeout: const Duration(seconds: 2),
+      );
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      final tokenSpent = Completer<bool>();
+      final received = Completer<List<int>>();
+      var admitted = false;
+      server.listen((request) async {
+        final slot = upgrades.reserve()!;
+        final socket = await WebSocketTransformer.upgrade(request);
+        slot.prove(
+          IOWebSocketChannel(socket),
+          const MediaUpgradeOffer(
+            route: '/audio',
+            namespace: 'audio-group',
+            sessionId: _audioSessionId,
+            peerId: _sourcePeerId,
+            connectionGeneration: 1,
+            token: 'token-a',
+          ),
+          mediaMacKey: _mediaKey,
+          onProven: (channel) async {
+            if (!await tokenSpent.future) return false;
+            admitted = true;
+            channel.stream.listen((message) {
+              if (!received.isCompleted) received.complete(message as List<int>);
+            });
+            return true;
+          },
+        );
+      });
+      final client = await dialMediaChannel(
+        Uri.parse(
+          'ws://127.0.0.1:${server.port}/audio'
+          '?session=$_audioSessionId&token=token-a',
+        ),
+        MediaRoute.audio,
+        sessionId: _audioSessionId,
+        proverPeerId: _sourcePeerId,
+        proofKey: _mediaKey,
+      );
+      final closed = client.stream.drain<void>();
+      // Sent before the main isolate answered about the token.
+      client.sink.add(<int>[1, 2, 3]);
+      expect(upgrades.provisionalCount, 0, reason: 'spent=$spent');
+      tokenSpent.complete(spent);
+      if (spent) {
+        expect(await received.future, <int>[1, 2, 3]);
+        await client.sink.close();
+      } else {
+        await closed.timeout(const Duration(seconds: 2));
+        expect(admitted, isFalse);
+      }
+      await server.close(force: true);
+    }
   });
 
   late SessionUpgradeTokenRegistry tokens;

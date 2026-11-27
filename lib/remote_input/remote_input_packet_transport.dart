@@ -1,16 +1,14 @@
 import 'dart:async';
 import 'dart:typed_data';
 
-import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:whisper/remote_input/remote_input_activity.dart';
 import 'package:whisper/remote_input/remote_input_datagrams.dart';
 import 'package:whisper/remote_input/remote_input_lane.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
 import 'package:whisper/socket/bounded_outbound_queue.dart';
-import 'package:whisper/socket/media_upgrade_proof.dart';
+import 'package:whisper/socket/media_channel_dial.dart';
 import 'package:whisper/socket/packet_byte_transport.dart';
-import 'package:whisper/socket/direct_peer_http_client.dart';
 
 abstract class RemoteInputPacketTransport {
   void send(RemoteInputPacketFrame packet);
@@ -138,10 +136,6 @@ class RemoteInputWebSocketPacketTransport extends RemoteInputPacketByteTransport
     return transport;
   }
 
-  /// How soon a controller notices the other side has stopped answering
-  /// and hands the keyboard and mouse back.
-  static const controllerPingInterval = Duration(seconds: 5);
-
   /// Connects for the session [accept] answers, with the UDP lane beside
   /// it when the accept named a port (`remote_input_lane.dart`).
   static Future<RemoteInputObservablePacketTransport> connect(
@@ -176,50 +170,23 @@ class RemoteInputWebSocketPacketTransport extends RemoteInputPacketByteTransport
     required String peerId,
     bool preserveMouseMoves = false,
   }) async {
-    AuthenticatedMediaPacketEncoder? unownedPacketEncoder;
-    try {
-      WebSocketChannel channel = IOWebSocketChannel.connect(
+    final channel = await dialMediaChannel(
+      uri,
+      MediaRoute.input,
+      sessionId: sessionId,
+      proverPeerId: peerId,
+      proofKey: mediaMacKey,
+    );
+    return RemoteInputWebSocketPacketTransport.forChannel(
+      channel,
+      packetEncoder: MediaRoute.input.encoder(
         uri,
-        customClient: newDirectPeerHttpClient(),
-        // The controlled side can hang and still hold the socket open; only
-        // its side pinged, so this side kept swallowing local input for good.
-        pingInterval: controllerPingInterval,
-      );
-      await channel.ready;
-      channel = await authenticateMediaWebSocketClient(
-        channel,
-        uri: uri,
-        route: '/input',
-        namespace: 'remote-input',
         sessionId: sessionId,
-        peerId: peerId,
-        mediaMacKey: mediaMacKey,
-      );
-      unownedPacketEncoder = AuthenticatedMediaPacketEncoder(
-        route: '/input',
-        namespace: 'remote-input',
-        sessionId: sessionId,
-        mediaMacKey: mediaMacKey,
-        channelBinding: mediaPacketChannelBindingFromUri(uri),
+        sendKey: mediaMacKey,
         maxPayloadBytes: 64 * 1024,
-      );
-      final transport = RemoteInputWebSocketPacketTransport.forChannel(
-        channel,
-        packetEncoder: unownedPacketEncoder,
-        preserveMouseMoves: preserveMouseMoves,
-      );
-      unownedPacketEncoder = null;
-      return transport;
-    } catch (error, stackTrace) {
-      Error.throwWithStackTrace(
-        error is PacketWebSocketConnectException
-            ? error
-            : PacketWebSocketConnectException(uri, error),
-        stackTrace,
-      );
-    } finally {
-      unownedPacketEncoder?.destroy();
-    }
+      ),
+      preserveMouseMoves: preserveMouseMoves,
+    );
   }
 
   @override

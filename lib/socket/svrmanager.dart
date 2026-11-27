@@ -1,11 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:shelf/shelf.dart' as shelf;
 import 'package:shelf/shelf_io.dart' as shelf_io;
-import 'package:shelf_web_socket/shelf_web_socket.dart';
 import 'package:uuid/uuid.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:whisper/socket/backpressure_web_socket.dart';
@@ -34,7 +32,7 @@ import 'package:whisper/socket/direct_peer_http_client.dart';
 import 'package:whisper/socket/file_browse_trust_cache.dart';
 import 'package:whisper/socket/file_transfer_engine.dart';
 import 'package:whisper/socket/file_transfer_v3.dart';
-import 'package:whisper/socket/media_upgrade_proof.dart';
+import 'package:whisper/socket/media_upgrade_server.dart';
 import 'package:whisper/socket/outgoing_text_retry.dart';
 import 'package:whisper/socket/pairing_attempt_limiter.dart';
 import 'package:whisper/socket/outbound_frame_class.dart';
@@ -97,13 +95,6 @@ final class _SocketAuthResult {
 
 typedef _IdentityPinPlan = ({PairingReason? reason, String expectedPublicKey});
 
-Uint8List _secureMediaProofRandomBytes(int length) {
-  final random = math.Random.secure();
-  return Uint8List.fromList(
-    List<int>.generate(length, (_) => random.nextInt(256)),
-  );
-}
-
 enum _PeerPolicyDisposition { manualDisconnect, trustRevoked, deviceDeleted }
 
 enum _PeerAuthSuppressionReason {
@@ -149,20 +140,6 @@ class WsSvrManager {
   static final Set<String> _windowStreamControlActions =
       WindowStreamControlAction.values.map((action) => action.name).toSet();
   static const String _fileBrowseNamespace = 'remote-files';
-
-  static Duration _validateMediaProofTimeout(Duration value) {
-    if (value <= Duration.zero) {
-      throw ArgumentError.value(value, 'mediaProofTimeout');
-    }
-    return value;
-  }
-
-  static int _validateMaxProvisionalMediaSockets(int value) {
-    if (value <= 0) {
-      throw ArgumentError.value(value, 'maxProvisionalMediaSockets');
-    }
-    return value;
-  }
 
   static PeerReconnectController _defaultReconnectControllerFactory({
     required ReconnectAttempt attempt,
@@ -218,12 +195,12 @@ class WsSvrManager {
        _authCommitBarrier = authCommitBarrier,
        _authEnvelopeObserver = authEnvelopeObserver,
        _socketCloseTimeout = socketCloseTimeout,
-       _mediaProofTimeout = _validateMediaProofTimeout(mediaProofTimeout),
-       _maxProvisionalMediaSockets = _validateMaxProvisionalMediaSockets(
-         maxProvisionalMediaSockets,
+       _mediaUpgrades = MediaUpgradeServer(
+         maxProvisional: maxProvisionalMediaSockets,
+         proofTimeout: mediaProofTimeout,
+         pingInterval: _serverPingInterval,
+         randomBytes: mediaProofRandomBytes,
        ),
-       _mediaProofRandomBytes =
-           mediaProofRandomBytes ?? _secureMediaProofRandomBytes,
        _transferDownloadDirectory = transferDownloadDirectory,
        _folderTransferStore =
            folderTransferStore ?? const FolderTransferStore(),
@@ -371,12 +348,10 @@ class WsSvrManager {
   bool _interruptedTransfersReconciled = false;
   final ConnectionAuthCommitBarrier? _authCommitBarrier;
   final Duration _socketCloseTimeout;
-  final Duration _mediaProofTimeout;
-  final int _maxProvisionalMediaSockets;
-  final SecureRandomBytes _mediaProofRandomBytes;
+  /// `/audio`, `/input` and `/window` upgrades still proving themselves.
+  final MediaUpgradeServer _mediaUpgrades;
   final Future<Directory> Function()? _transferDownloadDirectory;
   final FolderTransferStore _folderTransferStore;
-  int _provisionalMediaSocketCount = 0;
   final Map<String, PeerReconnectController> _reconnectControllers =
       <String, PeerReconnectController>{};
   final Map<String, int> _peerPolicyEpochs = <String, int>{};
@@ -676,7 +651,7 @@ class WsSvrManager {
       _heartBeat(peerId: peerId);
 
   @visibleForTesting
-  int get debugProvisionalMediaSocketCount => _provisionalMediaSocketCount;
+  int get debugProvisionalMediaSocketCount => _mediaUpgrades.provisionalCount;
 
   String _shortSessionId(String sessionId) {
     if (sessionId.length <= 8) {
@@ -1336,103 +1311,33 @@ class WsSvrManager {
         SessionUpgradeClaim claim,
       )
       attach,
-    }) async {
-      if (_provisionalMediaSocketCount >= _maxProvisionalMediaSockets) {
-        return shelf.Response(429, body: 'Too Many Requests');
-      }
-      _provisionalMediaSocketCount += 1;
+    }) => _mediaUpgrades.upgradeShelf(
+      request,
+      MediaUpgradeOffer.forClaim(provisionalClaim, token),
+      mediaMacKey: provisionalClaim.withMediaMacKey,
       // Its token comes from a peer that already authenticated.
-      _acceptedSockets?.trust(request.context['shelf.io.connection_info']);
-      var provisionalReleased = false;
-      final pendingUpgrade = Completer<void>();
-      _pendingSocketAttachments.add(pendingUpgrade.future);
-      void releaseProvisional() {
-        if (provisionalReleased) {
-          return;
-        }
-        provisionalReleased = true;
-        provisionalClaim.destroy();
-        _provisionalMediaSocketCount -= 1;
-        _completePendingSocketAttachment(pendingUpgrade);
-      }
-
-      late final shelf.Handler mediaHandler;
-      try {
-        final nonceBytes = _mediaProofRandomBytes(32);
-        if (nonceBytes.length != 32) {
-          releaseProvisional();
-          return shelf.Response.internalServerError();
-        }
-        final challenge = MediaUpgradeChallenge(
-          route: provisionalClaim.route,
-          namespace: provisionalClaim.namespace,
-          sessionId: provisionalClaim.sessionId,
-          tokenHash: mediaUpgradeTokenHash(token),
-          nonce: base64Url.encode(nonceBytes).replaceAll('=', ''),
-          peerId: provisionalClaim.peerId,
-          connectionGeneration: provisionalClaim.connectionGeneration,
+      onReserved: () =>
+          _acceptedSockets?.trust(request.context['shelf.io.connection_info']),
+      onProven: (authenticated) {
+        if (!canAttach(provisionalClaim)) return false;
+        final consumed = _sessionUpgradeTokens.consume(
+          route: route,
+          sessionId: sessionId,
+          token: token,
+          now: DateTime.now(),
+          expected: provisionalClaim,
         );
-        mediaHandler = webSocketHandler((WebSocketChannel channel, _) {
-          try {
-            provisionalClaim.withMediaMacKey(
-              (mediaMacKey) => MediaUpgradeServerSession(
-                channel: channel,
-                challenge: challenge,
-                mediaMacKey: mediaMacKey,
-                timeout: _mediaProofTimeout,
-                onAuthenticated: (authenticatedChannel) {
-                  if (!canAttach(provisionalClaim)) {
-                    return false;
-                  }
-                  final consumed = _sessionUpgradeTokens.consume(
-                    route: route,
-                    sessionId: sessionId,
-                    token: token,
-                    now: DateTime.now(),
-                    expected: provisionalClaim,
-                  );
-                  if (consumed == null) {
-                    return false;
-                  }
-                  var attached = false;
-                  try {
-                    attached = attach(authenticatedChannel, consumed);
-                    return attached;
-                  } finally {
-                    if (!attached) {
-                      consumed.destroy();
-                    }
-                  }
-                },
-                onProvisionalFinished: releaseProvisional,
-              ),
-            );
-          } catch (_) {
-            releaseProvisional();
-            _ignoreFuture(
-              channel.sink.close(4001, 'media_auth_failed'),
-              context: 'close failed media proof session initialization',
-            );
-          }
-        }, pingInterval: _serverPingInterval);
-      } catch (_) {
-        releaseProvisional();
-        return shelf.Response.internalServerError();
-      }
-      late final shelf.Response response;
-      try {
-        response = await mediaHandler(request);
-      } on shelf.HijackException {
-        rethrow;
-      } catch (_) {
-        releaseProvisional();
-        rethrow;
-      }
-      if (response.statusCode != HttpStatus.switchingProtocols) {
-        releaseProvisional();
-      }
-      return response;
-    }
+        if (consumed == null) return false;
+        var attached = false;
+        try {
+          attached = attach(authenticated, consumed);
+          return attached;
+        } finally {
+          if (!attached) consumed.destroy();
+        }
+      },
+      onReleased: provisionalClaim.destroy,
+    );
 
     FutureOr<shelf.Response> handler(shelf.Request request) async {
       final path = request.url.path;
@@ -2851,6 +2756,7 @@ class WsSvrManager {
       hasPendingSessions:
           _sessionsBySink.isNotEmpty ||
           _pendingSocketAttachments.isNotEmpty ||
+          _mediaUpgrades.hasPending ||
           _pendingOutgoingConnections.isNotEmpty ||
           _audioManager.hasActiveChannels ||
           _remoteInputManager.hasActiveChannels,
@@ -2871,8 +2777,9 @@ class WsSvrManager {
     _incomingAuthPeerIdsBySink.clear();
     _identityPinPlansBySink.clear();
     _authRequestGate.clear();
-    while (_pendingSocketAttachments.isNotEmpty) {
+    while (_pendingSocketAttachments.isNotEmpty || _mediaUpgrades.hasPending) {
       await Future.wait(_pendingSocketAttachments.toList(growable: false));
+      await _mediaUpgrades.drain();
     }
     final sessionEntries = _sessionsBySink.entries.toList(growable: false);
     final authenticatedEntries = sessionEntries

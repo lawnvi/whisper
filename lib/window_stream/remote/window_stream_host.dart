@@ -6,15 +6,12 @@ import 'dart:ffi';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
-import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:window_stream_native/window_stream_native.dart';
 
 import '../../socket/bounded_binary_websocket_session.dart';
 import '../../socket/bounded_outbound_queue.dart';
-import '../../socket/direct_peer_http_client.dart';
-import '../../socket/media_upgrade_proof.dart';
-import '../../socket/no_delay_socket.dart';
+import '../../socket/media_channel_dial.dart';
 import '../../socket/packet_byte_transport.dart';
 import '../../socket/session_upgrade_token_registry.dart';
 import '../android/agent/phone_capture_backend.dart';
@@ -1097,33 +1094,27 @@ class WindowStreamHost {
     prepared;
     try {
       prepared = scope(stream.viewerPeerId, (base, sendKey, receiveKey) {
-        final uri = Uri(
-          scheme: base.scheme,
+        final uri = MediaRoute.window.uri(
           host: base.host,
           port: base.port,
-          path: 'window',
-          queryParameters: {'session': stream.sessionId, 'token': token},
+          sessionId: stream.sessionId,
+          token: token,
         );
-        final binding = mediaPacketChannelBindingFromUri(uri);
         return (
           uri: uri,
           proofKey: Uint8List.fromList(sendKey),
-          encoder: AuthenticatedMediaPacketEncoder(
-            route: route,
-            namespace: namespace,
+          encoder: MediaRoute.window.encoder(
+            uri,
             sessionId: stream.sessionId,
-            mediaMacKey: sendKey,
-            channelBinding: binding,
+            sendKey: sendKey,
             maxPayloadBytes:
                 WindowStreamPacket.headerBytes +
                 WindowStreamPacket.maxVideoPayload,
           ),
-          decoder: AuthenticatedMediaPacketDecoder(
-            route: route,
-            namespace: namespace,
+          decoder: MediaRoute.window.decoder(
+            uri,
             sessionId: stream.sessionId,
-            mediaMacKey: receiveKey,
-            channelBinding: binding,
+            receiveKey: receiveKey,
             maxPayloadBytes: maxInputMessageBytes,
           ),
         );
@@ -1139,18 +1130,12 @@ class WindowStreamHost {
     final (:uri, :proofKey, :encoder, :decoder) = prepared;
     WebSocketChannel? channel;
     try {
-      final socket = await connectNoDelayWebSocket(
+      channel = await dialMediaChannel(
         uri,
-        client: newDirectPeerHttpClient(),
-      );
-      channel = await authenticateMediaWebSocketClient(
-        IOWebSocketChannel(socket),
-        uri: uri,
-        route: route,
-        namespace: namespace,
+        MediaRoute.window,
         sessionId: stream.sessionId,
-        peerId: stream.open.hostPeerId,
-        mediaMacKey: proofKey,
+        proverPeerId: stream.open.hostPeerId,
+        proofKey: proofKey,
       );
     } catch (error) {
       channel = null;

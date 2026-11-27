@@ -12,50 +12,6 @@ const String mediaUpgradeProofType = 'whisper-media-proof-v1';
 const String mediaUpgradeReadyType = 'whisper-media-ready-v1';
 const int maxMediaUpgradeHandshakeMessageBytes = 2048;
 
-final class MediaUpgradeClientContext {
-  MediaUpgradeClientContext({
-    required this.namespace,
-    required this.sessionId,
-    required this.peerId,
-    required Uint8List mediaMacKey,
-    this.timeout = const Duration(seconds: 3),
-  }) : _mediaMacKey = Uint8List.fromList(mediaMacKey) {
-    if (sessionId.isEmpty ||
-        peerId.isEmpty ||
-        mediaMacKey.length != 32 ||
-        timeout <= Duration.zero) {
-      throw const FormatException('invalid media upgrade client context');
-    }
-  }
-
-  final String namespace;
-  final String sessionId;
-  final String peerId;
-  final Duration timeout;
-  final Uint8List _mediaMacKey;
-  bool _destroyed = false;
-
-  T withMediaMacKey<T>(T Function(Uint8List key) action) {
-    if (_destroyed) {
-      throw StateError('media upgrade context has been destroyed');
-    }
-    final scopedKey = Uint8List.fromList(_mediaMacKey);
-    try {
-      return action(scopedKey);
-    } finally {
-      scopedKey.fillRange(0, scopedKey.length, 0);
-    }
-  }
-
-  void destroy() {
-    if (_destroyed) {
-      return;
-    }
-    _destroyed = true;
-    _mediaMacKey.fillRange(0, _mediaMacKey.length, 0);
-  }
-}
-
 final class MediaUpgradeChallenge {
   MediaUpgradeChallenge({
     required String route,

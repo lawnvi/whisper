@@ -17,7 +17,7 @@ import 'package:whisper/remote_input/remote_input_platform.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
 import 'package:whisper/remote_input/remote_input_scroll.dart';
 import 'package:whisper/remote_input/remote_input_workspace_graph.dart';
-import 'package:whisper/socket/packet_byte_transport.dart';
+import 'package:whisper/socket/media_channel_dial.dart';
 
 typedef RemoteInputPeerControlSender =
     void Function(String peerId, RemoteInputControlMessage control);
@@ -757,15 +757,11 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
     final generation = _lifecycle.generation;
     target.connecting = true;
     _manager.handleControlMessage(accept);
-    final path = accept.path.isNotEmpty ? accept.path : target.offer.path;
-    final uri = buildPeerPacketUri(
+    final uri = MediaRoute.input.uri(
       host: remoteHost.isNotEmpty ? remoteHost : target.request.host,
       port: remotePort > 0 ? remotePort : target.request.port,
-      path: path,
-      queryParameters: <String, String>{
-        if (accept.transportToken.isNotEmpty) 'session': accept.sessionId,
-        if (accept.transportToken.isNotEmpty) 'token': accept.transportToken,
-      },
+      sessionId: accept.sessionId,
+      token: accept.transportToken,
     );
     final RemoteInputPacketTransport transport;
     try {

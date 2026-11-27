@@ -10,6 +10,7 @@ import 'package:uuid/uuid.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../../helper/local.dart';
+import '../../socket/media_channel_dial.dart';
 import '../../socket/packet_byte_transport.dart';
 import '../../socket/session_upgrade_token_registry.dart';
 import '../core/window_input_event.dart';
@@ -825,15 +826,11 @@ class RemotePeerSource implements WindowSource, ClosesTasks, ConfirmsTaskClose {
           );
           return;
         }
-        final uri = Uri(
-          scheme: 'ws',
+        final uri = MediaRoute.window.uri(
           host: remoteHost.isNotEmpty ? remoteHost : _host,
           port: port,
-          path: 'window',
-          queryParameters: {
-            'session': message.sessionId,
-            'token': inboundToken ?? message.transportToken,
-          },
+          sessionId: message.sessionId,
+          token: inboundToken ?? message.transportToken,
         );
         if (inboundToken != null) {
           final inbound = InboundWindowHostRelay(

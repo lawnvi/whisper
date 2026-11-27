@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:whisper/audio/audio_protocol.dart';
-import 'package:whisper/socket/media_upgrade_proof.dart';
+import 'package:whisper/socket/media_channel_dial.dart';
 import 'package:whisper/socket/packet_byte_transport.dart';
 
 typedef AudioGroupSinkFailure = void Function(String sinkPeerId, Object error);
@@ -57,24 +57,26 @@ class AudioGroupWebSocketPacketTransport extends AudioGroupPacketByteTransport {
     required String sessionId,
     required String peerId,
   }) async {
-    final channelTransport = await connectPacketWebSocket(
+    final channel = await dialMediaChannel(
       uri,
-      mediaUpgradeContext: MediaUpgradeClientContext(
-        namespace: 'audio-group',
-        sessionId: sessionId,
-        peerId: peerId,
-        mediaMacKey: mediaMacKey,
-      ),
-      packetEncoder: AuthenticatedMediaPacketEncoder(
-        route: '/audio',
-        namespace: 'audio-group',
-        sessionId: sessionId,
-        mediaMacKey: mediaMacKey,
-        channelBinding: mediaPacketChannelBindingFromUri(uri),
-        maxPayloadBytes: 256 * 1024,
+      MediaRoute.audio,
+      sessionId: sessionId,
+      proverPeerId: peerId,
+      proofKey: mediaMacKey,
+    );
+    return AudioGroupWebSocketPacketTransport._(
+      PacketByteTransport.audio(
+        addStream: channel.sink.addStream,
+        closeSink: () => channel.sink.close(),
+        incoming: channel.stream,
+        packetEncoder: MediaRoute.audio.encoder(
+          uri,
+          sessionId: sessionId,
+          sendKey: mediaMacKey,
+          maxPayloadBytes: 256 * 1024,
+        ),
       ),
     );
-    return AudioGroupWebSocketPacketTransport._(channelTransport);
   }
 }
 

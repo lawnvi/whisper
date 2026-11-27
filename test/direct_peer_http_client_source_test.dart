@@ -19,17 +19,12 @@ void main() {
     final svrmanager = File('lib/socket/svrmanager.dart').readAsStringSync();
     expect(svrmanager, isNot(contains('httpClient = HttpClient()')));
 
-    for (final path in <String>[
-      'lib/remote_input/remote_input_packet_transport.dart',
-      'lib/socket/packet_byte_transport.dart',
-    ]) {
-      final source = File(path).readAsStringSync();
-      expect(
-        source,
-        isNot(contains('IOWebSocketChannel.connect(uri);')),
-        reason: '$path must pass a direct customClient',
-      );
-      expect(source, contains('customClient: newDirectPeerHttpClient()'));
-    }
+    // Every media route dials through this one function.
+    final mediaDial = File(
+      'lib/socket/media_channel_dial.dart',
+    ).readAsStringSync();
+    expect(mediaDial, isNot(contains('IOWebSocketChannel.connect(uri);')));
+    expect(mediaDial, contains('customClient: newDirectPeerHttpClient()'));
+    expect(mediaDial, contains('client: newDirectPeerHttpClient()'));
   });
 }

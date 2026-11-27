@@ -1,9 +1,7 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
 import 'dart:isolate';
-import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
@@ -26,7 +24,7 @@ import 'package:whisper/helper/privacy_log.dart';
 import 'package:whisper/socket/aead_engine.dart';
 import 'package:whisper/socket/bounded_binary_websocket_session.dart';
 import 'package:whisper/socket/datagram_endpoint.dart';
-import 'package:whisper/socket/media_upgrade_proof.dart';
+import 'package:whisper/socket/media_upgrade_server.dart';
 import 'package:whisper/socket/no_delay_socket.dart';
 import 'package:whisper/socket/packet_byte_transport.dart';
 import 'package:whisper/socket/session_upgrade_token_registry.dart';
@@ -1154,7 +1152,6 @@ class _MediaChannel {
   BoundedBinaryWebSocketSession? session;
   AuthenticatedMediaPacketDecoder? decoder;
   DatagramLane? lane;
-  bool active = false;
   bool _expectedClose = false;
 
   Future<void> close({required bool expected}) async {
@@ -1180,9 +1177,6 @@ class _MediaChannel {
         packet.sessionId != spec.streamId) {
       throw const FormatException('audio group packet claim mismatch');
     }
-    if (!active) {
-      return;
-    }
     diagnostics.groupPacketDelivered(
       groupId: packet.groupId,
       streamId: packet.streamId,
@@ -1198,7 +1192,7 @@ class _MediaChannel {
     decoder?.destroy();
     decoder = null;
     playback.channels.remove(this);
-    if (!_expectedClose && active) {
+    if (!_expectedClose) {
       playback.fail(AudioFailureReason.transport);
     }
   }
@@ -1210,10 +1204,6 @@ class _MediaChannel {
 /// and every packet checked against the playback it belongs to.
 class _MediaServer {
   _MediaServer._(this._runtime, this._listening, this._server);
-
-  static const int _maxProvisional = 8;
-  static const Duration _proofTimeout = Duration(seconds: 3);
-  static const Duration _pingInterval = Duration(seconds: 45);
 
   static Future<_MediaServer> bind(_AudioRuntime runtime) async {
     final listening = await ServerSocket.bind('0.0.0.0', 0);
@@ -1232,8 +1222,10 @@ class _MediaServer {
   final _AudioRuntime _runtime;
   final ServerSocket _listening;
   final HttpServer _server;
-  final Random _random = Random.secure();
-  int _provisional = 0;
+  final MediaUpgradeServer _upgrades = MediaUpgradeServer(
+    maxProvisional: 8,
+    proofTimeout: const Duration(seconds: 3),
+  );
 
   int get port => _listening.port;
 
@@ -1246,35 +1238,25 @@ class _MediaServer {
       await _refuse(request, HttpStatus.badRequest);
       return;
     }
-    final sessions = request.uri.queryParametersAll['session'];
-    final tokens = request.uri.queryParametersAll['token'];
-    if (sessions == null ||
-        sessions.length != 1 ||
-        sessions.single.isEmpty ||
-        tokens == null ||
-        tokens.length != 1 ||
-        tokens.single.isEmpty) {
+    final credentials = mediaUpgradeCredentials(request.uri);
+    if (credentials == null) {
       await _refuse(request, HttpStatus.unauthorized);
       return;
     }
-    if (_provisional >= _maxProvisional) {
-      await _refuse(request, HttpStatus.tooManyRequests);
+    final slot = _upgrades.reserve();
+    if (slot == null || !slot.ready) {
+      slot?.release();
+      await _refuse(
+        request,
+        slot == null
+            ? HttpStatus.tooManyRequests
+            : HttpStatus.internalServerError,
+      );
       return;
     }
-    _provisional += 1;
-    var released = false;
-    void release() {
-      if (!released) {
-        released = true;
-        _provisional -= 1;
-      }
-    }
-
-    final sessionId = sessions.single;
-    final token = tokens.single;
     final claim = await _runtime.lookupClaim(
-      sessionId,
-      token,
+      credentials.sessionId,
+      credentials.token,
       request.connectionInfo?.remoteAddress.address ?? '',
     );
     final playback = claim == null ? null : _runtime.playbackFor(claim);
@@ -1282,7 +1264,7 @@ class _MediaServer {
       if (claim != null) {
         _runtime.releaseClaim(claim);
       }
-      release();
+      slot.release();
       await _refuse(request, HttpStatus.unauthorized);
       return;
     }
@@ -1291,47 +1273,43 @@ class _MediaServer {
       socket = await WebSocketTransformer.upgrade(request);
     } catch (_) {
       _runtime.releaseClaim(claim);
-      release();
+      slot.release();
       return;
     }
-    socket.pingInterval = _pingInterval;
-    final channel = IOWebSocketChannel(socket);
-    final media = _MediaChannel(claim, playback);
-    final nonce = Uint8List.fromList(
-      List<int>.generate(32, (_) => _random.nextInt(256)),
-    );
+    socket.pingInterval = _upgrades.pingInterval;
+    // Until the proof holds, the claim is this upgrade's to give back.
+    var proven = false;
+    slot.onReleased = () {
+      if (!proven) _runtime.releaseClaim(claim);
+    };
     try {
-      MediaUpgradeServerSession(
-        channel: channel,
-        challenge: MediaUpgradeChallenge(
+      slot.prove(
+        IOWebSocketChannel(socket),
+        MediaUpgradeOffer(
           route: '/audio',
           namespace: claim.namespace,
           sessionId: claim.sessionId,
-          tokenHash: mediaUpgradeTokenHash(token),
-          nonce: base64Url.encode(nonce).replaceAll('=', ''),
           peerId: claim.peerId,
           connectionGeneration: claim.connectionGeneration,
+          token: credentials.token,
         ),
         mediaMacKey: claim.mediaMacKey,
-        timeout: _proofTimeout,
-        onAuthenticated: (authenticated) {
-          if (playback.pipeline.isClosed) {
+        // The token is used up only after the proof, as on the main port,
+        // and the channel is played from only once it is.
+        onProven: (authenticated) async {
+          if (playback.pipeline.isClosed) return false;
+          proven = true;
+          if (!await _runtime.consumeClaim(claim) ||
+              playback.pipeline.isClosed) {
+            _runtime.releaseClaim(claim);
             return false;
           }
-          _attach(media, authenticated);
-          unawaited(_confirm(media));
+          _attach(_MediaChannel(claim, playback), authenticated);
           return true;
-        },
-        onProvisionalFinished: () {
-          release();
-          if (media.session == null) {
-            _runtime.releaseClaim(claim);
-          }
         },
       );
     } catch (_) {
-      release();
-      _runtime.releaseClaim(claim);
+      slot.release();
       unawaited(socket.close(4001, 'media_auth_failed'));
     }
   }
@@ -1369,16 +1347,6 @@ class _MediaServer {
       onError: diagnostics.audioChannelError,
       onClosed: media.closed,
     );
-  }
-
-  /// The token is used up only after the proof, as on the main port.
-  Future<void> _confirm(_MediaChannel media) async {
-    final consumed = await _runtime.consumeClaim(media.claim);
-    if (!consumed) {
-      await media.close(expected: true);
-      return;
-    }
-    media.active = true;
   }
 
   Future<void> _refuse(HttpRequest request, int status) async {

@@ -2,8 +2,6 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show visibleForTesting;
-import 'package:shelf/shelf.dart' as shelf;
-import 'package:shelf_web_socket/shelf_web_socket.dart' as shelf_ws;
 import 'package:uuid/uuid.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:whisper/helper/privacy_log.dart';
@@ -12,8 +10,9 @@ import 'package:whisper/remote_input/remote_input_lane.dart';
 import 'package:whisper/remote_input/remote_input_lane_report.dart';
 import 'package:whisper/remote_input/remote_input_lifecycle.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
-import 'package:whisper/socket/bounded_binary_websocket_session.dart';
 import 'package:whisper/socket/datagram_endpoint.dart';
+import 'package:whisper/socket/media_channel_dial.dart';
+import 'package:whisper/socket/media_channel_registry.dart';
 import 'package:whisper/socket/packet_byte_transport.dart';
 import 'package:whisper/socket/session_upgrade_token_registry.dart';
 
@@ -101,19 +100,15 @@ class RemoteInputManager {
     lane?.close();
   }
 
-  final Map<BoundedBinaryWebSocketSession, SessionUpgradeClaim> _channels =
-      <BoundedBinaryWebSocketSession, SessionUpgradeClaim>{};
-  final Map<BoundedBinaryWebSocketSession, Future<void>> _channelCloses =
-      <BoundedBinaryWebSocketSession, Future<void>>{};
-  Future<void>? _closeChannelsFuture;
-  bool _closingChannels = false;
-  Object? _channelCloseError;
-  StackTrace? _channelCloseStackTrace;
+  final MediaChannelRegistry _channels = MediaChannelRegistry(
+    MediaRoute.input,
+    maxPayloadBytes: maxPacketPayloadBytes,
+  );
 
   RemoteInputSession? session(String sessionId) => _sessions[sessionId];
-  int get activeChannelCount => _channels.length;
-  bool get hasActiveChannels => _channels.isNotEmpty;
-  bool get isClosingChannels => _closingChannels;
+  int get activeChannelCount => _channels.activeCount;
+  bool get hasActiveChannels => _channels.activeCount > 0;
+  bool get isClosingChannels => _channels.isClosing;
 
   void configureSessionCleanup(RemoteClipboardSessionCleaner cleanup) {
     _sessionCleaner = cleanup;
@@ -332,38 +327,14 @@ class RemoteInputManager {
     String sessionId, {
     String? peerId,
     String? namespace,
-  }) {
-    return _closeMatchingChannels(
-      (claim) =>
-          claim.sessionId == sessionId &&
-          (peerId == null || claim.peerId == peerId) &&
-          (namespace == null || claim.namespace == namespace),
-    );
-  }
+  }) => _channels.closeSession(sessionId, peerId: peerId, namespace: namespace);
 
-  Future<void> closePeerChannels(String peerId) {
-    return _closeMatchingChannels((claim) => claim.peerId == peerId);
-  }
+  Future<void> closePeerChannels(String peerId) => _channels.closePeer(peerId);
 
   Future<void> closeSupersededPeerChannels(
     String peerId, {
     required Uint8List mediaMacKey,
-  }) {
-    return _closeMatchingChannels(
-      (claim) =>
-          claim.peerId == peerId && !claim.matchesMediaMacKey(mediaMacKey),
-    );
-  }
-
-  Future<void> _closeMatchingChannels(
-    bool Function(SessionUpgradeClaim claim) matches,
-  ) async {
-    final channels = _channels.entries
-        .where((entry) => matches(entry.value))
-        .map((entry) => entry.key)
-        .toList(growable: false);
-    await Future.wait(channels.map(_trackChannelClose));
-  }
+  }) => _channels.closeSuperseded(peerId, mediaMacKey: mediaMacKey);
 
   FutureOr<void> handlePacketBytes(
     Uint8List bytes, {
@@ -392,16 +363,9 @@ class RemoteInputManager {
     SessionUpgradeClaim claim, {
     bool Function(SessionUpgradeClaim claim)? claimValidator,
   }) {
-    if (claim.route != '/input' ||
-        claim.namespace != 'remote-input' ||
+    if (!_channels.isForRoute(claim) ||
         claimValidator?.call(claim) == false ||
-        _channels.values.any(
-          (active) =>
-              active.route == claim.route &&
-              active.namespace == claim.namespace &&
-              active.sessionId == claim.sessionId &&
-              active.peerId == claim.peerId,
-        )) {
+        _channels.hasChannelFor(claim)) {
       return false;
     }
     final session = _sessions[claim.sessionId];
@@ -418,16 +382,6 @@ class RemoteInputManager {
       unawaited(channel.sink.close().catchError((Object _) {}));
       return false;
     }
-    final packetDecoder = claim.withMediaPacketContext(
-      (mediaMacKey, channelBinding) => AuthenticatedMediaPacketDecoder(
-        route: claim.route,
-        namespace: claim.namespace,
-        sessionId: claim.sessionId,
-        mediaMacKey: mediaMacKey,
-        channelBinding: channelBinding,
-        maxPayloadBytes: maxPacketPayloadBytes,
-      ),
-    );
     // Packets from both ways go through one merger and then one at a time
     // into the session, as the WebSocket alone always did.
     Future<void> tail = Future<void>.value();
@@ -468,13 +422,17 @@ class RemoteInputManager {
           )
         : null;
     if (lane != null) _answerLanes[claim.sessionId] = lane;
+    void cleanUp() {
+      report.close();
+      _forgetLane(claim.sessionId, lane);
+    }
+
     try {
-      late final BoundedBinaryWebSocketSession binding;
-      binding = BoundedBinaryWebSocketSession(
-        channel: channel,
-        maxMessageBytes: maxChannelMessageBytes,
-        onMessage: (bytes) {
-          merger.accept(framed(packetDecoder.decode(bytes)));
+      final attached = _channels.attach(
+        channel,
+        claim: claim,
+        onPacket: (payload) {
+          merger.accept(framed(payload));
           return tail;
         },
         onClosing: () {
@@ -484,23 +442,15 @@ class RemoteInputManager {
             onSessionClosed?.call(claim.sessionId);
           }
         },
-        onClosed: () {
-          report.close();
+        onClosed: (_) {
           _logLane(merger, withLane: lane != null);
-          _forgetLane(claim.sessionId, lane);
-          packetDecoder.destroy();
-          _channels.remove(binding)?.destroy();
+          cleanUp();
         },
       );
-      _channels[binding] = claim;
-      if (_closingChannels) {
-        unawaited(_trackChannelClose(binding));
-      }
-      return true;
+      if (!attached) cleanUp();
+      return attached;
     } catch (_) {
-      report.close();
-      _forgetLane(claim.sessionId, lane);
-      packetDecoder.destroy();
+      cleanUp();
       rethrow;
     }
   }
@@ -523,86 +473,5 @@ class RemoteInputManager {
     });
   }
 
-  Future<void> _trackChannelClose(BoundedBinaryWebSocketSession channel) {
-    final existing = _channelCloses[channel];
-    if (existing != null) {
-      return existing;
-    }
-    late final Future<void> tracked;
-    tracked = channel
-        .close()
-        .then<void>(
-          (_) {},
-          onError: (Object error, StackTrace stackTrace) {
-            _channelCloseError ??= error;
-            _channelCloseStackTrace ??= stackTrace;
-          },
-        )
-        .whenComplete(() {
-          if (identical(_channelCloses[channel], tracked)) {
-            _channelCloses.remove(channel);
-          }
-        });
-    _channelCloses[channel] = tracked;
-    return tracked;
-  }
-
-  Future<void> closeChannels() {
-    final existing = _closeChannelsFuture;
-    if (existing != null) {
-      return existing;
-    }
-    _closingChannels = true;
-    final completer = Completer<void>();
-    final closeFuture = completer.future;
-    _closeChannelsFuture = closeFuture;
-    _channelCloseError = null;
-    _channelCloseStackTrace = null;
-    unawaited(
-      () async {
-        try {
-          while (_channels.isNotEmpty || _channelCloses.isNotEmpty) {
-            for (final channel in _channels.keys.toList(growable: false)) {
-              unawaited(_trackChannelClose(channel));
-            }
-            final closes = _channelCloses.values.toList(growable: false);
-            if (closes.isNotEmpty) {
-              await Future.wait(closes);
-            }
-          }
-          if (_channelCloseError case final error?) {
-            Error.throwWithStackTrace(error, _channelCloseStackTrace!);
-          }
-        } finally {
-          _closingChannels = false;
-          if (identical(_closeChannelsFuture, closeFuture)) {
-            _closeChannelsFuture = null;
-          }
-        }
-      }().then<void>(
-        (_) {
-          completer.complete();
-        },
-        onError: (Object error, StackTrace stackTrace) {
-          completer.completeError(error, stackTrace);
-        },
-      ),
-    );
-    return closeFuture;
-  }
-
-  shelf.Handler webSocketHandler({
-    required SessionUpgradeClaim claim,
-    bool Function(SessionUpgradeClaim claim)? claimValidator,
-    Duration pingInterval = const Duration(seconds: 15),
-    void Function()? onAttachmentComplete,
-  }) {
-    return shelf_ws.webSocketHandler((WebSocketChannel channel, _) {
-      try {
-        attachChannel(channel, claim: claim, claimValidator: claimValidator);
-      } finally {
-        onAttachmentComplete?.call();
-      }
-    }, pingInterval: pingInterval);
-  }
+  Future<void> closeChannels() => _channels.closeAll();
 }

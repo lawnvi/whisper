@@ -16,7 +16,7 @@ import 'package:whisper/audio/audio_platform.dart';
 import 'package:whisper/audio/audio_protocol.dart';
 import 'package:whisper/audio/audio_share_manager.dart';
 import 'package:whisper/helper/local.dart';
-import 'package:whisper/socket/packet_byte_transport.dart';
+import 'package:whisper/socket/media_channel_dial.dart';
 
 typedef AudioGroupControlSender = void Function(
   String peerId,
@@ -856,12 +856,11 @@ class AudioGroupCoordinator extends ChangeNotifier {
     AudioGroupSinkLink? connectedTransport;
     try {
       if (remoteHost.isNotEmpty && remotePort > 0) {
-        Uri uriAt(int port) => _audioUri(
+        Uri uriAt(int port) => MediaRoute.audio.uri(
               host: remoteHost,
               port: port,
-              path: accept.path,
               sessionId: accept.sessionId,
-              transportToken: accept.transportToken,
+              token: accept.transportToken,
             );
         connectedTransport = await _media.connectSink(
           AudioGroupSinkDial(
@@ -1722,24 +1721,6 @@ class AudioGroupCoordinator extends ChangeNotifier {
     super.dispose();
   }
 
-  Uri _audioUri({
-    required String host,
-    required int port,
-    required String path,
-    required String sessionId,
-    required String transportToken,
-  }) {
-    final normalizedPath = path.isEmpty ? '/audio' : path;
-    return buildPeerPacketUri(
-      host: host,
-      port: port,
-      path: normalizedPath,
-      queryParameters: <String, String>{
-        if (transportToken.isNotEmpty) 'session': sessionId,
-        if (transportToken.isNotEmpty) 'token': transportToken,
-      },
-    );
-  }
 
   /// Takes effect on the next audio written, while this device is playing.
   void updatePlaybackGain(double gain) {

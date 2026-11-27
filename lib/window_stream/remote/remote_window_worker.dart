@@ -2,14 +2,11 @@ import 'dart:async';
 import 'dart:isolate';
 import 'dart:typed_data';
 
-import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../../socket/bounded_binary_websocket_session.dart';
 import '../../socket/bounded_outbound_queue.dart';
-import '../../socket/direct_peer_http_client.dart';
-import '../../socket/media_upgrade_proof.dart';
-import '../../socket/no_delay_socket.dart';
+import '../../socket/media_channel_dial.dart';
 import '../../socket/packet_byte_transport.dart';
 import '../core/window_input_event.dart';
 import '../core/window_source.dart';
@@ -90,40 +87,29 @@ class RemoteWindowWorker implements StreamWorker {
         await relay.connected.timeout(InboundWhisperWindowSpec.connectTimeout);
         channel = relay;
       } else {
-        final socket = await connectNoDelayWebSocket(
+        channel = await dialMediaChannel(
           uri,
-          client: newDirectPeerHttpClient(),
-        ).timeout(const Duration(seconds: 6));
-        channel = await authenticateMediaWebSocketClient(
-          IOWebSocketChannel(socket),
-          uri: uri,
-          route: WhisperWindowSpec.route,
-          namespace: WhisperWindowSpec.namespace,
+          MediaRoute.window,
           sessionId: spec.sessionId,
-          peerId: spec.viewerPeerId,
-          mediaMacKey: spec.sendKey,
+          proverPeerId: spec.viewerPeerId,
+          proofKey: spec.sendKey,
         );
       }
       _channel = channel;
-      final binding = mediaPacketChannelBindingFromUri(uri);
-      _decoder = AuthenticatedMediaPacketDecoder(
-        route: WhisperWindowSpec.route,
-        namespace: WhisperWindowSpec.namespace,
+      _decoder = MediaRoute.window.decoder(
+        uri,
         sessionId: spec.sessionId,
-        mediaMacKey: spec.receiveKey,
-        channelBinding: binding,
+        receiveKey: spec.receiveKey,
         maxPayloadBytes:
             WindowStreamPacket.headerBytes + WindowStreamPacket.maxVideoPayload,
       );
       _input = PacketByteTransport.remoteInput(
         addStream: channel.sink.addStream,
         closeSink: () => channel.sink.close(),
-        packetEncoder: AuthenticatedMediaPacketEncoder(
-          route: WhisperWindowSpec.route,
-          namespace: WhisperWindowSpec.namespace,
+        packetEncoder: MediaRoute.window.encoder(
+          uri,
           sessionId: spec.sessionId,
-          mediaMacKey: spec.sendKey,
-          channelBinding: binding,
+          sendKey: spec.sendKey,
           maxPayloadBytes: 8 * 1024,
         ),
       );

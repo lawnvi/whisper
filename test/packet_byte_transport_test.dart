@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/socket/bounded_outbound_queue.dart';
+import 'package:whisper/socket/media_channel_dial.dart';
 import 'package:whisper/socket/packet_byte_transport.dart';
 
 void main() {
@@ -466,32 +468,29 @@ void main() {
     ]);
   });
 
-  test('shared input websocket helper closes on reliable overflow', () async {
+  test('input transport closes on reliable overflow', () async {
     final firstWriteStarted = Completer<void>();
     final releaseFirstWrite = Completer<void>();
     final overflowClosed = Completer<void>();
     var writes = 0;
     var closes = 0;
-    final transport = await connectPacketWebSocket(
-      Uri.parse('ws://127.0.0.1:10002/input'),
-      remoteInputMaxItems: 2,
-      remoteInputMaxBytes: 1024,
-      connector: (_) async => (
-        addStream: (stream) async {
-          await stream.single;
-          writes += 1;
-          if (writes == 1) {
-            firstWriteStarted.complete();
-            await releaseFirstWrite.future;
-          }
-        },
-        closeSink: () async {
-          closes += 1;
-          if (!overflowClosed.isCompleted) {
-            overflowClosed.complete();
-          }
-        },
-      ),
+    final transport = PacketByteTransport.remoteInput(
+      maxItems: 2,
+      maxBytes: 1024,
+      addStream: (stream) async {
+        await stream.single;
+        writes += 1;
+        if (writes == 1) {
+          firstWriteStarted.complete();
+          await releaseFirstWrite.future;
+        }
+      },
+      closeSink: () async {
+        closes += 1;
+        if (!overflowClosed.isCompleted) {
+          overflowClosed.complete();
+        }
+      },
     );
 
     transport.send([1], kind: OutboundPacketKind.key);
@@ -512,24 +511,30 @@ void main() {
   });
 
   test('websocket connection errors never expose capability queries', () async {
+    // A port nothing listens on: the dial fails at once.
+    final closed = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    final port = closed.port;
+    await closed.close();
     final uri = Uri.parse(
-      'ws://peer.local:10002/audio?session=session-a&token=secret-token',
+      'ws://127.0.0.1:$port/audio?session=session-a&token=secret-token',
     );
 
     Object? failure;
     try {
-      await connectPacketWebSocket(
+      await dialMediaChannel(
         uri,
-        connector: (_) => Future<PacketWebSocketConnection>.error(
-          StateError('failed to connect $uri'),
-        ),
+        MediaRoute.audio,
+        sessionId: 'session-a',
+        proverPeerId: 'peer-a',
+        proofKey: Uint8List(32),
       );
     } catch (error) {
       failure = error;
     }
 
     expect(failure, isNotNull);
-    expect(failure.toString(), contains('ws://peer.local:10002/audio'));
+    expect(failure, isA<PacketWebSocketConnectException>());
+    expect(failure.toString(), contains('ws://127.0.0.1:$port/audio'));
     expect(failure.toString(), isNot(contains('secret-token')));
     expect(failure.toString(), isNot(contains('session=session-a')));
     expect(failure.toString(), isNot(contains('?')));
