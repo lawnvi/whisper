@@ -252,6 +252,7 @@ class _MediaServer {
       mediaKey: media.claim.mediaMacKey,
       channelBinding: media.claim.channelBinding,
       sessionId: media.claim.sessionId,
+      peerId: media.claim.peerId,
       onPacket: (packet) {
         try {
           media.handlePacket(packet, diagnostics);

@@ -73,16 +73,18 @@ abstract interface class TimedLane {
   Duration? get queueing;
 }
 
-/// The keyboard and mouse lanes of this isolate, for a transfer to tell how
-/// long they wait behind it.
+/// The live lanes of this isolate (keyboard and mouse; the sound of the
+/// audio isolate as it reports it), each with the device at its other end,
+/// for a transfer to tell how long they wait behind it.
 final class LinkDelay {
   static final LinkDelay shared = LinkDelay();
 
-  final Set<TimedLane> _lanes = {};
+  final Map<TimedLane, String?> _lanes = {};
   final Set<Object> _wanting = {};
 
-  void attach(TimedLane lane) {
-    _lanes.add(lane);
+  /// [peerId]: the device at the lane's other end, when known.
+  void attach(TimedLane lane, {String? peerId}) {
+    _lanes[lane] = peerId;
     lane.probing = _wanting.isNotEmpty;
   }
 
@@ -99,18 +101,29 @@ final class LinkDelay {
     }
     final now = _wanting.isNotEmpty;
     if (now == before) return;
-    for (final lane in _lanes) {
+    for (final lane in _lanes.keys) {
       lane.probing = now;
     }
   }
 
-  /// The longest any lane waits now, or null when none knows.
-  Duration? queueing() {
+  /// Whether anyone wants the lanes to ask for answers often.
+  bool get wanted => _wanting.isNotEmpty;
+
+  /// The longest any lane to [peerId] (or any lane at all) waits now, or
+  /// null when none knows.
+  Duration? queueing({String? peerId}) {
     Duration? worst;
-    for (final lane in _lanes) {
+    for (final MapEntry(key: lane, value: peer) in _lanes.entries) {
+      if (peerId != null && peer != peerId) continue;
       final queue = lane.queueing;
       if (queue != null && (worst == null || queue > worst)) worst = queue;
     }
     return worst;
   }
+
+  /// What each device's lanes wait now, at worst; null where none knows.
+  Map<String, Duration?> queueingByPeer() => {
+    for (final peer in _lanes.values.whereType<String>().toSet())
+      peer: queueing(peerId: peer),
+  };
 }

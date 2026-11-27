@@ -5,6 +5,7 @@ import 'package:whisper/audio/audio_fanout_transport.dart';
 import 'package:whisper/audio/audio_protocol.dart';
 import 'package:whisper/socket/datagram_endpoint.dart';
 import 'package:whisper/socket/datagram_seal.dart';
+import 'package:whisper/socket/link_delay.dart';
 import 'package:whisper/socket/media_channel_dial.dart';
 import 'package:whisper/socket/media_datagrams.dart';
 import 'package:whisper/socket/packet_byte_transport.dart';
@@ -52,6 +53,7 @@ abstract final class AudioGroupDatagrams {
     required String sessionId,
     required String peerId,
     required bool mediaPort,
+    required String sinkPeerId,
     Duration connectTimeout = mediaChannelConnectTimeout,
   }) async {
     final socket = await AudioGroupWebSocketPacketTransport.connect(
@@ -69,6 +71,8 @@ abstract final class AudioGroupDatagrams {
       sessionId: sessionId,
       // The sink listens by UDP on its media port's number.
       port: uri.port,
+      delay: LinkDelay.shared,
+      peerId: sinkPeerId,
     );
     if (lane == null) return socket;
     return AudioGroupLaneTransport(socket, lane);
@@ -79,6 +83,7 @@ abstract final class AudioGroupDatagrams {
     required Uint8List mediaKey,
     required Uint8List channelBinding,
     required String sessionId,
+    required String peerId,
     required void Function(AudioGroupPacketFrame packet) onPacket,
   }) {
     return MediaDatagrams.answer(
@@ -87,6 +92,8 @@ abstract final class AudioGroupDatagrams {
       mediaKey: mediaKey,
       channelBinding: channelBinding,
       sessionId: sessionId,
+      delay: LinkDelay.shared,
+      peerId: peerId,
       onData: (payload) {
         for (final bytes in unpackAudioDatagram(payload)) {
           final AudioGroupPacketFrame packet;

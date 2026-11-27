@@ -24,6 +24,7 @@ abstract final class MediaDatagrams {
     required int port,
     void Function(Uint8List payload)? onData,
     LinkDelay? delay,
+    String? peerId,
   }) {
     final address = InternetAddress.tryParse(uri.host);
     if (endpoint == null ||
@@ -47,6 +48,7 @@ abstract final class MediaDatagrams {
       // The dialer only hears keepalives unless it is told otherwise.
       onData: onData ?? (_) {},
       delay: delay,
+      peerId: peerId,
     );
   }
 
@@ -60,6 +62,7 @@ abstract final class MediaDatagrams {
     required String sessionId,
     required void Function(Uint8List payload) onData,
     LinkDelay? delay,
+    String? peerId,
   }) {
     if (endpoint == null || endpoint.isClosed) return null;
     return DatagramLane(
@@ -73,6 +76,7 @@ abstract final class MediaDatagrams {
       dialer: false,
       onData: onData,
       delay: delay,
+      peerId: peerId,
     );
   }
 }

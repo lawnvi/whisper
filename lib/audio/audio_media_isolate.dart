@@ -27,12 +27,14 @@ import 'package:whisper/socket/bounded_binary_websocket_session.dart';
 import 'package:whisper/socket/datagram_endpoint.dart';
 import 'package:whisper/socket/media_channel_dial.dart';
 import 'package:whisper/socket/media_dial_back.dart';
+import 'package:whisper/socket/link_delay.dart';
 import 'package:whisper/socket/media_upgrade_server.dart';
 import 'package:whisper/socket/no_delay_socket.dart';
 import 'package:whisper/socket/packet_byte_transport.dart';
 import 'package:whisper/socket/session_upgrade_token_registry.dart';
 import 'package:whisper/socket/whisper_ports.dart';
 
+part 'audio_media_bridge.dart';
 part 'audio_media_isolate_messages.dart';
 part 'audio_media_native.dart';
 part 'audio_media_server.dart';
@@ -369,15 +371,6 @@ class _PlaybackListener {
   final void Function(Object error) onFailure;
 }
 
-class _PendingClaim {
-  _PendingClaim(this.claim, this.sessionId, this.token, this.expires);
-
-  final SessionUpgradeClaim claim;
-  final String sessionId;
-  final String token;
-  final Timer expires;
-}
-
 /// The main isolate's side of the audio isolate.
 class _IsolateClient implements AudioRemoteMediaChannels {
   _IsolateClient._(this._isolate, this._commands, this._receive, this._media);
@@ -435,6 +428,7 @@ class _IsolateClient implements AudioRemoteMediaChannels {
   final Map<int, void Function(int sentAtMicros)> captureListeners =
       <int, void Function(int sentAtMicros)>{};
   final Map<int, _PendingClaim> _claims = <int, _PendingClaim>{};
+  late final _ReportedLanes _lanes = _ReportedLanes(send);
   int _nextId = 0;
 
   int nextId() => ++_nextId;
@@ -509,75 +503,11 @@ class _IsolateClient implements AudioRemoteMediaChannels {
               .catchError((Object _) => false)
               .then((asked) => send(_DialBackAsked(message.requestId, asked))),
         );
+      case _LaneReport():
+        _lanes.update(message);
       case _Log():
         _media._log(message.line);
     }
-  }
-
-  void _lookupClaim(_ClaimLookup lookup) {
-    final broker = _media._manager.claimBroker;
-    final claim = broker?.lookup(
-      sessionId: lookup.sessionId,
-      token: lookup.token,
-      remoteAddress: lookup.remoteAddress,
-    );
-    final sendKey = claim != null && claim.reverse
-        ? broker?.sendKeyFor(claim)
-        : null;
-    if (claim != null && claim.reverse && sendKey == null) claim.destroy();
-    if (claim == null || claim.isDestroyed) {
-      send(_ClaimAnswer(lookup.requestId, null));
-      return;
-    }
-    // Released if the proof never comes.
-    final expires = Timer(const Duration(seconds: 10), () {
-      _claims.remove(lookup.requestId)?._release();
-    });
-    _claims[lookup.requestId] = _PendingClaim(
-      claim,
-      lookup.sessionId,
-      lookup.token,
-      expires,
-    );
-    send(
-      _ClaimAnswer(
-        lookup.requestId,
-        claim.withMediaPacketContext(
-          (mediaMacKey, channelBinding) => _ClaimData(
-            namespace: claim.namespace,
-            sessionId: claim.sessionId,
-            peerId: claim.peerId,
-            connectionGeneration: claim.connectionGeneration,
-            mediaMacKey: Uint8List.fromList(mediaMacKey),
-            channelBinding: Uint8List.fromList(channelBinding),
-            sendKey: sendKey,
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _consumeClaim(int requestId) {
-    final pending = _claims.remove(requestId);
-    if (pending == null) {
-      send(_ConsumeAnswer(requestId, false));
-      return;
-    }
-    final consumed = _media._manager.claimBroker?.consume(
-      sessionId: pending.sessionId,
-      token: pending.token,
-      expected: pending.claim,
-    );
-    pending._release();
-    consumed?.destroy();
-    send(_ConsumeAnswer(requestId, consumed != null));
-  }
-}
-
-extension on _PendingClaim {
-  void _release() {
-    expires.cancel();
-    claim.destroy();
   }
 }
 
@@ -594,7 +524,8 @@ Future<void> _audioIsolateMain(_IsolateStart start) async {
     // Pure-Dart fallback still works.
   }
   final runtime = _AudioRuntime(start.main, _NativeAudio(start.entry))
-    ..mediaPort = start.mediaPort;
+    ..mediaPort = start.mediaPort
+    ..lanes.start();
   final receive = ReceivePort();
   start.main.send(receive.sendPort);
   receive.listen(runtime.handle);
@@ -610,6 +541,7 @@ class _AudioRuntime {
   final _NativeAudio _native;
   final AudioShareDiagnostics _diagnostics;
   int mediaPort = 0;
+  late final _LaneReporter lanes = _LaneReporter(_main.send);
   final Map<int, AudioGroupPacketTransport> _links =
       <int, AudioGroupPacketTransport>{};
   late final AudioFanoutTransport _fanout = AudioFanoutTransport(
@@ -710,6 +642,8 @@ class _AudioRuntime {
         _claimConsumes.remove(message.requestId)?.complete(message.consumed);
       case _DialBackAsked():
         _dialBackAsks.remove(message.requestId)?.complete(message.asked);
+      case _ProbeLanes(:final on):
+        lanes.probe(on);
     }
   }
 
@@ -795,6 +729,7 @@ class _AudioRuntime {
           peerId: command.sourcePeerId,
           mediaPort: identical(uri, command.mediaUri),
           connectTimeout: connectTimeout,
+          sinkPeerId: command.sinkPeerId,
         );
       },
     );

@@ -407,6 +407,7 @@ class RemoteInputManager {
               mediaKey: mediaMacKey,
               channelBinding: channelBinding,
               sessionId: claim.sessionId,
+              peerId: claim.peerId,
               onData: (bytes) {
                 final RemoteInputPacketFrame packet;
                 try {

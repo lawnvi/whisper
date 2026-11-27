@@ -66,6 +66,7 @@ abstract final class RemoteInputDatagrams {
     sessionId: accept.sessionId,
     port: accept.datagramPort,
     delay: LinkDelay.shared,
+    peerId: accept.sinkPeerId,
   );
 
   /// The answering side's lane for one session, once its WebSocket is
@@ -74,6 +75,7 @@ abstract final class RemoteInputDatagrams {
     required Uint8List mediaKey,
     required Uint8List channelBinding,
     required String sessionId,
+    required String peerId,
     required void Function(Uint8List payload) onData,
   }) => MediaDatagrams.answer(
     _endpoint,
@@ -83,5 +85,6 @@ abstract final class RemoteInputDatagrams {
     sessionId: sessionId,
     onData: onData,
     delay: LinkDelay.shared,
+    peerId: peerId,
   );
 }

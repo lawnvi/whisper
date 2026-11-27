@@ -195,7 +195,8 @@ abstract interface class DatagramPath {
 /// lane carries goes from the dialer (keyboard and mouse from the
 /// controlling computer, sound from its source), and [queueing] is the
 /// wait on that way only. While [probing] it asks for an answer every
-/// [probeEvery]. [delay] is told about the lane for as long as it is open.
+/// [probeEvery]. [delay] is told about the lane, and [peerId] the device at
+/// its other end, for as long as it is open.
 final class DatagramLane implements DatagramPath, TimedLane {
   DatagramLane({
     required DatagramEndpoint endpoint,
@@ -209,6 +210,7 @@ final class DatagramLane implements DatagramPath, TimedLane {
     this.answerEvery = const Duration(milliseconds: 40),
     this.probeEvery = const Duration(milliseconds: 25),
     LinkDelay? delay,
+    String? peerId,
     DateTime Function()? now,
   }) : _endpoint = endpoint,
        _dialer = dialer,
@@ -227,7 +229,7 @@ final class DatagramLane implements DatagramPath, TimedLane {
     _endpoint.attach(_opener.laneId, _receive);
     _timer = Timer.periodic(keepalive, (_) => _sendKeepalive());
     _sendKeepalive();
-    delay?.attach(this);
+    delay?.attach(this, peerId: peerId);
   }
 
   static const int _kindKeepalive = 0;
