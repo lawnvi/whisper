@@ -19,6 +19,7 @@ std::mutex& g_callbacks_mutex = *new std::mutex();
 wsn_input_callback g_input_callback = nullptr;
 wsn_window_callback g_window_callback = nullptr;
 wsn_capture_callback g_capture_callback = nullptr;
+wsn_capture_callback g_media_callback = nullptr;
 std::atomic<int64_t> g_next_request{1};
 
 // The serial callback thread behind PostCallback.
@@ -55,6 +56,11 @@ void SetWindowCallback(wsn_window_callback callback) {
 void SetCaptureCallback(wsn_capture_callback callback) {
   std::lock_guard<std::mutex> lock(g_callbacks_mutex);
   g_capture_callback = callback;
+}
+
+void SetCaptureMediaCallback(wsn_capture_callback callback) {
+  std::lock_guard<std::mutex> lock(g_callbacks_mutex);
+  g_media_callback = callback;
 }
 
 void ClearSurfaceCallbacks() {
@@ -115,11 +121,13 @@ void EmitCapture(int64_t id, int32_t kind, const void* data, int32_t length, int
 void EmitCaptureOwned(int64_t id, int32_t kind, uint8_t* data, int32_t length, int64_t pts_us, int32_t flags,
                       int32_t width, int32_t height) {
   std::lock_guard<std::mutex> lock(g_callbacks_mutex);
-  if (g_capture_callback == nullptr) {
+  const bool media = kind == WSN_CAPTURE_PACKET || kind == WSN_CAPTURE_AUDIO;
+  wsn_capture_callback target = media && g_media_callback != nullptr ? g_media_callback : g_capture_callback;
+  if (target == nullptr) {
     std::free(data);
     return;
   }
-  g_capture_callback(id, kind, data, length, pts_us, flags, width, height);
+  target(id, kind, data, length, pts_us, flags, width, height);
 }
 
 void PostCallback(std::function<void()> work) {

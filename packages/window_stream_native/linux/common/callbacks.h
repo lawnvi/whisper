@@ -17,6 +17,8 @@ namespace wsn {
 void SetInputCallback(wsn_input_callback callback);
 void SetWindowCallback(wsn_window_callback callback);
 void SetCaptureCallback(wsn_capture_callback callback);
+// Takes WSN_CAPTURE_PACKET and WSN_CAPTURE_AUDIO while set.
+void SetCaptureMediaCallback(wsn_capture_callback callback);
 
 // wsn_reset_all: forgets the input and window callbacks (capture keeps its
 // own, it is cleared by its own reset).

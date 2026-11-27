@@ -9,7 +9,6 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:window_stream_native/window_stream_native.dart';
 
 import '../../socket/bounded_binary_websocket_session.dart';
-import '../../socket/bounded_outbound_queue.dart';
 import '../../socket/media_channel_dial.dart';
 import '../../socket/packet_byte_transport.dart';
 import '../../socket/session_upgrade_token_registry.dart';
@@ -17,7 +16,8 @@ import '../android/agent/phone_capture_backend.dart';
 import '../android/agent/phone_self_start.dart';
 import '../core/window_stream_models.dart';
 import '../window_stream_log.dart';
-import 'host_audio.dart';
+import 'host_media_isolate.dart';
+import 'host_stream_media.dart';
 import 'window_capture_backend.dart';
 import 'window_stream_control.dart';
 import 'window_stream_host_types.dart';
@@ -52,24 +52,15 @@ class _HostStream {
   bool hostDials = false;
   bool dialing = false;
 
-  /// Codes the window's sound for the viewer, once there is some.
-  HostAudioEncoder? audioEncoder;
-
   /// This capture carries its app's sound to the viewer. One per viewer
   /// and app: two windows of one app would otherwise play it twice.
   bool audioOn = false;
-
-  /// Sound chunks from the capture, those held back (paused, not live)
-  /// and packets sent, for diagnostics.
-  int audioIn = 0;
-  int audioHeld = 0;
-  int audioOut = 0;
 
   /// The viewer paused the stream (its window hidden): no sound either.
   bool paused = false;
   HostStreamState state = HostStreamState.awaitingMedia;
   int? captureId;
-  PacketByteTransport? transport;
+  HostMediaPlane? media;
   BoundedBinaryWebSocketSession? input;
   AuthenticatedMediaPacketDecoder? inputDecoder;
   DateTime lastKeyframeAsk = DateTime.fromMillisecondsSinceEpoch(0);
@@ -92,14 +83,6 @@ class _HostStream {
 
   /// The picture quality the viewer chose (older viewers: the usual one).
   WindowStreamQuality quality = WindowStreamQuality.standard;
-
-  /// Keeps the viewer's radio awake while the picture is still.
-  Timer? tick;
-
-  /// Video packets handed to the socket and not yet written.
-  int videoInFlight = 0;
-  bool busy = false;
-  final sinceSent = Stopwatch();
 
   void readViewport(Map<String, Object?> payload) {
     final width = payload['viewportWidth'];
@@ -151,11 +134,17 @@ class WindowStreamHost {
   /// A stream's bit rate at the standard quality.
   static const int usualBitRate = 12000000;
   static const int maxInputMessageBytes = 8 * 1024;
+  static const int _maxVideoPacket =
+      WindowStreamPacket.headerBytes + WindowStreamPacket.maxVideoPayload;
 
   /// Where windows, pictures and input go: the desktop's native capture or
   /// the phone's agent.
   final WindowCaptureBackend _backend;
   bool _attached = false;
+
+  /// Where streams' media run on a desktop, once up; null keeps them here.
+  HostMediaIsolate? _mediaIsolate;
+  Future<void>? _mediaSpawn;
   final _streams = <String, _HostStream>{};
 
   /// Goes up whenever a window starts or stops being shown somewhere.
@@ -340,6 +329,23 @@ class WindowStreamHost {
     _backend.attach(_onCaptureEvent);
   }
 
+  /// Starts the host media isolate once, where native code can hand it
+  /// video and sound; streams opened before it is up (or when it can't
+  /// start) keep their media here.
+  Future<void> _startMediaIsolate() {
+    final backend = _backend;
+    if (backend is! NativeCaptureBackend || !backend.routesMedia) {
+      return Future<void>.value();
+    }
+    return _mediaSpawn ??= HostMediaIsolate.spawn(
+      route: backend.routeMedia,
+      onExit: () {
+        _mediaIsolate = null;
+        _mediaSpawn = null;
+      },
+    ).then((planes) => _mediaIsolate = planes);
+  }
+
   /// Whether windows can be offered now, with the backend attached.
   bool _ready() {
     if (!supported) {
@@ -386,22 +392,19 @@ class WindowStreamHost {
       ):
         _sendVideo(stream, payload, ptsUs: ptsUs, config: config, key: key);
       case CaptureSize(:final width, :final height):
-        unawaited(
-          stream.transport?.send(
-            WindowStreamPacket.size(width, height),
-            kind: OutboundPacketKind.control,
-          ),
-        );
+        stream.media?.control(WindowStreamPacket.size(width, height));
       case CaptureTextFocus(:final flags):
         _log(stream, flags == 1 ? 'focus: text field' : 'focus: no text field');
-        unawaited(
-          stream.transport?.send(
-            WindowStreamPacket.textFocus(typing: flags == 1),
-            kind: OutboundPacketKind.control,
-          ),
-        );
+        stream.media?.control(WindowStreamPacket.textFocus(typing: flags == 1));
       case CaptureAudio(:final pcm, :final ptsUs, :final rate, :final channels):
-        _onAudio(stream, pcm, ptsUs, rate, channels);
+        if (stream.state == HostStreamState.live) {
+          stream.media?.audio(
+            pcm,
+            ptsUs: ptsUs,
+            rate: rate,
+            channels: channels,
+          );
+        }
       case CaptureEnded(:final gone, :final code, :final reason):
         // The viewer shows why (permission, helper, elevated…); a window
         // that went away just closes.
@@ -412,33 +415,10 @@ class WindowStreamHost {
     }
   }
 
-  /// The window's sound (PCM s16le, interleaved), on the video's clock,
-  /// for a stream whose viewer asked for it ([_HostStream.audio]): coded
-  /// with Opus and sent ahead of the video. None while paused.
-  void _onAudio(
-    _HostStream stream,
-    Uint8List pcm,
-    int ptsUs,
-    int rate,
-    int channels,
-  ) {
-    final transport = stream.transport;
-    stream.audioIn++;
-    if (!stream.audioOn ||
-        stream.paused ||
-        transport == null ||
-        stream.state != HostStreamState.live) {
-      stream.audioHeld++;
-      return;
-    }
-    final encoder = stream.audioEncoder ??= HostAudioEncoder(
-      send: (packet) {
-        stream.audioOut++;
-        unawaited(transport.send(packet, kind: OutboundPacketKind.audio));
-      },
-    );
-    encoder.add(pcm, ptsUs: ptsUs, sampleRate: rate, channels: channels);
-  }
+  /// The viewer gets the window's sound: it asked for it, this stream
+  /// carries its app's sound, and the stream is not paused.
+  void _syncSound(_HostStream stream) =>
+      stream.media?.audioOpen = stream.audioOn && !stream.paused;
 
   void _sendVideo(
     _HostStream stream,
@@ -447,46 +427,16 @@ class WindowStreamHost {
     required bool config,
     required bool key,
   }) {
-    final transport = stream.transport;
-    if (transport == null || stream.state != HostStreamState.live) {
+    final media = stream.media;
+    if (media == null || stream.state != HostStreamState.live) {
       return;
     }
-    stream.sinceSent.reset();
-    // Two frames waiting is enough: beyond that every frame only adds
-    // delay. The encoder then skips frames until the socket catches up.
-    stream.videoInFlight++;
-    _setBusy(stream, stream.videoInFlight >= 2);
-    final sent = transport.send(
-      WindowStreamPacket.video(
-        payload,
-        ptsUs: ptsUs,
-        flags:
-            (config ? WindowStreamPacket.flagConfig : 0) |
-            (key ? WindowStreamPacket.flagKey : 0),
-      ),
-      kind: config
-          ? OutboundPacketKind.videoConfig
-          : key
-          ? OutboundPacketKind.videoKey
-          : OutboundPacketKind.videoDelta,
-    );
-    unawaited(
-      sent.whenComplete(() {
-        stream.videoInFlight--;
-        if (stream.videoInFlight == 0) {
-          _setBusy(stream, false);
-        }
-      }),
-    );
+    media.video(payload, ptsUs: ptsUs, config: config, key: key);
   }
 
   void _setBusy(_HostStream stream, bool busy) {
     final capture = stream.captureId;
-    if (capture == null || stream.busy == busy) {
-      return;
-    }
-    stream.busy = busy;
-    _backend.captureSetBusy(capture, busy);
+    if (capture != null) _backend.captureSetBusy(capture, busy);
   }
 
   void _askKeyframe(_HostStream stream) {
@@ -563,6 +513,7 @@ class WindowStreamHost {
         if (stream != null && capture != null) {
           stream.paused = message.action == WindowStreamControlAction.pause;
           _backend.captureSetPaused(capture, stream.paused);
+          _syncSound(stream);
         }
       case WindowStreamControlAction.keyframe:
         final stream = _streams[message.sessionId];
@@ -886,11 +837,13 @@ class WindowStreamHost {
     WindowStreamControlMessage message,
     WindowStreamControlSender send,
   ) async {
+    final media = _startMediaIsolate();
     // Fresh window list and lock state: the viewer's may be seconds old. A
     // list that timed out falls back to the last one; a definite "no"
     // (permission, helper, …) is the viewer's answer.
-    if (await _catalogWindows() == null &&
-        _catalogError != WindowStreamCaptureCode.unknown) {
+    final windows = await _catalogWindows();
+    await media;
+    if (windows == null && _catalogError != WindowStreamCaptureCode.unknown) {
       await send(
         message.reply(
           WindowStreamControlAction.reject,
@@ -1014,22 +967,18 @@ class WindowStreamHost {
       unawaited(channel.sink.close().catchError((Object _) {}));
       return false;
     }
-    final encoder = claim.withMediaPacketContext(
+    final seal = claim.withMediaPacketContext(
       (_, channelBinding) => sendKeyScope(
         stream.viewerPeerId,
-        (sendKey) => AuthenticatedMediaPacketEncoder(
-          route: route,
-          namespace: namespace,
+        (sendKey) => HostMediaSeal(
           sessionId: claim.sessionId,
-          mediaMacKey: sendKey,
+          sendKey: sendKey,
           channelBinding: channelBinding,
-          maxPayloadBytes:
-              WindowStreamPacket.headerBytes +
-              WindowStreamPacket.maxVideoPayload,
+          maxPayloadBytes: _maxVideoPacket,
         ),
       ),
     );
-    if (encoder == null) {
+    if (seal == null) {
       unawaited(channel.sink.close().catchError((Object _) {}));
       return false;
     }
@@ -1043,7 +992,7 @@ class WindowStreamHost {
         maxPayloadBytes: maxInputMessageBytes,
       ),
     );
-    _attachMedia(stream, channel, encoder: encoder, decoder: decoder);
+    _attachMedia(stream, channel, seal: seal, decoder: decoder);
     return true;
   }
 
@@ -1066,7 +1015,7 @@ class WindowStreamHost {
     ({
       Uri uri,
       Uint8List proofKey,
-      AuthenticatedMediaPacketEncoder encoder,
+      HostMediaSeal seal,
       AuthenticatedMediaPacketDecoder decoder,
     })?
     prepared;
@@ -1081,13 +1030,11 @@ class WindowStreamHost {
         return (
           uri: uri,
           proofKey: Uint8List.fromList(sendKey),
-          encoder: MediaRoute.window.encoder(
-            uri,
+          seal: HostMediaSeal(
             sessionId: stream.sessionId,
             sendKey: sendKey,
-            maxPayloadBytes:
-                WindowStreamPacket.headerBytes +
-                WindowStreamPacket.maxVideoPayload,
+            channelBinding: mediaPacketChannelBindingFromUri(uri),
+            maxPayloadBytes: _maxVideoPacket,
           ),
           decoder: MediaRoute.window.decoder(
             uri,
@@ -1105,7 +1052,7 @@ class WindowStreamHost {
       await _stop(stream, notify: true, reason: 'connectionFailed');
       return;
     }
-    final (:uri, :proofKey, :encoder, :decoder) = prepared;
+    final (:uri, :proofKey, :seal, :decoder) = prepared;
     WebSocketChannel? channel;
     try {
       channel = await dialMediaChannel(
@@ -1122,7 +1069,7 @@ class WindowStreamHost {
       proofKey.fillRange(0, proofKey.length, 0);
     }
     if (channel == null || stream.state != HostStreamState.awaitingMedia) {
-      encoder.destroy();
+      seal.wipe();
       decoder.destroy();
       await channel?.sink.close().catchError((Object _) {});
       // The viewer's own wait ends with "could not connect".
@@ -1130,7 +1077,7 @@ class WindowStreamHost {
       return;
     }
     _log(stream, 'dialled the viewer');
-    _attachMedia(stream, channel, encoder: encoder, decoder: decoder);
+    _attachMedia(stream, channel, seal: seal, decoder: decoder);
   }
 
   /// Streams [stream] over an authenticated `/window` socket, whichever side
@@ -1138,25 +1085,29 @@ class WindowStreamHost {
   void _attachMedia(
     _HostStream stream,
     WebSocketChannel channel, {
-    required AuthenticatedMediaPacketEncoder encoder,
+    required HostMediaSeal seal,
     required AuthenticatedMediaPacketDecoder decoder,
   }) {
     stream.inputDecoder = decoder;
-    final video = stream.transport = PacketByteTransport.video(
-      addStream: channel.sink.addStream,
-      closeSink: () => channel.sink.close(),
-      packetEncoder: encoder,
-      onKeyframeNeeded: () => _askKeyframe(stream),
-    );
-    // A viewer that stopped reading (overflow, a write that never finished)
-    // still holds the socket open: end the stream on that alone.
-    unawaited(
-      video.done.then((end) {
-        if (end.isUnexpected && identical(stream.transport, video)) {
-          unawaited(_stop(stream, notify: true, reason: end.reason.name));
-        }
-      }),
-    );
+    late final HostMediaPlane media;
+    void ended(String reason) {
+      if (identical(stream.media, media)) {
+        unawaited(_stop(stream, notify: true, reason: reason));
+      }
+    }
+
+    final planes = _mediaIsolate;
+    media = stream.media = planes != null
+        ? planes.open(channel.sink, seal, onEnded: ended)
+        : HostStreamMedia.sealed(
+            addStream: channel.sink.addStream,
+            closeSink: () => channel.sink.close(),
+            seal: seal,
+            setBusy: (busy) => _setBusy(stream, busy),
+            askKeyframe: () => _askKeyframe(stream),
+            onEnded: ended,
+          );
+    _syncSound(stream);
     stream.input = BoundedBinaryWebSocketSession(
       channel: channel,
       maxMessageBytes:
@@ -1201,18 +1152,7 @@ class WindowStreamHost {
       // itself is out of sight on this device.
       _takeSound(stream);
       _applyViewport(stream);
-      stream.sinceSent.start();
-      stream.tick = Timer.periodic(const Duration(milliseconds: 30), (_) {
-        if (stream.sinceSent.elapsedMilliseconds >= 30) {
-          stream.sinceSent.reset();
-          unawaited(
-            stream.transport?.send(
-              WindowStreamPacket.tick(),
-              kind: OutboundPacketKind.control,
-            ),
-          );
-        }
-      });
+      stream.media?.start(capture);
     });
   }
 
@@ -1275,12 +1215,7 @@ class WindowStreamHost {
     }
     final packet = WindowStreamPacket.decode(bytes);
     if (packet is WindowStreamPing) {
-      unawaited(
-        stream.transport?.send(
-          WindowStreamPacket.pong(packet.clockUs),
-          kind: OutboundPacketKind.control,
-        ),
-      );
+      stream.media?.control(WindowStreamPacket.pong(packet.clockUs));
       return;
     }
     if (packet is! WindowStreamInput) {
@@ -1328,6 +1263,7 @@ class WindowStreamHost {
     }
     _backend.captureSetAudio(capture, WsnCaptureAudio.onSilentHere);
     stream.audioOn = true;
+    _syncSound(stream);
     return true;
   }
 
@@ -1341,8 +1277,6 @@ class WindowStreamHost {
     }
     stream.state = HostStreamState.closed;
     _log(stream, 'stopped${reason.isEmpty ? '' : ': $reason'}');
-    stream.tick?.cancel();
-    stream.audioEncoder?.close();
     _streams.remove(stream.sessionId);
     hostedChanged.value++;
     final capture = stream.captureId;
@@ -1352,6 +1286,7 @@ class WindowStreamHost {
     }
     if (stream.audioOn) {
       stream.audioOn = false;
+      _syncSound(stream);
       // Another window of the same app to the same viewer carries on.
       for (final other in _streams.values) {
         if (_sameSound(other, stream) && _takeSound(other)) {
@@ -1359,7 +1294,7 @@ class WindowStreamHost {
         }
       }
     }
-    await stream.transport?.close();
+    await stream.media?.close();
     await stream.input?.close();
     if (notify) {
       await stream.send(
@@ -1426,17 +1361,17 @@ class WindowStreamHost {
           'scale': stream.viewportScale,
           'keyboardInset': stream.keyboardInset,
         },
-        'videoInFlight': stream.videoInFlight,
-        'busy': stream.busy,
+        'videoInFlight': stream.media?.counts.videoInFlight ?? 0,
+        'busy': stream.media?.counts.busy ?? false,
         'quality': stream.quality.name,
         'bitRate': stream.bitRate,
         'audio': {
           'asked': stream.audio,
           'on': stream.audioOn,
           'paused': stream.paused,
-          'in': stream.audioIn,
-          'held': stream.audioHeld,
-          'out': stream.audioOut,
+          'in': stream.media?.counts.audioIn ?? 0,
+          'held': stream.media?.counts.audioHeld ?? 0,
+          'out': stream.media?.counts.audioOut ?? 0,
         },
       },
   ];

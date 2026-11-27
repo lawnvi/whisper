@@ -190,6 +190,11 @@ public func wsn_set_capture_callback(_ callback: WSNCaptureCallback?) {
   }
 }
 
+@_cdecl("wsn_set_capture_media_callback")
+public func wsn_set_capture_media_callback(_ callback: WSNCaptureCallback?) {
+  CaptureRegistry.shared.setMediaCallback(callback)
+}
+
 @_cdecl("wsn_capture_supported")
 public func wsn_capture_supported() -> Int32 {
   if #available(macOS 12.3, *) {

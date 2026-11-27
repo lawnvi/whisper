@@ -266,6 +266,15 @@ final class WindowStreamNativeBindings {
             void Function(int, int)>(
           'wsn_capture_set_bit_rate',
         ),
+        setCaptureMediaCallback =
+            library.providesSymbol('wsn_set_capture_media_callback')
+                ? library.lookupFunction<
+                        Void Function(
+                            Pointer<NativeFunction<WsnCaptureCallbackNative>>),
+                        void Function(
+                            Pointer<NativeFunction<WsnCaptureCallbackNative>>)>(
+                    'wsn_set_capture_media_callback')
+                : null,
         // Added after API version 1: a build without it streams no sound.
         _captureSetAudio = library.providesSymbol('wsn_capture_set_audio')
             ? library.lookupFunction<Void Function(Int64, Int32),
@@ -378,6 +387,11 @@ final class WindowStreamNativeBindings {
   final int Function(int, Pointer<Utf8>, int) _surfaceSnapshot;
   final void Function(Pointer<NativeFunction<WsnCaptureCallbackNative>>)
       setCaptureCallback;
+
+  /// Where video packets and sound go instead of [setCaptureCallback]'s
+  /// callback, while set (a host media isolate); null in builds without it.
+  final void Function(Pointer<NativeFunction<WsnCaptureCallbackNative>>)?
+      setCaptureMediaCallback;
   final int Function() captureSupported;
   final int Function() captureInputPermission;
   final int Function() captureRequestCatalog;

@@ -41,12 +41,20 @@ final class CaptureRegistry {
   private let callbackQueue = DispatchQueue(
     label: "whisper.window_stream.capture_callbacks", qos: .userInteractive)
   private var callback: WSNCaptureCallback?
+  private var mediaCallback: WSNCaptureCallback?
   private var captures: [Int64: AnyObject] = [:]
   private var nextId: Int64 = 1
 
   func setCallback(_ value: WSNCaptureCallback?) {
     lock.lock()
     callback = value
+    lock.unlock()
+  }
+
+  /// Takes video packets and sound while set (wsn_set_capture_media_callback).
+  func setMediaCallback(_ value: WSNCaptureCallback?) {
+    lock.lock()
+    mediaCallback = value
     lock.unlock()
   }
 
@@ -108,7 +116,8 @@ final class CaptureRegistry {
         return
       }
       self.lock.lock()
-      let callback = self.callback
+      let media = kind == WSNCapture.kindPacket || kind == WSNCapture.kindAudio
+      let callback = media ? (self.mediaCallback ?? self.callback) : self.callback
       self.lock.unlock()
       guard let callback = callback else {
         free(data)

@@ -39,6 +39,10 @@ int32_t Supported() {
 
 }  // namespace
 
+WSN_EXPORT void wsn_set_capture_media_callback(wsn_capture_callback callback) {
+  SetCaptureMediaCallback(callback);
+}
+
 WSN_EXPORT void wsn_set_capture_callback(wsn_capture_callback callback) {
   SetCaptureCallback(callback);
   if (callback != nullptr) WarmInstalledApps();

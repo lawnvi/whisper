@@ -108,6 +108,8 @@ void wsn_set_capture_callback(wsn_capture_callback callback) {
   if (callback != nullptr) Post([] { Init(); });
 }
 
+void wsn_set_capture_media_callback(wsn_capture_callback callback) { wsn::SetCaptureMediaCallback(callback); }
+
 int32_t wsn_capture_supported(void) {
   static int32_t supported = [] {
     using wsn::capture::Desktop;

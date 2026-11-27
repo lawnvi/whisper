@@ -13,6 +13,7 @@ std::mutex g_mutex;
 wsn_input_callback g_input = nullptr;
 wsn_window_callback g_window = nullptr;
 wsn_capture_callback g_capture = nullptr;
+wsn_capture_callback g_media = nullptr;
 std::atomic<int64_t> g_next_request{1};
 
 }  // namespace
@@ -30,6 +31,11 @@ void SetWindowCallback(wsn_window_callback callback) {
 void SetCaptureCallback(wsn_capture_callback callback) {
   std::lock_guard<std::mutex> lock(g_mutex);
   g_capture = callback;
+}
+
+void SetCaptureMediaCallback(wsn_capture_callback callback) {
+  std::lock_guard<std::mutex> lock(g_mutex);
+  g_media = callback;
 }
 
 void ClearSurfaceCallbacks() {
@@ -71,11 +77,13 @@ void EmitInput(int64_t surface, int32_t kind, int32_t code, int32_t modifiers, d
 void EmitCaptureOwned(int64_t id, int32_t kind, uint8_t* data, int32_t length, int64_t pts_us, int32_t flags,
                       int32_t width, int32_t height) {
   std::lock_guard<std::mutex> lock(g_mutex);
-  if (g_capture == nullptr) {
+  const bool media = kind == WSN_CAPTURE_PACKET || kind == WSN_CAPTURE_AUDIO;
+  wsn_capture_callback target = media && g_media != nullptr ? g_media : g_capture;
+  if (target == nullptr) {
     std::free(data);
     return;
   }
-  g_capture(id, kind, data, data == nullptr ? 0 : length, pts_us, flags, width, height);
+  target(id, kind, data, data == nullptr ? 0 : length, pts_us, flags, width, height);
 }
 
 void EmitCapture(int64_t id, int32_t kind, const uint8_t* data, int32_t length, int64_t pts_us, int32_t flags,

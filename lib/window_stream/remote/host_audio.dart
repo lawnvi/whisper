@@ -13,6 +13,11 @@ class HostAudioEncoder {
   /// [WindowStreamPacket.audio]) to the stream's transport.
   final void Function(Uint8List packet) send;
 
+  /// How Opus is opened in this isolate; the host media isolate, where
+  /// plugins are not registered, opens it the worker way.
+  static Future<AudioCodec?> Function(AudioCodecConfig config) openCodec =
+      OpusAudioCodec.create;
+
   static const int frameMs = 20;
   static const int _bitRate = 128000;
 
@@ -89,7 +94,7 @@ class HostAudioEncoder {
     _channels = channels;
     _pending = Int16List(_frameSamples);
     _pendingCount = 0;
-    _opening = OpusAudioCodec.create(
+    _opening = openCodec(
       AudioCodecConfig(
         sampleRate: sampleRate,
         channels: channels,

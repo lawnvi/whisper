@@ -182,6 +182,10 @@ typedef void (*wsn_capture_callback)(int64_t id, int32_t kind, uint8_t *data,
                                      int32_t height);
 
 WSN_API void wsn_set_capture_callback(wsn_capture_callback callback);
+// Where WSN_CAPTURE_PACKET and WSN_CAPTURE_AUDIO go instead, when set: a Dart
+// isolate of their own codes and sends them. Everything else stays with the
+// capture callback. Null: they go with the rest, as before.
+WSN_API void wsn_set_capture_media_callback(wsn_capture_callback callback);
 WSN_API int32_t wsn_capture_supported(void);
 // 1 when input can be injected (macOS: Accessibility permission).
 WSN_API int32_t wsn_capture_input_permission(void);

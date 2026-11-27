@@ -43,6 +43,14 @@
 
 窗口流转的接受方是 `WindowStreamHost`（主机）和 `WindowStreamViewer.attachInbound`（被主机反拨的观看端），各自管自己的流。
 
+桌面主机的 `/window` socket 留在主 isolate，媒体在另一个 isolate（`lib/window_stream/remote/host_media_isolate.dart`）：
+
+- 原生把视频包和声音通过第二个回调（`wsn_set_capture_media_callback`）直接交给这个 isolate。尺寸、焦点、结束这类事件仍走主 isolate 的采集回调。回调地址由主 isolate 设置和撤销：isolate 起来之后才设，isolate 一退出就撤。
+- isolate 里每条流一个 `HostStreamMedia`（`host_stream_media.dart`），负责编 Opus、加密、30 ms 心跳和在途帧计数。加密器用主 isolate 交过来的密钥副本建好后，副本立刻清零（`HostMediaSeal`）。
+- 封好的字节经 `host_media_relay.dart` 交给主 isolate 写进 socket。每一块写完才回确认，所以视频队列仍然能感到 socket 的背压，和 socket 在自己手里时一样。socket 一关或写出错，isolate 里等着的写立刻失败，这条流随即结束，不等写出超时。
+- 尺寸、焦点和 pong 由主 isolate 转给 isolate，和视频走同一条有序队列；观看端发来的输入仍在主 isolate 解密并注入。
+- isolate 起不来或原生库没有第二回调（旧版本）时，`HostStreamMedia` 留在主 isolate，行为和以前一样。安卓主机的视频来自代理的 socket，也留在主 isolate。
+
 ## 关闭原因
 
 发送一侧用 `PacketByteTransport`，它的 `done` 只完成一次，带一个 `PacketTransportTermination`：
@@ -91,5 +99,6 @@
 - `test/packet_byte_transport_test.dart`、`test/remote_input_packet_transport_test.dart`：关闭原因，包括溢出。
 - `test/media_websocket_authorization_test.dart` 还有键鼠和声音的反拨（正向端口拒绝连接，反拨后数据到达）和"没人等的反向令牌在每条路由上都被拒"。
 - `test/window_stream_reverse_dial_test.dart`：窗口反拨，包括主机一开始就拨和观看端连不上后再请主机拨。
+- `test/window_stream_host_media_relay_test.dart`：主机媒体 isolate 的写出确认：写完才算完成、按顺序，socket 断开时等着的写立刻失败。
 
-没有测试的：音频 isolate 端口上的完整播放路径（要原生音频），包括声音反拨经 isolate 端口的那条；窗口主机在视频发送端坏掉时停流（要原生采集）；真实的单向可达网络（只在本机回环上模拟过拒绝连接）。
+没有测试的：音频 isolate 端口上的完整播放路径（要原生音频），包括声音反拨经 isolate 端口的那条；窗口主机在视频发送端坏掉时停流，以及主机媒体 isolate 从原生收包的整条路径（都要原生采集）；真实的单向可达网络（只在本机回环上模拟过拒绝连接）。

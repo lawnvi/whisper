@@ -333,11 +333,11 @@ void main() {
     final host = File(
       'lib/window_stream/remote/window_stream_host.dart',
     ).readAsStringSync();
-    final encoder = RegExp(
-      r'final encoder = claim\.withMediaPacketContext\([\s\S]*?\);\n',
+    final seal = RegExp(
+      r'final seal = claim\.withMediaPacketContext\([\s\S]*?\);\n',
     ).firstMatch(host)!.group(0)!;
-    expect(encoder, contains('(_, channelBinding) => sendKeyScope('));
-    expect(encoder, contains('mediaMacKey: sendKey'));
+    expect(seal, contains('(_, channelBinding) => sendKeyScope('));
+    expect(seal, contains('sendKey: sendKey'));
     // Capture starts after the upgrade's ready frame.
     expect(host, contains('scheduleMicrotask(() {'));
   });

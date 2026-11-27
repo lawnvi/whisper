@@ -294,6 +294,18 @@ class NativeCaptureBackend implements WindowCaptureBackend {
   WindowStreamNativeBindings? _ensureNative() =>
       supported ? _attachNative() : null;
 
+  /// Native code can hand video and sound to the host media isolate.
+  bool get routesMedia => _ensureNative()?.setCaptureMediaCallback != null;
+
+  /// Points native video and sound at [callbackAddress] (the host media
+  /// isolate's callback), or back at the capture callback when null.
+  void routeMedia(int? callbackAddress) =>
+      _bindings?.setCaptureMediaCallback?.call(
+        callbackAddress == null
+            ? nullptr
+            : Pointer.fromAddress(callbackAddress),
+      );
+
   @override
   Future<WindowStreamFailureReason?> unavailableReason() async {
     if (!_isDesktop) {
