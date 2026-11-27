@@ -10,8 +10,10 @@ import 'package:whisper/audio/audio_protocol.dart';
 import 'package:whisper/audio/audio_share_manager.dart';
 import 'package:whisper/remote_input/remote_input_manager.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
+import 'package:whisper/socket/backpressure_web_socket.dart';
 import 'package:whisper/socket/media_upgrade_proof.dart';
 import 'package:whisper/socket/packet_byte_transport.dart';
+import 'package:whisper/socket/pre_auth_byte_cap.dart';
 import 'package:whisper/socket/session_upgrade_token_registry.dart';
 import 'package:whisper/socket/socket_admission.dart';
 import 'package:whisper/socket/svrmanager.dart';
@@ -80,10 +82,7 @@ Uri _authorizedMediaUri({
     host: '127.0.0.1',
     port: port,
     path: route,
-    queryParameters: <String, String>{
-      'session': sessionId,
-      'token': token,
-    },
+    queryParameters: <String, String>{'session': sessionId, 'token': token},
   );
 }
 
@@ -186,95 +185,105 @@ void main() {
     await manager.closeGracefully(closeServer: true, forceServerClose: true);
   });
 
-  test('routes only explicit websocket endpoints with strict HTTP policy',
-      () async {
-    final started = await manager.startServer(0);
-    expect(started.isSuccess, isTrue);
-    expect(started.port, greaterThan(0));
+  test(
+    'routes only explicit websocket endpoints with strict HTTP policy',
+    () async {
+      final started = await manager.startServer(0);
+      expect(started.isSuccess, isTrue);
+      expect(started.port, greaterThan(0));
 
-    final client = HttpClient();
-    Future<HttpClientResponse> request(
-      String method,
-      String path, {
-      Map<String, String> headers = const {},
-    }) async {
-      final request = await client.openUrl(
-        method,
-        Uri.parse('http://127.0.0.1:${started.port}$path'),
-      );
-      headers.forEach(request.headers.set);
-      return request.close();
-    }
+      final client = HttpClient();
+      Future<HttpClientResponse> request(
+        String method,
+        String path, {
+        Map<String, String> headers = const {},
+      }) async {
+        final request = await client.openUrl(
+          method,
+          Uri.parse('http://127.0.0.1:${started.port}$path'),
+        );
+        headers.forEach(request.headers.set);
+        return request.close();
+      }
 
-    expect((await request('GET', '/missing')).statusCode, 404);
-    expect(
-      (await request('GET', '/missing', headers: {
-        'Connection': 'Upgrade',
-        'Upgrade': 'websocket',
-        'Sec-WebSocket-Version': '13',
-        'Sec-WebSocket-Key': 'dGhlIHNhbXBsZSBub25jZQ==',
-      }))
-          .statusCode,
-      404,
-    );
-    expect((await request('POST', '/chat')).statusCode, 400);
-    expect((await request('GET', '/chat')).statusCode, 400);
-    for (final path in const <String>['/chat', '/audio', '/input']) {
+      expect((await request('GET', '/missing')).statusCode, 404);
       expect(
-        (await request('GET', path, headers: {
-          'Connection': 'Upgrade',
-          'Upgrade': 'websocket',
-          'Sec-WebSocket-Version': '13',
-          'Sec-WebSocket-Key': 'dGhlIHNhbXBsZSBub25jZQ==',
-          'Origin': 'https://example.invalid',
-        }))
-            .statusCode,
-        403,
+        (await request(
+          'GET',
+          '/missing',
+          headers: {
+            'Connection': 'Upgrade',
+            'Upgrade': 'websocket',
+            'Sec-WebSocket-Version': '13',
+            'Sec-WebSocket-Key': 'dGhlIHNhbXBsZSBub25jZQ==',
+          },
+        )).statusCode,
+        404,
       );
+      expect((await request('POST', '/chat')).statusCode, 400);
+      expect((await request('GET', '/chat')).statusCode, 400);
+      for (final path in const <String>['/chat', '/audio', '/input']) {
+        expect(
+          (await request(
+            'GET',
+            path,
+            headers: {
+              'Connection': 'Upgrade',
+              'Upgrade': 'websocket',
+              'Sec-WebSocket-Version': '13',
+              'Sec-WebSocket-Key': 'dGhlIHNhbXBsZSBub25jZQ==',
+              'Origin': 'https://example.invalid',
+            },
+          )).statusCode,
+          403,
+        );
+        expect(
+          await _rawUpgradeStatus(port: started.port, path: path, origin: ''),
+          path == '/chat' ? HttpStatus.forbidden : HttpStatus.unauthorized,
+        );
+        expect(
+          await _rawUpgradeStatus(
+            port: started.port,
+            path: path,
+            origin: '   ',
+          ),
+          path == '/chat' ? HttpStatus.forbidden : HttpStatus.unauthorized,
+        );
+      }
       expect(
-        await _rawUpgradeStatus(
-          port: started.port,
-          path: path,
-          origin: '',
-        ),
-        path == '/chat' ? HttpStatus.forbidden : HttpStatus.unauthorized,
+        (await request(
+          'GET',
+          '/chat',
+          headers: {
+            'Connection': 'Upgrade',
+            'Upgrade': 'websocket',
+            'Sec-WebSocket-Version': '13',
+            'Sec-WebSocket-Key': 'malformed',
+          },
+        )).statusCode,
+        400,
       );
-      expect(
-        await _rawUpgradeStatus(
-          port: started.port,
-          path: path,
-          origin: '   ',
-        ),
-        path == '/chat' ? HttpStatus.forbidden : HttpStatus.unauthorized,
-      );
-    }
-    expect(
-      (await request('GET', '/chat', headers: {
-        'Connection': 'Upgrade',
-        'Upgrade': 'websocket',
-        'Sec-WebSocket-Version': '13',
-        'Sec-WebSocket-Key': 'malformed',
-      }))
-          .statusCode,
-      400,
-    );
-    client.close(force: true);
-  });
+      client.close(force: true);
+    },
+  );
 
-  test('starting again awaits old server and reports the actual port',
-      () async {
-    final first = await manager.startServer(0);
-    final second = await manager.startServer(0);
-    expect(first.port, greaterThan(0));
-    expect(second.port, greaterThan(0));
+  test(
+    'starting again awaits old server and reports the actual port',
+    () async {
+      final first = await manager.startServer(0);
+      final second = await manager.startServer(0);
+      expect(first.port, greaterThan(0));
+      expect(second.port, greaterThan(0));
 
-    final oldSocket = await Socket.connect('127.0.0.1', first.port)
-        .then<Object>((value) async {
-      await value.close();
-      return value;
-    }).catchError((Object error) => error);
-    expect(oldSocket, isA<SocketException>());
-  });
+      final oldSocket = await Socket.connect('127.0.0.1', first.port)
+          .then<Object>((value) async {
+            await value.close();
+            return value;
+          })
+          .catchError((Object error) => error);
+      expect(oldSocket, isA<SocketException>());
+    },
+  );
 
   test('concurrent graceful closes share one completion', () async {
     await manager.startServer(0);
@@ -297,69 +306,74 @@ void main() {
 
     final connection = await Socket.connect('127.0.0.1', started.port)
         .then<Object>((socket) async {
-      await socket.close();
-      return socket;
-    }).catchError((Object error) => error);
+          await socket.close();
+          return socket;
+        })
+        .catchError((Object error) => error);
     expect(connection, isA<SocketException>());
   });
 
-  test('audio and input share rate limits without consuming chat slots',
-      () async {
-    final admission = SocketAdmissionController(
-      maxChatConnections: 1,
-      maxPreAuthConnections: 1,
-      maxPreAuthConnectionsPerIp: 1,
-      maxUpgradeAttemptsPerMinutePerIp: 2,
-    );
-    final audioManager = AudioShareManager();
-    final inputManager = RemoteInputManager();
-    final tokens = SessionUpgradeTokenRegistry();
-    _activateAudioSession(audioManager);
-    _activateInputSession(inputManager);
-    final isolated = WsSvrManager.forTesting(
-      admission: admission,
-      audioManager: audioManager,
-      remoteInputManager: inputManager,
-      sessionUpgradeTokens: tokens,
-      audioGroupClaimValidator: (_) => false,
-      mediaPeerClaimValidator: (_) => true,
-    );
-    addTearDown(() => isolated.closeGracefully(
-          closeServer: true,
-          forceServerClose: true,
-        ));
-    final started = await isolated.startServer(0);
-    final audio = await _connectAuthorizedMedia(
-      uri: _authorizedMediaUri(
-        port: started.port,
-        route: '/audio',
-        sessionId: _audioSessionId,
-        tokens: tokens,
-      ),
-      namespace: 'audio',
-    );
-    final input = await _connectAuthorizedMedia(
-      uri: _authorizedMediaUri(
-        port: started.port,
-        route: '/input',
-        sessionId: _inputSessionId,
-        tokens: tokens,
-      ),
-      namespace: 'remote-input',
-    );
-    addTearDown(audio.sink.close);
-    addTearDown(input.sink.close);
-    await _waitFor(() =>
-        audioManager.activeChannelCount == 1 &&
-        inputManager.activeChannelCount == 1);
+  test(
+    'audio and input share rate limits without consuming chat slots',
+    () async {
+      final admission = SocketAdmissionController(
+        maxChatConnections: 1,
+        maxPreAuthConnections: 1,
+        maxPreAuthConnectionsPerIp: 1,
+        maxUpgradeAttemptsPerMinutePerIp: 2,
+      );
+      final audioManager = AudioShareManager();
+      final inputManager = RemoteInputManager();
+      final tokens = SessionUpgradeTokenRegistry();
+      _activateAudioSession(audioManager);
+      _activateInputSession(inputManager);
+      final isolated = WsSvrManager.forTesting(
+        admission: admission,
+        audioManager: audioManager,
+        remoteInputManager: inputManager,
+        sessionUpgradeTokens: tokens,
+        audioGroupClaimValidator: (_) => false,
+        mediaPeerClaimValidator: (_) => true,
+      );
+      addTearDown(
+        () =>
+            isolated.closeGracefully(closeServer: true, forceServerClose: true),
+      );
+      final started = await isolated.startServer(0);
+      final audio = await _connectAuthorizedMedia(
+        uri: _authorizedMediaUri(
+          port: started.port,
+          route: '/audio',
+          sessionId: _audioSessionId,
+          tokens: tokens,
+        ),
+        namespace: 'audio',
+      );
+      final input = await _connectAuthorizedMedia(
+        uri: _authorizedMediaUri(
+          port: started.port,
+          route: '/input',
+          sessionId: _inputSessionId,
+          tokens: tokens,
+        ),
+        namespace: 'remote-input',
+      );
+      addTearDown(audio.sink.close);
+      addTearDown(input.sink.close);
+      await _waitFor(
+        () =>
+            audioManager.activeChannelCount == 1 &&
+            inputManager.activeChannelCount == 1,
+      );
 
-    expect(admission.chatConnectionCount, 0);
-    expect(admission.preAuthConnectionCount, 0);
-    final rejected = await _upgradeStatus(
-      Uri.parse('ws://127.0.0.1:${started.port}/chat'),
-    );
-    expect(rejected, HttpStatus.tooManyRequests);
-  });
+      expect(admission.chatConnectionCount, 0);
+      expect(admission.preAuthConnectionCount, 0);
+      final rejected = await _upgradeStatus(
+        Uri.parse('ws://127.0.0.1:${started.port}/chat'),
+      );
+      expect(rejected, HttpStatus.tooManyRequests);
+    },
+  );
 
   test('manager-only media channels are awaited by graceful close', () async {
     final audioManager = AudioShareManager();
@@ -371,10 +385,9 @@ void main() {
       audioGroupClaimValidator: (_) => false,
       mediaPeerClaimValidator: (_) => true,
     );
-    addTearDown(() => isolated.closeGracefully(
-          closeServer: true,
-          forceServerClose: true,
-        ));
+    addTearDown(
+      () => isolated.closeGracefully(closeServer: true, forceServerClose: true),
+    );
     final started = await isolated.startServer(0);
     final audio = await _connectAuthorizedMedia(
       uri: _authorizedMediaUri(
@@ -418,10 +431,9 @@ void main() {
       audioGroupClaimValidator: (_) => false,
       mediaPeerClaimValidator: (_) => true,
     );
-    addTearDown(() => isolated.closeGracefully(
-          closeServer: true,
-          forceServerClose: true,
-        ));
+    addTearDown(
+      () => isolated.closeGracefully(closeServer: true, forceServerClose: true),
+    );
     final started = await isolated.startServer(0);
 
     final audio = await _connectAuthorizedMedia(
@@ -459,10 +471,9 @@ void main() {
 
   test('start followed immediately by close finishes stopped', () async {
     final isolated = WsSvrManager.forTesting();
-    addTearDown(() => isolated.closeGracefully(
-          closeServer: true,
-          forceServerClose: true,
-        ));
+    addTearDown(
+      () => isolated.closeGracefully(closeServer: true, forceServerClose: true),
+    );
 
     final starting = isolated.startServer(0);
     final closing = isolated.closeGracefully(closeServer: true);
@@ -473,18 +484,18 @@ void main() {
     expect(isolated.started, isFalse);
     final connection = await Socket.connect('127.0.0.1', started.port)
         .then<Object>((socket) async {
-      await socket.close();
-      return socket;
-    }).catchError((Object error) => error);
+          await socket.close();
+          return socket;
+        })
+        .catchError((Object error) => error);
     expect(connection, isA<SocketException>());
   });
 
   test('close followed immediately by start finishes started', () async {
     final isolated = WsSvrManager.forTesting();
-    addTearDown(() => isolated.closeGracefully(
-          closeServer: true,
-          forceServerClose: true,
-        ));
+    addTearDown(
+      () => isolated.closeGracefully(closeServer: true, forceServerClose: true),
+    );
     await isolated.startServer(0);
 
     final closing = isolated.closeGracefully(closeServer: true);
@@ -498,126 +509,133 @@ void main() {
     await socket.close();
   });
 
-  test('server stops accepting before existing channel cleanup completes',
-      () async {
-    final audioManager = _BlockingAudioManager();
-    final tokens = SessionUpgradeTokenRegistry();
-    _activateAudioSession(audioManager);
-    final isolated = WsSvrManager.forTesting(
-      audioManager: audioManager,
-      sessionUpgradeTokens: tokens,
-      audioGroupClaimValidator: (_) => false,
-      mediaPeerClaimValidator: (_) => true,
-    );
-    addTearDown(() {
-      if (!audioManager.releaseClose.isCompleted) {
-        audioManager.releaseClose.complete();
-      }
-      return isolated.closeGracefully(
-        closeServer: true,
-        forceServerClose: true,
+  test(
+    'server stops accepting before existing channel cleanup completes',
+    () async {
+      final audioManager = _BlockingAudioManager();
+      final tokens = SessionUpgradeTokenRegistry();
+      _activateAudioSession(audioManager);
+      final isolated = WsSvrManager.forTesting(
+        audioManager: audioManager,
+        sessionUpgradeTokens: tokens,
+        audioGroupClaimValidator: (_) => false,
+        mediaPeerClaimValidator: (_) => true,
       );
-    });
-    final started = await isolated.startServer(0);
-    audioManager.arm();
-
-    final closing = isolated.closeGracefully(closeServer: true);
-    await audioManager.closeStarted.future;
-    final connection = await Socket.connect('127.0.0.1', started.port)
-        .then<Object>((socket) async {
-      await socket.close();
-      return socket;
-    }).catchError((Object error) => error);
-
-    expect(connection, isA<SocketException>());
-    audioManager.releaseClose.complete();
-    await closing;
-  });
-
-  test('retained server rejects upgrades while closing and reopens after',
-      () async {
-    final audioManager = _BlockingAudioManager();
-    final tokens = SessionUpgradeTokenRegistry();
-    _activateAudioSession(audioManager);
-    final isolated = WsSvrManager.forTesting(
-      audioManager: audioManager,
-      sessionUpgradeTokens: tokens,
-      audioGroupClaimValidator: (_) => false,
-      mediaPeerClaimValidator: (_) => true,
-    );
-    addTearDown(() {
-      if (!audioManager.releaseClose.isCompleted) {
-        audioManager.releaseClose.complete();
-      }
-      return isolated.closeGracefully(
-        closeServer: true,
-        forceServerClose: true,
-      );
-    });
-    final started = await isolated.startServer(0);
-    final existing = await _connectAuthorizedMedia(
-      uri: _authorizedMediaUri(
-        port: started.port,
-        route: '/audio',
-        sessionId: _audioSessionId,
-        tokens: tokens,
-      ),
-      namespace: 'audio',
-    );
-    final existingClosed = existing.stream.listen((_) {}).asFuture<void>();
-    await _waitFor(() => audioManager.activeChannelCount == 1);
-    audioManager.arm();
-
-    final closing = isolated.closeGracefully();
-    await audioManager.closeStarted.future;
-    final rejected = await _upgradeStatus(
-      Uri.parse('ws://127.0.0.1:${started.port}/audio'),
-    );
-    expect(rejected, HttpStatus.serviceUnavailable);
-
-    audioManager.releaseClose.complete();
-    await closing;
-    await existingClosed.timeout(const Duration(seconds: 2));
-    final reopened = await _connectAuthorizedMedia(
-      uri: _authorizedMediaUri(
-        port: started.port,
-        route: '/audio',
-        sessionId: _audioSessionId,
-        tokens: tokens,
-      ),
-      namespace: 'audio',
-    );
-    await reopened.sink.close();
-  });
-
-  test('graceful close cancels and awaits an in-flight outgoing handshake',
-      () async {
-    final stalledServer = await HttpServer.bind(
-      InternetAddress.loopbackIPv4,
-      0,
-    );
-    addTearDown(() => stalledServer.close(force: true));
-    final requestReceived = Completer<void>();
-    stalledServer.listen((request) {
-      if (!requestReceived.isCompleted) {
-        requestReceived.complete();
-      }
-    });
-    final isolated = WsSvrManager.forTesting();
-    addTearDown(() => isolated.closeGracefully(
+      addTearDown(() {
+        if (!audioManager.releaseClose.isCompleted) {
+          audioManager.releaseClose.complete();
+        }
+        return isolated.closeGracefully(
           closeServer: true,
           forceServerClose: true,
-        ));
-    final connecting = isolated.connectToServer(
-      _attemptRequest('graceful-close', stalledServer.port),
-    );
-    await requestReceived.future;
-    final closing = isolated.closeGracefully();
+        );
+      });
+      final started = await isolated.startServer(0);
+      audioManager.arm();
 
-    final result = await connecting.timeout(const Duration(seconds: 2));
-    await closing.timeout(const Duration(seconds: 2));
-    expect(result.status, ConnectionAttemptStatus.cancelled);
-  });
+      final closing = isolated.closeGracefully(closeServer: true);
+      await audioManager.closeStarted.future;
+      final connection = await Socket.connect('127.0.0.1', started.port)
+          .then<Object>((socket) async {
+            await socket.close();
+            return socket;
+          })
+          .catchError((Object error) => error);
+
+      expect(connection, isA<SocketException>());
+      audioManager.releaseClose.complete();
+      await closing;
+    },
+  );
+
+  test(
+    'retained server rejects upgrades while closing and reopens after',
+    () async {
+      final audioManager = _BlockingAudioManager();
+      final tokens = SessionUpgradeTokenRegistry();
+      _activateAudioSession(audioManager);
+      final isolated = WsSvrManager.forTesting(
+        audioManager: audioManager,
+        sessionUpgradeTokens: tokens,
+        audioGroupClaimValidator: (_) => false,
+        mediaPeerClaimValidator: (_) => true,
+      );
+      addTearDown(() {
+        if (!audioManager.releaseClose.isCompleted) {
+          audioManager.releaseClose.complete();
+        }
+        return isolated.closeGracefully(
+          closeServer: true,
+          forceServerClose: true,
+        );
+      });
+      final started = await isolated.startServer(0);
+      final existing = await _connectAuthorizedMedia(
+        uri: _authorizedMediaUri(
+          port: started.port,
+          route: '/audio',
+          sessionId: _audioSessionId,
+          tokens: tokens,
+        ),
+        namespace: 'audio',
+      );
+      final existingClosed = existing.stream.listen((_) {}).asFuture<void>();
+      await _waitFor(() => audioManager.activeChannelCount == 1);
+      audioManager.arm();
+
+      final closing = isolated.closeGracefully();
+      await audioManager.closeStarted.future;
+      final rejected = await _upgradeStatus(
+        Uri.parse('ws://127.0.0.1:${started.port}/audio'),
+      );
+      expect(rejected, HttpStatus.serviceUnavailable);
+
+      audioManager.releaseClose.complete();
+      await closing;
+      await existingClosed.timeout(const Duration(seconds: 2));
+      final reopened = await _connectAuthorizedMedia(
+        uri: _authorizedMediaUri(
+          port: started.port,
+          route: '/audio',
+          sessionId: _audioSessionId,
+          tokens: tokens,
+        ),
+        namespace: 'audio',
+      );
+      await reopened.sink.close();
+    },
+  );
+
+  test(
+    'graceful close cancels and awaits an in-flight outgoing handshake',
+    () async {
+      final stalledServer = await HttpServer.bind(
+        InternetAddress.loopbackIPv4,
+        0,
+      );
+      addTearDown(() => stalledServer.close(force: true));
+      final requestReceived = Completer<void>();
+      stalledServer.listen((request) {
+        if (!requestReceived.isCompleted) {
+          requestReceived.complete();
+        }
+      });
+      final isolated = WsSvrManager.forTesting();
+      addTearDown(
+        () =>
+            isolated.closeGracefully(closeServer: true, forceServerClose: true),
+      );
+      final connecting = isolated.connectToServer(
+        _attemptRequest('graceful-close', stalledServer.port),
+      );
+      await requestReceived.future;
+      final closing = isolated.closeGracefully();
+
+      final result = await connecting.timeout(const Duration(seconds: 2));
+      await closing.timeout(const Duration(seconds: 2));
+      expect(result.status, ConnectionAttemptStatus.cancelled);
+    },
+  );
 
   test('failed listener bind leaves outgoing connector available', () async {
     final occupied = await HttpServer.bind(InternetAddress.anyIPv4, 0);
@@ -631,10 +649,9 @@ void main() {
       await socket.close();
     });
     final isolated = WsSvrManager.forTesting();
-    addTearDown(() => isolated.closeGracefully(
-          closeServer: true,
-          forceServerClose: true,
-        ));
+    addTearDown(
+      () => isolated.closeGracefully(closeServer: true, forceServerClose: true),
+    );
     final failedStart = await isolated.startServer(occupied.port);
     expect(failedStart.isSuccess, isFalse);
     final connecting = isolated.connectToServer(
@@ -659,10 +676,9 @@ void main() {
       }
     });
     final isolated = WsSvrManager.forTesting();
-    addTearDown(() => isolated.closeGracefully(
-          closeServer: true,
-          forceServerClose: true,
-        ));
+    addTearDown(
+      () => isolated.closeGracefully(closeServer: true, forceServerClose: true),
+    );
     final connecting = isolated.connectToServer(
       _attemptRequest('tracked-close', stalledServer.port),
     );
@@ -684,8 +700,10 @@ void main() {
       final socket = await WebSocketTransformer.upgrade(request);
       await socket.close();
     });
-    final redirectServer =
-        await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final redirectServer = await HttpServer.bind(
+      InternetAddress.loopbackIPv4,
+      0,
+    );
     addTearDown(() => redirectServer.close(force: true));
     redirectServer.listen((request) async {
       request.response
@@ -697,15 +715,12 @@ void main() {
       await request.response.close();
     });
     final isolated = WsSvrManager.forTesting();
-    addTearDown(() => isolated.closeGracefully(
-          closeServer: true,
-          forceServerClose: true,
-        ));
+    addTearDown(
+      () => isolated.closeGracefully(closeServer: true, forceServerClose: true),
+    );
 
     await isolated
-        .connectToServer(
-          _attemptRequest('redirect', redirectServer.port),
-        )
+        .connectToServer(_attemptRequest('redirect', redirectServer.port))
         .timeout(const Duration(seconds: 2));
 
     expect(targetReached, isFalse);
@@ -742,11 +757,200 @@ void main() {
       final result = await connecting.timeout(const Duration(seconds: 2));
 
       expect(result.status, ConnectionAttemptStatus.rejected);
-      await isolated.closeGracefully(
-        closeServer: true,
-        forceServerClose: true,
-      );
+      await isolated.closeGracefully(closeServer: true, forceServerClose: true);
       await peerServer.close(force: true);
     }
   });
+
+  test(
+    'direct /chat upgrade rejects Origin, subprotocols, bad keys, and caps pre-auth bytes',
+    () async {
+      final server = WsSvrManager.forTesting(manageSharedCoordinators: false);
+      addTearDown(
+        () => server.closeGracefully(closeServer: true, forceServerClose: true),
+      );
+      final started = await server.startServer(0);
+      expect(started.isSuccess, isTrue);
+
+      final validKey = base64.encode(List<int>.filled(16, 7));
+      final cases =
+          <
+            ({
+              String label,
+              String extraHeaders,
+              String key,
+              String expectedPrefix,
+            })
+          >[
+            (
+              label: 'origin rejected',
+              extraHeaders: 'Origin: https://evil.invalid\r\n',
+              key: validKey,
+              expectedPrefix: 'HTTP/1.1 403',
+            ),
+            (
+              label: 'subprotocol rejected',
+              extraHeaders: 'Sec-WebSocket-Protocol: custom\r\n',
+              key: validKey,
+              expectedPrefix: 'HTTP/1.1 400',
+            ),
+            (
+              label: 'invalid key rejected',
+              extraHeaders: '',
+              key: 'not-16-bytes',
+              expectedPrefix: 'HTTP/1.1 400',
+            ),
+          ];
+
+      for (final c in cases) {
+        final sock = await Socket.connect(
+          InternetAddress.loopbackIPv4,
+          started.port,
+        );
+        final buf = StringBuffer();
+        final done = Completer<void>();
+        sock.listen(
+          (d) {
+            buf.write(latin1.decode(d));
+            if (buf.toString().contains('\r\n\r\n') && !done.isCompleted) {
+              done.complete();
+            }
+          },
+          onError: (Object _) {
+            if (!done.isCompleted) done.complete();
+          },
+          onDone: () {
+            if (!done.isCompleted) done.complete();
+          },
+        );
+        sock.write(
+          'GET /chat HTTP/1.1\r\n'
+          'Host: 127.0.0.1:${started.port}\r\n'
+          'Connection: Upgrade\r\n'
+          'Upgrade: websocket\r\n'
+          'Sec-WebSocket-Version: 13\r\n'
+          'Sec-WebSocket-Key: ${c.key}\r\n'
+          '${c.extraHeaders}\r\n',
+        );
+        await done.future.timeout(const Duration(seconds: 2));
+        expect(buf.toString(), startsWith(c.expectedPrefix), reason: c.label);
+        sock.destroy();
+      }
+
+      // Valid /chat upgrade omits extensions/subprotocols and cuts off a peer
+      // that exceeds preAuthByteCap before authenticating.
+      final sock = await Socket.connect(
+        InternetAddress.loopbackIPv4,
+        started.port,
+      );
+      addTearDown(sock.destroy);
+      final headers = StringBuffer();
+      final headersDone = Completer<void>();
+      final closed = Completer<void>();
+      sock.listen(
+        (d) {
+          if (!headersDone.isCompleted) {
+            headers.write(latin1.decode(d));
+            if (headers.toString().contains('\r\n\r\n')) {
+              headersDone.complete();
+            }
+          }
+        },
+        onError: (Object _) {},
+        onDone: () {
+          if (!closed.isCompleted) closed.complete();
+        },
+      );
+      sock.write(
+        'GET /chat HTTP/1.1\r\n'
+        'Host: 127.0.0.1:${started.port}\r\n'
+        'Connection: Upgrade\r\n'
+        'Upgrade: websocket\r\n'
+        'Sec-WebSocket-Version: 13\r\n'
+        'Sec-WebSocket-Key: $validKey\r\n'
+        'Sec-WebSocket-Extensions: permessage-deflate\r\n\r\n',
+      );
+      await headersDone.future.timeout(const Duration(seconds: 2));
+      final text = headers.toString();
+      expect(text, startsWith('HTTP/1.1 101'));
+      expect(text.toLowerCase(), isNot(contains('sec-websocket-extensions')));
+      expect(text.toLowerCase(), isNot(contains('sec-websocket-protocol')));
+
+      // Unfinished masked binary frame past preAuthByteCap triggers cutoff.
+      sock.add(<int>[0x82, 0xff, 0, 0, 0, 0, 4, 0, 0, 0, 1, 2, 3, 4]);
+      final chunk = Uint8List(64 * 1024);
+      try {
+        for (var sent = 0; sent < 2 * preAuthByteCap; sent += chunk.length) {
+          if (closed.isCompleted) break;
+          sock.add(chunk);
+          await sock.flush();
+        }
+      } on SocketException {
+        // Expected when server destroys the pre-auth socket.
+      }
+      await closed.future.timeout(const Duration(seconds: 5));
+    },
+  );
+
+  test(
+    'BackpressureWebSocketChannel closes immediately while addStream is blocked',
+    () async {
+      final httpServer = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => httpServer.close(force: true));
+      final serverWsReady = Completer<WebSocket>();
+      httpServer.listen((req) async {
+        final ws = await WebSocketTransformer.upgrade(
+          req,
+          compression: CompressionOptions.compressionOff,
+        );
+        serverWsReady.complete(ws);
+      });
+
+      final client = HttpClient();
+      addTearDown(() => client.close(force: true));
+      final key = base64.encode(List<int>.filled(16, 9));
+      final req = await client.openUrl(
+        'GET',
+        Uri.parse('http://127.0.0.1:${httpServer.port}/chat'),
+      );
+      req.headers
+        ..set(HttpHeaders.connectionHeader, 'Upgrade')
+        ..set(HttpHeaders.upgradeHeader, 'websocket')
+        ..set('Sec-WebSocket-Key', key)
+        ..set('Sec-WebSocket-Version', '13');
+      final res = await req.close();
+      final socket = await res.detachSocket();
+      final ws = WebSocket.fromUpgradedSocket(
+        socket,
+        serverSide: false,
+        compression: CompressionOptions.compressionOff,
+      );
+      final channel = BackpressureWebSocketChannel(ws, socket: socket);
+      final serverWs = await serverWsReady.future;
+      final sub = serverWs.listen((_) {});
+      sub.pause();
+      addTearDown(sub.cancel);
+
+      // Push 256 KiB frames through addStream until kernel buffers stall it.
+      final chunk = Uint8List(256 * 1024);
+      Future<dynamic>? blockedWrite;
+      for (var i = 0; i < 64; i++) {
+        final fut = channel.sink.addStream(Stream<Object>.value(chunk));
+        try {
+          await fut.timeout(const Duration(milliseconds: 150));
+        } on TimeoutException {
+          blockedWrite = fut;
+          break;
+        }
+      }
+      expect(blockedWrite, isNotNull);
+
+      // Closing while addStream is blocked must return promptly without
+      // throwing StateError("StreamSink is bound to a stream").
+      await channel.sink.close().timeout(const Duration(seconds: 1));
+      await blockedWrite!
+          .catchError((Object _) {})
+          .timeout(const Duration(seconds: 1));
+    },
+  );
 }

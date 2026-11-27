@@ -1,12 +1,11 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:math';
 import 'dart:typed_data';
 
-import 'package:crypto/crypto.dart' as hashes;
 import 'package:cryptography/cryptography.dart';
 import 'package:whisper/socket/auth_protocol.dart';
 import 'package:whisper/socket/auth_session_keys.dart';
+export 'package:whisper/socket/auth_session_keys.dart'
+    show identityPublicKeyHash;
 import 'package:whisper/socket/auth_transcript.dart';
 import 'package:whisper/socket/authenticated_frame.dart';
 import 'package:whisper/socket/bounded_outbound_queue.dart';
@@ -133,7 +132,7 @@ final class PeerSocketSession {
         'negotiatedProtocolVersion',
       );
     }
-    final nonce = localNonce ?? _secureNonce();
+    final nonce = localNonce ?? secureAuthNonce();
     if (nonce.length != 32) {
       throw ArgumentError.value(nonce.length, 'localNonce.length');
     }
@@ -274,50 +273,72 @@ final class PeerSocketSession {
     _outboundQueue = BoundedOutboundQueue.chat(
       addStream: addStream,
       add: add,
-      maxBytes: 128 * 1024 * 1024,
+      maxItems: 512,
+      maxBytes: 32 * 1024 * 1024,
+      writerTimeout: const Duration(seconds: 30),
+      minWriteBytesPerSecond: 16 * 1024,
+      maxWriterTimeout: const Duration(seconds: 120),
       onOverflow: onOverflow,
     );
   }
 
-  Future<bool> enqueueIncoming(int byteLength, Future<void> Function() action) {
-    final queue = _inboundQueue;
-    if (queue == null) {
-      return Future<bool>.value(false);
-    }
-    return queue.add(byteLength, action);
-  }
+  Future<bool> enqueueIncoming(
+    int byteLength,
+    Future<void> Function() action,
+  ) => _inboundQueue?.add(byteLength, action) ?? Future<bool>.value(false);
 
   Future<bool> enqueueOutgoing(Object value, {required int byteLength}) {
     final queue = _outboundQueue;
-    if (queue == null) {
-      return Future<bool>.value(false);
-    }
-    return queue.add(value, byteLength: byteLength);
+    return Future<bool>.value(
+      queue != null && queue.enqueueControl(value, byteLength: byteLength),
+    );
   }
 
   Future<bool> enqueueAuthenticatedOutgoing(
     Uint8List payload, {
     required int byteLength,
-  }) {
-    final queue = _outboundQueue;
-    if (queue == null) {
-      return Future<bool>.value(false);
-    }
-    return queue.addLazy(() => encodeOutgoing(payload), byteLength: byteLength);
-  }
+    OutboundPacketKind kind = OutboundPacketKind.control,
+    bool waitForSpace = false,
+  }) => _enqueueLazy(
+    () => encodeOutgoing(payload),
+    byteLength: byteLength,
+    kind: kind,
+    waitForSpace: waitForSpace,
+  );
 
   Future<bool> enqueueAuthenticatedBuffer(
     AuthenticatedPayloadBuffer buffer, {
     required int byteLength,
+    OutboundPacketKind kind = OutboundPacketKind.file,
+    bool waitForSpace = true,
+  }) => _enqueueLazy(
+    () => encodeOutgoingBuffer(buffer),
+    byteLength: byteLength,
+    kind: kind,
+    waitForSpace: waitForSpace,
+  );
+
+  Future<bool> _enqueueLazy(
+    Future<Object> Function() produce, {
+    required int byteLength,
+    required OutboundPacketKind kind,
+    required bool waitForSpace,
   }) {
     final queue = _outboundQueue;
-    if (queue == null) {
-      return Future<bool>.value(false);
-    }
-    return queue.addLazy(
-      () => encodeOutgoingBuffer(buffer),
-      byteLength: byteLength,
-    );
+    if (queue == null) return Future<bool>.value(false);
+    return waitForSpace
+        ? queue.enqueueWhenSpaceAvailable(
+            produce,
+            byteLength: byteLength,
+            kind: kind,
+          )
+        : Future<bool>.value(
+            queue.enqueueControlLazy(
+              produce,
+              byteLength: byteLength,
+              kind: kind,
+            ),
+          );
   }
 
   void markTransportAuthenticated() {
@@ -459,7 +480,7 @@ final class PeerSocketSession {
       final remoteEphemeralPublicKey = AuthSessionKeys.parseEphemeralPublicKey(
         hello.ephemeralPublicKey!,
       );
-      final remoteNonce = _decodeOptional32(hello.nonce);
+      final remoteNonce = decodeOptional32(hello.nonce);
       final localEphemeralPublicKey = await _continueAfter(
         AuthSessionKeys.publicKeyBase64Url(_localEphemeralKeyPair),
         PeerSocketPhase.awaitingHello,
@@ -473,7 +494,7 @@ final class PeerSocketSession {
         clientEphemeralKey: hello.ephemeralPublicKey!,
         serverEphemeralKey: localEphemeralPublicKey,
         clientNonce: remoteNonce,
-        clientNonceCommitment: _decodeOptional32(hello.nonceCommitment),
+        clientNonceCommitment: decodeOptional32(hello.nonceCommitment),
         serverNonce: _localNonce,
         intendedPkh: hello.intendedPublicKeyHash ?? '',
         serverPairingRequired: pairingRequired,
@@ -513,12 +534,12 @@ final class PeerSocketSession {
     try {
       _requireEnvelope(challenge, AuthAction.challenge);
       final commitment = _commitsNonce ? commitClientNonce(_localNonce) : null;
-      final echoed = _decodeOptional32(
+      final echoed = decodeOptional32(
         commitment == null
             ? challenge.peerNonce
             : challenge.peerNonceCommitment,
       );
-      if (echoed == null || !_sameBytes(echoed, commitment ?? _localNonce)) {
+      if (echoed == null || !sameAuthBytes(echoed, commitment ?? _localNonce)) {
         _fail<void>('nonce_mismatch');
       }
       final remoteProfile = _decodeProfile(challenge);
@@ -629,11 +650,11 @@ final class PeerSocketSession {
         );
       }
       if (proof.peerId != remotePeerId ||
-          !_sameBytes(
+          !sameAuthBytes(
             decodeAuthBase64Url(proof.peerNonce!, expectedLength: 32),
             _localNonce,
           ) ||
-          !_sameBytes(
+          !sameAuthBytes(
             decodeAuthBase64Url(proof.profileDigest, expectedLength: 32),
             _remoteProfile!.canonicalDigest(),
           )) {
@@ -704,15 +725,15 @@ final class PeerSocketSession {
         return _fail('duplicate_approval');
       }
       if (approval.peerId != remotePeerId ||
-          !_sameBytes(
+          !sameAuthBytes(
             decodeAuthBase64Url(approval.nonce!, expectedLength: 32),
             _remoteNonce!,
           ) ||
-          !_sameBytes(
+          !sameAuthBytes(
             decodeAuthBase64Url(approval.peerNonce!, expectedLength: 32),
             _localNonce,
           ) ||
-          !_sameBytes(
+          !sameAuthBytes(
             decodeAuthBase64Url(approval.profileDigest, expectedLength: 32),
             _remoteProfile!.canonicalDigest(),
           )) {
@@ -821,15 +842,15 @@ final class PeerSocketSession {
     try {
       _requireEnvelope(result, AuthAction.result);
       if (result.peerId != remotePeerId ||
-          !_sameBytes(
+          !sameAuthBytes(
             decodeAuthBase64Url(result.nonce!, expectedLength: 32),
             _remoteNonce!,
           ) ||
-          !_sameBytes(
+          !sameAuthBytes(
             decodeAuthBase64Url(result.peerNonce!, expectedLength: 32),
             _localNonce,
           ) ||
-          !_sameBytes(
+          !sameAuthBytes(
             decodeAuthBase64Url(result.profileDigest, expectedLength: 32),
             _remoteProfile!.canonicalDigest(),
           )) {
@@ -1023,7 +1044,7 @@ final class PeerSocketSession {
       envelope.profileDigest,
       expectedLength: 32,
     );
-    if (!_sameBytes(claimedDigest, profile.canonicalDigest())) {
+    if (!sameAuthBytes(claimedDigest, profile.canonicalDigest())) {
       return _fail('profile_digest_mismatch');
     }
     return profile;
@@ -1082,30 +1103,4 @@ final class PeerSocketSession {
     close();
     throw AuthHandshakeException(code);
   }
-}
-
-String identityPublicKeyHash(String publicKeyBase64Url) {
-  final publicKey = decodeAuthBase64Url(publicKeyBase64Url, expectedLength: 32);
-  return base64Url
-      .encode(hashes.sha256.convert(publicKey).bytes)
-      .replaceAll('=', '');
-}
-
-Uint8List? _decodeOptional32(String? value) =>
-    value == null ? null : decodeAuthBase64Url(value, expectedLength: 32);
-
-Uint8List _secureNonce() {
-  final random = Random.secure();
-  return Uint8List.fromList(List<int>.generate(32, (_) => random.nextInt(256)));
-}
-
-bool _sameBytes(List<int> first, List<int> second) {
-  if (first.length != second.length) {
-    return false;
-  }
-  var difference = 0;
-  for (var index = 0; index < first.length; index += 1) {
-    difference |= first[index] ^ second[index];
-  }
-  return difference == 0;
 }

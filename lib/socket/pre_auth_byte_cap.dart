@@ -203,5 +203,9 @@ WebSocket cappedClientWebSocket(
       return phase == PeerSocketPhase.awaitingResult ||
           phase == PeerSocketPhase.authenticated;
     });
-  return WebSocket.fromUpgradedSocket(capped, serverSide: false);
+  return WebSocket.fromUpgradedSocket(
+    capped,
+    serverSide: false,
+    compression: CompressionOptions.compressionOff,
+  );
 }

@@ -190,3 +190,51 @@ FileTransferData incomingTransferDraft(
     updatedAt: now,
   );
 }
+
+Future<void> closeReceivingTransferHandles({
+  required RandomAccessFile? writer,
+  required IncomingWritePipeline? writePipeline,
+  required IOSink? sink,
+  required bool flush,
+}) async {
+  if (writer != null) {
+    try {
+      await writePipeline?.drain();
+      if (flush) {
+        await writer.flush();
+      }
+    } finally {
+      await writer.close();
+    }
+  }
+  if (sink != null) {
+    if (flush) {
+      await sink.flush();
+    }
+    await sink.close();
+  }
+}
+
+Future<void> deleteCanceledIncomingTempPath({
+  required bool isFolder,
+  required Future<Directory> Function() stagingDirectory,
+  required Future<File> Function() tempFile,
+  required void Function(Object error) onError,
+}) async {
+  try {
+    if (isFolder) {
+      final staging = await stagingDirectory();
+      if (await staging.exists()) {
+        await staging.delete(recursive: true);
+      }
+      return;
+    }
+    var file = await tempFile();
+    if (await file.exists()) {
+      file = await tempFile();
+      await file.delete();
+    }
+  } catch (error) {
+    onError(error);
+  }
+}

@@ -269,4 +269,116 @@ void main() {
       expect(writes, 1);
     },
   );
+
+  test(
+    'waiting bulk/mount producers pause when full without overflow and wake cleanly',
+    () async {
+      final firstGate = Completer<void>();
+      final writer = _RecordingStreamWriter()..blockFirst = firstGate;
+      var overflows = 0;
+      final queue = BoundedOutboundQueue.chat(
+        addStream: writer.addStream,
+        maxItems: 4,
+        maxBytes: 64,
+        waitMaxItems: 2,
+        waitMaxBytes: 16,
+        onOverflow: () => overflows++,
+      );
+
+      expect(
+        await queue.enqueueWhenSpaceAvailable(
+          () async => 'bulk-1',
+          byteLength: 8,
+          kind: OutboundPacketKind.file,
+        ),
+        isTrue,
+      );
+      expect(
+        await queue.enqueueWhenSpaceAvailable(
+          () async => 'bulk-2',
+          byteLength: 8,
+          kind: OutboundPacketKind.mount,
+        ),
+        isTrue,
+      );
+
+      var thirdAdmitted = false;
+      final third = queue
+          .enqueueWhenSpaceAvailable(
+            () async => 'bulk-3',
+            byteLength: 8,
+            kind: OutboundPacketKind.file,
+          )
+          .then((ok) {
+            thirdAdmitted = ok;
+            return ok;
+          });
+      await Future<void>.delayed(Duration.zero);
+      expect(thirdAdmitted, isFalse);
+      expect(overflows, 0);
+
+      // Control admission succeeds immediately even while writer is blocked
+      // and bulk waiters are paused.
+      expect(queue.enqueueControl('ctrl-1', byteLength: 4), isTrue);
+      expect(overflows, 0);
+
+      firstGate.complete();
+      expect(await third, isTrue);
+      await queue.closeAndDrain();
+      expect(overflows, 0);
+      expect(writer.sent, ['bulk-1', 'bulk-2', 'ctrl-1', 'bulk-3']);
+    },
+  );
+
+  test(
+    'abort and close immediately wake waiting producers with false',
+    () async {
+      final firstGate = Completer<void>();
+      final writer = _RecordingStreamWriter()..blockFirst = firstGate;
+      final queue = BoundedOutboundQueue.chat(
+        addStream: writer.addStream,
+        waitMaxItems: 1,
+        waitMaxBytes: 8,
+      );
+
+      expect(
+        await queue.enqueueWhenSpaceAvailable(
+          () async => 'bulk-1',
+          byteLength: 8,
+        ),
+        isTrue,
+      );
+      final waiting = queue.enqueueWhenSpaceAvailable(
+        () async => 'bulk-2',
+        byteLength: 8,
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      queue.abort();
+      expect(await waiting.timeout(const Duration(milliseconds: 100)), isFalse);
+      firstGate.complete();
+    },
+  );
+
+  test(
+    'size-scaled writer timeout grants large items extra time on slow links',
+    () async {
+      final writerDone = Completer<void>();
+      final queue = BoundedOutboundQueue.chat(
+        addStream: (stream) async {
+          await stream.single;
+          await Future<void>.delayed(const Duration(milliseconds: 80));
+          writerDone.complete();
+        },
+        writerTimeout: const Duration(milliseconds: 20),
+        // 1024 B/s -> 1024-byte item gets +1s headroom beyond the 20ms base.
+        minWriteBytesPerSecond: 1024,
+        maxWriterTimeout: const Duration(seconds: 2),
+      );
+
+      expect(await queue.add('large-on-slow-link', byteLength: 1024), isTrue);
+      expect(writerDone.isCompleted, isTrue);
+      await queue.closeAndDrain();
+    },
+  );
 }

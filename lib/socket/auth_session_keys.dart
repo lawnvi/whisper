@@ -1,9 +1,12 @@
 import 'dart:convert';
 import 'dart:ffi';
+import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart' as hashes;
 import 'package:cryptography/cryptography.dart';
 import 'package:sodium/sodium.dart' as sodium;
+import 'package:whisper/socket/auth_protocol.dart';
 
 @Native<Int32 Function(Pointer<Uint8>, Pointer<Uint8>, Pointer<Uint8>)>(
   symbol: 'crypto_scalarmult_curve25519',
@@ -208,4 +211,30 @@ final class AuthSessionKeys {
     }
     return SimplePublicKey(bytes, type: KeyPairType.x25519);
   }
+}
+
+String identityPublicKeyHash(String publicKeyBase64Url) {
+  final publicKey = decodeAuthBase64Url(publicKeyBase64Url, expectedLength: 32);
+  return base64Url
+      .encode(hashes.sha256.convert(publicKey).bytes)
+      .replaceAll('=', '');
+}
+
+Uint8List? decodeOptional32(String? value) =>
+    value == null ? null : decodeAuthBase64Url(value, expectedLength: 32);
+
+Uint8List secureAuthNonce() {
+  final random = Random.secure();
+  return Uint8List.fromList(List<int>.generate(32, (_) => random.nextInt(256)));
+}
+
+bool sameAuthBytes(List<int> first, List<int> second) {
+  if (first.length != second.length) {
+    return false;
+  }
+  var difference = 0;
+  for (var index = 0; index < first.length; index += 1) {
+    difference |= first[index] ^ second[index];
+  }
+  return difference == 0;
 }

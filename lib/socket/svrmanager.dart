@@ -7,8 +7,8 @@ import 'package:shelf/shelf.dart' as shelf;
 import 'package:shelf/shelf_io.dart' as shelf_io;
 import 'package:shelf_web_socket/shelf_web_socket.dart';
 import 'package:uuid/uuid.dart';
-import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:whisper/socket/backpressure_web_socket.dart';
 import 'package:whisper/debug/automation_hooks.dart' show DebugPairingRequests;
 import 'package:whisper/audio/audio_group_coordinator.dart';
 import 'package:whisper/audio/audio_share_coordinator.dart';
@@ -37,6 +37,7 @@ import 'package:whisper/socket/file_transfer_v3.dart';
 import 'package:whisper/socket/media_upgrade_proof.dart';
 import 'package:whisper/socket/outgoing_text_retry.dart';
 import 'package:whisper/socket/pairing_attempt_limiter.dart';
+import 'package:whisper/socket/outbound_frame_class.dart';
 import 'package:whisper/socket/pre_auth_byte_cap.dart';
 import 'package:whisper/socket/peer_connection.dart';
 import 'package:whisper/socket/peer_socket_session.dart';
@@ -431,7 +432,7 @@ class WsSvrManager {
       }
     },
     sendBytesToConnection: _peerConnections.sendToAwaitedIfCurrent,
-    enqueueBytesToConnection: _peerConnections.sendIfCurrent,
+    enqueueBytesToConnection: _peerConnections.sendToAwaitedIfCurrent,
     markPeerUnresponsive: _removeUnresponsivePeerIfCurrent,
     emitTransferUpdated: (snapshot) {
       // Copies made in the file manager go to the folder chosen there.
@@ -1089,7 +1090,6 @@ class WsSvrManager {
     session.attachTransport(
       subscription: subscription,
       addStream: sink.addStream,
-      add: sink.add,
       admissionLease: admissionLease,
       onOverflow: () {
         session.close();
@@ -1249,7 +1249,7 @@ class WsSvrManager {
         ..sender = sendFileBrowseControlTo
         ..sendFile = _sendCopiedFile
         ..sendFolder = _sendCopiedFolder
-        ..sendData = _sendFileBrowseData;
+        ..sendData = sendFileBrowseData;
       RemoteFilesClient.sender = sendFileBrowseControlTo;
       RemoteFilesClient.localPeerId = localPeerIdFor;
       RemoteFilesClient.sendFile = _sendCopiedFile;
@@ -1535,26 +1535,25 @@ class WsSvrManager {
           ? null
           : _acceptedSockets?.claim(connectionInfo);
       if (accepted != null) {
-        widenTransferBuffers(accepted);
+        tuneChatSocket(accepted);
         lease.bind(accepted);
       }
       final pendingUpgrade = Completer<void>();
       _pendingSocketAttachments.add(pendingUpgrade.future);
-      final chatHandler = webSocketHandler(
-        (WebSocketChannel webSocket, _) {
-          _trackIncomingSocketAttachment(
-            webSocket,
-            lease,
-            pendingUpgrade,
-            remoteHost,
-          );
-        },
-        allowedOrigins: const <String>[],
-        pingInterval: _serverPingInterval,
-      );
       late final shelf.Response response;
       try {
-        response = await chatHandler(request);
+        response = upgradeChatWebSocket(
+          request,
+          pingInterval: _serverPingInterval,
+          onConnection: (webSocket) {
+            _trackIncomingSocketAttachment(
+              webSocket,
+              lease,
+              pendingUpgrade,
+              remoteHost,
+            );
+          },
+        );
       } on shelf.HijackException {
         rethrow;
       } catch (_) {
@@ -2600,16 +2599,18 @@ class WsSvrManager {
     // 在此之前失败必须直接释放,否则该 key 会永久占用鉴权门。
     var authKeyBoundToSink = false;
     try {
-      channel = IOWebSocketChannel(
-        _connectOutgoingWebSocket(endpoint.chatUri, attempt),
+      final upgraded = await _connectOutgoingWebSocket(
+        endpoint.chatUri,
+        attempt,
+      );
+      channel = BackpressureWebSocketChannel(
+        upgraded.webSocket,
+        socket: upgraded.socket,
       );
       attempt.channel = channel;
       final connectedChannel = channel;
-      await connectedChannel.ready;
       attempt.isReady = true;
-      if (attempt.isCancelled) {
-        throw const OutgoingConnectionCancelled();
-      }
+      if (attempt.isCancelled) throw const OutgoingConnectionCancelled();
       final channelSink = connectedChannel.sink;
       _pendingOutgoingBySink[channelSink] = attempt;
       _outgoingAuthKeysBySink[channelSink] = authRequestKey;
@@ -2758,7 +2759,7 @@ class WsSvrManager {
     Object error,
   ) => _connectionExceptionResult(request, error);
 
-  Future<WebSocket> _connectOutgoingWebSocket(
+  Future<({WebSocket webSocket, Socket socket})> _connectOutgoingWebSocket(
     Uri webSocketUri,
     PendingOutgoingConnection attempt,
   ) async {
@@ -2813,10 +2814,10 @@ class WsSvrManager {
       throw const OutgoingConnectionCancelled();
     }
     setTcpNoDelay(socket);
-    widenTransferBuffers(socket);
-    final webSocket = cappedClientWebSocket(socket, () => attempt.session);
-    webSocket.pingInterval = _serverPingInterval;
-    return webSocket;
+    tuneChatSocket(socket);
+    final webSocket = cappedClientWebSocket(socket, () => attempt.session)
+      ..pingInterval = _serverPingInterval;
+    return (webSocket: webSocket, socket: socket);
   }
 
   void _cancelPendingOutgoingConnections() {
@@ -3366,47 +3367,45 @@ class WsSvrManager {
       return false;
     }
     if (rawAuth) {
-      if (buffered != null) {
-        return false;
-      }
-      return session.enqueueOutgoing(bytes, byteLength: bytes.length);
+      return buffered == null &&
+          await session.enqueueOutgoing(bytes, byteLength: bytes.length);
     }
     if (!session.isAuthenticated) {
       await _closeSocketSink(sink);
       return false;
     }
     final byteLength = bytes.length + _authenticatedFrameOverhead;
+    final cls = classifyOutboundFrame(bytes);
     if (buffered != null) {
       return session.enqueueAuthenticatedBuffer(
         buffered,
         byteLength: byteLength,
+        kind: cls.kind,
+        waitForSpace: cls.waitForSpace,
       );
     }
-    return session.enqueueAuthenticatedOutgoing(bytes, byteLength: byteLength);
+    return session.enqueueAuthenticatedOutgoing(
+      bytes,
+      byteLength: byteLength,
+      kind: cls.kind,
+      waitForSpace: cls.waitForSpace,
+    );
   }
 
-  Uint8List? _outgoingBytes(Object message) {
-    if (message is Uint8List) {
-      return message;
-    }
-    if (message is List<int>) {
-      return Uint8List.fromList(message);
-    }
-    if (message is String) {
-      return Uint8List.fromList(utf8.encode(message));
-    }
-    return null;
-  }
+  Uint8List? _outgoingBytes(Object message) => switch (message) {
+    Uint8List b => b,
+    List<int> b => Uint8List.fromList(b),
+    String s => Uint8List.fromList(utf8.encode(s)),
+    _ => null,
+  };
 
-  Uint8List _messageFrame(Uint8List payload) {
-    return WhisperFrameV3(
-      type: WhisperFrameType.message,
-      transferId: '',
-      offset: 0,
-      sequence: 0,
-      payload: payload,
-    ).encode();
-  }
+  Uint8List _messageFrame(Uint8List payload) => WhisperFrameV3(
+    type: WhisperFrameType.message,
+    transferId: '',
+    offset: 0,
+    sequence: 0,
+    payload: payload,
+  ).encode();
 
   Future<bool> _sendMessageData(
     MessageData message, {
@@ -5807,7 +5806,7 @@ class WsSvrManager {
 
   /// The bytes a mounted folder on [peerId] asked for, on the same
   /// connection as the session's other replies.
-  Future<bool> _sendFileBrowseData(
+  Future<bool> sendFileBrowseData(
     String peerId,
     String sessionId,
     int requestId,

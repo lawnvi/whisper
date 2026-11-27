@@ -31,21 +31,68 @@ void widenTransferBuffers(Socket socket) {
     return;
   }
   try {
-    for (final option in const [_soSndBuf, _soRcvBuf]) {
-      socket.setRawOption(
-        RawSocketOption.fromInt(_solSocket, option, _transferBufferBytes),
-      );
-    }
+    socket.setRawOption(
+      RawSocketOption.fromInt(_solSocket, _soSndBuf, _transferSendBufferBytes),
+    );
+    socket.setRawOption(
+      RawSocketOption.fromInt(
+        _solSocket,
+        _soRcvBuf,
+        _transferReceiveBufferBytes,
+      ),
+    );
   } on Object {
     // Best effort: the transfer still works, only slower.
   }
+}
+
+/// Caps unsent bytes queued inside the kernel send buffer on `/chat` sockets
+/// (macOS and Linux) so network-bottlenecked bulk traffic stays in the
+/// application scheduler where control and mount frames can overtake it.
+///
+/// Never call on media connections (`/audio`, `/input`, `/window`).
+void setTcpNotSentLowat(
+  Socket socket, {
+  int bytes = _defaultNotSentLowatBytes,
+}) {
+  final int? option;
+  if (Platform.isMacOS) {
+    option = _tcpNotSentLowatMac;
+  } else if (Platform.isLinux) {
+    option = _tcpNotSentLowatLinux;
+  } else {
+    option = null;
+  }
+  if (option == null) {
+    return;
+  }
+  try {
+    socket.setRawOption(RawSocketOption.fromInt(_ipprotoTcp, option, bytes));
+  } on Object {
+    // Best effort: older kernels or sockets that refuse still work normally.
+  }
+}
+
+/// Applies `/chat`-only transport tuning: wider Windows buffers for bulk
+/// transfer throughput plus `TCP_NOTSENT_LOWAT` on macOS/Linux to keep
+/// unsent bulk bytes in the application scheduler. Never call on media links.
+void tuneChatSocket(Socket socket) {
+  widenTransferBuffers(socket);
+  setTcpNotSentLowat(socket);
 }
 
 // Winsock's SOL_SOCKET, SO_SNDBUF and SO_RCVBUF.
 const _solSocket = 0xffff;
 const _soSndBuf = 0x1001;
 const _soRcvBuf = 0x1002;
-const _transferBufferBytes = 16 * 1024 * 1024;
+const _transferSendBufferBytes = 16 * 1024 * 1024;
+const _transferReceiveBufferBytes = 16 * 1024 * 1024;
+
+// IPPROTO_TCP and TCP_NOTSENT_LOWAT on macOS (Darwin) and Linux.
+const _ipprotoTcp = 6;
+const _tcpNotSentLowatMac = 0x201;
+const _tcpNotSentLowatLinux = 25;
+const _defaultNotSentLowatBytes = 256 * 1024;
 
 /// A listening socket whose accepted connections have TCP_NODELAY set, for
 /// [HttpServer.listenOn] (shelf's own `serve` gives no way to set it). Each

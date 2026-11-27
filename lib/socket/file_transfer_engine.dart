@@ -33,6 +33,7 @@ import 'package:whisper/socket/incoming_transfer_parts.dart';
 import 'package:whisper/socket/transfer_outcomes.dart';
 import 'package:whisper/socket/transfer_checksum_prefix.dart';
 import 'package:whisper/socket/outgoing_progress_hub.dart';
+import 'package:whisper/socket/outgoing_window_pump.dart';
 import 'package:whisper/socket/peer_transfer_runtime.dart';
 import 'package:whisper/socket/transfer_ack_watchdog.dart';
 import 'package:whisper/socket/transfer_pacer.dart';
@@ -67,7 +68,7 @@ class FileTransferEngine {
       Object bytes,
     )
     sendBytesToConnection,
-    bool Function(TransferConnectionBinding connection, Object bytes)?
+    FutureOr<bool> Function(TransferConnectionBinding connection, Object bytes)?
     enqueueBytesToConnection,
     FutureOr<bool> Function(TransferConnectionBinding connection)?
     markPeerUnresponsive,
@@ -173,8 +174,18 @@ class FileTransferEngine {
     Object bytes,
   )
   _sendBytesToConnection;
-  final bool Function(TransferConnectionBinding connection, Object bytes)?
+  final FutureOr<bool> Function(
+    TransferConnectionBinding connection,
+    Object bytes,
+  )?
   _enqueueBytesToConnection;
+  late final OutgoingWindowPump _outgoingWindowPump = OutgoingWindowPump(
+    (work) => _sendFileTransferV3WindowSafely(
+      work.transfer,
+      work.message,
+      offset: work.offset,
+    ),
+  );
   final bool _ownsAckWatchdog;
   TransferAckWatchdog _ackWatchdog;
   final TransferTimeoutRetryTracker _timeoutRetries;
@@ -1386,14 +1397,14 @@ class FileTransferEngine {
           throw const WireInputRejected(WireInputReason.transferFrameMismatch);
         }
         final database = _database();
-        final draft = _incomingTransferDraft(message, metadata);
+        final draft = incomingTransferDraft(message, metadata);
         FileTransferAdmissionResult? claimAdmission;
         late final WireMessageReplayClaim replay;
         try {
           replay = await _wireMessageReplayGuard.claim(
             message,
             fetchExisting: database.fetchMessagesByUuid,
-            isDuplicate: _matchesIncomingFileOffer,
+            isDuplicate: matchesIncomingFileOffer,
             persist: (incoming) async {
               requireCurrent();
               final result = await database.admitFileTransfer(
@@ -1571,7 +1582,10 @@ class FileTransferEngine {
 
   /// 原 svrmanager `_handlePeerDisconnected` 的 transfer 清理段:
   /// 标记该 peer 的传输等待重连,并清空其运行时队列。
+  Future<void> waitUntilOutgoingIdle() => _outgoingWindowPump.waitUntilIdle();
+
   Future<void> handlePeerDisconnected(String peerId) async {
+    _outgoingWindowPump.cancelPeer(peerId);
     _timeoutRetries.clearPeer(peerId);
     await _markPeerTransfersWaitingReconnect(peerId);
     _transferRuntime.clearPeer(peerId);
@@ -1619,6 +1633,7 @@ class FileTransferEngine {
       return;
     }
     _blockedOutgoingPeers.add(peerId);
+    _outgoingWindowPump.cancelPeer(peerId);
     _timeoutRetries.clearPeer(peerId);
     _outgoingIntentEpochs[peerId] = (_outgoingIntentEpochs[peerId] ?? 0) + 1;
     final canceled = await _sendFileLock.synchronized(
@@ -1629,7 +1644,8 @@ class FileTransferEngine {
       ),
     );
     for (final transfer in canceled) {
-      _ackWatchdog.cancel(transfer.transferId);
+      _outgoingWindowPump.cancel(transfer.transferId);
+    _ackWatchdog.cancel(transfer.transferId);
       _outgoingWindowEndOffsets.remove(transfer.transferId);
       _outgoingProgress.untrack(transfer.transferId);
       _outgoingTransferSequences.remove(transfer.transferId);
@@ -1645,16 +1661,13 @@ class FileTransferEngine {
     }
   }
 
-  void allowOutgoingTransfersForPeer(String peerId) {
-    _blockedOutgoingPeers.remove(peerId);
-  }
-
-  bool _matchesIncomingFileOffer(MessageData persisted, MessageData incoming) =>
-      matchesIncomingFileOffer(persisted, incoming);
+  void allowOutgoingTransfersForPeer(String peerId) =>
+      _blockedOutgoingPeers.remove(peerId);
 
   /// 原 svrmanager `closeGracefully` 中的 transfer 清理段:
   /// 标记可恢复传输等待重连,并冲刷/关闭全部续传句柄。
   Future<void> closeAll({bool persistRecoverable = true}) async {
+    _outgoingWindowPump.clear();
     _timeoutRetries.clearAll();
     _ackWatchdog.close();
     if (persistRecoverable) {
@@ -1874,11 +1887,6 @@ class FileTransferEngine {
       return false;
     }
   }
-
-  FileTransferData _incomingTransferDraft(
-    MessageData message,
-    FileTransferV3Metadata metadata,
-  ) => incomingTransferDraft(message, metadata);
 
   Future<void> _sendFileOfferError(
     MessageData message,
@@ -2300,6 +2308,7 @@ class FileTransferEngine {
       }
       throw const WireInputRejected(WireInputReason.transferOffsetInvalid);
     }
+    _outgoingWindowPump.cancel(transfer.transferId);
     _ackWatchdog.cancel(transfer.transferId);
     final message = await _database().fetchAssociatedFileTransferMessage(
       transfer,
@@ -2371,7 +2380,8 @@ class FileTransferEngine {
       }
       requireCurrent();
       if (sourceProof != control.resumeProofSha256) {
-        _ackWatchdog.cancel(transfer.transferId);
+        _outgoingWindowPump.cancel(transfer.transferId);
+    _ackWatchdog.cancel(transfer.transferId);
         _outgoingWindowEndOffsets.remove(transfer.transferId);
         _outgoingProgress.untrack(transfer.transferId);
         _outgoingTransferSequences[transfer.transferId] = 0;
@@ -2431,13 +2441,18 @@ class FileTransferEngine {
       await _sendOutgoingFileVerification(updated, message);
       return;
     }
-    await _sendFileTransferV3WindowSafely(updated, message, offset: offset);
+    _outgoingWindowPump.schedule((
+      transfer: updated,
+      message: message,
+      offset: offset,
+    ));
   }
 
   Future<void> _failOutgoingFileTransferV3(
     FileTransferData transfer,
     FileTransferFailureReason failureReason,
   ) async {
+    _outgoingWindowPump.cancel(transfer.transferId);
     _ackWatchdog.cancel(transfer.transferId);
     await _updateTransfer(
       transfer.transferId,
@@ -3376,11 +3391,21 @@ class FileTransferEngine {
     if (message == null) {
       return;
     }
-    await _sendFileTransferV3WindowSafely(
-      updated,
-      message,
+    final sentEnd = _outgoingWindowEndOffsets[updated.transferId] ?? durableOffset;
+    if (sentEnd > durableOffset) {
+      _armOutgoingAckWatchdog(
+        transfer: updated,
+        message: message,
+        connection: connection,
+        durableOffset: durableOffset,
+        sentEnd: sentEnd,
+      );
+    }
+    _outgoingWindowPump.schedule((
+      transfer: updated,
+      message: message,
       offset: durableOffset,
-    );
+    ));
   }
 
   Future<void> _handleFileTransferV3Verify(
@@ -3414,6 +3439,7 @@ class FileTransferEngine {
     connection ??=
         _outgoingConnectionBindings[transfer.transferId] ??
         _operationConnectionBindings[transfer.transferId];
+    _outgoingWindowPump.cancel(transfer.transferId);
     _ackWatchdog.cancel(transfer.transferId);
     if (clearTimeoutRetry) {
       _timeoutRetries.clear(transfer.transferId);
@@ -3491,7 +3517,11 @@ class FileTransferEngine {
         continue;
       }
       _outgoingConnectionBindings[transferId] = connection;
-      await _sendFileTransferV3WindowSafely(updated, message, offset: offset);
+      _outgoingWindowPump.schedule((
+        transfer: updated,
+        message: message,
+        offset: offset,
+      ));
       return;
     }
   }
@@ -4634,44 +4664,23 @@ class FileTransferEngine {
   Future<void> _closeReceivingTransferFile(
     String transferId, {
     bool flush = false,
-  }) async {
-    final writer = _receivingTransferWritersV3.remove(transferId);
+  }) {
     _incomingAckClock.forget(transferId);
-    final writePipeline = _receivingWritePipelines.remove(transferId);
-    if (writer != null) {
-      try {
-        await writePipeline?.drain();
-        if (flush) {
-          await writer.flush();
-        }
-      } finally {
-        await writer.close();
-      }
-    }
-    final sink = _receivingTransferSinks.remove(transferId);
-    if (sink != null) {
-      if (flush) {
-        await sink.flush();
-      }
-      await sink.close();
-    }
+    return closeReceivingTransferHandles(
+      writer: _receivingTransferWritersV3.remove(transferId),
+      writePipeline: _receivingWritePipelines.remove(transferId),
+      sink: _receivingTransferSinks.remove(transferId),
+      flush: flush,
+    );
   }
 
   Future<void> _closeAllReceivingTransferFiles({bool flush = false}) async {
-    final transferIds = <String>{
+    for (final transferId in <String>{
       ..._receivingTransferWritersV3.keys,
       ..._receivingWritePipelines.keys,
-    };
-    for (final transferId in transferIds) {
+      ..._receivingTransferSinks.keys,
+    }) {
       await _closeReceivingTransferFile(transferId, flush: flush);
-    }
-    final sinks = _receivingTransferSinks.values.toList(growable: false);
-    _receivingTransferSinks.clear();
-    for (final sink in sinks) {
-      if (flush) {
-        await sink.flush();
-      }
-      await sink.close();
     }
   }
 
@@ -4714,32 +4723,18 @@ class FileTransferEngine {
     }
   }
 
-  Future<void> _deleteCanceledIncomingTempFile(
-    FileTransferData transfer,
-  ) async {
-    if (transfer.tempPath.isEmpty) {
-      return;
-    }
-    try {
-      if (_isFolderTransfer(transfer)) {
-        final staging = await _validatedIncomingStagingDirectory(transfer);
-        if (await staging.exists()) {
-          await staging.delete(recursive: true);
-        }
-        return;
-      }
-      var tempFile = await _validatedIncomingTempFile(transfer);
-      if (await tempFile.exists()) {
-        tempFile = await _validatedIncomingTempFile(transfer);
-        await tempFile.delete();
-      }
-    } catch (error) {
-      _logFailure(
+  Future<void> _deleteCanceledIncomingTempFile(FileTransferData transfer) {
+    if (transfer.tempPath.isEmpty) return Future<void>.value();
+    return deleteCanceledIncomingTempPath(
+      isFolder: _isFolderTransfer(transfer),
+      stagingDirectory: () => _validatedIncomingStagingDirectory(transfer),
+      tempFile: () => _validatedIncomingTempFile(transfer),
+      onError: (error) => _logFailure(
         FileTransferDiagnosticKind.temporaryFileCleanupFailed,
         error,
         direction: FileTransferDirection.incoming,
-      );
-    }
+      ),
+    );
   }
 
   Future<void> _closeResumableHandles() async {

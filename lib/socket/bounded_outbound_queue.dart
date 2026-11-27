@@ -4,6 +4,7 @@ import 'dart:collection';
 enum OutboundPacketKind {
   chat,
   control,
+  mount,
   file,
   audio,
   mouseMove,
@@ -29,12 +30,24 @@ final class BoundedOutboundQueue {
     required _OutboundPolicy policy,
     required this.maxItems,
     required this.maxBytes,
+    int? waitMaxItems,
+    int? waitMaxBytes,
     required this.writerTimeout,
+    int? minWriteBytesPerSecond,
+    Duration? maxWriterTimeout,
     this.onOverflow,
   }) : _addStream = addStream,
        _add = add,
-       _policy = policy {
-    if (maxItems <= 0 || maxBytes <= 0 || writerTimeout <= Duration.zero) {
+       _policy = policy,
+       _waitMaxItems = waitMaxItems ?? maxItems,
+       _waitMaxBytes = waitMaxBytes ?? maxBytes,
+       _minWriteBytesPerSecond = minWriteBytesPerSecond,
+       _maxWriterTimeout = maxWriterTimeout ?? writerTimeout {
+    if (maxItems <= 0 ||
+        maxBytes <= 0 ||
+        _waitMaxItems <= 0 ||
+        _waitMaxBytes <= 0 ||
+        writerTimeout <= Duration.zero) {
       throw ArgumentError('outbound queue limits must be positive');
     }
   }
@@ -42,9 +55,13 @@ final class BoundedOutboundQueue {
   factory BoundedOutboundQueue.chat({
     required Future<void> Function(Stream<Object>) addStream,
     void Function(Object)? add,
-    int maxItems = 64,
-    int maxBytes = 8 * 1024 * 1024,
-    Duration writerTimeout = const Duration(seconds: 15),
+    int maxItems = 512,
+    int maxBytes = 32 * 1024 * 1024,
+    int waitMaxItems = 16,
+    int waitMaxBytes = 8 * 1024 * 1024,
+    Duration writerTimeout = const Duration(seconds: 30),
+    int? minWriteBytesPerSecond,
+    Duration maxWriterTimeout = const Duration(seconds: 120),
     void Function()? onOverflow,
   }) => BoundedOutboundQueue._(
     addStream: addStream,
@@ -52,7 +69,11 @@ final class BoundedOutboundQueue {
     policy: _OutboundPolicy.failClosed,
     maxItems: maxItems,
     maxBytes: maxBytes,
+    waitMaxItems: waitMaxItems,
+    waitMaxBytes: waitMaxBytes,
     writerTimeout: writerTimeout,
+    minWriteBytesPerSecond: minWriteBytesPerSecond,
+    maxWriterTimeout: maxWriterTimeout,
     onOverflow: onOverflow,
   );
 
@@ -118,9 +139,14 @@ final class BoundedOutboundQueue {
   final _OutboundPolicy _policy;
   final int maxItems;
   final int maxBytes;
+  final int _waitMaxItems;
+  final int _waitMaxBytes;
   final Duration writerTimeout;
+  final int? _minWriteBytesPerSecond;
+  final Duration _maxWriterTimeout;
   final void Function()? onOverflow;
   final Queue<_OutboundItem> _waiting = Queue<_OutboundItem>();
+  final Queue<Completer<bool>> _spaceWaiters = Queue<Completer<bool>>();
 
   _OutboundItem? _active;
   Future<void>? _pumpFuture;
@@ -131,12 +157,126 @@ final class BoundedOutboundQueue {
   int _writerAttempt = 0;
   int _pendingItems = 0;
   int _pendingBytes = 0;
+  int _pendingWaitItems = 0;
+  int _pendingWaitBytes = 0;
   int _droppedItems = 0;
 
   int get pendingItems => _pendingItems;
   int get pendingBytes => _pendingBytes;
   int get droppedItems => _droppedItems;
   bool get isClosed => !_accepting;
+
+  /// Enqueues a control frame and resolves immediately upon admission without
+  /// waiting for the underlying socket write to complete, so inbound receive
+  /// handlers never deadlock waiting on outbound TCP backpressure.
+  bool enqueueControl(
+    Object value, {
+    required int byteLength,
+    OutboundPacketKind kind = OutboundPacketKind.control,
+  }) =>
+      enqueueControlLazy(() async => value, byteLength: byteLength, kind: kind);
+
+  /// Lazy variant of [enqueueControl]: [produce] runs only when dequeued for
+  /// writing so encryption sequence numbers match actual wire order.
+  bool enqueueControlLazy(
+    Future<Object> Function() produce, {
+    required int byteLength,
+    OutboundPacketKind kind = OutboundPacketKind.control,
+  }) {
+    if (byteLength < 0) {
+      throw ArgumentError.value(byteLength, 'byteLength');
+    }
+    if (!_accepting || _terminal) {
+      return false;
+    }
+    if (_wouldOverflowControl(byteLength)) {
+      _accepting = false;
+      _failSpaceWaiters();
+      _signalOverflow();
+      return false;
+    }
+    final item = _OutboundItem(
+      produce: produce,
+      byteLength: byteLength,
+      kind: kind,
+    );
+    _waiting.addLast(item);
+    _pendingItems += 1;
+    _pendingBytes += byteLength;
+    _ensurePump();
+    return true;
+  }
+
+  /// Waits until bulk/mount capacity is available, then enqueues [produce]
+  /// lazily and returns `true` upon admission (or `false` if the queue closes
+  /// while waiting). Never fails closed on capacity limits.
+  Future<bool> enqueueWhenSpaceAvailable(
+    Future<Object> Function() produce, {
+    required int byteLength,
+    OutboundPacketKind kind = OutboundPacketKind.file,
+  }) async {
+    if (byteLength < 0) {
+      throw ArgumentError.value(byteLength, 'byteLength');
+    }
+    while (true) {
+      if (!_accepting || _terminal) {
+        return false;
+      }
+      if (_hasWaitSpace(byteLength)) {
+        final item = _OutboundItem(
+          produce: produce,
+          byteLength: byteLength,
+          kind: kind,
+          countsTowardWaitCap: true,
+        );
+        _waiting.addLast(item);
+        _pendingItems += 1;
+        _pendingBytes += byteLength;
+        _pendingWaitItems += 1;
+        _pendingWaitBytes += byteLength;
+        _ensurePump();
+        return true;
+      }
+      final waiter = Completer<bool>();
+      _spaceWaiters.addLast(waiter);
+      final resumed = await waiter.future;
+      if (!resumed) {
+        return false;
+      }
+    }
+  }
+
+  bool _hasWaitSpace(int byteLength) {
+    if (_pendingWaitItems == 0) {
+      return true;
+    }
+    return _pendingWaitItems < _waitMaxItems &&
+        byteLength <= _waitMaxBytes - _pendingWaitBytes;
+  }
+
+  bool _wouldOverflowControl(int byteLength) {
+    final controlItems = _pendingItems - _pendingWaitItems;
+    final controlBytes = _pendingBytes - _pendingWaitBytes;
+    return controlItems >= maxItems || byteLength > maxBytes - controlBytes;
+  }
+
+  void _wakeSpaceWaiters() {
+    while (_spaceWaiters.isNotEmpty && _accepting && !_terminal) {
+      final waiter = _spaceWaiters.removeFirst();
+      if (!waiter.isCompleted) {
+        waiter.complete(true);
+      }
+    }
+  }
+
+  void _failSpaceWaiters() {
+    while (_spaceWaiters.isNotEmpty) {
+      final waiter = _spaceWaiters.removeFirst();
+      if (!waiter.isCompleted) {
+        waiter.complete(false);
+      }
+    }
+  }
 
   Future<bool> add(
     Object value, {
@@ -326,13 +466,23 @@ final class BoundedOutboundQueue {
     });
   }
 
+  Duration _deadlineFor(int byteLength) {
+    final minRate = _minWriteBytesPerSecond;
+    if (minRate == null || minRate <= 0) {
+      return writerTimeout;
+    }
+    final extraSeconds = (byteLength / minRate).ceil();
+    final scaled = writerTimeout + Duration(seconds: extraSeconds);
+    return scaled > _maxWriterTimeout ? _maxWriterTimeout : scaled;
+  }
+
   Future<void> _pump() async {
     while (_waiting.isNotEmpty && !_terminal) {
       final item = _waiting.removeFirst();
       _active = item;
       final attempt = ++_writerAttempt;
       try {
-        await _write(item).timeout(writerTimeout);
+        await _write(item).timeout(_deadlineFor(item.byteLength));
         if (!_isCurrentWriter(item, attempt)) {
           return;
         }
@@ -367,6 +517,11 @@ final class BoundedOutboundQueue {
     _active = null;
     _pendingItems -= 1;
     _pendingBytes -= item.byteLength;
+    if (item.countsTowardWaitCap) {
+      _pendingWaitItems -= 1;
+      _pendingWaitBytes -= item.byteLength;
+      _wakeSpaceWaiters();
+    }
     if (!item.completion.isCompleted) {
       item.completion.complete(result);
     }
@@ -381,16 +536,22 @@ final class BoundedOutboundQueue {
       final waiting = _waiting.removeFirst();
       _pendingItems -= 1;
       _pendingBytes -= waiting.byteLength;
+      if (waiting.countsTowardWaitCap) {
+        _pendingWaitItems -= 1;
+        _pendingWaitBytes -= waiting.byteLength;
+      }
       if (!waiting.completion.isCompleted) {
         waiting.completion.complete(OutboundQueueResult.closed);
       }
     }
+    _failSpaceWaiters();
     _completeDrain();
     _signalOverflow();
   }
 
   void abort() {
     if (_terminal && _pendingItems == 0) {
+      _failSpaceWaiters();
       return;
     }
     _accepting = false;
@@ -404,15 +565,21 @@ final class BoundedOutboundQueue {
       final waiting = _waiting.removeFirst();
       _pendingItems -= 1;
       _pendingBytes -= waiting.byteLength;
+      if (waiting.countsTowardWaitCap) {
+        _pendingWaitItems -= 1;
+        _pendingWaitBytes -= waiting.byteLength;
+      }
       if (!waiting.completion.isCompleted) {
         waiting.completion.complete(OutboundQueueResult.closed);
       }
     }
+    _failSpaceWaiters();
     _completeDrain();
   }
 
   Future<void> closeAndDrain() {
     _accepting = false;
+    _failSpaceWaiters();
     if (_pendingItems == 0) {
       return Future<void>.value();
     }
@@ -432,11 +599,13 @@ final class _OutboundItem {
     required this.produce,
     required this.byteLength,
     required this.kind,
+    this.countsTowardWaitCap = false,
   });
 
   final Future<Object> Function() produce;
   final int byteLength;
   final OutboundPacketKind kind;
+  final bool countsTowardWaitCap;
   final Completer<OutboundQueueResult> completion =
       Completer<OutboundQueueResult>();
 }

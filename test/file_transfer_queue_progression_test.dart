@@ -109,6 +109,7 @@ void main() {
         ),
         requireCurrent: () {},
       );
+      await engine.waitUntilOutgoingIdle();
       final firstWindow = watchdog.currentWindow(_firstId)!;
       expect(firstWindow.sentEnd, fileTransferV3WindowSize);
 
@@ -143,6 +144,7 @@ void main() {
         ),
         requireCurrent: () {},
       );
+      await engine.waitUntilOutgoingIdle();
       expect(watchdog.currentWindow(_firstId)?.attempt, 1);
 
       await engine.handleFrame(
@@ -157,6 +159,7 @@ void main() {
         ),
         requireCurrent: () {},
       );
+      await engine.waitUntilOutgoingIdle();
       expect(watchdog.currentWindow(_firstId)?.sentEnd, size);
       expect(
         (await database.fetchFileTransfer(_firstId))?.committedBytes,
@@ -248,6 +251,7 @@ void main() {
         ),
         requireCurrent: () {},
       );
+      await engine.waitUntilOutgoingIdle();
 
       final data = _dataFrames(sent, _firstId).toList(growable: false);
       expect(data, hasLength(8));
@@ -278,10 +282,12 @@ void main() {
         _control(FileTransferV3Action.ready, _firstId, size: 4, offset: 0),
       );
       await engine.handleFrame(_binding, ready, requireCurrent: () {});
+      await engine.waitUntilOutgoingIdle();
       final window = watchdog.currentWindow(_firstId)!;
       final dataBeforeDuplicate = _dataFrames(sent, _firstId).toList();
 
       await engine.handleFrame(_binding, ready, requireCurrent: () {});
+      await engine.waitUntilOutgoingIdle();
 
       expect(watchdog.currentWindow(_firstId), same(window));
       expect(_dataFrames(sent, _firstId), dataBeforeDuplicate);
@@ -311,6 +317,7 @@ void main() {
         ),
         requireCurrent: () {},
       );
+      await engine.waitUntilOutgoingIdle();
       await engine.handleFrame(
         _binding,
         _controlFrame(
@@ -318,6 +325,7 @@ void main() {
         ),
         requireCurrent: () {},
       );
+      await engine.waitUntilOutgoingIdle();
       final window = watchdog.currentWindow(_firstId)!;
       final dataBeforeDelayedReady = _dataFrames(sent, _firstId).toList();
 
@@ -358,6 +366,7 @@ void main() {
         ),
         requireCurrent: () {},
       );
+      await engine.waitUntilOutgoingIdle();
       final window = watchdog.currentWindow(_firstId)!;
 
       await expectLater(
@@ -411,6 +420,7 @@ void main() {
       ),
       requireCurrent: () {},
     );
+    await engine.waitUntilOutgoingIdle();
 
     // Initial window + 2 watchdog retransmits, then enters waitingReconnect
     // instead of failing immediately or dropping the peer.
@@ -612,12 +622,14 @@ void main() {
           requireCurrent: () {},
         );
       }
+      await engine.waitUntilOutgoingIdle();
       expect(_dataFrames(sent, _firstId), hasLength(1));
       expect(_dataFrames(sent, _secondId), isEmpty);
       expect(_dataFrames(sent, _thirdId), isEmpty);
 
       await engine.cancelTransfer(_secondId);
       await engine.cancelTransfer(_firstId);
+      await engine.waitUntilOutgoingIdle();
 
       expect(_dataFrames(sent, _secondId), isEmpty);
       expect(_dataFrames(sent, _thirdId), hasLength(1));
@@ -681,6 +693,7 @@ void main() {
           _controlFrame(terminal),
           requireCurrent: () {},
         );
+        await engine.waitUntilOutgoingIdle();
 
         expect(_dataFrames(sent, _secondId), hasLength(1));
         expect(
@@ -814,9 +827,11 @@ void main() {
         ),
         requireCurrent: () {},
       );
+      await engine.waitUntilOutgoingIdle();
 
       expect(ackResult, isNotNull);
       expect(await ackResult!.timeout(const Duration(seconds: 1)), isNull);
+      await engine.waitUntilOutgoingIdle();
       final successorData = _dataFrames(sent, _secondId).toList();
       expect(successorData.map((frame) => frame.offset), <int>[
         for (
@@ -883,6 +898,7 @@ void main() {
       );
       releaseRead.complete();
       await firstReady;
+      await engine.waitUntilOutgoingIdle();
 
       expect(
         (await database.fetchFileTransfer(_firstId))?.state,
@@ -942,6 +958,7 @@ void main() {
         );
         releaseSend.complete();
         await firstReady;
+        await engine.waitUntilOutgoingIdle();
 
         expect(
           (await database.fetchFileTransfer(_firstId))?.state,
@@ -1317,6 +1334,7 @@ void main() {
         ),
         requireCurrent: () {},
       );
+      await engine.waitUntilOutgoingIdle();
       await engine.handleFrame(
         _binding,
         _controlFrame(
@@ -1331,6 +1349,7 @@ void main() {
         ),
         requireCurrent: () {},
       );
+      await engine.waitUntilOutgoingIdle();
       final dataBeforeDisconnect = sent
           .where((frame) => frame.type == WhisperFrameType.fileData)
           .length;
@@ -1372,6 +1391,7 @@ void main() {
         _controlFrame(resume),
         requireCurrent: () {},
       );
+      await engine.waitUntilOutgoingIdle();
 
       expect(_dataFrames(sent, _firstId).first.offset, 2);
     },
@@ -1539,6 +1559,7 @@ void main() {
       ),
       requireCurrent: () {},
     );
+    await engine.waitUntilOutgoingIdle();
     expect(scheduler.activeTimerCount, 1);
 
     await engine.closeAll(persistRecoverable: false);
@@ -1589,6 +1610,7 @@ void main() {
       ),
       requireCurrent: () {},
     );
+    await engine.waitUntilOutgoingIdle();
 
     expect(_dataFrames(sent, _secondId), isEmpty);
     expect(_dataFrames(sent, _thirdId), isEmpty);
