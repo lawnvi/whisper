@@ -69,20 +69,25 @@ final class DatagramEndpoint {
   @visibleForTesting
   void loseSocket() => _socket.close();
 
-  /// Binds on all IPv4 addresses, on [port] when it is free, else on any,
-  /// or not at all when [exact] (the other end expects that port).
+  /// Binds on all IPv4 addresses, on [port] when it is free (or one of the
+  /// [tries] - 1 after it), else on any, or not at all when [exact] (the
+  /// other end expects that port).
   static Future<DatagramEndpoint> bind({
     int port = 0,
+    int tries = 1,
     bool exact = false,
     @visibleForTesting Duration rebindDelay = _rebindDelay,
   }) async {
-    RawDatagramSocket socket;
-    try {
-      socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, port);
-    } on SocketException {
-      if (port == 0 || exact) rethrow;
-      socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
+    RawDatagramSocket? socket;
+    final end = math.min(port + tries, 65536);
+    for (var next = port; socket == null && next > 0 && next < end; next++) {
+      try {
+        socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, next);
+      } on SocketException {
+        if (exact) rethrow;
+      }
     }
+    socket ??= await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
     _markInteractive(socket);
     return DatagramEndpoint._(socket, rebindDelay: rebindDelay);
   }

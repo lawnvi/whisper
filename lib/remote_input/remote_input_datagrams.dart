@@ -4,6 +4,7 @@ import 'package:whisper/socket/datagram_endpoint.dart';
 import 'package:whisper/socket/link_delay.dart';
 import 'package:whisper/socket/media_channel_dial.dart';
 import 'package:whisper/socket/media_datagrams.dart';
+import 'package:whisper/socket/whisper_ports.dart';
 
 /// The UDP side of keyboard and mouse sharing (`remote_input_lane.dart`):
 /// one socket for the whole app, opened when sharing can start, and the
@@ -15,10 +16,14 @@ abstract final class RemoteInputDatagrams {
 
   static DatagramEndpoint? get endpoint => _endpoint;
 
-  /// Opens the socket once; failing leaves the WebSocket only.
-  static Future<void> open() => _opening ??= () async {
+  /// Opens the socket once, on the number of [mainPort] when that is free
+  /// (`WhisperPorts`); failing leaves the WebSocket only.
+  static Future<void> open({int mainPort = 0}) => _opening ??= () async {
     try {
-      _endpoint = await DatagramEndpoint.bind();
+      _endpoint = await DatagramEndpoint.bind(
+        port: WhisperPorts.inputDatagrams(mainPort),
+        tries: WhisperPorts.tries,
+      );
     } on Object {
       _endpoint = null;
     }

@@ -21,6 +21,7 @@ import 'package:whisper/audio/audio_protocol.dart';
 import 'package:whisper/audio/audio_share_diagnostics.dart';
 import 'package:whisper/audio/audio_share_manager.dart';
 import 'package:whisper/helper/privacy_log.dart';
+import 'package:whisper/helper/local.dart';
 import 'package:whisper/socket/aead_engine.dart';
 import 'package:whisper/socket/bounded_binary_websocket_session.dart';
 import 'package:whisper/socket/datagram_endpoint.dart';
@@ -30,6 +31,7 @@ import 'package:whisper/socket/media_upgrade_server.dart';
 import 'package:whisper/socket/no_delay_socket.dart';
 import 'package:whisper/socket/packet_byte_transport.dart';
 import 'package:whisper/socket/session_upgrade_token_registry.dart';
+import 'package:whisper/socket/whisper_ports.dart';
 
 part 'audio_media_isolate_messages.dart';
 part 'audio_media_native.dart';
@@ -76,7 +78,12 @@ class DesktopAudioGroupMedia implements AudioGroupMedia {
       }
       // Unpacks libopus where the isolate opens it (Windows, Linux).
       await OpusAudioCodec.warmUp();
-      final client = await _IsolateClient.spawn(entry, this);
+      final main = await LocalSetting().port().catchError((Object _) => 0);
+      final client = await _IsolateClient.spawn(
+        entry,
+        this,
+        WhisperPorts.audioMedia(main),
+      );
       _client = client;
       _manager.remoteChannels = client;
       return client;
@@ -378,6 +385,7 @@ class _IsolateClient implements AudioRemoteMediaChannels {
   static Future<_IsolateClient> spawn(
     AudioNativeEntryPoints entry,
     DesktopAudioGroupMedia media,
+    int mediaPort,
   ) async {
     final receive = ReceivePort('audio');
     final ready = Completer<SendPort>();
@@ -395,7 +403,7 @@ class _IsolateClient implements AudioRemoteMediaChannels {
     try {
       isolate = await Isolate.spawn(
         _audioIsolateMain,
-        _IsolateStart(receive.sendPort, entry),
+        _IsolateStart(receive.sendPort, entry, mediaPort),
         debugName: 'audio',
         errorsAreFatal: false,
       );
@@ -585,7 +593,8 @@ Future<void> _audioIsolateMain(_IsolateStart start) async {
   } catch (_) {
     // Pure-Dart fallback still works.
   }
-  final runtime = _AudioRuntime(start.main, _NativeAudio(start.entry));
+  final runtime = _AudioRuntime(start.main, _NativeAudio(start.entry))
+    ..mediaPort = start.mediaPort;
   final receive = ReceivePort();
   start.main.send(receive.sendPort);
   receive.listen(runtime.handle);
@@ -600,6 +609,7 @@ class _AudioRuntime {
   final SendPort _main;
   final _NativeAudio _native;
   final AudioShareDiagnostics _diagnostics;
+  int mediaPort = 0;
   final Map<int, AudioGroupPacketTransport> _links =
       <int, AudioGroupPacketTransport>{};
   late final AudioFanoutTransport _fanout = AudioFanoutTransport(

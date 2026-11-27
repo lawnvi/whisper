@@ -213,7 +213,12 @@ Future<void> main(List<String> arguments) async {
   if (isDesktop()) {
     unawaited(CastReceiverManager.shared.initialize());
     // Keyboard and mouse beside their WebSocket, on weak Wi-Fi.
-    unawaited(RemoteInputDatagrams.open());
+    unawaited(
+      LocalSetting().port().then(
+        (port) => RemoteInputDatagrams.open(mainPort: port),
+        onError: (Object _) => RemoteInputDatagrams.open(),
+      ),
+    );
     // Windows sent here from another device open in windows of their own.
     DesktopOfferOpener.shared.start();
     // Streamed windows' sound is decoded in the stream isolate, which opens

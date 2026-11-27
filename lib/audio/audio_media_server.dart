@@ -63,9 +63,7 @@ class _MediaServer {
   _MediaServer._(this._runtime, this._listening, this._server);
 
   static Future<_MediaServer> bind(_AudioRuntime runtime) async {
-    final listening = await ServerSocket.bind('0.0.0.0', 0);
-    // Sound by UDP comes to the same port number (`audio_group_lane.dart`).
-    await AudioGroupDatagrams.listenAt(listening.port);
+    final listening = await _listen(runtime.mediaPort);
     final server = HttpServer.listenOn(NoDelayServerSocket(listening));
     server.idleTimeout = const Duration(seconds: 10);
     final media = _MediaServer._(runtime, listening, server);
@@ -74,6 +72,25 @@ class _MediaServer {
       onError: (Object _) {},
     );
     return media;
+  }
+
+  /// TCP, and UDP for sound by UDP (`audio_group_lane.dart`), on one
+  /// number: [fixed] (`WhisperPorts.audioMedia`) or one of the next few,
+  /// else any free one, with UDP beside it if that number is free too.
+  static Future<ServerSocket> _listen(int fixed) async {
+    for (final port in WhisperPorts.candidates(fixed)) {
+      final ServerSocket listening;
+      try {
+        listening = await ServerSocket.bind('0.0.0.0', port);
+      } on SocketException {
+        continue;
+      }
+      if (await AudioGroupDatagrams.listenAt(port)) return listening;
+      await listening.close();
+    }
+    final listening = await ServerSocket.bind('0.0.0.0', 0);
+    await AudioGroupDatagrams.listenAt(listening.port);
+    return listening;
   }
 
   final _AudioRuntime _runtime;

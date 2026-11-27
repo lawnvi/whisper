@@ -47,6 +47,14 @@ xattr -dr com.apple.quarantine /Applications/Whisper.app
 
 **Windows Firewall**: the first time Whisper opens, Windows asks whether it may use the network; tick "Private networks". If the current network is set to "Public", Windows blocks other devices from connecting in. In Settings → Network & internet, open the current network's properties and set its network profile type to "Private", or tick "Private" for Whisper under "Allow an app through Windows Firewall". When only one device blocks incoming connections, you can also connect from that device; sound, keyboard and mouse, and window flow then work as usual.
 
+**Linux and other firewalls that open ports one by one**: Whisper uses these ports (defaults in brackets):
+
+- The Server Port (`10002`), TCP and UDP: the connection itself, and keyboard and mouse sharing.
+- The Server Port + 2 (`10004`), TCP and UDP: a computer playing sound shared from another device.
+- `10003` TCP: share links, only while a link is on.
+
+When another program holds one of these numbers, Whisper moves on to one of the next 7. With ufw: `sudo ufw allow 10002:10004/tcp` and `sudo ufw allow 10002,10004/udp`. With only TCP open everything works, but the keyboard, mouse and sound stutter on weak Wi-Fi.
+
 **macOS Local Network permission**: from macOS 15, apps need permission to reach the local network. Open System Settings → Privacy & Security → Local Network and make sure Whisper is on.
 
 **Proxies and VPNs**: TUN or enhanced modes in tools like Clash, and company VPNs, can take over LAN traffic. Route your LAN directly, or turn them off and try again.

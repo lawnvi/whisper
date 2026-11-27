@@ -28,7 +28,7 @@ If the other device is not listed, connect with a QR code or an address:
 - **Phone**: select the plus button, then switch between the QR code, scanner, and IP/port tabs to show your code, scan the other device, or enter its address.
 - **Computer**: select this device's name at the bottom left. The panel shows your QR code and address; "Enter an address…" takes the other device's IP and port.
 
-The QR code carries both the LAN address and the device identity, so there is no extra password. The default service port is `10002` and can be changed under "Server Port" in Settings.
+The QR code carries both the LAN address and the device identity, so there is no extra password. The default service port is `10002` and can be changed under "Server Port" in Settings. The keyboard, mouse and sound also use the ports next to it; for firewalls that open ports one by one, see [Can't find or connect to a device](troubleshooting_en.md#cant-find-or-connect-to-a-device) in troubleshooting.
 
 On Linux, discovery depends on Avahi. On networks that block mDNS / Bonjour, connecting by IP is more reliable.
 

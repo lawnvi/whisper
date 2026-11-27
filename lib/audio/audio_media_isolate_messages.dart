@@ -4,10 +4,13 @@ part of 'audio_media_isolate.dart';
 // sent through ports.
 
 class _IsolateStart {
-  const _IsolateStart(this.main, this.entry);
+  const _IsolateStart(this.main, this.entry, this.mediaPort);
 
   final SendPort main;
   final AudioNativeEntryPoints entry;
+
+  /// The media port to listen on (`WhisperPorts.audioMedia`); 0: any.
+  final int mediaPort;
 }
 
 class _ConnectSink {

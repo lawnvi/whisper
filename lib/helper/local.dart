@@ -151,6 +151,9 @@ class LocalSetting {
     await _setSP(_explicitDeviceName, true);
   }
 
+  /// The main port: Settings → Server Port.
+  Future<int> port() => getSPDefault(_port, 10002);
+
   Future<void> updatePort(int port) async {
     await _setSP(_port, port);
   }

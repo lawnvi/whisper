@@ -24,13 +24,15 @@ abstract final class AudioGroupDatagrams {
   static DatagramEndpoint? _answering;
   static Future<DatagramEndpoint?>? _dialing;
 
-  /// The sink's socket on [port], its media port; none when that is taken.
-  static Future<void> listenAt(int port) async {
-    if (_answering?.isClosed == false) return;
+  /// The sink's socket on [port], its media port; false when that is taken.
+  static Future<bool> listenAt(int port) async {
+    if (_answering?.isClosed == false) return _answering!.port == port;
     try {
       _answering = await DatagramEndpoint.bind(port: port, exact: true);
+      return true;
     } on Object {
       _answering = null;
+      return false;
     }
   }
 
