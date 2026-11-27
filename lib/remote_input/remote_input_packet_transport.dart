@@ -18,7 +18,9 @@ abstract class RemoteInputPacketTransport {
 
 abstract class RemoteInputObservablePacketTransport
     implements RemoteInputPacketTransport {
-  Stream<void> get done;
+  /// Completes once, with why: [PacketTransportTermination.isUnexpected]
+  /// unless this side closed it.
+  Future<PacketTransportTermination> get done;
 }
 
 class RemoteInputPacketByteTransport implements RemoteInputPacketTransport {
@@ -72,26 +74,9 @@ class RemoteInputPacketByteTransport implements RemoteInputPacketTransport {
 class RemoteInputWebSocketPacketTransport extends RemoteInputPacketByteTransport
     implements RemoteInputObservablePacketTransport {
   RemoteInputWebSocketPacketTransport._(
-    Stream<dynamic> incoming,
     PacketByteTransport transport, {
     bool preserveMouseMoves = false,
-  }) : _stream = incoming.asBroadcastStream(),
-       super.withTransport(transport, preserveMouseMoves: preserveMouseMoves) {
-    _streamSubscription = _stream.listen(
-      (_) {},
-      onError: (_, __) {
-        _notifyDone();
-      },
-      onDone: _notifyDone,
-      cancelOnError: false,
-    );
-  }
-
-  final Stream<dynamic> _stream;
-  final StreamController<void> _doneController =
-      StreamController<void>.broadcast();
-  late final StreamSubscription<dynamic> _streamSubscription;
-  bool _doneNotified = false;
+  }) : super.withTransport(transport, preserveMouseMoves: preserveMouseMoves);
 
   factory RemoteInputWebSocketPacketTransport.forChannel(
     WebSocketChannel channel, {
@@ -118,22 +103,17 @@ class RemoteInputWebSocketPacketTransport extends RemoteInputPacketByteTransport
     AuthenticatedMediaPacketEncoder? packetEncoder,
     bool preserveMouseMoves = false,
   }) {
-    late final RemoteInputWebSocketPacketTransport transport;
-    transport = RemoteInputWebSocketPacketTransport._(
-      incoming,
+    return RemoteInputWebSocketPacketTransport._(
       PacketByteTransport.remoteInput(
         addStream: addStream,
         closeSink: closeSink,
+        incoming: incoming,
         maxItems: maxItems,
         maxBytes: maxBytes,
         packetEncoder: packetEncoder,
-        onOverflow: () {
-          transport._notifyDone();
-        },
       ),
       preserveMouseMoves: preserveMouseMoves,
     );
-    return transport;
   }
 
   /// Connects for the session [accept] answers, with the UDP lane beside
@@ -190,22 +170,5 @@ class RemoteInputWebSocketPacketTransport extends RemoteInputPacketByteTransport
   }
 
   @override
-  Stream<void> get done => _doneController.stream;
-
-  void _notifyDone() {
-    if (_doneNotified || _doneController.isClosed) {
-      return;
-    }
-    _doneNotified = true;
-    _doneController.add(null);
-  }
-
-  @override
-  Future<void> close() async {
-    await _streamSubscription.cancel();
-    await super.close();
-    if (!_doneController.isClosed) {
-      await _doneController.close();
-    }
-  }
+  Future<PacketTransportTermination> get done => _inner.done;
 }

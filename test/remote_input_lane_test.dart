@@ -19,7 +19,8 @@ class _Socket implements RemoteInputObservablePacketTransport {
   @override
   void send(RemoteInputPacketFrame packet) => sent.add(packet);
   @override
-  Stream<void> get done => const Stream.empty();
+  Future<PacketTransportTermination> get done =>
+      Completer<PacketTransportTermination>().future;
   @override
   Future<void> close() async {}
 }

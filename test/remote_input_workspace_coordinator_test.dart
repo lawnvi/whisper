@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:whisper/socket/packet_byte_transport.dart';
 import 'package:whisper/remote_input/remote_input_key_translation.dart';
 import 'package:whisper/remote_input/remote_input_manager.dart';
 import 'package:whisper/remote_input/remote_input_packet_transport.dart';
@@ -1294,14 +1295,19 @@ class _ObservableFakeRemoteInputTransport
         RemoteInputPacketTransport,
         RemoteInputObservablePacketTransport {
   final sentPackets = <RemoteInputPacketFrame>[];
-  final _doneController = StreamController<void>.broadcast();
+  final _done = Completer<PacketTransportTermination>();
   bool closed = false;
 
   @override
-  Stream<void> get done => _doneController.stream;
+  Future<PacketTransportTermination> get done => _done.future;
 
   void complete() {
-    _doneController.add(null);
+    if (_done.isCompleted) return;
+    _done.complete(
+      const PacketTransportTermination(
+        PacketTransportTerminationReason.remoteClosed,
+      ),
+    );
   }
 
   @override
@@ -1314,6 +1320,12 @@ class _ObservableFakeRemoteInputTransport
   @override
   Future<void> close() async {
     closed = true;
-    await _doneController.close();
+    if (!_done.isCompleted) {
+      _done.complete(
+        const PacketTransportTermination(
+          PacketTransportTerminationReason.localClosed,
+        ),
+      );
+    }
   }
 }

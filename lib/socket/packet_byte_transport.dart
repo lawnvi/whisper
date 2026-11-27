@@ -15,6 +15,9 @@ enum PacketTransportTerminationReason {
   remoteClosed,
   remoteError,
   writerFailure,
+
+  /// More was queued than the far side read: a reliable queue fails closed.
+  overflow,
 }
 
 final class PacketTransportTermination {
@@ -78,6 +81,7 @@ class PacketByteTransport {
   PacketByteTransport.remoteInput({
     required Future<void> Function(Stream<Object>) addStream,
     required Future<void> Function() closeSink,
+    Stream<dynamic>? incoming,
     this.onPacketSent,
     this.onPacketDropped,
     void Function()? onOverflow,
@@ -97,7 +101,9 @@ class PacketByteTransport {
          maxBytes: maxBytes,
          writerTimeout: writerTimeout,
          onOverflow: onOverflow,
-       );
+       ) {
+    _observeIncoming(incoming);
+  }
 
   /// Window-stream video from the source to the viewer. See
   /// [BoundedOutboundQueue.video] for which frames may be dropped; dropping
@@ -105,6 +111,7 @@ class PacketByteTransport {
   PacketByteTransport.video({
     required Future<void> Function(Stream<Object>) addStream,
     required Future<void> Function() closeSink,
+    Stream<dynamic>? incoming,
     this.onPacketSent,
     this.onPacketDropped,
     void Function()? onOverflow,
@@ -126,7 +133,9 @@ class PacketByteTransport {
          writerTimeout: writerTimeout,
          onOverflow: onOverflow,
          onKeyframeNeeded: onKeyframeNeeded,
-       );
+       ) {
+    _observeIncoming(incoming);
+  }
 
   final void Function(Object bytes)? _sendBytes;
   final TransportCloseGuard _closeGuard;
@@ -191,9 +200,11 @@ class PacketByteTransport {
               ),
             );
           } else if (result == OutboundQueueResult.dropped && queue.isClosed) {
+            // Only the packet that overflowed is dropped by a closed queue;
+            // later ones come back closed.
             _terminateUnexpected(
               const PacketTransportTermination(
-                PacketTransportTerminationReason.writerFailure,
+                PacketTransportTerminationReason.overflow,
               ),
             );
           }

@@ -8,6 +8,7 @@ import 'package:whisper/remote_input/remote_input_lane_report.dart';
 import 'package:whisper/remote_input/remote_input_packet_transport.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
 import 'package:whisper/socket/datagram_endpoint.dart';
+import 'package:whisper/socket/packet_byte_transport.dart';
 
 /// Keyboard and mouse over UDP beside the WebSocket. On a weak link TCP
 /// holds every packet behind a lost one until it is sent again (a few
@@ -107,7 +108,7 @@ class RemoteInputLaneTransport implements RemoteInputObservablePacketTransport {
   bool get laneHealthy => _lane.healthy;
 
   @override
-  Stream<void> get done => _socket.done;
+  Future<PacketTransportTermination> get done => _socket.done;
 
   @override
   void send(RemoteInputPacketFrame packet) {

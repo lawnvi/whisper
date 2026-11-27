@@ -4081,16 +4081,16 @@ class WsSvrManager {
   }
 
   Future<void> _closeSupersededMediaChannels(PeerSocketSession session) async {
+    final peerId = session.remotePeerId;
     await session.withMediaReceiveKeyAsync(
-      (mediaReceiveKey) => Future.wait(<Future<void>>[
-        _audioManager.closeSupersededPeerChannels(
-          session.remotePeerId,
-          mediaMacKey: mediaReceiveKey,
-        ),
+      (key) => Future.wait(<Future<void>>[
+        _audioManager.closeSupersededPeerChannels(peerId, mediaMacKey: key),
         _remoteInputManager.closeSupersededPeerChannels(
-          session.remotePeerId,
-          mediaMacKey: mediaReceiveKey,
+          peerId,
+          mediaMacKey: key,
         ),
+        // Hosted window streams keep no claim; none is under the new keys.
+        WindowStreamHost.shared.closePeer(peerId),
       ]),
     );
   }

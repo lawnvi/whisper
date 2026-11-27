@@ -502,7 +502,7 @@ void main() {
     expect(transport.isClosed, isTrue);
     expect(
       (await transport.done).reason,
-      PacketTransportTerminationReason.writerFailure,
+      PacketTransportTerminationReason.overflow,
     );
     expect(closes, 1);
     releaseFirstWrite.complete();

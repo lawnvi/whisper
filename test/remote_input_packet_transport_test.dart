@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/remote_input/remote_input_packet_transport.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
+import 'package:whisper/socket/packet_byte_transport.dart';
 
 void main() {
   test(
@@ -28,7 +29,7 @@ void main() {
         maxItems: 2,
         maxBytes: 1024 * 1024,
       );
-      final done = transport.done.first;
+      final done = transport.done;
       RemoteInputPacketFrame packet(int sequence) => RemoteInputPacketFrame(
         sessionId: 'input-overflow',
         sequence: sequence,
@@ -42,7 +43,7 @@ void main() {
       transport.send(packet(2));
       transport.send(packet(3));
 
-      await done;
+      expect((await done).reason, PacketTransportTerminationReason.overflow);
       releaseFirstWrite.complete();
       await transport.close();
       expect(socketCloses, 1);

@@ -1789,11 +1789,10 @@ class RemoteInputCoordinator extends ChangeNotifier {
     RemoteInputPacketTransport transport, {
     required String sessionId,
   }) {
-    if (transport is! RemoteInputObservablePacketTransport) {
-      return null;
-    }
-    return transport.done.listen((_) {
-      if (_state.role != RemoteInputRuntimeRole.source ||
+    if (transport is! RemoteInputObservablePacketTransport) return null;
+    return transport.done.asStream().listen((termination) {
+      if (!termination.isUnexpected ||
+          _state.role != RemoteInputRuntimeRole.source ||
           _state.sessionId != sessionId) {
         return;
       }

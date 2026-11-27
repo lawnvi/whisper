@@ -1221,11 +1221,10 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
     _RemoteInputWorkspaceTargetRuntime target,
   ) {
     final transport = target.transport;
-    if (transport is! RemoteInputObservablePacketTransport) {
-      return null;
-    }
-    return transport.done.listen((_) {
-      if (_snapshot.role != RemoteInputWorkspaceRole.controller ||
+    if (transport is! RemoteInputObservablePacketTransport) return null;
+    return transport.done.asStream().listen((termination) {
+      if (!termination.isUnexpected ||
+          _snapshot.role != RemoteInputWorkspaceRole.controller ||
           _targets[target.request.peerId] != target ||
           !target.snapshot.isConnected) {
         return;
