@@ -1,15 +1,15 @@
 # Files already over the size limit (Dart 1000, native 1500 lines).
 # They may only shrink: run `dart run tool/check_sizes.dart --update` after a split.
-1802 lib/audio/audio_group_coordinator.dart
-1396 lib/audio/audio_media_isolate.dart
+1790 lib/audio/audio_group_coordinator.dart
+1395 lib/audio/audio_media_isolate.dart
 1527 lib/debug/automation_hooks.dart
 2148 lib/model/LocalDatabase.dart
 1769 lib/new_ui/files/phone_files.dart
 1237 lib/new_ui/input/shell_input_page.dart
 1002 lib/new_ui/settings/settings_layout.dart
 1034 lib/new_ui/tray/tray_panel.dart
-2979 lib/page/conversation.dart
-3830 lib/page/deviceList.dart
+2909 lib/page/conversation.dart
+3821 lib/page/deviceList.dart
 2211 lib/page/remote_files/files_desktop.dart
 1495 lib/page/remote_files/files_model.dart
 1362 lib/page/settings.dart
@@ -23,7 +23,7 @@
 1111 lib/share_links/share_server.dart
 4819 lib/socket/file_transfer_engine.dart
 1093 lib/socket/peer_socket_session.dart
-6822 lib/socket/svrmanager.dart
+6693 lib/socket/svrmanager.dart
 1303 lib/state/desktop_quick_send_inbox.dart
 2286 lib/theme/whisper_ui.dart
 1989 lib/widget/media_message_preview.dart
@@ -31,7 +31,7 @@
 1969 lib/window_stream/remote/window_stream_host.dart
 1355 lib/window_stream/window_stream_coordinator.dart
 6676 linux/remote_input_plugin.cc
-5092 macos/Runner/MainFlutterWindow.swift
+4129 macos/Runner/MainFlutterWindow.swift
 1746 packages/window_stream_native/linux/receiver/surface.cc
 1864 packages/window_stream_native/windows/receiver/surface.cpp
 1602 packages/window_stream_native/windows/receiver/volume_control.cpp

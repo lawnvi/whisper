@@ -54,7 +54,7 @@ void main() {
       expect(macos, contains('traceRemoteInput('));
       _expectTypedWrappers(
         macos,
-        RegExp(r'private func traceRemoteInput\s*\('),
+        RegExp(r'func traceRemoteInput\s*\('),
       );
       _expectTypedWrappers(
         macos,

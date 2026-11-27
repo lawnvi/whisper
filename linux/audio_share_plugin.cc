@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -296,21 +297,14 @@ class AudioSharePlugin {
     fl_method_call_respond_not_implemented(method_call, nullptr);
   }
 
-  // From the audio isolate's thread: 0 when written, 1 when [handle] is not
-  // the playback running now.
+  // From the audio isolate's thread: 0 when written or dropped, 1 when
+  // [handle] is not the playback running now.
   int32_t WriteFromIsolate(int64_t handle,
                            const int16_t* pcm,
                            int32_t sample_count) {
 #if HAVE_PULSE_AUDIO
-    std::lock_guard<std::mutex> lock(playback_mutex_);
-    if (handle != playback_handle_ || playback_stream_ == nullptr) {
-      return 1;
-    }
-    int pulse_error = 0;
-    pa_simple_write(playback_stream_, pcm,
-                    static_cast<size_t>(sample_count) * sizeof(int16_t),
-                    &pulse_error);
-    return 0;
+    return WriteToPlayback(handle, pcm,
+                           static_cast<size_t>(sample_count) * sizeof(int16_t));
 #else
     (void)handle;
     (void)pcm;
@@ -339,6 +333,7 @@ class AudioSharePlugin {
 
 #if HAVE_PULSE_AUDIO
     StopPlayback("");
+    PlaybackFormat playback_format;
     const int sample_rate = IntValue(format, "sampleRate", 48000);
     const int channels =
         std::max(1, std::min(2, IntValue(format, "channels", 2)));
@@ -347,20 +342,20 @@ class AudioSharePlugin {
     spec.format = PA_SAMPLE_S16LE;
     spec.rate = static_cast<uint32_t>(sample_rate);
     spec.channels = static_cast<uint8_t>(channels);
-    const pa_buffer_attr buffer_attr = LowLatencyPlaybackBufferAttr(
+    playback_format.spec = spec;
+    playback_format.buffer_attr = LowLatencyPlaybackBufferAttr(
         sample_rate, channels, frame_duration_ms);
 
     int pulse_error = 0;
-    pa_simple* stream = pa_simple_new(nullptr, "whisper",
-                                      PA_STREAM_PLAYBACK, nullptr,
-                                      "Audio Share Playback", &spec, nullptr,
-                                      &buffer_attr, &pulse_error);
+    pa_simple* stream = OpenPlaybackStream(playback_format, &pulse_error);
     if (stream == nullptr) {
       *error = pa_strerror(pulse_error);
       return false;
     }
     std::lock_guard<std::mutex> lock(playback_mutex_);
     playback_stream_ = stream;
+    playback_format_ = playback_format;
+    next_playback_reopen_ = std::chrono::steady_clock::now();
     playback_session_id_ = session_id;
     ++playback_handle_;
     return true;
@@ -382,22 +377,81 @@ class AudioSharePlugin {
     }
 
 #if HAVE_PULSE_AUDIO
-    std::lock_guard<std::mutex> lock(playback_mutex_);
-    if (playback_stream_ == nullptr || session_id != playback_session_id_) {
-      return true;
+    int64_t handle = 0;
+    {
+      std::lock_guard<std::mutex> lock(playback_mutex_);
+      if (session_id != playback_session_id_) {
+        return true;
+      }
+      handle = playback_handle_;
     }
-    int pulse_error = 0;
-    if (pa_simple_write(playback_stream_, pcm.data(), pcm.size(),
-                        &pulse_error) < 0) {
-      *error = pa_strerror(pulse_error);
-      return false;
-    }
+    WriteToPlayback(handle, pcm.data(), pcm.size());
     return true;
 #else
     *error = "PulseAudio support is not available in this Linux build";
     return false;
 #endif
   }
+
+#if HAVE_PULSE_AUDIO
+  struct PlaybackFormat {
+    pa_sample_spec spec{};
+    pa_buffer_attr buffer_attr{};
+  };
+
+  static pa_simple* OpenPlaybackStream(const PlaybackFormat& format,
+                                       int* pulse_error) {
+    return pa_simple_new(nullptr, "whisper", PA_STREAM_PLAYBACK, nullptr,
+                         "Audio Share Playback", &format.spec, nullptr,
+                         &format.buffer_attr, pulse_error);
+  }
+
+  // When the sound server restarts (PipeWire or PulseAudio updated, crashed,
+  // or the user's session moved), the old connection fails every write and
+  // the sound stayed off for good. The connection is dropped and made again
+  // on the next write, at most once a second, with the lock released:
+  // connecting can wait on the server, and stopping from the platform thread
+  // must not.
+  int32_t WriteToPlayback(int64_t handle, const void* data, size_t bytes) {
+    PlaybackFormat format;
+    {
+      std::lock_guard<std::mutex> lock(playback_mutex_);
+      if (handle != playback_handle_ || playback_session_id_.empty()) {
+        return 1;
+      }
+      if (playback_stream_ != nullptr) {
+        return WritePlaybackLocked(data, bytes);
+      }
+      const auto now = std::chrono::steady_clock::now();
+      if (now < next_playback_reopen_) {
+        return 0;
+      }
+      next_playback_reopen_ = now + std::chrono::seconds(1);
+      format = playback_format_;
+    }
+    int pulse_error = 0;
+    pa_simple* stream = OpenPlaybackStream(format, &pulse_error);
+    if (stream == nullptr) {
+      return 0;
+    }
+    std::lock_guard<std::mutex> lock(playback_mutex_);
+    if (handle != playback_handle_ || playback_stream_ != nullptr) {
+      pa_simple_free(stream);
+      return handle != playback_handle_ ? 1 : WritePlaybackLocked(data, bytes);
+    }
+    playback_stream_ = stream;
+    return WritePlaybackLocked(data, bytes);
+  }
+
+  int32_t WritePlaybackLocked(const void* data, size_t bytes) {
+    int pulse_error = 0;
+    if (pa_simple_write(playback_stream_, data, bytes, &pulse_error) < 0) {
+      pa_simple_free(playback_stream_);
+      playback_stream_ = nullptr;
+    }
+    return 0;
+  }
+#endif
 
   void StopPlayback(const std::string& session_id) {
 #if HAVE_PULSE_AUDIO
@@ -685,6 +739,9 @@ class AudioSharePlugin {
 #if HAVE_PULSE_AUDIO
   std::mutex playback_mutex_;
   pa_simple* playback_stream_ = nullptr;
+  PlaybackFormat playback_format_;
+  // When a lost connection to the sound server is tried again.
+  std::chrono::steady_clock::time_point next_playback_reopen_;
   std::string playback_session_id_;
   // Bumped on every start and stop; see WriteFromIsolate.
   int64_t playback_handle_ = 0;

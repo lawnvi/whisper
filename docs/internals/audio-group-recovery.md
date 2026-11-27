@@ -34,5 +34,14 @@
 
 墙上时钟被调整时（网络对时、手动改），`AudioClockSyncEstimator` 会把旧样本全部丢掉：一个样本给出的偏差离真值不超过它来回时间的一半，所以时钟不变的两个样本相差不会超过两者来回时间之和的一半；超过这个界限再加 20 ms 余量，就说明时钟被调过了。以前旧样本来回时间更短，会在最优样本里留十几次探测，这期间每个包都按错的时间播放。重新 offer 时，那台播放端的估计也会从头算。
 
+## 原生播放器
 
-`test/audio_group_coordinator_test.dart` 的“the source alone brings a lost sink back”一组覆盖断开再连上、暂停后不主动放、`sinkJoinRequest` 总被应答、不认识的组回停止；`test/audio_clock_sync_estimator_test.dart` 覆盖时钟被调整后重新估计、网络抖动时不重来。没在真机上测：电脑睡眠醒来后声音自动接回、Wi-Fi 短暂断开、Android 做播放端、播放中手动改系统时间。
+输出设备变了或没了，三端都由原生播放器自己接回，Dart 不用管：没有输出时丢掉写来的数据，有了再接着放。`writePcm` 仍然只在句柄已不是当前这次播放时返回 1。
+
+- **macOS**（`macos/Runner/AudioSharePlugin.swift`）：插拔耳机、连上 AirPods、换默认输出时 `AVAudioEngine` 会自己停下。每次写入前看 `isRunning`，停了就重新连接节点再启动，最多每秒试一次。以前停下后照样排缓冲区，引擎停着时调 `player.play()` 还会抛异常让应用崩溃。
+- **Windows**（`windows/runner/audio_share_plugin.cpp`）：原来就会在默认输出变化或缓冲区不动时重开；现在 `waveOutPrepareHeader`/`waveOutWrite` 失败也关掉句柄，下次写入重开。拔掉的设备在旧句柄上会一直失败。
+- **Linux**（`linux/audio_share_plugin.cc`）：耳机之类的切换由 PipeWire/PulseAudio 自己挪流。声音服务重启后旧连接每次写都失败，以前声音就一直没了；现在写失败就释放连接，下次写入时重连，最多每秒一次。重连在锁外做，`pa_simple_new` 等服务器时不会卡住平台线程上的停止。
+
+## 测试
+
+`test/audio_group_coordinator_test.dart` 的“the source alone brings a lost sink back”一组覆盖断开再连上、暂停后不主动放、`sinkJoinRequest` 总被应答、不认识的组回停止；`test/audio_clock_sync_estimator_test.dart` 覆盖时钟被调整后重新估计、网络抖动时不重来。没在真机上测：电脑睡眠醒来后声音自动接回、Wi-Fi 短暂断开、Android 做播放端、播放中手动改系统时间、三端播放中换输出设备、Linux 重启 PipeWire。原生改动只做了编译检查：macOS 真编，Windows 用 zig/mingw（不等于 MSVC `/W4 /WX`），Linux 用 clang 加 PulseAudio 桩头文件查语法。

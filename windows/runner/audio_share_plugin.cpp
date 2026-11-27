@@ -497,6 +497,7 @@ class AudioSharePlugin : public flutter::Plugin {
       if (error != nullptr) {
         *error = MmResultMessage(prepare_result);
       }
+      DropBrokenPlaybackLocked(now);
       return false;
     }
 
@@ -507,6 +508,7 @@ class AudioSharePlugin : public flutter::Plugin {
       if (error != nullptr) {
         *error = MmResultMessage(write_result);
       }
+      DropBrokenPlaybackLocked(now);
       return false;
     }
     if (playback_buffers_.empty()) {
@@ -514,6 +516,13 @@ class AudioSharePlugin : public flutter::Plugin {
     }
     playback_buffers_.push_back(std::move(buffer));
     return true;
+  }
+
+  // A device that was removed fails every write on its old handle, even after
+  // it comes back: the next write opens the default output again.
+  void DropBrokenPlaybackLocked(std::chrono::steady_clock::time_point now) {
+    ClosePlaybackLocked();
+    next_playback_reopen_ = now;
   }
 
   void StopPlayback(const std::string& session_id = "") {
