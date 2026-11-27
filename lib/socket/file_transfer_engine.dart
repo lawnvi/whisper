@@ -32,10 +32,11 @@ import 'package:whisper/socket/folder_transfer_source.dart';
 import 'package:whisper/socket/incoming_transfer_parts.dart';
 import 'package:whisper/socket/transfer_outcomes.dart';
 import 'package:whisper/socket/transfer_checksum_prefix.dart';
-import 'package:whisper/socket/outgoing_progress_estimator.dart';
+import 'package:whisper/socket/outgoing_progress_hub.dart';
 import 'package:whisper/socket/peer_transfer_runtime.dart';
 import 'package:whisper/socket/transfer_ack_watchdog.dart';
 import 'package:whisper/socket/transfer_pacer.dart';
+import 'package:whisper/socket/transfer_timeout_retry.dart';
 import 'package:whisper/socket/whisper_frame_v3.dart';
 import 'package:whisper/socket/wire_input_policy.dart';
 import 'package:whisper/socket/wire_message_codec.dart';
@@ -71,6 +72,8 @@ class FileTransferEngine {
     FutureOr<bool> Function(TransferConnectionBinding connection)?
     markPeerUnresponsive,
     TransferAckWatchdog? ackWatchdog,
+    TransferAckTimerFactory? watchdogRetryTimerFactory,
+    List<Duration>? watchdogRetryDelays,
     required void Function(TransferSnapshot snapshot) emitTransferUpdated,
     required void Function(String message) notify,
     required PeerProfile? Function(String peerId) remoteProfileFor,
@@ -111,6 +114,11 @@ class FileTransferEngine {
        _enqueueBytesToConnection = enqueueBytesToConnection,
        _ownsAckWatchdog = ackWatchdog == null,
        _ackWatchdog = ackWatchdog ?? TransferAckWatchdog(),
+       _timeoutRetries = TransferTimeoutRetryTracker(
+         timerFactory: watchdogRetryTimerFactory,
+         delays:
+             watchdogRetryDelays ?? TransferTimeoutRetryTracker.defaultDelays,
+       ),
        _emitTransferUpdated = emitTransferUpdated,
        _notify = notify,
        _remoteProfileFor = remoteProfileFor,
@@ -169,6 +177,7 @@ class FileTransferEngine {
   _enqueueBytesToConnection;
   final bool _ownsAckWatchdog;
   TransferAckWatchdog _ackWatchdog;
+  final TransferTimeoutRetryTracker _timeoutRetries;
   final void Function(TransferSnapshot snapshot) _emitTransferUpdated;
   final void Function(String message) _notify;
   final PeerProfile? Function(String peerId) _remoteProfileFor;
@@ -244,10 +253,14 @@ class FileTransferEngine {
   final Map<String, int> _incomingProgressDispatchTimes = <String, int>{};
   final DateTime Function() _now;
   final TransferAckTimerFactory _progressTimerFactory;
-  final Map<String, _OutgoingProgressTracker> _outgoingProgressTrackers =
-      <String, _OutgoingProgressTracker>{};
-  final Map<String, double> _lastOutgoingRateByPeer = <String, double>{};
-  Timer? _outgoingProgressTimer;
+  late final OutgoingProgressHub _outgoingProgress = OutgoingProgressHub(
+    now: _now,
+    timerFactory: _progressTimerFactory,
+    dispatchInterval: const Duration(milliseconds: _progressDispatchIntervalMs),
+    sentEndFor: (transferId) => _outgoingWindowEndOffsets[transferId],
+    sourceFor: (transferId) => _outgoingTransferSources[transferId],
+    onSnapshot: _emitTransferUpdated,
+  );
   final Map<String, int> _outgoingTransferSequences = <String, int>{};
   final Map<String, int> _outgoingWindowEndOffsets = <String, int>{};
   final Map<String, FileTransferV3FlowParameters> _outgoingFlows =
@@ -1559,6 +1572,7 @@ class FileTransferEngine {
   /// 原 svrmanager `_handlePeerDisconnected` 的 transfer 清理段:
   /// 标记该 peer 的传输等待重连,并清空其运行时队列。
   Future<void> handlePeerDisconnected(String peerId) async {
+    _timeoutRetries.clearPeer(peerId);
     await _markPeerTransfersWaitingReconnect(peerId);
     _transferRuntime.clearPeer(peerId);
   }
@@ -1605,6 +1619,7 @@ class FileTransferEngine {
       return;
     }
     _blockedOutgoingPeers.add(peerId);
+    _timeoutRetries.clearPeer(peerId);
     _outgoingIntentEpochs[peerId] = (_outgoingIntentEpochs[peerId] ?? 0) + 1;
     final canceled = await _sendFileLock.synchronized(
       () => _database().cancelOutgoingTransfersForPeer(
@@ -1616,7 +1631,7 @@ class FileTransferEngine {
     for (final transfer in canceled) {
       _ackWatchdog.cancel(transfer.transferId);
       _outgoingWindowEndOffsets.remove(transfer.transferId);
-      _untrackOutgoingProgress(transfer.transferId);
+      _outgoingProgress.untrack(transfer.transferId);
       _outgoingTransferSequences.remove(transfer.transferId);
       await _outgoingChecksums.remove(transfer.transferId)?.dispose();
       await _closeOutgoingTransferSource(transfer.transferId);
@@ -1634,24 +1649,13 @@ class FileTransferEngine {
     _blockedOutgoingPeers.remove(peerId);
   }
 
-  bool _matchesIncomingFileOffer(MessageData persisted, MessageData incoming) {
-    return persisted.sender == incoming.sender &&
-        persisted.receiver == incoming.receiver &&
-        persisted.name == incoming.name &&
-        persisted.clipboard == incoming.clipboard &&
-        persisted.size == incoming.size &&
-        persisted.type == MessageEnum.File &&
-        persisted.content == incoming.content &&
-        persisted.message == incoming.message &&
-        persisted.timestamp == incoming.timestamp &&
-        persisted.uuid == incoming.uuid &&
-        persisted.md5 == incoming.md5 &&
-        persisted.fileTimestamp == incoming.fileTimestamp;
-  }
+  bool _matchesIncomingFileOffer(MessageData persisted, MessageData incoming) =>
+      matchesIncomingFileOffer(persisted, incoming);
 
   /// 原 svrmanager `closeGracefully` 中的 transfer 清理段:
   /// 标记可恢复传输等待重连,并冲刷/关闭全部续传句柄。
   Future<void> closeAll({bool persistRecoverable = true}) async {
+    _timeoutRetries.clearAll();
     _ackWatchdog.close();
     if (persistRecoverable) {
       await _markRecoverableTransfersWaitingReconnect();
@@ -1679,126 +1683,8 @@ class FileTransferEngine {
         filesDone: incomingFolder.session.latest.filesSettled,
       );
     }
-    final tracker = _outgoingProgressTrackers[data.transferId];
-    if (tracker != null && data.direction == FileTransferDirection.outgoing) {
-      tracker.transfer = data;
-      if (data.state == FileTransferState.transferring) {
-        snapshot = _outgoingDisplaySnapshot(
-          tracker,
-          _now().millisecondsSinceEpoch,
-        );
-        tracker.lastEmitted = snapshot.committedBytes;
-      }
-    }
+    snapshot = _outgoingProgress.maybeSmoothSnapshot(data, snapshot);
     _emitTransferUpdated(snapshot);
-  }
-
-  /// 发送端 `transferring` 快照统一走估计器:ACK 只按 ackIntervalSize 到达,
-  /// 直接显示 durableOffset 会一顿一顿,见 [OutgoingProgressEstimator]。
-  TransferSnapshot _outgoingDisplaySnapshot(
-    _OutgoingProgressTracker tracker,
-    int nowMs,
-  ) {
-    final transfer = tracker.transfer;
-    final sentEnd =
-        _outgoingWindowEndOffsets[transfer.transferId] ??
-        tracker.estimator.durableOffset;
-    final displayed = tracker.estimator.estimate(
-      nowMs: nowMs,
-      sentEnd: sentEnd,
-      size: transfer.size,
-    );
-    // A folder's display walks towards what the receiver has confirmed and
-    // is deliberately a little behind it; see the estimator.
-    final committedBytes = tracker.estimator.followsConfirmed
-        ? displayed
-        : math.max(displayed, transfer.committedBytes);
-    final source = _outgoingTransferSources[transfer.transferId];
-    return TransferSnapshot(
-      transferId: transfer.transferId,
-      messageUuid: transfer.messageUuid,
-      peerUid: transfer.peerUid,
-      direction: transfer.direction,
-      state: FileTransferState.transferring,
-      finalPath: transfer.finalPath,
-      tempPath: transfer.tempPath,
-      size: transfer.size,
-      committedBytes: committedBytes,
-      lastError: transfer.lastError,
-      updatedAt: nowMs,
-      filesDone: source is FolderTransferSource
-          ? source.filesBefore(committedBytes)
-          : null,
-    );
-  }
-
-  void _trackOutgoingProgress(
-    FileTransferData transfer, {
-    required int durableOffset,
-  }) {
-    final nowMs = _now().millisecondsSinceEpoch;
-    final existing = _outgoingProgressTrackers[transfer.transferId];
-    if (existing != null) {
-      existing.transfer = transfer;
-      existing.estimator.reset(durableOffset, nowMs);
-    } else {
-      _outgoingProgressTrackers[transfer.transferId] = _OutgoingProgressTracker(
-        transfer: transfer,
-        estimator: OutgoingProgressEstimator(
-          durableOffset: durableOffset,
-          nowMs: nowMs,
-          seedRateBytesPerMs: _lastOutgoingRateByPeer[transfer.peerUid] ?? 0,
-          followsConfirmed: _isFolderTransfer(transfer),
-        ),
-      );
-    }
-    _outgoingProgressTimer ??= _progressTimerFactory(
-      const Duration(milliseconds: _progressDispatchIntervalMs),
-      _tickOutgoingProgress,
-    );
-  }
-
-  void _untrackOutgoingProgress(String transferId) {
-    final tracker = _outgoingProgressTrackers.remove(transferId);
-    if (tracker == null) {
-      return;
-    }
-    final rate = tracker.estimator.rateBytesPerMs;
-    if (rate > 0) {
-      _lastOutgoingRateByPeer[tracker.transfer.peerUid] = rate;
-    }
-    if (_outgoingProgressTrackers.isEmpty) {
-      _outgoingProgressTimer?.cancel();
-      _outgoingProgressTimer = null;
-    }
-  }
-
-  void _clearOutgoingProgressTrackers() {
-    for (final transferId in _outgoingProgressTrackers.keys.toList()) {
-      _untrackOutgoingProgress(transferId);
-    }
-  }
-
-  /// 周期性把插值后的发送进度推给 UI;定时器只在有活跃发送时运行。
-  void _tickOutgoingProgress() {
-    final nowMs = _now().millisecondsSinceEpoch;
-    for (final tracker in _outgoingProgressTrackers.values.toList()) {
-      if (tracker.transfer.state != FileTransferState.transferring) {
-        continue;
-      }
-      final snapshot = _outgoingDisplaySnapshot(tracker, nowMs);
-      if (snapshot.committedBytes == tracker.lastEmitted) {
-        continue;
-      }
-      tracker.lastEmitted = snapshot.committedBytes;
-      _emitTransferUpdated(snapshot);
-    }
-    _outgoingProgressTimer = _outgoingProgressTrackers.isEmpty
-        ? null
-        : _progressTimerFactory(
-            const Duration(milliseconds: _progressDispatchIntervalMs),
-            _tickOutgoingProgress,
-          );
   }
 
   Future<FileTransferData?> _updateTransfer(
@@ -1876,7 +1762,7 @@ class FileTransferEngine {
             await _clearActiveIncomingTransfer(current.transferId, flush: true);
           }
           _outgoingWindowEndOffsets.remove(current.transferId);
-          _untrackOutgoingProgress(current.transferId);
+          _outgoingProgress.untrack(current.transferId);
           _outgoingTransferSequences.remove(current.transferId);
           _outgoingFlows.remove(current.transferId);
           _incomingFlows.remove(current.transferId);
@@ -1902,7 +1788,7 @@ class FileTransferEngine {
     _ackWatchdog.cancel(message.uuid);
     _outgoingTransferSequences[message.uuid] = 0;
     _outgoingWindowEndOffsets.remove(message.uuid);
-    _untrackOutgoingProgress(message.uuid);
+    _outgoingProgress.untrack(message.uuid);
     _outgoingFlows.remove(message.uuid);
     return _sendFileTransferV3FrameTo(
       peerId,
@@ -1992,28 +1878,7 @@ class FileTransferEngine {
   FileTransferData _incomingTransferDraft(
     MessageData message,
     FileTransferV3Metadata metadata,
-  ) {
-    final now = DateTime.now().millisecondsSinceEpoch;
-    return FileTransferData(
-      transferId: message.uuid,
-      messageUuid: message.uuid,
-      messageRowId: 0,
-      peerUid: message.sender,
-      direction: FileTransferDirection.incoming,
-      state: FileTransferState.queued,
-      finalPath: '',
-      tempPath: '',
-      size: message.size,
-      checksumAlgorithm: metadata.checksumAlgorithm,
-      checksumValue: metadata.checksumValue,
-      chunkSize: metadata.chunkSize,
-      committedBytes: 0,
-      resumeProofResetCount: 0,
-      lastError: '',
-      createdAt: now,
-      updatedAt: now,
-    );
-  }
+  ) => incomingTransferDraft(message, metadata);
 
   Future<void> _sendFileOfferError(
     MessageData message,
@@ -2258,6 +2123,7 @@ class FileTransferEngine {
         startNextOnFailure: startNextOnFailure,
       );
     }
+    await _closeReceivingTransferFile(transfer.transferId, flush: true);
     var tempFile = await _validatedIncomingTempFile(transfer);
     if (!await tempFile.exists()) {
       tempFile = await _validatedIncomingTempFile(transfer);
@@ -2507,7 +2373,7 @@ class FileTransferEngine {
       if (sourceProof != control.resumeProofSha256) {
         _ackWatchdog.cancel(transfer.transferId);
         _outgoingWindowEndOffsets.remove(transfer.transferId);
-        _untrackOutgoingProgress(transfer.transferId);
+        _outgoingProgress.untrack(transfer.transferId);
         _outgoingTransferSequences[transfer.transferId] = 0;
         await _sendFileTransferV3ControlTo(
           transfer.peerUid,
@@ -2542,9 +2408,15 @@ class FileTransferEngine {
       return;
     }
     final offset = control.durableOffset;
+    _timeoutRetries.cancelOfferTimeout(transfer.transferId);
+    _timeoutRetries.noteProgress(transfer.transferId, offset);
     _outgoingWindowEndOffsets[transfer.transferId] = offset;
     _outgoingTransferSequences[transfer.transferId] = 0;
-    _trackOutgoingProgress(transfer, durableOffset: offset);
+    _outgoingProgress.track(
+      transfer,
+      durableOffset: offset,
+      followsConfirmed: _isFolderTransfer(transfer),
+    );
     final updated = await _updateTransfer(
       transfer.transferId,
       state: FileTransferState.transferring,
@@ -2938,14 +2810,79 @@ class FileTransferEngine {
             isTerminalFileTransferState(transfer.state)) {
           return;
         }
-        // Fail only this transfer; leave the peer connection and other
-        // subsystems (audio, input, mounts, window stream) intact.
-        await _failOutgoingFileTransferV3(
-          transfer,
-          FileTransferFailureReason.receiver,
-        );
+        await _handleStalledOutgoingTransfer(transfer, timeout.connection);
       },
     );
+  }
+
+  Future<void> _handleStalledOutgoingTransfer(
+    FileTransferData transfer,
+    TransferConnectionBinding connection,
+  ) async {
+    // Keep the peer connection and other subsystems intact. Put only this
+    // transfer into a recoverable state with automatic backoff retries so
+    // transient weak-Wi-Fi stalls (including ephemeral pastes) resume from
+    // the receiver's preserved partial bytes; fail only after consecutive
+    // stalled retries make no durable progress.
+    final scheduled = _timeoutRetries.scheduleRetry(
+      transferId: transfer.transferId,
+      peerId: transfer.peerUid,
+      durableOffset: transfer.committedBytes,
+      onRetry: () => _retryTimedOutTransfer(transfer.transferId, connection),
+    );
+    if (scheduled) {
+      await _updateTransfer(
+        transfer.transferId,
+        state: FileTransferState.waitingReconnect,
+        lastError: '',
+      );
+      await _releaseOutgoingAndStartNext(
+        transfer,
+        connection: connection,
+        startNext: false,
+        clearTimeoutRetry: false,
+      );
+      return;
+    }
+    await _failOutgoingFileTransferV3(
+      transfer,
+      FileTransferFailureReason.receiver,
+    );
+  }
+
+  Future<void> _retryTimedOutTransfer(
+    String transferId,
+    TransferConnectionBinding connection,
+  ) async {
+    final transfer = await _database().fetchFileTransfer(transferId);
+    if (transfer == null ||
+        transfer.direction != FileTransferDirection.outgoing ||
+        transfer.state != FileTransferState.waitingReconnect ||
+        !_isConnectedTo(transfer.peerUid)) {
+      return;
+    }
+    await retryTransfer(transferId);
+    final afterOffer = await _database().fetchFileTransfer(transferId);
+    if (afterOffer != null &&
+        afterOffer.state == FileTransferState.negotiating) {
+      _timeoutRetries.scheduleOfferTimeout(
+        transferId: transferId,
+        delay: _ackWatchdog.timeout,
+        onTimeout: () => _runTransferOperation<void>(
+          transferId,
+          connection: connection,
+          operation: () async {
+            final current = await _database().fetchFileTransfer(transferId);
+            if (current == null ||
+                current.direction != FileTransferDirection.outgoing ||
+                current.state != FileTransferState.negotiating) {
+              return;
+            }
+            await _handleStalledOutgoingTransfer(current, connection);
+          },
+        ),
+      );
+    }
   }
 
   Future<void> _yieldAfterFileTransferFrame() {
@@ -3365,6 +3302,16 @@ class FileTransferEngine {
     }
     final currentWindow = _ackWatchdog.currentWindow(control.transferId);
     if (currentWindow == null &&
+        connection != null &&
+        connection.peerId == transfer.peerUid &&
+        (transfer.state == FileTransferState.waitingReconnect ||
+            transfer.state == FileTransferState.negotiating)) {
+      // Late in-flight ACK (e.g. a folder receiver's keep-alive) arriving
+      // while this transfer is backing off or re-negotiating; ignore without
+      // tearing down the peer connection.
+      return;
+    }
+    if (currentWindow == null &&
         transfer.state == FileTransferState.verifying &&
         control.durableOffset == transfer.committedBytes) {
       return;
@@ -3384,10 +3331,8 @@ class FileTransferEngine {
       throw const WireInputRejected(WireInputReason.sessionNotCurrent);
     }
     final durableOffset = control.durableOffset;
-    _outgoingProgressTrackers[transfer.transferId]?.estimator.onAck(
-      durableOffset,
-      _now().millisecondsSinceEpoch,
-    );
+    _timeoutRetries.noteProgress(transfer.transferId, durableOffset);
+    _outgoingProgress.onAck(transfer.transferId, durableOffset);
     final pacer = _outgoingPacerFor?.call(transfer.transferId);
     pacer?.acknowledged(
       transfer.transferId,
@@ -3400,7 +3345,7 @@ class FileTransferEngine {
     );
     if (durableOffset >= transfer.size) {
       pacer?.forget(transfer.transferId);
-      _untrackOutgoingProgress(transfer.transferId);
+      _outgoingProgress.untrack(transfer.transferId);
     }
     final updated = await _updateTransfer(
       transfer.transferId,
@@ -3415,7 +3360,7 @@ class FileTransferEngine {
     }
     if (durableOffset >= updated.size) {
       _outgoingWindowEndOffsets.remove(control.transferId);
-      _untrackOutgoingProgress(control.transferId);
+      _outgoingProgress.untrack(control.transferId);
       final message = await _database().fetchAssociatedFileTransferMessage(
         updated,
       );
@@ -3464,13 +3409,17 @@ class FileTransferEngine {
     FileTransferData transfer, {
     TransferConnectionBinding? connection,
     bool startNext = true,
+    bool clearTimeoutRetry = true,
   }) async {
     connection ??=
         _outgoingConnectionBindings[transfer.transferId] ??
         _operationConnectionBindings[transfer.transferId];
     _ackWatchdog.cancel(transfer.transferId);
+    if (clearTimeoutRetry) {
+      _timeoutRetries.clear(transfer.transferId);
+    }
     _outgoingWindowEndOffsets.remove(transfer.transferId);
-    _untrackOutgoingProgress(transfer.transferId);
+    _outgoingProgress.untrack(transfer.transferId);
     _outgoingTransferSequences.remove(transfer.transferId);
     _outgoingFlows.remove(transfer.transferId);
     await _outgoingChecksums.remove(transfer.transferId)?.dispose();
@@ -4817,7 +4766,7 @@ class FileTransferEngine {
     _incomingConnectionBindings.clear();
     _outgoingTransferSequences.clear();
     _outgoingWindowEndOffsets.clear();
-    _clearOutgoingProgressTrackers();
+    _outgoingProgress.clear();
     _outgoingFlows.clear();
     _incomingFlows.clear();
     for (final checksum in _outgoingChecksums.values) {
@@ -4883,12 +4832,4 @@ class FileTransferEngine {
       }
     }
   }
-}
-
-final class _OutgoingProgressTracker {
-  _OutgoingProgressTracker({required this.transfer, required this.estimator});
-
-  FileTransferData transfer;
-  final OutgoingProgressEstimator estimator;
-  int lastEmitted = -1;
 }

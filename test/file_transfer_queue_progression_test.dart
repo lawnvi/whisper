@@ -381,57 +381,94 @@ void main() {
     },
   );
 
-  test(
-    'watchdog retransmits two durable windows then fails only that transfer',
-    () async {
-      final database = LocalDatabase.forTesting(NativeDatabase.memory());
-      addTearDown(database.close);
-      await _persistOutgoing(database, _firstId, size: 4);
-      final sent = <WhisperFrameV3>[];
-      final scheduler = _FakeTimerScheduler();
-      final unresponsive = <TransferConnectionBinding>[];
-      final engine = _engine(
-        database,
-        sent,
-        ackWatchdog: TransferAckWatchdog(timerFactory: scheduler.createTimer),
-        sourceFactory: (_, expectedSize) => _SizedSource(expectedSize),
-        markPeerUnresponsive: (binding) {
-          unresponsive.add(binding);
-          return true;
-        },
-      );
-      await engine.handleFrame(
-        _binding,
-        _controlFrame(
-          _control(FileTransferV3Action.ready, _firstId, size: 4, offset: 0),
-        ),
-        requireCurrent: () {},
-      );
+  test('watchdog backs off and auto-retries on stall, failing only after '
+      'consecutive stalled retries while keeping the peer connected', () async {
+    final database = LocalDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    await _persistOutgoing(database, _firstId, size: 4);
+    final sent = <WhisperFrameV3>[];
+    final scheduler = _FakeTimerScheduler();
+    final unresponsive = <TransferConnectionBinding>[];
+    final engine = _engine(
+      database,
+      sent,
+      ackWatchdog: TransferAckWatchdog(timerFactory: scheduler.createTimer),
+      watchdogRetryTimerFactory: scheduler.createTimer,
+      watchdogRetryDelays: const <Duration>[
+        Duration(seconds: 2),
+        Duration(seconds: 5),
+      ],
+      sourceFactory: (_, expectedSize) => _SizedSource(expectedSize),
+      markPeerUnresponsive: (binding) {
+        unresponsive.add(binding);
+        return true;
+      },
+    );
+    await engine.handleFrame(
+      _binding,
+      _controlFrame(
+        _control(FileTransferV3Action.ready, _firstId, size: 4, offset: 0),
+      ),
+      requireCurrent: () {},
+    );
 
-      await scheduler.fireNext();
-      await scheduler.fireNext();
-      await scheduler.fireNext();
+    // Initial window + 2 watchdog retransmits, then enters waitingReconnect
+    // instead of failing immediately or dropping the peer.
+    await scheduler.fireNext();
+    await scheduler.fireNext();
+    await scheduler.fireNext();
 
-      final data = _dataFrames(sent, _firstId).toList();
-      expect(data.map((frame) => frame.offset), <int>[0, 0, 0]);
-      expect(data.map((frame) => frame.sequence), <int>[0, 1, 2]);
-      // F17: peer connection stays alive; only this transfer fails and sends
-      // an error frame to clean up the receiver.
-      expect(unresponsive, isEmpty);
-      expect(
-        (await database.fetchFileTransfer(_firstId))?.state,
-        FileTransferState.failed,
-      );
-      expect(
-        sent.where(
-          (frame) =>
-              frame.type == WhisperFrameType.fileError &&
-              frame.transferId == _firstId,
-        ),
-        isNotEmpty,
-      );
-    },
-  );
+    final data = _dataFrames(sent, _firstId).toList();
+    expect(data.map((frame) => frame.offset), <int>[0, 0, 0]);
+    expect(data.map((frame) => frame.sequence), <int>[0, 1, 2]);
+    expect(unresponsive, isEmpty);
+    expect(
+      (await database.fetchFileTransfer(_firstId))?.state,
+      FileTransferState.waitingReconnect,
+    );
+    expect(sent.where((f) => f.type == WhisperFrameType.fileError), isEmpty);
+
+    // First backoff timer fires -> automatically re-offers the transfer.
+    await scheduler.fireNext();
+    expect(
+      sent.where((f) => f.type == WhisperFrameType.fileOffer),
+      hasLength(1),
+    );
+    expect(
+      (await database.fetchFileTransfer(_firstId))?.state,
+      FileTransferState.negotiating,
+    );
+
+    // Silent receiver never answers ready -> offer timeout schedules retry 2.
+    await scheduler.fireNext();
+    expect(
+      (await database.fetchFileTransfer(_firstId))?.state,
+      FileTransferState.waitingReconnect,
+    );
+
+    // Second backoff timer fires -> re-offers again, still no answer ->
+    // offer timeout exhausts retries and fails ONLY this transfer.
+    await scheduler.fireNext();
+    expect(
+      sent.where((f) => f.type == WhisperFrameType.fileOffer),
+      hasLength(2),
+    );
+    await scheduler.fireNext();
+
+    expect(unresponsive, isEmpty);
+    expect(
+      (await database.fetchFileTransfer(_firstId))?.state,
+      FileTransferState.failed,
+    );
+    expect(
+      sent.where(
+        (frame) =>
+            frame.type == WhisperFrameType.fileError &&
+            frame.transferId == _firstId,
+      ),
+      isNotEmpty,
+    );
+  });
 
   test(
     'duplicate committed receiver data only re-ACKs durable progress',
@@ -1636,6 +1673,8 @@ FileTransferEngine _engine(
   LocalDatabase database,
   List<WhisperFrameV3> sent, {
   TransferAckWatchdog? ackWatchdog,
+  TransferAckTimerFactory? watchdogRetryTimerFactory,
+  List<Duration>? watchdogRetryDelays,
   FileTransferSource Function(String sourcePath, int expectedSize)?
   sourceFactory,
   Future<Directory> Function()? downloadDirectory,
@@ -1665,6 +1704,8 @@ FileTransferEngine _engine(
     },
     markPeerUnresponsive: markPeerUnresponsive ?? (_) => true,
     ackWatchdog: ackWatchdog,
+    watchdogRetryTimerFactory: watchdogRetryTimerFactory,
+    watchdogRetryDelays: watchdogRetryDelays,
     emitTransferUpdated: (_) {},
     notify: (_) {},
     remoteProfileFor: remoteProfileFor ?? (_) => _capablePeer(),

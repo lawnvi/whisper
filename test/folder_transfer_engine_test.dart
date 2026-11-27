@@ -32,6 +32,7 @@ final class _Device {
     Directory temp, {
     this.scanFolder,
     this.ackTimeout,
+    this.watchdogRetryDelays,
     this.keepAliveInterval = const Duration(seconds: 5),
     this.quietLimit = const Duration(minutes: 5),
     this.checkpointInterval = const Duration(milliseconds: 30),
@@ -47,6 +48,7 @@ final class _Device {
 
   /// How long this device waits for progress on what it sent.
   final Duration? ackTimeout;
+  final List<Duration>? watchdogRetryDelays;
   final Duration keepAliveInterval;
   final Duration quietLimit;
   final Duration checkpointInterval;
@@ -127,6 +129,7 @@ final class _Device {
     ackWatchdog: ackTimeout == null
         ? null
         : TransferAckWatchdog(timeout: ackTimeout!),
+    watchdogRetryDelays: watchdogRetryDelays,
     emitTransferUpdated: snapshots.add,
     notify: notices.add,
     remoteProfileFor: (peerId) => _profile(peerId),
@@ -307,6 +310,7 @@ void main() {
   void connect({
     Future<FolderScanResult> Function(String path)? scanFolder,
     Duration? ackTimeout,
+    List<Duration>? watchdogRetryDelays,
     Duration keepAliveInterval = const Duration(seconds: 5),
     Duration quietLimit = const Duration(minutes: 5),
     Duration checkpointInterval = const Duration(milliseconds: 30),
@@ -318,6 +322,7 @@ void main() {
       temp,
       scanFolder: scanFolder,
       ackTimeout: ackTimeout,
+      watchdogRetryDelays: watchdogRetryDelays,
       quietLimit: quietLimit,
       ackIntervalSize: ackIntervalSize,
     );
@@ -739,9 +744,11 @@ void main() {
       expect(sender.rejections, isEmpty);
     });
 
-    test('fails only that transfer once that has gone on too long', () async {
+    test('retries with backoff and fails only that transfer once stalls '
+        'persist', () async {
       connect(
         ackTimeout: const Duration(milliseconds: 200),
+        watchdogRetryDelays: const <Duration>[Duration(milliseconds: 50)],
         keepAliveInterval: const Duration(milliseconds: 60),
         checkpointInterval: const Duration(seconds: 30),
         ackIntervalSize: 4096 * _kib,
@@ -756,6 +763,7 @@ void main() {
       });
       await sendWithLastFrameHeld(() => release.future);
       final transferId = _onlyTransferId(sender);
+      await sender.waitForState(transferId, FileTransferState.waitingReconnect);
       await sender.waitForState(transferId, FileTransferState.failed);
 
       // F17: the peer connection stays alive instead of tearing down the
@@ -782,6 +790,72 @@ void main() {
       );
       await receiver.waitForState(nextId, FileTransferState.completed);
     });
+
+    test(
+      'auto-retries from preserved partial data after a transient stall',
+      () async {
+        const size = 2 * 1024 * _kib;
+        final file = File(p.join(temp.path, 'stall-recover.bin'))
+          ..writeAsBytesSync(_pattern(size, 9));
+        connect(
+          ackTimeout: const Duration(milliseconds: 120),
+          watchdogRetryDelays: const <Duration>[
+            Duration(milliseconds: 50),
+            Duration(milliseconds: 100),
+          ],
+          ackIntervalSize: 512 * _kib,
+        );
+        // Drop receiver ACKs after the first durable ACK so the sender stalls
+        // and enters waitingReconnect while the receiver holds partial bytes.
+        var dropAcks = false;
+        var ackCount = 0;
+        receiver.onSend = (frame) {
+          if (frame.type == WhisperFrameType.fileAck) {
+            ackCount += 1;
+            if (ackCount >= 2 && dropAcks) {
+              return false;
+            }
+            if (ackCount == 1) {
+              dropAcks = true;
+            }
+          }
+          return true;
+        };
+        const transferId = '33333333-3333-4333-8333-333333333333';
+        expect(
+          await sender.engine.sendFileTo(
+            'receiver',
+            file.path,
+            messageId: transferId,
+          ),
+          isTrue,
+        );
+        await sender.waitForState(
+          transferId,
+          FileTransferState.waitingReconnect,
+        );
+        // Link recovers: allow ACKs again and verify automatic backoff retry
+        // resumes from partial progress (> 0) without user intervention.
+        final resumedFrom = <int>[];
+        dropAcks = false;
+        receiver.onSend = (frame) {
+          if (frame.type == WhisperFrameType.fileReady) {
+            resumedFrom.add(frame.offset);
+          }
+          return true;
+        };
+        final done = await receiver.waitForState(
+          transferId,
+          FileTransferState.completed,
+        );
+        await sender.waitForState(transferId, FileTransferState.completed);
+
+        expect(sender.unresponsiveVerdicts, 0);
+        expect(sender.linked, isTrue);
+        expect(resumedFrom.any((offset) => offset > 0), isTrue);
+        expect(File(done.finalPath).readAsBytesSync(), file.readAsBytesSync());
+      },
+    );
   });
 
   test('cancelling on the receiving side removes what was staged', () async {

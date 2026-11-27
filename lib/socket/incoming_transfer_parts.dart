@@ -3,7 +3,11 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:synchronized/synchronized.dart';
-import 'package:whisper/model/LocalDatabase.dart' show FileTransferAdmission;
+import 'package:whisper/model/LocalDatabase.dart'
+    show FileTransferAdmission, FileTransferData, MessageData;
+import 'package:whisper/model/file_transfer.dart';
+import 'package:whisper/model/message.dart';
+import 'package:whisper/socket/file_transfer_v3.dart';
 import 'package:whisper/socket/folder_transfer_sink.dart';
 
 /// Writes what arrives for one transfer in order, without making the frame
@@ -144,4 +148,45 @@ final class TransferAdmissionRejected implements Exception {
   const TransferAdmissionRejected(this.decision);
 
   final FileTransferAdmission decision;
+}
+
+bool matchesIncomingFileOffer(MessageData persisted, MessageData incoming) {
+  return persisted.sender == incoming.sender &&
+      persisted.receiver == incoming.receiver &&
+      persisted.name == incoming.name &&
+      persisted.clipboard == incoming.clipboard &&
+      persisted.size == incoming.size &&
+      persisted.type == MessageEnum.File &&
+      persisted.content == incoming.content &&
+      persisted.message == incoming.message &&
+      persisted.timestamp == incoming.timestamp &&
+      persisted.uuid == incoming.uuid &&
+      persisted.md5 == incoming.md5 &&
+      persisted.fileTimestamp == incoming.fileTimestamp;
+}
+
+FileTransferData incomingTransferDraft(
+  MessageData message,
+  FileTransferV3Metadata metadata,
+) {
+  final now = DateTime.now().millisecondsSinceEpoch;
+  return FileTransferData(
+    transferId: message.uuid,
+    messageUuid: message.uuid,
+    messageRowId: 0,
+    peerUid: message.sender,
+    direction: FileTransferDirection.incoming,
+    state: FileTransferState.queued,
+    finalPath: '',
+    tempPath: '',
+    size: message.size,
+    checksumAlgorithm: metadata.checksumAlgorithm,
+    checksumValue: metadata.checksumValue,
+    chunkSize: metadata.chunkSize,
+    committedBytes: 0,
+    resumeProofResetCount: 0,
+    lastError: '',
+    createdAt: now,
+    updatedAt: now,
+  );
 }
