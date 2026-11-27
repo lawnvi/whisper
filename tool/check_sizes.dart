@@ -9,6 +9,14 @@ import 'dart:io';
 const dartLimit = 1000;
 const nativeLimit = 1500;
 const baselinePath = 'tool/size_baseline.txt';
+const uiSocketBaselinePath = 'tool/ui_socket_import_baseline.txt';
+
+const uiPrefixes = <String>['lib/page/', 'lib/new_ui/', 'lib/widget/'];
+const allowedUiSocketFiles = <String>{'svrmanager.dart', 'socket_events.dart'};
+final _socketImportPattern = RegExp(
+  r'''^\s*(?:import|export)\s+['"](?:package:whisper/socket/|(?:\.\./)+socket/)([^'"]+)['"]''',
+  multiLine: true,
+);
 
 const nativeExtensions = {
   '.c', '.cc', '.cpp', '.h', '.hpp', '.m', '.mm', '.swift', '.kt', '.java', //
@@ -41,9 +49,13 @@ Future<void> main(List<String> args) async {
     stderr.writeln('git ls-files failed: ${listed.stderr}');
     exit(2);
   }
+  final trackedFiles = (listed.stdout as String)
+      .split('\x00')
+      .where((path) => path.isNotEmpty)
+      .toList(growable: false);
   final sizes = <String, int>{};
-  for (final path in (listed.stdout as String).split('\x00')) {
-    if (path.isEmpty || limitFor(path) == null) continue;
+  for (final path in trackedFiles) {
+    if (limitFor(path) == null) continue;
     final file = File(path);
     if (!file.existsSync()) continue;
     sizes[path] = '\n'.allMatches(file.readAsStringSync()).length;
@@ -80,10 +92,17 @@ Future<void> main(List<String> args) async {
     }
   }
 
+  final uiSocketProblems = _checkUiSocketImports(
+    trackedFiles,
+    update: update,
+    hasSizeProblems: problems.isNotEmpty,
+  );
+
   if (update) {
-    if (problems.isNotEmpty) {
+    if (problems.isNotEmpty || uiSocketProblems.isNotEmpty) {
       stderr.writeln('The baseline only goes down. Fix these first:');
       problems.forEach(stderr.writeln);
+      uiSocketProblems.forEach(stderr.writeln);
       exit(1);
     }
     final paths = next.keys.toList()..sort();
@@ -102,7 +121,65 @@ Future<void> main(List<String> args) async {
     problems.forEach(stderr.writeln);
     exit(1);
   }
+  if (uiSocketProblems.isNotEmpty) {
+    stderr.writeln(
+      'UI files must not import lib/socket/ internals (see AGENTS.md):',
+    );
+    uiSocketProblems.forEach(stderr.writeln);
+    exit(1);
+  }
   stdout.writeln(
     'File sizes ok: ${baseline.length} files still over the limit, none grew.',
   );
+}
+
+List<String> _checkUiSocketImports(
+  List<String> trackedFiles, {
+  required bool update,
+  required bool hasSizeProblems,
+}) {
+  final actual = <String>{};
+  for (final path in trackedFiles) {
+    if (!path.endsWith('.dart') ||
+        !uiPrefixes.any((prefix) => path.startsWith(prefix))) {
+      continue;
+    }
+    final file = File(path);
+    if (!file.existsSync()) continue;
+    for (final match in _socketImportPattern.allMatches(
+      file.readAsStringSync(),
+    )) {
+      final target = match.group(1)!;
+      if (!allowedUiSocketFiles.contains(target)) {
+        actual.add('$path $target');
+      }
+    }
+  }
+  final baselineFile = File(uiSocketBaselinePath);
+  final baseline = <String>{};
+  if (baselineFile.existsSync()) {
+    for (final line in baselineFile.readAsLinesSync()) {
+      final text = line.trim();
+      if (text.isEmpty || text.startsWith('#')) continue;
+      baseline.add(text);
+    }
+  }
+  final problems = <String>[
+    for (final entry in (actual.difference(baseline).toList()..sort()))
+      '$entry (import WsSvrManager or ISocketEvent instead)',
+  ];
+  if (update && problems.isEmpty && !hasSizeProblems) {
+    final sorted = actual.toList()..sort();
+    baselineFile.writeAsStringSync(
+      '# Existing UI -> lib/socket/ internal imports allowed temporarily.\n'
+      '# UI reaches the network through svrmanager.dart and socket_events.dart only.\n'
+      '# This list may only shrink: run `dart run tool/check_sizes.dart --update`\n'
+      '# after removing an internal import.\n'
+      '${sorted.join('\n')}${sorted.isEmpty ? '' : '\n'}',
+    );
+    stdout.writeln(
+      '${sorted.length} UI -> socket internal imports recorded.',
+    );
+  }
+  return problems;
 }

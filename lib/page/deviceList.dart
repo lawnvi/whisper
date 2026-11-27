@@ -644,7 +644,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (widget.debugPreview != null) return;
-    _lanDiscovery.setBackgrounded(state != AppLifecycleState.resumed);
+    if (Platform.isAndroid || Platform.isIOS) _lanDiscovery.setBackgrounded(state != AppLifecycleState.resumed);
   }
 
   @override

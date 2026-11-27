@@ -1,0 +1,12 @@
+# Existing UI -> lib/socket/ internal imports allowed temporarily.
+# UI reaches the network through svrmanager.dart and socket_events.dart only.
+# This list may only shrink: run `dart run tool/check_sizes.dart --update`
+# after removing an internal import.
+lib/new_ui/shell/shell_device_drop.dart file_transfer_engine.dart
+lib/new_ui/shell/shell_device_drop.dart folder_transfer_manifest.dart
+lib/new_ui/shell/shell_self_panel.dart device_identity.dart
+lib/new_ui/shell/shell_self_panel.dart peer_socket_session.dart
+lib/page/conversation.dart file_transfer_engine.dart
+lib/page/deviceList.dart device_identity.dart
+lib/page/deviceList.dart peer_socket_session.dart
+lib/widget/folder_skipped_dialog.dart folder_transfer_manifest.dart
