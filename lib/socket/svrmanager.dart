@@ -47,6 +47,9 @@ import 'package:whisper/socket/peer_socket_session.dart';
 import 'package:whisper/socket/pending_outgoing_connection.dart';
 import 'package:whisper/socket/quick_send_identity_gate.dart';
 import 'package:whisper/socket/transfer_ack_watchdog.dart';
+import 'package:whisper/socket/transfer_channel_manager.dart';
+import 'package:whisper/socket/transfer_channel_protocol.dart';
+import 'package:whisper/socket/transfer_data_isolate.dart';
 import 'package:whisper/socket/socket_admission.dart';
 import 'package:whisper/socket/socket_events.dart';
 export 'package:whisper/socket/socket_events.dart';
@@ -152,6 +155,7 @@ class WsSvrManager {
     FolderTransferStore? folderTransferStore,
     TransferAckWatchdog? transferAckWatchdog,
     List<Duration>? transferRetryDelays,
+    bool enableTransferChannel = true,
   }) : _admission = admission ?? SocketAdmissionController(),
        _audioManager = audioManager ?? AudioShareManager.shared,
        _remoteInputManager = remoteInputManager ?? RemoteInputManager.shared,
@@ -183,7 +187,8 @@ class WsSvrManager {
        _folderTransferStore =
            folderTransferStore ?? const FolderTransferStore(),
        _transferAckWatchdog = transferAckWatchdog,
-       _transferRetryDelays = transferRetryDelays;
+       _transferRetryDelays = transferRetryDelays,
+       _enableTransferChannel = enableTransferChannel;
 
   @visibleForTesting
   WsSvrManager.forTesting({
@@ -211,6 +216,7 @@ class WsSvrManager {
     FolderTransferStore? folderTransferStore,
     TransferAckWatchdog? transferAckWatchdog,
     List<Duration>? transferRetryDelays,
+    bool enableTransferChannel = true,
   }) : this._internal(
          admission: admission, audioManager: audioManager,
          remoteInputManager: remoteInputManager,
@@ -234,6 +240,7 @@ class WsSvrManager {
          folderTransferStore: folderTransferStore,
          transferAckWatchdog: transferAckWatchdog,
          transferRetryDelays: transferRetryDelays,
+         enableTransferChannel: enableTransferChannel,
        );
 
   // 工厂构造函数，返回单例实例
@@ -245,19 +252,13 @@ class WsSvrManager {
 
   HttpServer? _server;
 
-  /// What [_server] listens on, for routes that tune their connection.
   NoDelayServerSocket? _acceptedSockets;
   final _listeningSockets = Expando<ServerSocket>('listening socket');
-
-  Future<void> _closeHttpServer(
-    HttpServer server, {
-    required bool force,
-  }) async {
-    final listening = _listeningSockets[server];
-    _listeningSockets[server] = null;
-    await listening?.close();
-    await server.close(force: force);
-  }
+  final bool _enableTransferChannel;
+  late final TransferChannelManager _transferChannels = TransferChannelManager(
+    _TransferChannelHost(this),
+    claimBrokerFactory: (manager) => _TransferClaimBroker(this, manager),
+  );
 
   late final PeerDirectory _peers = PeerDirectory(
     socketCloseTimeout: _socketCloseTimeout,
@@ -348,7 +349,7 @@ class WsSvrManager {
       }
     },
     sendBytesToConnection: _peers.sendToAwaitedIfCurrent,
-    enqueueBytesToConnection: _peers.sendToAwaitedIfCurrent,
+    enqueueBytesToConnection: _sendBulkTransferFrame,
     pruneInvalidOutbound: (peerId) =>
         _peers.sessionForPeer(peerId)?.dropInvalidOutbound(),
     ackWatchdog: _transferAckWatchdog,
@@ -585,19 +586,6 @@ class WsSvrManager {
 
   Future<void> _closeSocketSink(WebSocketSink sink) => _peers.closeSink(sink);
 
-  Future<void> debugRegisterPeerConnection(
-    String peerId,
-    PeerConnection connection,
-  ) => _peers.connections.register(connection);
-
-  @visibleForTesting
-  bool debugSendMalformedTransportFrame(String peerId) =>
-      _peers.debugSendMalformedTransportFrame(peerId);
-
-  @visibleForTesting
-  Future<bool> debugDropPeerTransport(String peerId) =>
-      _peers.debugDropPeerTransport(peerId);
-
   Future<bool> _registerPeerConnection({
     required String peerId,
     required WebSocketSink sink,
@@ -621,6 +609,7 @@ class WsSvrManager {
     _completeRemoteProfileRefreshWaiters(peerId: peerId);
     _outgoingTextAcknowledgements.disconnectPeer(peerId);
     _forgetPeerMedia(peerId);
+    _transferChannels.closePeer(peerId);
     FileBrowseHost.shared.closePeer(peerId);
     RemoteFilesClient.peerGone(peerId, reason: 'offline');
     await _transferEngine.preparePeerSuperseded(peerId);
@@ -1028,6 +1017,9 @@ class WsSvrManager {
       _dialer.markServerStarted();
       _acceptingUpgrades = !_closeOperationQueued;
       _acceptingOutgoingConnections = !_closeOperationQueued;
+      if (_enableTransferChannel) {
+        await _transferChannels.startWorker(mainPort: port > 0 ? server.port : 0);
+      }
       final host = '${server.address.host}:${server.port}';
       logger.i('Serving at ws://$host');
       return ServerStartResult.success(server.port);
@@ -1358,6 +1350,13 @@ class WsSvrManager {
     await _audioManager.closeChannels();
     await _remoteInputManager.closeChannels();
     await WindowStreamHost.shared.closeAll();
+    if (closeServer) {
+      await _transferChannels.stopWorker();
+    } else {
+      for (final peerId in disconnectedPeerIds) {
+        _transferChannels.closePeer(peerId);
+      }
+    }
     for (final peerId in disconnectedPeerIds) {
       await _remoteClipboardTransfer.clearPeer(peerId);
       WindowStreamViewer.shared.peerDisconnected(peerId);
@@ -1442,15 +1441,6 @@ class WsSvrManager {
     ),
   );
 
-  @visibleForTesting
-  Future<bool> debugRemovePeerForWatchdog(String peerId) {
-    final binding = _peers.currentBinding(peerId);
-    if (binding == null) {
-      return Future<bool>.value(false);
-    }
-    return _removeUnresponsivePeerIfCurrent(binding);
-  }
-
   /// Explicit ordered teardown steps when a peer's current connection ends.
   /// Keep this sequence explicit so tokens, acks, and media channels close
   /// before transfer recovery and shared coordinators run.
@@ -1460,6 +1450,7 @@ class WsSvrManager {
         (peerId, _) {
           _outgoingTextAcknowledgements.disconnectPeer(peerId);
           _forgetPeerMedia(peerId);
+          _transferChannels.closePeer(peerId);
         },
         (peerId, _) => _wireControlSessions.clearPeer(
           peerId,

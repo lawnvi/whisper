@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:whisper/socket/backpressure_web_socket.dart';
 import 'package:whisper/socket/pre_auth_byte_cap.dart';
 
 /// Sends small writes at once instead of waiting for the previous one to be
@@ -73,11 +74,49 @@ void setTcpNotSentLowat(
   }
 }
 
+/// Best-effort DSCP CS1 (Lower Effort / Background, TOS = 0x20) on POSIX
+/// bulk-transfer sockets so routers that honor DiffServ prioritize real-time
+/// audio and input over file transfers. No-op on Windows (ignored by default).
+void setBulkDscp(Socket socket) {
+  final int? option;
+  if (Platform.isMacOS) {
+    option = _ipTosMac;
+  } else if (Platform.isLinux || Platform.isAndroid) {
+    option = _ipTosLinux;
+  } else {
+    option = null;
+  }
+  if (option == null) {
+    return;
+  }
+  try {
+    socket.setRawOption(RawSocketOption.fromInt(_ipprotoIp, option, _dscpCs1));
+  } on Object {
+    // Best effort: IPv6-only sockets or kernels that refuse keep working.
+  }
+}
+
 /// Applies `/chat`-only transport tuning: wider Windows buffers for bulk
 /// transfer throughput plus `TCP_NOTSENT_LOWAT` on macOS/Linux to keep
 /// unsent bulk bytes in the application scheduler. Never call on media links.
 void tuneChatSocket(Socket socket) {
   widenTransferBuffers(socket);
+  setTcpNotSentLowat(socket);
+}
+
+/// Applies `/transfer` bulk-file socket tuning: wider Windows buffers for
+/// throughput, `TCP_NOTSENT_LOWAT` on POSIX so entering steered pacing drains
+/// quickly, and best-effort DSCP CS1.
+void tuneTransferBulkSocket(Socket socket) {
+  widenTransferBuffers(socket);
+  setTcpNotSentLowat(socket);
+  setBulkDscp(socket);
+}
+
+/// Applies `/transfer` mount-browse socket tuning: default kernel buffers
+/// (never 16 MiB) with `TCP_NOTSENT_LOWAT` on POSIX for low-latency reads and
+/// writes.
+void tuneTransferBrowseSocket(Socket socket) {
   setTcpNotSentLowat(socket);
 }
 
@@ -87,6 +126,12 @@ const _soSndBuf = 0x1001;
 const _soRcvBuf = 0x1002;
 const _transferSendBufferBytes = 16 * 1024 * 1024;
 const _transferReceiveBufferBytes = 16 * 1024 * 1024;
+
+// IPPROTO_IP and IP_TOS (DSCP CS1 = 0x20) on macOS and Linux/Android.
+const _ipprotoIp = 0;
+const _ipTosMac = 3;
+const _ipTosLinux = 1;
+const _dscpCs1 = 0x20;
 
 // IPPROTO_TCP and TCP_NOTSENT_LOWAT on macOS (Darwin) and Linux.
 const _ipprotoTcp = 6;
@@ -188,11 +233,50 @@ class NoDelayServerSocket extends Stream<Socket> implements ServerSocket {
 }
 
 /// Opens a WebSocket over a socket with TCP_NODELAY set (dart:io's
-/// `WebSocket.connect` gives no access to its socket).
+/// `WebSocket.connect` gives no access to its socket). Optional [onSocket]
+/// applies additional tuning (such as transfer buffer sizing or DSCP) before
+/// wrapping the upgraded socket.
 Future<WebSocket> connectNoDelayWebSocket(
   Uri uri, {
   required HttpClient client,
   Duration timeout = const Duration(seconds: 6),
+  void Function(Socket socket)? onSocket,
+}) async {
+  final upgraded = await _upgradeClientNoDelaySocket(
+    uri,
+    client: client,
+    timeout: timeout,
+    onSocket: onSocket,
+  );
+  return upgraded.webSocket;
+}
+
+/// Opens a [BackpressureWebSocketChannel] over a socket with TCP_NODELAY and
+/// optional [onSocket] tuning so `sink.addStream` propagates real TCP
+/// backpressure and `sink.close` can immediately destroy a blocked socket.
+Future<BackpressureWebSocketChannel> connectBackpressureWebSocket(
+  Uri uri, {
+  required HttpClient client,
+  Duration timeout = const Duration(seconds: 6),
+  void Function(Socket socket)? onSocket,
+}) async {
+  final upgraded = await _upgradeClientNoDelaySocket(
+    uri,
+    client: client,
+    timeout: timeout,
+    onSocket: onSocket,
+  );
+  return BackpressureWebSocketChannel(
+    upgraded.webSocket,
+    socket: upgraded.socket,
+  );
+}
+
+Future<({WebSocket webSocket, Socket socket})> _upgradeClientNoDelaySocket(
+  Uri uri, {
+  required HttpClient client,
+  required Duration timeout,
+  void Function(Socket socket)? onSocket,
 }) async {
   final http = uri.replace(scheme: uri.scheme == 'wss' ? 'https' : 'http');
   final nonce = newWebSocketKey();
@@ -211,11 +295,13 @@ Future<WebSocket> connectNoDelayWebSocket(
     throw WebSocketException('Connection to $uri was not upgraded');
   }
   setTcpNoDelay(socket);
-  return WebSocket.fromUpgradedSocket(
+  onSocket?.call(socket);
+  final webSocket = WebSocket.fromUpgradedSocket(
     socket,
     serverSide: false,
     compression: CompressionOptions.compressionOff,
   );
+  return (webSocket: webSocket, socket: socket);
 }
 
 /// A fresh Sec-WebSocket-Key for a client's upgrade request.

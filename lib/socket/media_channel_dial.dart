@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:web_socket_channel/io.dart';
@@ -10,7 +11,7 @@ import 'package:whisper/socket/packet_byte_transport.dart';
 
 /// The media connections beside `/chat`, and what differs between them when
 /// one side dials the other. Everything else (the token, the proof, the
-/// packet envelope) is the same for all three.
+/// packet envelope) is the same for all of them.
 enum MediaRoute {
   audio('/audio', 'audio-group'),
 
@@ -20,7 +21,12 @@ enum MediaRoute {
   input('/input', 'remote-input', pingInterval: Duration(seconds: 5)),
 
   /// Video sets TCP_NODELAY on the socket itself before the upgrade.
-  window('/window', 'window-stream', noDelay: true);
+  window('/window', 'window-stream', noDelay: true),
+
+  /// Bulk file/folder and mounted-folder data channels in the transfer worker
+  /// isolate; uses [connectNoDelayWebSocket] so callers can tune socket buffers
+  /// and DSCP before wrapping the WebSocket.
+  transfer('/transfer', 'bulk-transfer', noDelay: true);
 
   const MediaRoute(
     this.path,
@@ -95,14 +101,24 @@ Future<WebSocketChannel> dialMediaChannel(
   required String proverPeerId,
   required Uint8List proofKey,
   Duration connectTimeout = mediaChannelConnectTimeout,
+  void Function(Socket socket)? onSocket,
 }) async {
   WebSocketChannel? channel;
   try {
-    if (route.noDelay) {
+    if (route == MediaRoute.transfer) {
+      channel = await connectBackpressureWebSocket(
+        uri,
+        client: newDirectPeerHttpClient(),
+        timeout: connectTimeout,
+        onSocket: onSocket,
+      ).timeout(connectTimeout);
+    } else if (route.noDelay) {
       channel = IOWebSocketChannel(
         await connectNoDelayWebSocket(
           uri,
           client: newDirectPeerHttpClient(),
+          timeout: connectTimeout,
+          onSocket: onSocket,
         ).timeout(connectTimeout),
       );
     } else {

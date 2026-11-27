@@ -44,6 +44,8 @@ import 'package:whisper/socket/wire_message_codec.dart';
 import 'package:whisper/socket/wire_message_replay.dart';
 import 'package:whisper/state/peer_profile.dart';
 
+part 'file_transfer_bulk_recovery.dart';
+
 enum _IncomingReadyResult { retained, sendFailed, unavailable }
 
 /// A folder being received: the worker writing it, and how much of its
@@ -2819,76 +2821,6 @@ class FileTransferEngine {
         await _handleStalledOutgoingTransfer(transfer, timeout.connection);
       },
     );
-  }
-
-  Future<void> _handleStalledOutgoingTransfer(
-    FileTransferData transfer,
-    TransferConnectionBinding connection,
-  ) async {
-    // Keep the peer connection and other subsystems intact. Put only this
-    // transfer into a recoverable state with automatic backoff retries so
-    // transient weak-Wi-Fi stalls (including ephemeral pastes) resume from
-    // the receiver's preserved partial bytes; fail only after consecutive
-    // stalled retries make no durable progress.
-    final scheduled = _timeoutRetries.scheduleRetry(
-      transferId: transfer.transferId,
-      peerId: transfer.peerUid,
-      durableOffset: transfer.committedBytes,
-      onRetry: () => _retryTimedOutTransfer(transfer.transferId, connection),
-    );
-    if (scheduled) {
-      await _updateTransfer(
-        transfer.transferId,
-        state: FileTransferState.waitingReconnect,
-        lastError: '',
-      );
-      await _releaseOutgoingAndStartNext(
-        transfer,
-        connection: connection,
-        startNext: false,
-        clearTimeoutRetry: false,
-      );
-      return;
-    }
-    await _failOutgoingFileTransferV3(
-      transfer,
-      FileTransferFailureReason.receiver,
-    );
-  }
-
-  Future<void> _retryTimedOutTransfer(
-    String transferId,
-    TransferConnectionBinding connection,
-  ) async {
-    final transfer = await _database().fetchFileTransfer(transferId);
-    if (transfer == null ||
-        transfer.direction != FileTransferDirection.outgoing ||
-        transfer.state != FileTransferState.waitingReconnect ||
-        !_isConnectedTo(transfer.peerUid)) {
-      return;
-    }
-    await retryTransfer(transferId);
-    final afterOffer = await _database().fetchFileTransfer(transferId);
-    if (afterOffer != null &&
-        afterOffer.state == FileTransferState.negotiating) {
-      _timeoutRetries.scheduleOfferTimeout(
-        transferId: transferId,
-        delay: _ackWatchdog.timeout,
-        onTimeout: () => _runTransferOperation<void>(
-          transferId,
-          connection: connection,
-          operation: () async {
-            final current = await _database().fetchFileTransfer(transferId);
-            if (current == null ||
-                current.direction != FileTransferDirection.outgoing ||
-                current.state != FileTransferState.negotiating) {
-              return;
-            }
-            await _handleStalledOutgoingTransfer(current, connection);
-          },
-        ),
-      );
-    }
   }
 
   Future<void> _yieldAfterFileTransferFrame() {

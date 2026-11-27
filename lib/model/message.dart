@@ -38,5 +38,6 @@ enum MessageEnum {
   AudioGroupControl,
   WindowStreamControl,
   FileBrowseControl,
+  TransferChannelControl,
 }
 

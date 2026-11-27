@@ -51,9 +51,10 @@ xattr -dr com.apple.quarantine /Applications/Whisper.app
 
 - The Server Port (`10002`), TCP and UDP: the connection itself, and keyboard and mouse sharing.
 - The Server Port + 2 (`10004`), TCP and UDP: a computer playing sound shared from another device.
+- The Server Port + 3 (`10005`), TCP: the dedicated data channel for file transfers and mounted folders (automatically dials back or falls back to the Server Port if blocked).
 - `10003` TCP: share links, only while a link is on.
 
-When another program holds one of these numbers, Whisper moves on to one of the next 7. With ufw: `sudo ufw allow 10002:10004/tcp` and `sudo ufw allow 10002,10004/udp`. With only TCP open everything works, but the keyboard, mouse and sound stutter on weak Wi-Fi.
+When another program holds one of these numbers, Whisper moves on to one of the next 7. With ufw: `sudo ufw allow 10002:10005/tcp` and `sudo ufw allow 10002,10004/udp`. With only TCP open everything works, but the keyboard, mouse and sound stutter on weak Wi-Fi.
 
 **macOS Local Network permission**: from macOS 15, apps need permission to reach the local network. Open System Settings → Privacy & Security → Local Network and make sure Whisper is on.
 

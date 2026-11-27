@@ -1,6 +1,6 @@
 # 媒体连接：声音、键鼠和窗口旁边的那几条 WebSocket
 
-声音、键鼠和窗口流转的数据不走 `/chat`，各自另开一条 WebSocket：`/audio`、`/input`、`/window`。三条的令牌、证明、加密、接受和关闭都是同一套代码，只有路由本身的几处参数不同。本文说明这一套怎么工作。UDP 车道见 [udp-lane.md](udp-lane.md)，声音掉线后谁负责接回来见 [audio-group-recovery.md](audio-group-recovery.md)。
+声音、键鼠和窗口流转的数据不走 `/chat`，各自另开一条 WebSocket：`/audio`、`/input`、`/window`。大块文件与挂载数据通道 `/transfer` 也复用同一套令牌、证明、加密和反拨机制，详情见 [transfer-channel.md](transfer-channel.md)。本文说明媒体连接这一套怎么工作。UDP 车道见 [udp-lane.md](udp-lane.md)，声音掉线后谁负责接回来见 [audio-group-recovery.md](audio-group-recovery.md)。
 
 ## 路由
 

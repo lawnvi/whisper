@@ -24,6 +24,7 @@ import 'package:whisper/socket/peer_connection.dart';
 import 'package:whisper/socket/peer_ping_tracker.dart';
 import 'package:whisper/socket/peer_profile_refresh.dart';
 import 'package:whisper/socket/peer_socket_session.dart';
+import 'package:whisper/socket/transfer_channel_protocol.dart';
 import 'package:whisper/socket/whisper_frame_v3.dart';
 import 'package:whisper/socket/wire_input_policy.dart';
 import 'package:whisper/socket/wire_message_codec.dart';
@@ -195,6 +196,14 @@ class ChannelRouter {
           session: session,
           requireCurrentBusiness: requireCurrentBusiness,
         );
+      case MessageEnum.TransferChannelControl:
+        requireCurrentBusiness();
+        final control = TransferChannelControlMessage.parseWireMessage(
+          message,
+          authenticatedPeerId: session.remotePeerId,
+          localPeerId: session.localProfile.uid,
+        );
+        await _host.handleTransferChannelControl(session, control);
       default:
         logger.i('未知消息：$str');
     }

@@ -563,6 +563,7 @@ class PeerCapabilities {
     this.windowStreamSinkV1 = false,
     this.windowStreamOfferV1 = false,
     this.remoteFilesV1 = false,
+    this.transferChannelV1 = false,
   });
 
   final bool fileTransferV3;
@@ -586,6 +587,10 @@ class PeerCapabilities {
   /// (after asking) and browses theirs (protocol 12).
   final bool remoteFilesV1;
 
+  /// Supports dedicated `/transfer` worker-isolate data channels for bulk file
+  /// transfers (`bulk`) and mounted-folder reads/writes (`browse`).
+  final bool transferChannelV1;
+
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
       'fileTransferV3': fileTransferV3,
@@ -599,6 +604,7 @@ class PeerCapabilities {
       'windowStreamSinkV1': windowStreamSinkV1,
       'windowStreamOfferV1': windowStreamOfferV1,
       'remoteFilesV1': remoteFilesV1,
+      if (transferChannelV1) 'transferChannelV1': true,
     };
   }
 
@@ -618,6 +624,7 @@ class PeerCapabilities {
       windowStreamSinkV1: json['windowStreamSinkV1'] as bool? ?? false,
       windowStreamOfferV1: json['windowStreamOfferV1'] as bool? ?? false,
       remoteFilesV1: json['remoteFilesV1'] as bool? ?? false,
+      transferChannelV1: json['transferChannelV1'] as bool? ?? false,
     );
   }
 
@@ -633,6 +640,7 @@ class PeerCapabilities {
     'windowStreamSinkV1',
     'windowStreamOfferV1',
     'remoteFilesV1',
+    'transferChannelV1',
   };
 
   factory PeerCapabilities.fromWireJson(Map<String, dynamic> json) {

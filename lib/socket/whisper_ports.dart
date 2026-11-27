@@ -11,6 +11,10 @@ abstract final class WhisperPorts {
   /// links take the one before it, 10003 by default).
   static int audioMedia(int main) => main > 0 ? main + 2 : 0;
 
+  /// The transfer worker isolate's TCP port for `/transfer` bulk and browse
+  /// data channels (10005 by default).
+  static int transferData(int main) => main > 0 ? main + 3 : 0;
+
   /// How many numbers from the fixed one are tried.
   static const int tries = 8;
 

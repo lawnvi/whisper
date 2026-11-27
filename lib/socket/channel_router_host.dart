@@ -12,6 +12,7 @@ import 'package:whisper/socket/outgoing_text_retry.dart';
 import 'package:whisper/socket/peer_directory.dart';
 import 'package:whisper/socket/peer_ping_tracker.dart';
 import 'package:whisper/socket/peer_socket_session.dart';
+import 'package:whisper/socket/transfer_channel_protocol.dart';
 import 'package:whisper/socket/wire_input_policy.dart';
 import 'package:whisper/socket/wire_message_replay.dart';
 import 'package:whisper/state/peer_profile.dart';
@@ -96,6 +97,10 @@ abstract interface class ChannelRouterHost {
   void answerInputDialBack(
     PeerSocketSession session,
     RemoteInputControlMessage request,
+  );
+  Future<void> handleTransferChannelControl(
+    PeerSocketSession session,
+    TransferChannelControlMessage control,
   );
   Future<void> releaseTerminalControl({
     required String namespace,

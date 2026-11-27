@@ -190,12 +190,15 @@ class FsUploads {
   }
 
   /// Ends upload [id]: in place of its file when [commit] (modified at
-  /// [modifiedMs] if given), else gone. Returns where it went: the file,
-  /// or the copy kept beside it.
+  /// [modifiedMs] if given), else gone. When [expectedSize] is supplied for a
+  /// commit, the host refuses to commit if the flushed temp file does not match
+  /// that length (preventing truncated commits across separate data/control
+  /// channels). Returns where it went: the file, or the copy kept beside it.
   Future<String> close(
     String id, {
     required bool commit,
     int? modifiedMs,
+    int? expectedSize,
   }) async {
     final upload = _open.remove(id);
     if (upload == null) {
@@ -212,6 +215,12 @@ class FsUploads {
       return upload.target;
     }
     try {
+      if (expectedSize != null) {
+        final actualSize = await File(upload.temp).length();
+        if (upload.size != expectedSize || actualSize != expectedSize) {
+          throw const FsPathException('size mismatch');
+        }
+      }
       if (modifiedMs != null) {
         await File(
           upload.temp,

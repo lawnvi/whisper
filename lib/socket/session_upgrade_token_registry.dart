@@ -313,7 +313,7 @@ String normalizeMediaRoute(String route) {
     throw ArgumentError.value(
       route,
       'route',
-      'must be /audio, /input or /window',
+      'must be /audio, /input, /window or /transfer',
     );
   }
   return normalized;
@@ -344,6 +344,7 @@ String? _tryNormalizeMediaNamespace(
     return switch (normalizedRoute) {
       '/audio' => 'audio-group',
       '/window' => 'window-stream',
+      '/transfer' => 'bulk-transfer',
       _ => 'remote-input',
     };
   }
@@ -351,6 +352,7 @@ String? _tryNormalizeMediaNamespace(
     ('/audio', 'audio-group') => 'audio-group',
     ('/input', 'remote-input') => 'remote-input',
     ('/window', 'window-stream') => 'window-stream',
+    ('/transfer', 'bulk-transfer') => 'bulk-transfer',
     _ => null,
   };
 }
@@ -359,7 +361,7 @@ String? _tryNormalizeMediaRoute(String route) {
   final trimmed = route.trim();
   final normalized = trimmed.startsWith('/') ? trimmed : '/$trimmed';
   return switch (normalized) {
-    '/audio' || '/input' || '/window' => normalized,
+    '/audio' || '/input' || '/window' || '/transfer' => normalized,
     _ => null,
   };
 }

@@ -356,6 +356,16 @@ final class _ChannelRouterHost implements ChannelRouterHost {
   ) => _m._answerInputDialBack(session, request);
 
   @override
+  Future<void> handleTransferChannelControl(
+    PeerSocketSession session,
+    TransferChannelControlMessage control,
+  ) => _m._transferChannels.handleControl(
+    remotePeerId: session.remotePeerId,
+    localGeneration: session.connectionGeneration,
+    control: control,
+  );
+
+  @override
   Future<void> releaseTerminalControl({
     required String namespace,
     required String route,
@@ -377,4 +387,113 @@ final class _ChannelRouterHost implements ChannelRouterHost {
 
   @override
   String shortSessionId(String sessionId) => _m._shortSessionId(sessionId);
+}
+
+final class _TransferChannelHost implements TransferChannelHost {
+  _TransferChannelHost(this._m);
+
+  final WsSvrManager _m;
+
+  @override
+  bool get enabled => _m._enableTransferChannel;
+
+  @override
+  String localPeerIdFor(String peerId) => _m._peers.localPeerIdFor(peerId);
+
+  @override
+  bool peerSupportsTransferChannel(String peerId) =>
+      _m.remoteProfileFor(peerId)?.capabilities.transferChannelV1 == true;
+
+  @override
+  TransferConnectionBinding? currentBinding(String peerId) =>
+      _m._peers.currentBinding(peerId);
+
+  @override
+  String? dialHostFor(String peerId, int generation) =>
+      _m._transferDialHostFor(peerId, generation);
+
+  @override
+  T? withSessionKeys<T>(
+    String peerId,
+    int generation,
+    T Function(Uint8List sendKey, Uint8List receiveKey) action,
+  ) => _m._withTransferSessionKeys(peerId, generation, action);
+
+  @override
+  String? issueTransferToken({
+    required String peerId,
+    required int generation,
+    required String sessionId,
+    required bool reverse,
+  }) => _m._issueTransferUpgradeToken(
+    peerId: peerId,
+    generation: generation,
+    sessionId: sessionId,
+    reverse: reverse,
+  );
+
+  @override
+  void revokeTransferToken({
+    required String peerId,
+    required String sessionId,
+  }) => _m._sessionUpgradeTokens.revoke(
+    route: MediaRoute.transfer.path,
+    namespace: MediaRoute.transfer.namespace,
+    sessionId: sessionId,
+    peerId: peerId,
+  );
+
+  @override
+  Future<bool> sendControl(
+    String peerId,
+    TransferChannelControlMessage control,
+  ) => _m._sendTransferChannelControlTo(peerId, control);
+
+  @override
+  Future<bool> sendFallbackOnChat(
+    TransferConnectionBinding binding,
+    Object payload,
+  ) => _m._peers.sendToAwaitedIfCurrent(binding, payload);
+
+  @override
+  Future<void> handleInboundFrame(TransferDataInboundFrame frame) =>
+      _m._handleInboundTransferFrame(frame);
+
+  @override
+  void onUnexpectedChannelDrop(
+    String peerId,
+    int generation,
+    TransferChannelKind kind,
+  ) => _m._onUnexpectedTransferChannelDrop(peerId, generation, kind);
+}
+
+final class _TransferClaimBroker implements TransferClaimBroker {
+  _TransferClaimBroker(this._m, this._manager);
+
+  final WsSvrManager _m;
+  final TransferChannelManager _manager;
+
+  @override
+  TransferClaimLookupResult? lookup({
+    required String sessionId,
+    required String token,
+    required Object remoteAddress,
+  }) => _m._lookupIsolateTransferClaim(
+    manager: _manager,
+    sessionId: sessionId,
+    token: token,
+    remoteAddress: remoteAddress,
+  );
+
+  @override
+  bool consume({
+    required String sessionId,
+    required String token,
+    required SessionUpgradeClaim expected,
+  }) => _m._consumeIsolateTransferClaim(
+    manager: _manager,
+    sessionId: sessionId,
+    token: token,
+    expected: expected,
+  );
 }

@@ -114,6 +114,10 @@ class RemoteFilesClient {
   int _nextRequest = 1;
   final _pending = <int, Completer<Map<String, Object?>>>{};
   final _reads = <int, ({Completer<Uint8List> done, int length})>{};
+  final _inflightWrites = <String, Set<Future<void>>>{};
+  final _writeRequestIds = <int>{};
+  final _uploadSizes = <String, int>{};
+  final _failedUploads = <String>{};
   Completer<RemoteFsInfo>? _opening;
   RemoteFsInfo? info;
   int _thumbsRunning = 0;
@@ -167,6 +171,30 @@ class RemoteFilesClient {
     for (final client in _clients.values.toList()) {
       if (client.peerId == peerId) {
         client._fail(RemoteFsException(reason));
+      }
+    }
+  }
+
+  /// Fails in-flight ranged reads and upload writes for [peerId] when its
+  /// dedicated `browse` data channel drops while `/chat` remains connected, so
+  /// mounted callers retry or abort immediately instead of waiting 60s.
+  static void failInflightDataForPeer(String peerId) {
+    for (final client in _clients.values.toList()) {
+      if (client.peerId != peerId) continue;
+      final reads = client._reads.values.toList(growable: false);
+      client._reads.clear();
+      for (final read in reads) {
+        if (!read.done.isCompleted) {
+          read.done.completeError(const RemoteFsException(FileBrowseError.io));
+        }
+      }
+      final writeIds = client._writeRequestIds.toList(growable: false);
+      client._writeRequestIds.clear();
+      for (final id in writeIds) {
+        final pending = client._pending.remove(id);
+        if (pending != null && !pending.isCompleted) {
+          pending.completeError(const RemoteFsException(FileBrowseError.io));
+        }
       }
     }
   }
@@ -349,6 +377,10 @@ class RemoteFilesClient {
     }
     _pending.clear();
     _reads.clear();
+    _inflightWrites.clear();
+    _writeRequestIds.clear();
+    _uploadSizes.clear();
+    _failedUploads.clear();
     info = null;
     _clients.remove(sessionId);
     if (!_gone.isCompleted) {
@@ -566,56 +598,126 @@ class RemoteFilesClient {
       'path': path,
       if (truncate) 'truncate': true,
     }, timeout: _changePatience);
-    return (
+    final upload = (
       id: result['upload'] as String,
       size: (result['size'] as num?)?.toInt() ?? 0,
     );
+    _uploadSizes[upload.id] = truncate ? 0 : upload.size;
+    _failedUploads.remove(upload.id);
+    return upload;
   }
 
   /// Writes [data] at [offset] of [upload]; returns the file's size so far.
-  Future<int> write(String upload, int offset, Uint8List data) async {
-    final id = _nextRequest++;
-    final completer = Completer<Map<String, Object?>>();
-    _pending[id] = completer;
-    _clients[sessionId] = this;
-    final sent = await sendWrite?.call(
-      peerId,
-      '$sessionId/$upload',
-      id,
-      offset,
-      data,
-    );
-    if (sent != true) {
-      _pending.remove(id);
-      throw const RemoteFsException('offline');
+  Future<int> write(String upload, int offset, Uint8List data) {
+    // Track the client-requested extent up front (not merely the host's
+    // echoed size) so a missed or failed tail write can never match on commit.
+    final requestedEnd = offset + data.length;
+    final prev = _uploadSizes[upload] ?? 0;
+    if (requestedEnd > prev) {
+      _uploadSizes[upload] = requestedEnd;
     }
-    final result = await completer.future.timeout(
-      const Duration(seconds: 60),
-      onTimeout: () {
-        _pending.remove(id);
-        throw const RemoteFsException('timeout');
-      },
+    final done = Completer<void>();
+    final pendingSet = _inflightWrites.putIfAbsent(
+      upload,
+      () => <Future<void>>{},
     );
-    return (result['size'] as num?)?.toInt() ?? 0;
+    pendingSet.add(done.future);
+    Future<int> run() async {
+      final id = _nextRequest++;
+      final completer = Completer<Map<String, Object?>>();
+      _pending[id] = completer;
+      _writeRequestIds.add(id);
+      _clients[sessionId] = this;
+      try {
+        final sent = await sendWrite?.call(
+          peerId,
+          '$sessionId/$upload',
+          id,
+          offset,
+          data,
+        );
+        if (sent != true) {
+          _pending.remove(id);
+          throw const RemoteFsException('offline');
+        }
+        final result = await completer.future.timeout(
+          const Duration(seconds: 60),
+          onTimeout: () {
+            _pending.remove(id);
+            throw const RemoteFsException('timeout');
+          },
+        );
+        return (result['size'] as num?)?.toInt() ?? 0;
+      } catch (_) {
+        _failedUploads.add(upload);
+        rethrow;
+      } finally {
+        _writeRequestIds.remove(id);
+      }
+    }
+
+    return run().whenComplete(() {
+      if (!done.isCompleted) {
+        done.complete();
+      }
+      pendingSet.remove(done.future);
+      if (pendingSet.isEmpty && identical(_inflightWrites[upload], pendingSet)) {
+        _inflightWrites.remove(upload);
+      }
+    });
   }
 
-  Future<void> writeSize(String upload, int size) => _request(
-    FileBrowseAction.writeSize,
-    {'upload': upload, 'size': size},
-    timeout: _changePatience,
-  );
+  Future<void> _awaitInflightWrites(String upload) async {
+    while (true) {
+      final pending = _inflightWrites[upload];
+      if (pending == null || pending.isEmpty) {
+        return;
+      }
+      await Future.wait(pending.toList(growable: false));
+    }
+  }
+
+  Future<void> writeSize(String upload, int size) async {
+    await _awaitInflightWrites(upload);
+    await _request(
+      FileBrowseAction.writeSize,
+      {'upload': upload, 'size': size},
+      timeout: _changePatience,
+    );
+    _uploadSizes[upload] = size;
+  }
 
   /// Ends [upload]: when [commit], it takes its file's place (modified at
   /// [modifiedMs]) and the result says where it went (beside the file, if
   /// that changed there meanwhile) and what it is now; else it is gone.
+  ///
+  /// Waits for all in-flight [write] replies for [upload] before sending
+  /// `writeClose` on `/chat`. Refuses to commit if any write for [upload]
+  /// failed, and includes the client-sent logical size on commit so the host
+  /// rejects truncated commits if data and control ever raced.
   Future<({String path, FsEntry? entry})> writeClose(
     String upload, {
     required bool commit,
     int? modifiedMs,
+    int? expectedSize,
   }) async {
+    await _awaitInflightWrites(upload);
+    final hadFailure = _failedUploads.remove(upload);
+    final size = expectedSize ?? _uploadSizes.remove(upload);
+    if (commit && hadFailure) {
+      unawaited(
+        _request(
+          FileBrowseAction.writeClose,
+          {'upload': upload},
+          timeout: _changePatience,
+        ).catchError((Object _) => const <String, Object?>{}),
+      );
+      throw const RemoteFsException(FileBrowseError.io);
+    }
     final result = await _request(FileBrowseAction.writeClose, {
       'upload': upload,
       if (commit) 'commit': true,
+      if (commit && size != null) 'size': size,
       'modified': ?modifiedMs,
     }, timeout: _changePatience);
     final entry = result['entry'];

@@ -437,12 +437,18 @@ class FileBrowseHost {
         case FileBrowseAction.writeClose:
           final upload = _upload(message, text('upload'));
           final rootId = upload.rootId;
+          final rawExpectedSize = payload['size'];
+          if (rawExpectedSize != null &&
+              (rawExpectedSize is! int || rawExpectedSize < 0)) {
+            throw const FormatException('invalid expected size');
+          }
           final real = await uploads.close(
             upload.id,
             commit: payload['commit'] == true,
             modifiedMs: payload['modified'] is int
                 ? payload['modified'] as int
                 : null,
+            expectedSize: rawExpectedSize as int?,
           );
           final path = await files.resolver.relativeOf(rootId, real);
           await _ok(message, {
@@ -460,6 +466,7 @@ class FileBrowseHost {
         'not empty' => FileBrowseError.notEmpty,
         'bad name' => FileBrowseError.badName,
         'busy' => FileBrowseError.busy,
+        'size mismatch' => FileBrowseError.io,
         _ => FileBrowseError.notAllowed,
       });
     } on FormatException {

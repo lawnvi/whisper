@@ -36,6 +36,7 @@ extension WsSvrManagerControl on WsSvrManager {
         windowStreamSinkV1: supportsWindowStreamSink(),
         windowStreamOfferV1: supportsWindowStreamSink(),
         remoteFilesV1: true,
+        transferChannelV1: _enableTransferChannel,
       ),
       displayTopology: topology,
       formFactor: await localFormFactor(),
@@ -306,8 +307,141 @@ extension WsSvrManagerControl on WsSvrManager {
     );
   }
 
-  /// The bytes a mounted folder on [peerId] asked for, on the same
-  /// connection as the session's other replies.
+  Future<void> _closeHttpServer(
+    HttpServer server, {
+    required bool force,
+  }) async {
+    final listening = _listeningSockets[server];
+    _listeningSockets[server] = null;
+    await listening?.close();
+    await server.close(force: force);
+  }
+
+  /// Sends a `/transfer` negotiation control envelope on `/chat`.
+  Future<bool> _sendTransferChannelControlTo(
+    String peerId,
+    TransferChannelControlMessage control,
+  ) {
+    final session = _peers.sessionForPeer(peerId);
+    if (session == null || !session.isAuthenticated) {
+      return Future<bool>.value(false);
+    }
+    final message = _buildMessage(
+      MessageEnum.TransferChannelControl,
+      jsonEncode(control.toJson()),
+      '',
+      '',
+      0,
+      false,
+      senderOverride: session.localProfile.uid,
+      receiverOverride: peerId,
+      uid: control.sessionId,
+    );
+    return _sendMessageData(message, peerId: peerId);
+  }
+
+  /// Routes outgoing `fileData` frames over the dedicated `bulk` `/transfer`
+  /// channel when available, falling back to `/chat` transparently.
+  Future<bool> _sendBulkTransferFrame(
+    TransferConnectionBinding binding,
+    Object payload,
+  ) {
+    final Uint8List bytes;
+    if (payload is AuthenticatedPayloadBuffer) {
+      if (payload.isValid?.call() == false) {
+        return Future<bool>.value(false);
+      }
+      bytes = payload.payload;
+    } else if (payload is Uint8List) {
+      bytes = payload;
+    } else if (payload is List<int>) {
+      bytes = Uint8List.fromList(payload);
+    } else {
+      return _peers.sendToAwaitedIfCurrent(binding, payload);
+    }
+    final paced =
+        _transferPacing.general.rate.isFinite ||
+        _transferPacing.clipboard.rate.isFinite;
+    return _transferChannels.sendFrame(
+      binding: binding,
+      kind: TransferChannelKind.bulk,
+      encodedFrame: bytes,
+      fallbackPayload: payload,
+      paced: paced,
+    );
+  }
+
+  @visibleForTesting
+  Future<void> debugRegisterPeerConnection(
+    String peerId,
+    PeerConnection connection,
+  ) => _peers.connections.register(connection);
+
+  @visibleForTesting
+  bool debugSendMalformedTransportFrame(String peerId) =>
+      _peers.debugSendMalformedTransportFrame(peerId);
+
+  @visibleForTesting
+  Future<bool> debugDropPeerTransport(String peerId) =>
+      _peers.debugDropPeerTransport(peerId);
+
+  @visibleForTesting
+  Future<bool> debugRemovePeerForWatchdog(String peerId) {
+    final binding = _peers.currentBinding(peerId);
+    if (binding == null) {
+      return Future<bool>.value(false);
+    }
+    return _removeUnresponsivePeerIfCurrent(binding);
+  }
+
+  @visibleForTesting
+  int get debugTransferWorkerPort => _transferChannels.workerPort;
+
+  @visibleForTesting
+  int? debugActiveTransferChannelId(String peerId, TransferChannelKind kind) {
+    final binding = _peers.currentBinding(peerId);
+    if (binding == null) return null;
+    return _transferChannels.activeChannelIdFor(
+      peerId,
+      binding.generation,
+      kind,
+    );
+  }
+
+  @visibleForTesting
+  ({
+    int bulkSent,
+    int browseSent,
+    int bulkReceived,
+    int browseReceived,
+    int staleDropped,
+  })
+  get debugTransferChannelStats => _transferChannels.stats;
+
+  @visibleForTesting
+  void debugDropTransferChannel(String peerId, TransferChannelKind kind) =>
+      _transferChannels.debugCloseActiveChannel(peerId, kind);
+
+  @visibleForTesting
+  Future<bool> debugSendFileBrowseData(
+    String peerId,
+    String sessionId,
+    int requestId,
+    int offset,
+    Uint8List data,
+  ) => _sendFileBrowseData(peerId, sessionId, requestId, offset, data);
+
+  @visibleForTesting
+  Future<bool> debugSendFileBrowseWrite(
+    String peerId,
+    String transferId,
+    int requestId,
+    int offset,
+    Uint8List data,
+  ) => _sendFileBrowseWrite(peerId, transferId, requestId, offset, data);
+
+  /// The bytes a mounted folder on [peerId] asked for, sent over the
+  /// dedicated `browse` `/transfer` channel (or `/chat` fallback).
   Future<bool> _sendFileBrowseData(
     String peerId,
     String sessionId,
@@ -326,7 +460,11 @@ extension WsSvrManagerControl on WsSvrManager {
       sequence: requestId,
       payload: data,
     );
-    return _peers.sendToAwaitedIfCurrent(binding, frame.encode());
+    return _transferChannels.sendFrame(
+      binding: binding,
+      kind: TransferChannelKind.browse,
+      encodedFrame: frame.encode(),
+    );
   }
 
   /// Bytes a folder of [peerId]'s mounted here writes into one of its
@@ -349,7 +487,11 @@ extension WsSvrManagerControl on WsSvrManager {
       sequence: requestId,
       payload: data,
     );
-    return _peers.sendToAwaitedIfCurrent(binding, frame.encode());
+    return _transferChannels.sendFrame(
+      binding: binding,
+      kind: TransferChannelKind.browse,
+      encodedFrame: frame.encode(),
+    );
   }
 
   Future<bool> _sendCopiedFile(String peerId, String path, String id) {

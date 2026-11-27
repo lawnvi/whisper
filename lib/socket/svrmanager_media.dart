@@ -305,6 +305,10 @@ extension _MediaChannels on WsSvrManager {
 
   Future<void> _closeSupersededMediaChannels(PeerSocketSession session) async {
     final peerId = session.remotePeerId;
+    _transferChannels.closePeer(
+      peerId,
+      keepGeneration: session.connectionGeneration,
+    );
     await session.withMediaReceiveKeyAsync(
       (key) => Future.wait(<Future<void>>[
         _audioManager.closeSupersededPeerChannels(peerId, mediaMacKey: key),
@@ -723,6 +727,240 @@ extension _MediaChannels on WsSvrManager {
   void _forgetPeerMedia(String peerId) {
     _sessionUpgradeTokens.clearPeer(peerId);
     _dialBacks.cancelPeer(peerId);
+  }
+
+  TransferClaimLookupResult? _lookupIsolateTransferClaim({
+    required TransferChannelManager manager,
+    required String sessionId,
+    required String token,
+    required Object remoteAddress,
+  }) {
+    if (!_acceptingUpgrades || _systemSleeping) {
+      return null;
+    }
+    if (_admission.tryUpgrade(remoteAddress, DateTime.now()) != null) {
+      return null;
+    }
+    final claim = _sessionUpgradeTokens.lookup(
+      route: MediaRoute.transfer.path,
+      sessionId: sessionId,
+      token: token,
+      now: DateTime.now(),
+    );
+    if (claim == null) {
+      return null;
+    }
+    final kind =
+        claim.namespace == MediaRoute.transfer.namespace &&
+            _isExpectedMediaPeerClaim(claim)
+        ? manager.lookupPendingClaimKind(claim)
+        : null;
+    if (kind == null) {
+      claim.destroy();
+      return null;
+    }
+    final session = _peers.sessionForPeer(claim.peerId);
+    if (session == null ||
+        !session.isAuthenticated ||
+        session.connectionGeneration != claim.connectionGeneration) {
+      claim.destroy();
+      return null;
+    }
+    final sendKey = session.withMediaSendKey(Uint8List.fromList);
+    return TransferClaimLookupResult(claim: claim, kind: kind, sendKey: sendKey);
+  }
+
+  bool _consumeIsolateTransferClaim({
+    required TransferChannelManager manager,
+    required String sessionId,
+    required String token,
+    required SessionUpgradeClaim expected,
+  }) {
+    if (!_isExpectedMediaPeerClaim(expected) ||
+        !manager.consumePendingClaim(expected)) {
+      return false;
+    }
+    final consumed = _sessionUpgradeTokens.consume(
+      route: MediaRoute.transfer.path,
+      sessionId: sessionId,
+      token: token,
+      now: DateTime.now(),
+      expected: expected,
+    );
+    consumed?.destroy();
+    return consumed != null;
+  }
+
+  String? _issueTransferUpgradeToken({
+    required String peerId,
+    required int generation,
+    required String sessionId,
+    required bool reverse,
+  }) {
+    final session = _peers.sessionForPeer(peerId);
+    if (session == null ||
+        !session.isAuthenticated ||
+        session.connectionGeneration != generation) {
+      return null;
+    }
+    try {
+      return session.withMediaReceiveKey(
+        (mediaReceiveKey) => _sessionUpgradeTokens.issue(
+          route: MediaRoute.transfer.path,
+          namespace: MediaRoute.transfer.namespace,
+          sessionId: sessionId,
+          peerId: peerId,
+          mediaMacKey: mediaReceiveKey,
+          connectionGeneration: generation,
+          reverse: reverse,
+          now: DateTime.now(),
+        ),
+      );
+    } on StateError {
+      return null;
+    }
+  }
+
+  String? _transferDialHostFor(String peerId, int generation) {
+    final session = _peers.sessionForPeer(peerId);
+    if (session == null ||
+        !session.isAuthenticated ||
+        session.connectionGeneration != generation) {
+      return null;
+    }
+    return _mediaDialHost(session);
+  }
+
+  T? _withTransferSessionKeys<T>(
+    String peerId,
+    int generation,
+    T Function(Uint8List sendKey, Uint8List receiveKey) action,
+  ) {
+    final session = _peers.sessionForPeer(peerId);
+    if (session == null ||
+        !session.isAuthenticated ||
+        session.connectionGeneration != generation) {
+      return null;
+    }
+    return session.withMediaSendKey(
+      (sendKey) => session.withMediaReceiveKey(
+        (receiveKey) => action(sendKey, receiveKey),
+      ),
+    );
+  }
+
+  Future<void> _handleInboundTransferFrame(
+    TransferDataInboundFrame frame,
+  ) async {
+    final session = _peers.sessionForPeer(frame.peerId);
+    final sink = _peers.findSinkForSession(session);
+    if (session == null ||
+        sink == null ||
+        !session.isAuthenticated ||
+        session.connectionGeneration != frame.connectionGeneration ||
+        !_transferChannels.isChannelCurrent(
+          peerId: frame.peerId,
+          generation: frame.connectionGeneration,
+          kind: frame.kind,
+          channelId: frame.channelId,
+        )) {
+      return;
+    }
+    _pingTracker.noteInboundActivity(frame.peerId);
+    final WhisperFrameV3 decoded;
+    try {
+      decoded = WhisperFrameV3.decode(frame.bytes);
+    } catch (_) {
+      _transferChannels.closePeer(frame.peerId, kind: frame.kind);
+      return;
+    }
+    if (decoded.payload.length > WsSvrManager._maxFileDataPayloadBytes) {
+      _transferChannels.closePeer(frame.peerId, kind: frame.kind);
+      return;
+    }
+    void requireCurrent() {
+      _auth.requireCurrentBusinessSession(
+        session,
+        sink,
+        frame.connectionGeneration,
+      );
+      if (!_transferChannels.isChannelCurrent(
+        peerId: frame.peerId,
+        generation: frame.connectionGeneration,
+        kind: frame.kind,
+        channelId: frame.channelId,
+      )) {
+        throw const WireInputRejected(WireInputReason.sessionNotCurrent);
+      }
+    }
+
+    if (frame.kind == TransferChannelKind.bulk) {
+      if (decoded.type != WhisperFrameType.fileData) {
+        _transferChannels.closePeer(frame.peerId, kind: frame.kind);
+        return;
+      }
+      try {
+        await _transferEngine.handleFrame(
+          TransferConnectionBinding(
+            peerId: frame.peerId,
+            generation: frame.connectionGeneration,
+          ),
+          decoded,
+          requireCurrent: requireCurrent,
+        );
+      } on WireInputRejected catch (error) {
+        // Cross-connection cancel/error or stale channelId frames are dropped
+        // silently without tearing down /transfer or /chat.
+        if (error.reason == WireInputReason.sessionNotCurrent ||
+            error.reason == WireInputReason.transferInactive ||
+            error.reason == WireInputReason.transferNotFound) {
+          return;
+        }
+        _transferChannels.closePeer(frame.peerId, kind: frame.kind);
+      }
+      return;
+    }
+    if (!canBrowseFilesOf(frame.peerId)) {
+      return;
+    }
+    if (decoded.type == WhisperFrameType.browseData) {
+      RemoteFilesClient.handleData(
+        remotePeerId: frame.peerId,
+        sessionId: decoded.transferId,
+        requestId: decoded.sequence,
+        data: Uint8List.fromList(decoded.payload),
+      );
+    } else if (decoded.type == WhisperFrameType.browseWrite) {
+      try {
+        await FileBrowseHost.shared.handleWrite(
+          remotePeerId: frame.peerId,
+          transferId: decoded.transferId,
+          requestId: decoded.sequence,
+          offset: decoded.offset,
+          data: Uint8List.fromList(decoded.payload),
+        );
+      } catch (error) {
+        logger.i('挂载写入失败: ${error.runtimeType}');
+      }
+    } else {
+      _transferChannels.closePeer(frame.peerId, kind: frame.kind);
+    }
+  }
+
+  void _onUnexpectedTransferChannelDrop(
+    String peerId,
+    int generation,
+    TransferChannelKind kind,
+  ) {
+    if (kind == TransferChannelKind.bulk) {
+      unawaited(
+        _transferEngine.handleBulkChannelDropped(
+          TransferConnectionBinding(peerId: peerId, generation: generation),
+        ),
+      );
+    } else {
+      RemoteFilesClient.failInflightDataForPeer(peerId);
+    }
   }
 }
 
