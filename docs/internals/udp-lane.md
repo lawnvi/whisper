@@ -8,7 +8,7 @@ TCP 丢了一个包，后面已经到的包也要等它重传，通常要等几�
 
 ## 建立
 
-两种用途共用一套格式和密钥派生，见 `lib/socket/datagram_seal.dart` 和 `lib/socket/datagram_endpoint.dart`。
+两种用途共用一套格式和密钥派生，见 `lib/socket/datagram_seal.dart` 和 `lib/socket/datagram_endpoint.dart`；两边建拨号和应答车道都经过 `lib/socket/media_datagrams.dart`。
 
 - **密钥**：WebSocket 认证之后，两端已经共有媒体密钥和这次连接的一次性升级令牌（channel binding）。用 HMAC-SHA256 从这两者、用途（`remote-input` 或 `audio-group`）和会话号派生出两个方向各自的密钥和 8 字节通道号，所以两端不会在同一个密钥下重复使用 nonce。
 - **格式**：`WUD1` | 通道号 (8) | 序号 (8，大端) | 认证标签 (16) | 密文。用 XChaCha20-Poly1305 加密，nonce 由序号构成，头部计入附加数据。明文第一个字节是类型：0 是保活，1 是数据。载荷最多 1400 字节，局域网里不会分片。

@@ -34,6 +34,7 @@
 
 **开发者：现在怎么工作**
 
+- [声音、键鼠和窗口的媒体连接](internals/media-channels.md)
 - [键鼠和声音的 UDP 通道](internals/udp-lane.md)
 - [键鼠共享的会话归属与退出](internals/remote-input-lifecycle.md)
 - [电视投屏（DLNA）](internals/cast-receiver.md)
