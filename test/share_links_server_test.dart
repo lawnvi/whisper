@@ -697,6 +697,36 @@ void main() {
     final outcome = await done.future.timeout(const Duration(seconds: 20));
     expect(received, lessThan(64 << 20));
     expect(outcome, isA<HttpException>());
+
+    // Turning the share-link master switch off cuts active link downloads
+    // even while the server stays held open for web transfer.
+    await store.setEnabled(link.id, true);
+    await store.hold(true);
+    final heldReq = await _client.getUrl(url('/big/f/big.bin?dl=1'));
+    final heldRes = await heldReq.close();
+    expect(heldRes.statusCode, 200);
+    var heldReceived = 0;
+    final heldDone = Completer<Object?>();
+    late StreamSubscription<List<int>> heldSub;
+    heldSub = heldRes.listen(
+      (data) {
+        heldReceived += data.length;
+        if (heldReceived > (1 << 20)) {
+          heldSub.pause();
+          unawaited(store.setServiceOn(false).then((_) => heldSub.resume()));
+        }
+      },
+      onError: (Object error) => heldDone.complete(error),
+      onDone: () => heldDone.complete(null),
+      cancelOnError: true,
+    );
+    final heldOutcome = await heldDone.future.timeout(
+      const Duration(seconds: 20),
+    );
+    expect(heldReceived, lessThan(64 << 20));
+    expect(heldOutcome, isA<HttpException>());
+    expect(store.server.isRunning, isTrue);
+    await store.hold(false);
   });
 
   test('links, counters and the password survive a restart', () async {

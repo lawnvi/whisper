@@ -399,6 +399,9 @@ class ShareLinkStore extends ChangeNotifier implements ShareServerSource {
       return;
     }
     _serviceOn = on;
+    if (!on) {
+      server.dropLink();
+    }
     await _prefs.setBool(serviceKey, on);
     _notify();
     await _reconcile();

@@ -21,6 +21,12 @@ const webHistoryLimit = 200;
 /// Kept free on the disk an upload goes to.
 const webFreeSpaceReserve = 1024 * 1024 * 1024;
 
+/// Open uploads a single browser session may hold at once.
+const webMaxUploadsPerSession = 16;
+
+/// How long a `PUT /w/up/<id>` body may stay silent between chunks.
+const webUploadReadTimeout = Duration(seconds: 30);
+
 const webPingInterval = Duration(seconds: 15);
 
 /// The cookie that carries a session to HTTP requests.

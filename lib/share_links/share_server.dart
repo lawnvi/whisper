@@ -185,19 +185,17 @@ class ShareServer {
     final socket = _socket;
     _server = null;
     _socket = null;
-    for (final transfer in _transfers.toList()) {
-      transfer.cancel();
-    }
+    dropLink();
     _transfers.clear();
     // A server made with listenOn leaves its socket open on close.
     await socket?.close();
     await server?.close(force: true);
   }
 
-  /// Cuts the downloads of a link that was turned off or deleted.
-  void dropLink(String linkId) {
+  /// Cuts the downloads of a link, or all links when [linkId] is null.
+  void dropLink([String? linkId]) {
     for (final transfer in _transfers.toList()) {
-      if (transfer.linkId == linkId) {
+      if (linkId == null || transfer.linkId == linkId) {
         transfer.cancel();
       }
     }
@@ -252,10 +250,20 @@ class ShareServer {
       );
       return;
     }
+    final method = request.method;
+    if (segments.isNotEmpty &&
+        (method == 'GET' || method == 'HEAD') &&
+        await _probe(request, segments.first.toLowerCase())) {
+      return;
+    }
+    final wait = limiter.blockedFor(client);
+    if (wait != null) {
+      await _tooMany(request, pages, wait);
+      return;
+    }
     if (await extension?.handle(request, segments, client) ?? false) {
       return;
     }
-    final method = request.method;
     if (method != 'GET' && method != 'HEAD' && method != 'POST') {
       request.response.headers.set('allow', 'GET, HEAD, POST');
       await _plain(request, HttpStatus.methodNotAllowed, '');
@@ -269,16 +277,7 @@ class ShareServer {
       );
       return;
     }
-    final first = segments.first.toLowerCase();
-    if (await _probe(request, first)) {
-      return;
-    }
-    final wait = limiter.blockedFor(client);
-    if (wait != null) {
-      await _tooMany(request, pages, wait);
-      return;
-    }
-    final link = source.linkForRoute(first);
+    final link = source.linkForRoute(segments.first.toLowerCase());
     if (link == null) {
       // This answer is still the plain one; the requests after it wait.
       limiter.fail(client);

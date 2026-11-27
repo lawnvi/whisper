@@ -63,6 +63,7 @@ class WebTransferCoordinator extends ChangeNotifier {
     Future<DeviceData> Function()? self,
     Future<String> Function()? selfName,
     Future<Directory> Function()? receiveDirectory,
+    Future<int?> Function(String path)? availableBytes,
     Future<String> Function()? loadPage,
     void Function(MessageData message)? onMessage,
     void Function(TransferSnapshot snapshot)? onTransfer,
@@ -70,16 +71,23 @@ class WebTransferCoordinator extends ChangeNotifier {
     this.awayTimeout = const Duration(minutes: 10),
     this.maxSessions = 4,
     this.maxPending = 3,
+    this.maxUploadsPerSession = webMaxUploadsPerSession,
+    Duration uploadReadTimeout = webUploadReadTimeout,
   }) : _links = links,
        _self = self ?? (() => LocalSetting().instance()),
        _selfName = selfName ?? (() => LocalSetting().deviceDisplayName()),
-       _receiveDirectory = receiveDirectory ?? downloadDir {
+       _receiveDirectory = receiveDirectory ?? downloadDir,
+       _availableBytes = availableBytes ?? availableBytesForPath {
     records = WebTransferRecords(
       database: () => database ?? LocalDatabase(),
       onMessage: onMessage ?? WsSvrManager().dispatchMessage,
       onTransfer: onTransfer ?? WsSvrManager().dispatchTransfer,
     );
-    routes = WebTransferRoutes(this, loadPage: loadPage);
+    routes = WebTransferRoutes(
+      this,
+      loadPage: loadPage,
+      uploadReadTimeout: uploadReadTimeout,
+    );
   }
 
   static final shared = WebTransferCoordinator();
@@ -93,10 +101,14 @@ class WebTransferCoordinator extends ChangeNotifier {
   /// Waiting for an answer, in all (one per address).
   final int maxPending;
 
+  /// Open uploads a single session may hold at once.
+  final int maxUploadsPerSession;
+
   final ShareLinkStore? _links;
   final Future<DeviceData> Function() _self;
   final Future<String> Function() _selfName;
   final Future<Directory> Function() _receiveDirectory;
+  final Future<int?> Function(String path) _availableBytes;
 
   late final WebTransferRecords records;
   late final WebTransferRoutes routes;
@@ -609,9 +621,33 @@ class WebTransferCoordinator extends ChangeNotifier {
       });
       return;
     }
+    if (session.uploads.length >= maxUploadsPerSession) {
+      session.send(WebFrame.state, {
+        'id': offer.id,
+        'state': WebUploadState.refused,
+        'reason': 'limit',
+      });
+      return;
+    }
+    final directory = await _receiveDirectory();
+    if (offer.size > 0) {
+      final available = await _availableBytes(directory.path);
+      if (!hasEnoughStorageForFile(
+        fileSize: offer.size + _reservedUploadBytes(),
+        availableBytes: available,
+        reserveBytes: webFreeSpaceReserve,
+      )) {
+        session.send(WebFrame.state, {
+          'id': offer.id,
+          'state': WebUploadState.refused,
+          'reason': 'space',
+        });
+        return;
+      }
+    }
     final upload = WebUpload(
       offer: offer,
-      directory: await _receiveDirectory(),
+      directory: directory,
       transferId: offer.id,
       modified: modified,
     );
@@ -638,6 +674,19 @@ class WebTransferCoordinator extends ChangeNotifier {
       'state': WebUploadState.ready,
       'committed': 0,
     });
+  }
+
+  int _reservedUploadBytes() {
+    var total = 0;
+    for (final session in _sessions.values) {
+      for (final upload in session.uploads.values) {
+        final remaining = upload.offer.size - upload.committed;
+        if (remaining > 0) {
+          total += remaining;
+        }
+      }
+    }
+    return total;
   }
 
   Future<void> _failUpload(

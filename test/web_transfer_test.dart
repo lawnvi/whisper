@@ -68,6 +68,10 @@ class _Harness {
     Duration answer = const Duration(seconds: 30),
     Duration away = const Duration(seconds: 30),
     int maxSessions = 4,
+    int maxUploadsPerSession = 16,
+    Future<int?> Function(String path)? availableBytes,
+    Duration uploadReadTimeout = const Duration(seconds: 30),
+    String hostName = 'Host <Mac>',
   }) async {
     received = await Directory.systemTemp.createTemp('web-transfer-');
     db = LocalDatabase.forTesting(NativeDatabase.memory());
@@ -82,8 +86,9 @@ class _Harness {
       database: db,
       links: links,
       self: () async => _self,
-      selfName: () async => 'Host <Mac>',
+      selfName: () async => hostName,
       receiveDirectory: () async => received,
+      availableBytes: availableBytes,
       // CRLF, as a Windows checkout has it (git's autocrlf). Regression: the
       // page was blank there because its CSP hashes were taken over CRLF, but
       // browsers hash inline blocks with LF line ends and refused them.
@@ -95,6 +100,8 @@ class _Harness {
       answerTimeout: answer,
       awayTimeout: away,
       maxSessions: maxSessions,
+      maxUploadsPerSession: maxUploadsPerSession,
+      uploadReadTimeout: uploadReadTimeout,
     );
     await web.open();
   }
@@ -258,8 +265,9 @@ void main() {
     final pageHtml = await h.send('GET', '/', sameOrigin: false);
     expect(pageHtml.status, HttpStatus.ok);
     final html = utf8.decode(pageHtml.body);
-    // The name is data in the page, never markup.
-    expect(html, contains(r'"name":"Host <Mac>"'));
+    // The name is data in the page, never markup (`<` escaped to `\u003c`).
+    expect(html, contains(r'"name":"Host \u003cMac>"'));
+    expect(html, isNot(contains('"name":"Host <Mac>"')));
     expect(
       pageHtml.headers.value('content-security-policy'),
       allOf(contains("default-src 'none'"), contains("script-src 'sha256-")),
@@ -511,5 +519,85 @@ void main() {
     // Back again after the end: asked anew.
     final again = await h.page(_key(2));
     await again.next('wait');
+  });
+
+  test('security and resource bounds: boot script escape, rate limit, '
+      'upload cap, free-space reserve, and PUT read timeout', () async {
+    var freeBytes = (1024 * 1024 * 1024) + 500;
+    await h.start(
+      hostName: 'Host </script><script>alert(1)</script>',
+      maxUploadsPerSession: 2,
+      availableBytes: (_) async => freeBytes,
+      uploadReadTimeout: const Duration(milliseconds: 250),
+    );
+
+    // Boot JSON escapes `<` so a device name cannot break out of `<script>`.
+    final pageHtml = await h.send('GET', '/', sameOrigin: false);
+    final html = utf8.decode(pageHtml.body);
+    expect(html, isNot(contains('</script><script>alert(1)</script>')));
+    expect(html, contains(r'\u003c/script>'));
+
+    final page = await h.join(_key(1));
+
+    // Reserve check: 1 GiB reserve leaves 500 bytes usable.
+    page.send({
+      't': 'offer',
+      'id': _uuid(10),
+      'name': 'too-big.bin',
+      'size': 600,
+    });
+    final noSpace = await page.next('state');
+    expect(noSpace['state'], 'refused');
+    expect(noSpace['reason'], 'space');
+
+    // Concurrent offers account for reserved bytes and stop at the session cap.
+    page.send({'t': 'offer', 'id': _uuid(11), 'name': 'a.bin', 'size': 200});
+    expect((await page.next('state'))['state'], 'ready');
+    page.send({'t': 'offer', 'id': _uuid(12), 'name': 'b.bin', 'size': 200});
+    expect((await page.next('state'))['state'], 'ready');
+    page.send({'t': 'offer', 'id': _uuid(13), 'name': 'c.bin', 'size': 50});
+    final capped = await page.next('state');
+    expect(capped['state'], 'refused');
+    expect(capped['reason'], 'limit');
+
+    // A stalled PUT body times out and releases the upload for retry.
+    final raw = await Socket.connect('127.0.0.1', h.port);
+    raw.write(
+      'PUT /w/up/${_uuid(11)} HTTP/1.1\r\n'
+      'host: 127.0.0.1:${h.port}\r\norigin: ${h.origin}\r\n'
+      'cookie: ${page.cookie}\r\n'
+      'content-range: bytes 0-199/200\r\n'
+      'content-length: 200\r\n\r\n',
+    );
+    raw.add(List<int>.filled(50, 1));
+    await raw.flush();
+    await raw.drain<void>().timeout(const Duration(seconds: 3));
+    raw.destroy();
+    final afterTimeout = await h.send(
+      'GET',
+      '/w/up/${_uuid(11)}',
+      cookie: page.cookie,
+    );
+    expect(afterTimeout.status, HttpStatus.ok);
+    final committed = afterTimeout.json['committed'] as int;
+    expect(committed, 50);
+    final resumed = await h.put(
+      _uuid(11),
+      committed,
+      List<int>.filled(150, 2),
+      200,
+      cookie: page.cookie,
+    );
+    expect(resumed.status, HttpStatus.ok);
+    expect((await page.next('state'))['state'], 'done');
+
+    // Rate-limited clients are blocked before reaching web-transfer routes.
+    for (var i = 0; i < 10; i++) {
+      h.links.server.limiter.fail('127.0.0.1');
+    }
+    for (final path in const ['/', '/w/session']) {
+      final reply = await h.send('GET', path, sameOrigin: false);
+      expect(reply.status, HttpStatus.tooManyRequests, reason: path);
+    }
   });
 }

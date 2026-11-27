@@ -18,11 +18,15 @@ import 'web_transfer_uploads.dart';
 /// Web transfer's part of the share link server: `/` is the page, and
 /// `/w/...` what it talks to. See docs/internals/web-transfer.md「协议」.
 class WebTransferRoutes implements ShareServerExtension {
-  WebTransferRoutes(this._coordinator, {Future<String> Function()? loadPage})
-    : _loadPage = loadPage ?? _assetPage;
+  WebTransferRoutes(
+    this._coordinator, {
+    Future<String> Function()? loadPage,
+    this.uploadReadTimeout = webUploadReadTimeout,
+  }) : _loadPage = loadPage ?? _assetPage;
 
   final WebTransferCoordinator _coordinator;
   final Future<String> Function() _loadPage;
+  final Duration uploadReadTimeout;
   _Page? _page;
 
   static const _bootOpen = '<script id="boot" type="application/json">';
@@ -83,7 +87,7 @@ class WebTransferRoutes implements ShareServerExtension {
     final page = _page ??= _Page.parse(await _loadPage());
     final looks = await _coordinator.hostLooks();
     // The page reads it as JSON; `<` would let a name end the script block.
-    final boot = jsonEncode({'host': looks}).replaceAll('<', r'<');
+    final boot = jsonEncode({'host': looks}).replaceAll('<', r'\u003c');
     final bytes = utf8.encode('${page.before}$boot${page.after}');
     final host = request.headers.value('host') ?? '';
     final socketSource = RegExp(r'^[A-Za-z0-9.:\[\]-]+$').hasMatch(host)
@@ -202,11 +206,20 @@ class WebTransferRoutes implements ShareServerExtension {
       await upload.write(
         range.start,
         length,
-        request.map((chunk) {
+        request.timeout(uploadReadTimeout).map((chunk) {
           _coordinator.records.uploading(session, upload);
           return chunk;
         }),
       );
+    } on TimeoutException {
+      await _coordinator.chunkDone(session, upload);
+      request.response.persistentConnection = false;
+      try {
+        await _status(request, HttpStatus.requestTimeout, {'error': 'timeout'});
+      } on Object {
+        // The stream cancellation may already have closed the socket.
+      }
+      return;
     } on WebChunkException catch (error) {
       switch (error.reason) {
         case WebChunkRefusal.position:
