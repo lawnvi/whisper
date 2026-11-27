@@ -40,6 +40,8 @@ import 'package:whisper/socket/pairing_attempt_limiter.dart';
 import 'package:whisper/socket/outbound_frame_class.dart';
 import 'package:whisper/socket/pre_auth_byte_cap.dart';
 import 'package:whisper/socket/peer_connection.dart';
+import 'package:whisper/socket/peer_ping_tracker.dart';
+import 'package:whisper/socket/peer_profile_refresh.dart';
 import 'package:whisper/socket/peer_socket_session.dart';
 import 'package:whisper/socket/pending_outgoing_connection.dart';
 import 'package:whisper/socket/quick_send_identity_gate.dart';
@@ -147,8 +149,6 @@ class WsSvrManager {
   static final Set<String> _windowStreamControlActions =
       WindowStreamControlAction.values.map((action) => action.name).toSet();
   static const String _fileBrowseNamespace = 'remote-files';
-
-  static const String _profileRefreshRequestMessage = 'profile-refresh-request';
 
   static Duration _validateMediaProofTimeout(Duration value) {
     if (value <= Duration.zero) {
@@ -306,6 +306,7 @@ class WsSvrManager {
 
   WebSocketSink? _sink;
   final PeerConnectionRegistry _peerConnections = PeerConnectionRegistry();
+  final PeerPingTracker _pingTracker = PeerPingTracker();
   final Set<String> _deletedPeerDiscoverySuppressions = <String>{};
   final Map<WebSocketSink, String> _peerIdsBySink = <WebSocketSink, String>{};
   final Map<WebSocketSink, PeerSocketSession> _sessionsBySink =
@@ -329,8 +330,6 @@ class WsSvrManager {
       <WebSocketSink, _IdentityPinPlan>{};
   final Map<String, PeerProfile> _remoteProfilesByPeerId =
       <String, PeerProfile>{};
-  final Map<WebSocketSink, Timer> _clientTimersBySink =
-      <WebSocketSink, Timer>{};
   final Map<WebSocketSink, Future<void>> _socketCleanups =
       <WebSocketSink, Future<void>>{};
   final Map<WebSocketSink, TransportCloseGuard> _socketCloseGuards =
@@ -412,10 +411,9 @@ class WsSvrManager {
   bool _systemSleeping = false;
   final Set<String> _systemSleepReconnectPeerIds = <String>{};
   HttpServer? _serverClosing;
-  Timer? _clientTimer;
   PeerProfile? _remoteProfile;
-  final Map<String, Set<Completer<PeerProfile?>>> _remoteProfileRefreshWaiters =
-      <String, Set<Completer<PeerProfile?>>>{};
+  final PeerProfileRefreshTracker _profileRefreshTracker =
+      PeerProfileRefreshTracker();
   final TransferAckWatchdog? _transferAckWatchdog;
   final List<Duration>? _transferRetryDelays;
   late final FileTransferEngine _transferEngine = FileTransferEngine(
@@ -678,13 +676,8 @@ class WsSvrManager {
   }
 
   @visibleForTesting
-  Future<PeerProfile?> debugWaitForSelectedProfileUpdate() {
-    final completer = Completer<PeerProfile?>();
-    _remoteProfileRefreshWaiters
-        .putIfAbsent(receiver, () => <Completer<PeerProfile?>>{})
-        .add(completer);
-    return completer.future;
-  }
+  Future<PeerProfile?> debugWaitForSelectedProfileUpdate() =>
+      _profileRefreshTracker.waitForNextUpdate(receiver);
 
   @visibleForTesting
   Future<void> debugSendProfileHeartbeatTo(String peerId) =>
@@ -988,7 +981,7 @@ class WsSvrManager {
     _completeSocketAuth(sink, false, 'connection_closed');
     _releaseOutgoingAuthForSink(sink);
     _releaseIncomingAuthForSink(sink);
-    _clientTimersBySink.remove(sink)?.cancel();
+    _pingTracker.stopKeepalive(sink);
     final peerId = _peerIdsBySink.remove(sink);
     final currentSession = peerId == null ? null : _sessionsByPeerId[peerId];
     if (peerId == null) {
@@ -2640,13 +2633,6 @@ class WsSvrManager {
           reason: ConnectionAttemptReason.superseded,
         );
       }
-      final timer = Timer.periodic(_clientHeartbeatInterval, (timer) {
-        unawaited(_heartBeat(peerId: peerId, sink: channelSink));
-      });
-      _clientTimersBySink[channelSink] = timer;
-      if (receiver == peerId) {
-        _clientTimer = timer;
-      }
       return ConnectionAttemptResult.authenticated(
         requestId: request.requestId,
         peerId: peerId,
@@ -2905,7 +2891,7 @@ class WsSvrManager {
     }
     final hadActiveConnection = AuthSocketLifecycle.hasConnectionWork(
       hasSelectedSink: _sink != null,
-      hasClientTimer: _clientTimer != null,
+      hasClientTimer: _pingTracker.hasActiveKeepalives,
       hasPendingSessions:
           _sessionsBySink.isNotEmpty ||
           _pendingSocketAttachments.isNotEmpty ||
@@ -2924,12 +2910,7 @@ class WsSvrManager {
       return;
     }
 
-    _clientTimer?.cancel();
-    _clientTimer = null;
-    for (final timer in _clientTimersBySink.values) {
-      timer.cancel();
-    }
-    _clientTimersBySink.clear();
+    _pingTracker.clearAll();
     _outgoingAuthKeysBySink.clear();
     _incomingAuthPeerIdsBySink.clear();
     _identityPinPlansBySink.clear();
@@ -3281,6 +3262,7 @@ class WsSvrManager {
     String peerId, {
     bool Function()? stillOwnsCleanup,
   }) async {
+    _pingTracker.clearPeer(peerId);
     bool ownsCleanup() => stillOwnsCleanup?.call() ?? true;
 
     if (!ownsCleanup()) {
@@ -4236,6 +4218,7 @@ class WsSvrManager {
     _recordAuthenticatedReconnect(session, sink, storedDevice);
     _completeSocketAuth(sink, true, '');
     _deletedPeerDiscoverySuppressions.remove(storedDevice.uid);
+    _startKeepaliveTimer(storedDevice.uid, sink);
     _dispatchToAll((event) => event.onConnect());
     if (_manageSharedCoordinators) {
       _ignoreFuture(
@@ -4434,6 +4417,7 @@ class WsSvrManager {
         sink,
         session.connectionGeneration,
       );
+      _pingTracker.noteInboundActivity(session.remotePeerId);
     }
     if (!session.isAuthenticated && frame.type != WhisperFrameType.message) {
       throw const WireInputRejected(WireInputReason.sessionNotAuthenticated);
@@ -4735,16 +4719,29 @@ class WsSvrManager {
           if (message.sender == sender) {
             return;
           }
+          final heartbeatPeerId = incomingPeerId ?? message.sender;
+          if (message.message == heartbeatPingTag) {
+            final pong = _pingTracker.buildPongPayload(message.content);
+            if (pong != null && heartbeatPeerId.isNotEmpty) {
+              unawaited(_sendHeartbeatControl(heartbeatPongTag, pong, heartbeatPeerId, sink: sink));
+            }
+            break;
+          }
+          if (message.message == heartbeatPongTag) {
+            if (heartbeatPeerId.isNotEmpty) {
+              _pingTracker.completePong(heartbeatPeerId, message.content);
+            }
+            break;
+          }
           await _refreshRemoteProfileFromHeartbeat(
             message,
             peerId: incomingPeerId,
             requireCurrent: requireCurrentBusiness,
           );
           requireCurrentBusiness();
-          if (message.message == _profileRefreshRequestMessage) {
+          if (message.message == heartbeatProfileRequestTag) {
             unawaited(_heartBeat(peerId: incomingPeerId, sink: sink));
           }
-          await _ackMessage(message);
           break;
         }
       case MessageEnum.File:
@@ -5353,33 +5350,15 @@ class WsSvrManager {
     if (!isConnectedTo(targetPeerId)) {
       return remoteProfileFor(targetPeerId);
     }
-
-    final completer = Completer<PeerProfile?>();
-    _remoteProfileRefreshWaiters
-        .putIfAbsent(targetPeerId, () => <Completer<PeerProfile?>>{})
-        .add(completer);
-    try {
-      unawaited(
-        _heartBeat(
-          profileRefreshRequest: true,
-          peerId: targetPeerId,
-        ).catchError((Object _) {
-          if (!completer.isCompleted) {
-            completer.complete(remoteProfileFor(targetPeerId));
-          }
-        }),
-      );
-      return await completer.future.timeout(
-        timeout,
-        onTimeout: () => remoteProfileFor(targetPeerId),
-      );
-    } finally {
-      final waiters = _remoteProfileRefreshWaiters[targetPeerId];
-      waiters?.remove(completer);
-      if (waiters?.isEmpty == true) {
-        _remoteProfileRefreshWaiters.remove(targetPeerId);
-      }
-    }
+    return _profileRefreshTracker.request(
+      peerId: targetPeerId,
+      timeout: timeout,
+      sendRequest: () => _heartBeat(
+        profileRefreshRequest: true,
+        peerId: targetPeerId,
+      ),
+      currentProfile: remoteProfileFor,
+    );
   }
 
   void _setRemoteProfile(PeerProfile? profile, {String? peerId}) {
@@ -5436,27 +5415,10 @@ class WsSvrManager {
   }
 
   void _completeRemoteProfileRefreshWaiters({String? peerId}) {
-    final peerIds = peerId == null
-        ? _remoteProfileRefreshWaiters.keys.toList(growable: false)
-        : <String>[peerId];
-    for (final id in peerIds) {
-      final waiters = _remoteProfileRefreshWaiters.remove(id);
-      for (final waiter in waiters ?? const <Completer<PeerProfile?>>{}) {
-        if (!waiter.isCompleted) {
-          waiter.complete(remoteProfileFor(id));
-        }
-      }
-    }
-  }
-
-  bool _profileDeviceChanged(DeviceData? previous, DeviceData next) {
-    if (previous == null) {
-      return true;
-    }
-    return previous.name != next.name ||
-        previous.host != next.host ||
-        previous.port != next.port ||
-        previous.platform != next.platform;
+    _profileRefreshTracker.complete(
+      peerId: peerId,
+      currentProfile: remoteProfileFor,
+    );
   }
 
   Future<void> _refreshRemoteProfileFromHeartbeat(
@@ -5464,28 +5426,19 @@ class WsSvrManager {
     String? peerId,
     void Function()? requireCurrent,
   }) async {
-    final content = message.content;
-    if (content == null || content.isEmpty) {
-      return;
-    }
     try {
       final resolvedPeerId = peerId ?? message.sender;
       final previousProfile = resolvedPeerId.isEmpty
           ? _remoteProfile
           : _remoteProfilesByPeerId[resolvedPeerId];
-      final wireJson = Map<String, Object?>.from(jsonDecode(content) as Map);
-      final wireProfile = WirePeerProfile.fromJson(wireJson);
-      final profile = PeerProfile.fromWire(
-        wireProfile,
-        host: previousProfile?.device.host ?? '',
-        port: previousProfile?.device.port ?? 0,
+      final profile = PeerProfileRefreshTracker.decodeHeartbeatProfile(
+        message.content,
+        resolvedPeerId: resolvedPeerId,
+        previousProfile: previousProfile,
       );
-      WireInputPolicy.validateClaimedPeerId(
-        claimedPeerId: profile.device.uid,
-        authenticatedPeerId: resolvedPeerId,
-      ).requireAccepted();
+      if (profile == null) return;
       requireCurrent?.call();
-      final profileDeviceChanged = _profileDeviceChanged(
+      final profileDeviceChanged = PeerProfileRefreshTracker.deviceChanged(
         previousProfile?.device,
         profile.device,
       );
@@ -5531,6 +5484,61 @@ class WsSvrManager {
     );
   }
 
+  void _startKeepaliveTimer(String peerId, WebSocketSink sink) {
+    _pingTracker.startKeepalive(
+      token: sink,
+      peerId: peerId,
+      interval: _clientHeartbeatInterval,
+      sendPing: (payload) =>
+          _sendHeartbeatControl(heartbeatPingTag, payload, peerId, sink: sink),
+      onSilent: () => _closeSocketSink(sink),
+    );
+  }
+
+  /// Measures application-layer round-trip time over `/chat` ping/pong
+  /// (includes the peer's inbound receive-queue wait). Returns `null` when
+  /// disconnected or timed out.
+  Future<Duration?> measurePeerRtt(
+    String peerId, {
+    Duration timeout = const Duration(milliseconds: 1500),
+  }) async {
+    if (peerId.isEmpty || !isConnectedTo(peerId)) return null;
+    return _pingTracker.measure(
+      peerId: peerId,
+      timeout: timeout,
+      sendPing: (payload) =>
+          _sendHeartbeatControl(heartbeatPingTag, payload, peerId),
+    );
+  }
+
+  Future<bool> _sendHeartbeatControl(
+    String tag,
+    String content,
+    String peerId, {
+    WebSocketSink? sink,
+  }) async {
+    if (sink != null && !_isCurrentSinkForPeer(sink, peerId)) return false;
+    final localUid = _sessionsByPeerId[peerId]?.localProfile.uid ?? sender;
+    final message = _buildMessage(
+      MessageEnum.Heartbeat, content, tag, '', 0, false,
+      senderOverride: localUid, receiverOverride: peerId,
+    );
+    return _sendMessageData(
+      message, peerId: sink == null ? peerId : null, sink: sink,
+    );
+  }
+
+  bool _isCurrentSinkForPeer(WebSocketSink sink, String peerId) {
+    final session = _sessionsBySink[sink];
+    if (session == null || session.remotePeerId != peerId) return false;
+    try {
+      _requireCurrentBusinessSession(session, sink, session.connectionGeneration);
+      return true;
+    } on Object {
+      return false;
+    }
+  }
+
   Future<void> _heartBeat({
     bool profileRefreshRequest = false,
     WebSocketSink? sink,
@@ -5541,46 +5549,28 @@ class WsSvrManager {
         : sink == null
         ? receiver
         : _peerIdForSink(sink) ?? '';
-    if (targetPeerId.isEmpty) {
-      return;
-    }
-    if (sink != null) {
-      final session = _sessionsBySink[sink];
-      if (session == null || session.remotePeerId != targetPeerId) {
-        return;
-      }
-      try {
-        _requireCurrentBusinessSession(
-          session,
-          sink,
-          session.connectionGeneration,
-        );
-      } on WireInputRejected {
-        return;
-      } on AuthHandshakeException {
-        return;
-      }
-    }
+    if (targetPeerId.isEmpty) return;
+    if (sink != null && !_isCurrentSinkForPeer(sink, targetPeerId)) return;
     final profile = await _localPeerProfile();
-    var message = _buildMessage(
+    final message = _buildMessage(
       MessageEnum.Heartbeat,
       jsonEncode(profile.toWireProfile().toJson()),
-      profileRefreshRequest ? _profileRefreshRequestMessage : "",
-      "",
-      0,
-      false,
-      senderOverride: profile.device.uid,
-      receiverOverride: targetPeerId,
+      profileRefreshRequest ? heartbeatProfileRequestTag : heartbeatProfileTag,
+      '', 0, false,
+      senderOverride: profile.device.uid, receiverOverride: targetPeerId,
     );
     await _sendMessageData(
-      message,
-      peerId: sink == null ? targetPeerId : null,
-      sink: sink,
+      message, peerId: sink == null ? targetPeerId : null, sink: sink,
     );
   }
 
   Future<void> refreshConnectionLiveness() async {
-    await _heartBeat();
+    if (receiver.isEmpty) return;
+    await _pingTracker.dispatchPing(
+      peerId: receiver,
+      sendPing: (payload) =>
+          _sendHeartbeatControl(heartbeatPingTag, payload, receiver),
+    );
   }
 
   Future<void> broadcastLocalProfileUpdate() async {

@@ -8,23 +8,28 @@ import 'package:flutter/foundation.dart';
 enum LinkGrade { measuring, good, fair, poor, unreachable }
 
 /// How the link to one device is doing, measured while someone looks at it:
-/// every [every] a connection to its port, which is one round trip and says
-/// nothing on the wire (as the connection check does). The last [keep]
-/// tries give the latency, how much it varies, and how many got no answer.
+/// every [every] either an application-layer `/chat` ping/pong round trip (via
+/// [measure], which includes the remote peer's inbound receive-queue wait) or,
+/// when disconnected / no [measure] is given, a fallback TCP connection to its
+/// port. The last [keep] tries give the latency, how much it varies, and how
+/// many got no answer.
 class PeerLinkQuality extends ChangeNotifier {
   PeerLinkQuality({
     required this.host,
     required this.port,
+    Future<Duration?> Function()? measure,
     Future<void> Function(String host, int port)? reach,
     this.every = const Duration(seconds: 2),
     this.timeout = const Duration(milliseconds: 1500),
     this.keep = 20,
-  }) : _reach = reach ?? _connect;
+  }) : _measure = measure,
+       _reach = reach ?? _connect;
 
   final String host;
   final int port;
   final Duration every, timeout;
   final int keep;
+  final Future<Duration?> Function()? _measure;
   final Future<void> Function(String host, int port) _reach;
 
   /// Newest last; null for a try that got no answer in time.
@@ -58,11 +63,16 @@ class PeerLinkQuality extends ChangeNotifier {
   Future<void> _try() async {
     if (_busy) return;
     _busy = true;
-    final watch = Stopwatch()..start();
     Duration? took;
     try {
-      await _reach(host, port).timeout(timeout);
-      took = watch.elapsed;
+      final measure = _measure;
+      if (measure != null) {
+        took = await measure().timeout(timeout);
+      } else {
+        final watch = Stopwatch()..start();
+        await _reach(host, port).timeout(timeout);
+        took = watch.elapsed;
+      }
     } catch (_) {
       took = null;
     } finally {

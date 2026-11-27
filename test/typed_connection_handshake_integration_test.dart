@@ -1456,6 +1456,50 @@ void main() {
     expect(aaa.isConnectedTo('zzz-peer'), isTrue);
     expect(zzz.isConnectedTo('aaa-peer'), isTrue);
   });
+
+  test('bidirectional /chat ping/pong measures RTT and skips unchanged DB upserts', () async {
+    final harness = await _HandshakeHarness.start();
+    final connected = await harness.connect('ping-rtt-check');
+    expect(connected.isAuthenticated, isTrue);
+
+    final clientToServer = await harness.client.measurePeerRtt(
+      'server-peer',
+      timeout: const Duration(seconds: 2),
+    );
+    final serverToClient = await harness.server.measurePeerRtt(
+      'client-peer',
+      timeout: const Duration(seconds: 2),
+    );
+    expect(clientToServer, isNotNull);
+    expect(serverToClient, isNotNull);
+    expect(clientToServer!.inMilliseconds, lessThan(2000));
+    expect(serverToClient!.inMilliseconds, lessThan(2000));
+
+    // Unchanged profile heartbeat should not re-trigger onConnect churn.
+    harness.client.selectPeer('server-peer');
+    var connectEvents = 0;
+    final countingEvents = _CountingConnectEvents(() => connectEvents += 1);
+    harness.client.setEvent(countingEvents);
+    final waiter = harness.client.debugWaitForSelectedProfileUpdate();
+    await harness.server.debugSendProfileHeartbeatTo('client-peer');
+    await waiter.timeout(const Duration(seconds: 2));
+    await pumpEventQueue();
+    expect(connectEvents, 0);
+
+    await harness.client.disconnectPeer('server-peer');
+    expect(
+      await harness.client.measurePeerRtt('server-peer'),
+      isNull,
+    );
+  });
+}
+
+final class _CountingConnectEvents extends _ApprovingEvents {
+  _CountingConnectEvents(this._onConnect);
+  final void Function() _onConnect;
+
+  @override
+  void onConnect() => _onConnect();
 }
 
 final class _UpgradeRequiredServer {

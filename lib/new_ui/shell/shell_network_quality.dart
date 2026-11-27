@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/new_ui/shell/shell_parts.dart';
+import 'package:whisper/socket/svrmanager.dart';
 import 'package:whisper/state/peer_link_quality.dart';
 import 'package:whisper/theme/whisper_ui.dart';
 
@@ -28,8 +29,11 @@ class ShellNetworkRow extends StatefulWidget {
 class _ShellNetworkRowState extends State<ShellNetworkRow> {
   late final PeerLinkQuality _quality =
       widget.quality ??
-      (PeerLinkQuality(host: widget.device.host, port: widget.device.port)
-        ..start());
+      (PeerLinkQuality(
+        host: widget.device.host,
+        port: widget.device.port,
+        measure: () => WsSvrManager().measurePeerRtt(widget.device.uid),
+      )..start());
 
   @override
   void dispose() {
