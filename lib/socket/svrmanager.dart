@@ -3786,13 +3786,7 @@ class WsSvrManager {
       return;
     }
     _incomingAuthPeerIdsBySink[sink] = gateKey;
-    final outgoingKey = _authRequestKey(
-      peerId: session.remotePeerId,
-      host: '',
-      port: 0,
-    );
-    if (_authRequestGate.hasOutgoing(outgoingKey) ||
-        _hasActivePendingOutgoingForPeer(session.remotePeerId)) {
+    if (_hasReadyPendingOutgoingForPeer(session.remotePeerId)) {
       final decision = resolveSimultaneousDial(
         localUid: session.localProfile.uid,
         remoteUid: session.remotePeerId,
@@ -3803,12 +3797,24 @@ class WsSvrManager {
         return;
       }
       _cancelLosingOutgoingForPeer(session.remotePeerId);
+    } else if (_hasPendingOutgoingForPeer(session.remotePeerId)) {
+      // Only a WebSocket-ready outgoing dial counts as simultaneous dial;
+      // an attempt still stuck in TCP/HTTP connect must not kill a working
+      // incoming connection.
+      _cancelLosingOutgoingForPeer(session.remotePeerId);
     }
     await _ensureServerPairingDecision(session, sink);
     await _tryCompleteServerPairing(session, sink);
   }
 
-  bool _hasActivePendingOutgoingForPeer(String peerId) {
+  bool _hasReadyPendingOutgoingForPeer(String peerId) {
+    if (peerId.isEmpty) return false;
+    final attempts = _pendingOutgoingByPeerId[peerId];
+    return attempts != null &&
+        attempts.any((attempt) => !attempt.isCancelled && attempt.isReady);
+  }
+
+  bool _hasPendingOutgoingForPeer(String peerId) {
     if (peerId.isEmpty) return false;
     final attempts = _pendingOutgoingByPeerId[peerId];
     return attempts != null && attempts.any((attempt) => !attempt.isCancelled);

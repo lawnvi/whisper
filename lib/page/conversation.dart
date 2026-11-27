@@ -2861,11 +2861,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
     if (_isAlert || !_isCurrentRoute) return;
     _isAlert = true;
     unawaited(() async {
-      await confirmReleasePeerConnection(
-        context,
-        peerId: peerId,
-        fallbackPeerId: widget.device.uid,
-      );
+      await confirmReleasePeerConnection(context, peerId: peerId);
       _isAlert = false;
     }());
   }

@@ -3686,7 +3686,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
       await confirmReleasePeerConnection(
         context,
         peerId: peerId,
-        fallbackPeerId: WsSvrManager().receiver,
         cancelButtonText: l10n?.keepConnect ?? '取消',
       );
     } catch (error) {

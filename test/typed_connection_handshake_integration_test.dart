@@ -1425,6 +1425,98 @@ void main() {
     expect(server.isConnectedTo('aaa-peer'), isTrue);
     expect(client.isConnectedTo('zzz-peer'), isTrue);
   });
+
+  // Regression: an outgoing dial still stuck before WebSocket upgrade
+  // (e.g. reconnecting to a stale IP) must not win simultaneous-dial
+  // tie-breaking and kill a working incoming connection from that peer.
+  test('F7: unready outgoing dial is cancelled instead of killing a working '
+      'incoming connection', () async {
+    final aaaDb = LocalDatabase.forTesting(NativeDatabase.memory());
+    final zzzDb = LocalDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(aaaDb.close);
+    addTearDown(zzzDb.close);
+    final aaaKey = await _publicKey(61);
+    final zzzKey = await _publicKey(11);
+    await _trust(aaaDb, 'zzz-peer', zzzKey);
+    await _trust(zzzDb, 'aaa-peer', aaaKey);
+
+    final aaa = WsSvrManager.forTesting(
+      database: aaaDb,
+      identityStore: _identityStore(61),
+      localPeerProfileLoader: () async => _profile('aaa-peer'),
+      autoConnectEnabled: () async => true,
+      manageSharedCoordinators: false,
+    );
+    final zzz = WsSvrManager.forTesting(
+      database: zzzDb,
+      identityStore: _identityStore(11),
+      localPeerProfileLoader: () async => _profile('zzz-peer'),
+      autoConnectEnabled: () async => true,
+      manageSharedCoordinators: false,
+    );
+    aaa.setEvent(_ApprovingEvents());
+    zzz.setEvent(_ApprovingEvents());
+    addTearDown(
+      () => aaa.closeGracefully(closeServer: true, forceServerClose: true),
+    );
+    addTearDown(
+      () => zzz.closeGracefully(closeServer: true, forceServerClose: true),
+    );
+    final aaaStarted = await aaa.startServer(0);
+    expect(aaaStarted.isSuccess, isTrue);
+
+    // Silent TCP listener that never answers the HTTP upgrade, keeping
+    // aaa-peer's outgoing attempt unready (attempt.isReady == false).
+    final blackhole = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    final acceptedSockets = <Socket>[];
+    final blackholeAccepted = Completer<void>();
+    blackhole.listen((socket) {
+      acceptedSockets.add(socket);
+      if (!blackholeAccepted.isCompleted) {
+        blackholeAccepted.complete();
+      }
+    });
+    addTearDown(() async {
+      for (final socket in acceptedSockets) {
+        socket.destroy();
+      }
+      await blackhole.close();
+    });
+
+    // aaa-peer (smaller uid) starts dialing zzz-peer at the stale/silent port.
+    final stuckOutgoing = aaa.connectToServer(
+      ConnectionAttemptRequest(
+        requestId: 'stale-outgoing-dial',
+        endpoint: PeerEndpoint.loopbackForTesting(port: blackhole.port),
+        expectedPeerId: 'zzz-peer',
+        mode: ConnectionAttemptMode.interactive,
+      ),
+    );
+    await blackholeAccepted.future.timeout(const Duration(seconds: 2));
+
+    // zzz-peer (larger uid) dials into aaa-peer's live server. Even though
+    // aaa-peer < zzz-peer, aaa-peer's outgoing dial is not ready yet, so it
+    // must be cancelled and zzz-peer's working incoming connection accepted.
+    final incomingResult = await zzz
+        .connectToServer(
+          ConnectionAttemptRequest(
+            requestId: 'working-incoming-dial',
+            endpoint: PeerEndpoint.loopbackForTesting(port: aaaStarted.port),
+            expectedPeerId: 'aaa-peer',
+            mode: ConnectionAttemptMode.interactive,
+          ),
+        )
+        .timeout(const Duration(seconds: 5));
+    final outgoingResult = await stuckOutgoing.timeout(
+      const Duration(seconds: 3),
+    );
+
+    expect(incomingResult.isAuthenticated, isTrue);
+    expect(outgoingResult.status, ConnectionAttemptStatus.cancelled);
+    expect(outgoingResult.reason, ConnectionAttemptReason.superseded);
+    expect(aaa.isConnectedTo('zzz-peer'), isTrue);
+    expect(zzz.isConnectedTo('aaa-peer'), isTrue);
+  });
 }
 
 final class _LegacyCloseThenProxy {
