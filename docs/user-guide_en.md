@@ -32,6 +32,8 @@ The QR code carries both the LAN address and the device identity, so there is no
 
 On Linux, discovery depends on Avahi. On networks that block mDNS / Bonjour, connecting by IP is more reliable.
 
+When a firewall, a VPN or a hotspot stops other devices from connecting in to one device, connect from that device instead. Once connected, sound, keyboard and mouse, and window flow work too: when Whisper can't get in, that device connects out instead.
+
 Once connected, the "Network" row on the device card shows the link's quality and latency; select it for jitter and loss. High latency, a lot of jitter or loss makes keyboard and mouse stutter and files slow; 5 GHz Wi-Fi, a spot nearer the router or a cable helps a lot. The row below it is the other device's address; select it to copy it. Rest the pointer on this device's name at the bottom left to see its address; the card also shows the other device's version.
 
 When there are too many devices to tell apart, give one a name in "Custom name" on its device card, such as "Study desktop". The sidebar, chats, the tray and every device picker use that name. It is kept on this device only: the device itself and others still see its own name. Empty the field to go back to it.

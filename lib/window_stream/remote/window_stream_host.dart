@@ -20,39 +20,10 @@ import '../window_stream_log.dart';
 import 'host_audio.dart';
 import 'window_capture_backend.dart';
 import 'window_stream_control.dart';
+import 'window_stream_host_types.dart';
 
 export 'window_capture_backend.dart';
-
-/// Sends a control message to a peer; returns false when it could not.
-typedef WindowStreamControlSender =
-    Future<bool> Function(WindowStreamControlMessage message);
-
-/// Runs [action] with this device's media send key for [peerId].
-typedef MediaSendKeyScope =
-    T? Function<T>(String peerId, T Function(Uint8List key) action);
-
-/// For a viewer this device dialled the Whisper session to: runs [action]
-/// with that session's address (`ws://host:port`) and this device's media
-/// keys for the viewer. Null when this device is not that session's client.
-typedef MediaDialScope =
-    T? Function<T>(
-      String peerId,
-      T Function(Uri base, Uint8List sendKey, Uint8List receiveKey) action,
-    );
-
-enum HostStreamState { awaitingMedia, live, closed }
-
-/// The kind of screen a viewer shows windows on, from its `open`.
-enum WindowStreamViewerKind {
-  phone,
-  tablet,
-  desktop;
-
-  /// Viewers before `viewerKind` existed were phones or tablets (a Mac
-  /// viewer then also shared one display per viewer).
-  static WindowStreamViewerKind? parse(Object? value) =>
-      value is String ? values.asNameMap()[value] : null;
-}
+export 'window_stream_host_types.dart';
 
 class _HostStream {
   _HostStream({required this.open, required this.window, required this.send})
@@ -628,7 +599,11 @@ class WindowStreamHost {
       case WindowStreamControlAction.dial:
         final stream = _streams[message.sessionId];
         if (stream != null) {
-          await _dialViewer(stream, message.transportToken);
+          await _dialViewer(
+            stream,
+            message.transportToken,
+            message.transportPort ?? 0,
+          );
         }
       case WindowStreamControlAction.stop:
       case WindowStreamControlAction.error:
@@ -981,7 +956,7 @@ class WindowStreamHost {
         _isPhone &&
         dialScope?.call(
               stream.viewerPeerId,
-              (base, sendKey, receiveKey) => true,
+              (_, dialledSession, _, _) => dialledSession,
             ) ==
             true;
     _streams[message.sessionId] = stream;
@@ -1019,6 +994,7 @@ class WindowStreamHost {
     return stream != null &&
         stream.state == HostStreamState.awaitingMedia &&
         !stream.dialing &&
+        !claim.reverse &&
         claim.route == route &&
         claim.namespace == namespace &&
         claim.peerId == stream.viewerPeerId;
@@ -1076,16 +1052,17 @@ class WindowStreamHost {
   /// viewer proves its own when it dials). Keys per direction stay as when
   /// the viewer dials: video under this device's send key, input under its
   /// receive key, both bound to the token.
-  Future<void> _dialViewer(_HostStream stream, String token) async {
+  Future<void> _dialViewer(_HostStream stream, String token, int port) async {
     final scope = dialScope;
-    if (!stream.hostDials ||
-        stream.dialing ||
+    if (stream.dialing ||
         stream.state != HostStreamState.awaitingMedia ||
         scope == null ||
         !_ready()) {
       return;
     }
     stream.dialing = true;
+    // The viewer could not reach this device, or this phone said it dials:
+    // either way only to the address its `/chat` is on, at the port it gave.
     ({
       Uri uri,
       Uint8List proofKey,
@@ -1094,10 +1071,10 @@ class WindowStreamHost {
     })?
     prepared;
     try {
-      prepared = scope(stream.viewerPeerId, (base, sendKey, receiveKey) {
+      prepared = scope(stream.viewerPeerId, (host, _, sendKey, receiveKey) {
         final uri = MediaRoute.window.uri(
-          host: base.host,
-          port: base.port,
+          host: host,
+          port: port,
           sessionId: stream.sessionId,
           token: token,
         );

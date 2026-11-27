@@ -419,57 +419,39 @@ extension _MediaChannels on WsSvrManager {
     return session.withMediaSendKey(action);
   }
 
-  /// A one-time `/window` token for [hostPeerId] to dial this viewer back,
-  /// proved with that host's media send key (this device's receive key).
-  String? _issueInboundWindowToken(String hostPeerId, String sessionId) {
-    final session = _sessionsByPeerId[hostPeerId];
-    if (_server == null || session == null || !session.isAuthenticated) {
-      return null;
-    }
-    try {
-      return session.withMediaReceiveKey(
-        (mediaReceiveKey) => _sessionUpgradeTokens.issue(
-          route: WindowStreamHost.route,
-          namespace: WindowStreamHost.namespace,
-          sessionId: sessionId,
-          peerId: hostPeerId,
-          mediaMacKey: mediaReceiveKey,
-          connectionGeneration: session.connectionGeneration,
-          now: DateTime.now(),
-        ),
-      );
-    } on StateError {
-      return null;
-    }
+  /// A one-time `/window` token for [hostPeerId] to dial this viewer back
+  /// on, with the port to dial; proved with that host's media send key.
+  ({String token, int port})? _issueInboundWindowToken(
+    String hostPeerId,
+    String sessionId,
+  ) {
+    final port = _server?.port;
+    final token = _issueReverseToken(MediaRoute.window, hostPeerId, sessionId);
+    return port == null || token == null ? null : (token: token, port: port);
   }
 
-  /// For a viewer whose Whisper session this device dialled: the address it
-  /// dialled and this device's media keys, so a phone host can dial that
-  /// viewer's `/window` (WindowStreamMediaDial). Null otherwise.
+  /// For a viewer connected now: the address its `/chat` came from or went
+  /// to, whether this device dialled it, and this device's media keys, so a
+  /// host can dial that viewer's `/window` (WindowStreamMediaDial).
   T? _windowDialScope<T>(
     String peerId,
-    T Function(Uri base, Uint8List sendKey, Uint8List receiveKey) action,
+    T Function(
+      String host,
+      bool dialledSession,
+      Uint8List sendKey,
+      Uint8List receiveKey,
+    )
+    action,
   ) {
     final session = _sessionsByPeerId[peerId];
-    if (session == null ||
-        !session.isAuthenticated ||
-        session.role != PeerSocketRole.client) {
+    final host = session == null ? null : _mediaDialHost(session);
+    if (session == null || !session.isAuthenticated || host == null) {
       return null;
     }
-    ({String host, int port})? endpoint;
-    for (final entry in _sessionsBySink.entries) {
-      if (identical(entry.value, session)) {
-        endpoint = _endpointsBySink[entry.key];
-        break;
-      }
-    }
-    if (endpoint == null || endpoint.host.isEmpty || endpoint.port <= 0) {
-      return null;
-    }
-    final base = Uri(scheme: 'ws', host: endpoint.host, port: endpoint.port);
+    final dialled = session.role == PeerSocketRole.client;
     return session.withMediaSendKey(
       (sendKey) => session.withMediaReceiveKey(
-        (receiveKey) => action(base, sendKey, receiveKey),
+        (receiveKey) => action(host, dialled, sendKey, receiveKey),
       ),
     );
   }

@@ -10,7 +10,9 @@
 |---|---|---|---|
 | `/audio` | `audio-group` | 声音来源拨播放端 | 播放端是电脑时先试它音频 isolate 自己的端口（1.5 秒），不通再走主端口 |
 | `/input` | `remote-input` | 控制的一方拨被控的一方 | 拨号方每 5 秒 ping 一次：被控端卡住但 socket 还开着时，控制端不会一直吞掉本机的键鼠 |
-| `/window` | `window-stream` | 观看端拨主机 | 升级前就在 socket 上设 TCP_NODELAY；主机是手机且是 `/chat` 的客户端时反过来由主机拨（见下面"反拨"） |
+| `/window` | `window-stream` | 观看端拨主机 | 升级前就在 socket 上设 TCP_NODELAY；主机是手机且是 `/chat` 的客户端时一开始就由主机拨 |
+
+三条路由在拨号方连不上对方时都会改由对方拨回来，见下面"反拨"。
 
 ## 令牌和证明
 
@@ -63,13 +65,31 @@
 
 ## 反拨
 
-现在只有窗口流转能反拨：手机常常从外面连不进去（VPN、AP 隔离、热点），但它能连到电脑，所以手机主机是 `/chat` 的客户端时，主机在 accept 里说 `hostDials`，观看端用 `dial` 发一个自己签的令牌，主机拿它拨观看端的 `/window`，证明用主机自己的发送密钥（`window_stream_control.dart` 的 `WindowStreamMediaDial`）。声音和键鼠的拨号方向还是固定的。
+一台设备被防火墙、VPN、AP 隔离或热点挡住、别人连不进来时，只要 `/chat` 连着（由它连出去的），它也能用声音、键鼠和窗口流转：拨号方连不上，就请它反过来拨。
+
+1. **何时反拨**：只看正向拨号的错误（`lib/socket/media_dial_back.dart` 的 `mediaPeerUnreachable`）：`SocketException` 或 `TimeoutException`，直接抛出或包在 `WebSocketChannelException` 里。令牌被拒、证明失败不反拨，那不是网络的问题。
+2. **请求**：本来要拨号的一方签一个**反向**令牌（`SessionUpgradeClaim.reverse`），连同自己的端口在 `/chat` 上发出去：声音用 `groupDialBack`，键鼠用 `dialBack`，窗口用 `dial`。每个会话、每台设备、每条路由只有一个反向令牌，新签的作废旧的。正向和反向令牌互不通用：主机、键鼠和声音的接受逻辑只收它们等的那一种，正向令牌进不了反拨的等待，反向令牌也不会被当成正向的。
+3. **应答**：对方用自己已有的检查核对令牌对应的 claim（`dialBackClaim`），作废它发出的正向令牌，然后只拨一次。地址是这条 `/chat` 连接对端的地址（`WsSvrManager._mediaDialHost`，IPv4 映射的 IPv6 先变回 IPv4），不用消息里给的；端口用消息里的。证明用它自己的发送密钥，和正向时一样。
+4. **接上**：签令牌的一方等这个连接（声音和键鼠用 `MediaDialBackWaits`，8 秒；窗口的 worker 等中继，10 秒），没来就当连不上处理。连上后用同一代连接的发送密钥建加密器，数据照原来的方向走。
+
+各路由在哪里等：
+
+| 路由 | 谁请求 | 在哪里等 |
+|---|---|---|
+| `/audio` | 声音来源 | 电脑上在音频 isolate 里等，端口是 isolate 自己的：isolate 登记等待，经主 isolate 发 `groupDialBack`；isolate 查到反向令牌时，主 isolate 只对本机声音组里还在这个会话的播放端放行，并把同代发送密钥交给它。isolate 没起来时在主 isolate 等，走主端口 |
+| `/input` | 控制端 | 主 isolate（`RemoteInputWebSocketPacketTransport.dialBack`） |
+| `/window` | 观看端 | 流 isolate 里的 worker 发现连不上，经 UI isolate（`lib/window_stream/remote/window_dial_back.dart`）签令牌、建中继、发 `dial`；主机拨进来的连接经中继交给 worker，包的 channel binding 换成观看端自己的令牌 |
+
+手机主机是 `/chat` 的客户端时，窗口流转一开始就由主机拨：主机在 accept 里说 `hostDials`，观看端直接发 `dial`（`window_stream_control.dart` 的 `WindowStreamMediaDial`），不必先失败一次。
+
+反拨的连接不开 UDP 车道，指针移动和声音都走这条 WebSocket。
 
 ## 测试
 
 - `test/media_websocket_authorization_test.dart`：三条路由的令牌、证明、代次、名额和随机数失败，跨 isolate 先证明后消费令牌的那条路径，都在真实 socket 上。
 - `test/bounded_binary_websocket_session_test.dart`：登记、按旧密钥关闭、整体关闭时新来的连接。
 - `test/packet_byte_transport_test.dart`、`test/remote_input_packet_transport_test.dart`：关闭原因，包括溢出。
-- `test/window_stream_reverse_dial_test.dart`：窗口反拨。
+- `test/media_websocket_authorization_test.dart` 还有键鼠和声音的反拨（正向端口拒绝连接，反拨后数据到达）和"没人等的反向令牌在每条路由上都被拒"。
+- `test/window_stream_reverse_dial_test.dart`：窗口反拨，包括主机一开始就拨和观看端连不上后再请主机拨。
 
-没有测试的：音频 isolate 端口上的完整播放路径（要原生音频），窗口主机在视频发送端坏掉时停流（要原生采集）。
+没有测试的：音频 isolate 端口上的完整播放路径（要原生音频），包括声音反拨经 isolate 端口的那条；窗口主机在视频发送端坏掉时停流（要原生采集）；真实的单向可达网络（只在本机回环上模拟过拒绝连接）。

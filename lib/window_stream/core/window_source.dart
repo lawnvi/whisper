@@ -1,3 +1,5 @@
+import 'dart:isolate';
+
 import 'package:flutter/foundation.dart';
 
 import 'window_input_event.dart';
@@ -114,6 +116,7 @@ class WhisperWindowSpec extends StreamTransportSpec {
     required this.viewerPeerId,
     required Uint8List sendKey,
     required Uint8List receiveKey,
+    this.dialBackPort,
   }) : sendKey = Uint8List.fromList(sendKey),
        receiveKey = Uint8List.fromList(receiveKey);
 
@@ -129,6 +132,10 @@ class WhisperWindowSpec extends StreamTransportSpec {
 
   /// This device's media receive key for the host (video).
   final Uint8List receiveKey;
+
+  /// When the host cannot be reached at all, asks the UI isolate to have it
+  /// dial this device instead (`window_dial_back.dart`); null: no asking.
+  final SendPort? dialBackPort;
 
   void destroyKeys() {
     sendKey.fillRange(0, sendKey.length, 0);

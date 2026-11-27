@@ -7,6 +7,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import '../../socket/bounded_binary_websocket_session.dart';
 import '../../socket/bounded_outbound_queue.dart';
 import '../../socket/media_channel_dial.dart';
+import '../../socket/media_dial_back.dart';
 import '../../socket/packet_byte_transport.dart';
 import '../core/window_input_event.dart';
 import '../core/window_source.dart';
@@ -16,6 +17,7 @@ import '../pipeline/native_input_decoder.dart';
 import '../pipeline/stream_worker.dart';
 import '../pipeline/worker_opus.dart';
 import 'inbound_window_relay.dart';
+import 'window_dial_back.dart';
 import 'window_stream_control.dart';
 
 export 'inbound_window_relay.dart' show InboundWindowRelay;
@@ -77,9 +79,9 @@ class RemoteWindowWorker implements StreamWorker {
   @override
   Future<void> start() async {
     final spec = this.spec;
-    final uri = spec.uri;
+    var uri = spec.uri;
     try {
-      final WebSocketChannel channel;
+      WebSocketChannel channel;
       if (spec is InboundWhisperWindowSpec) {
         // The host dials this device; the UI isolate checked its proof.
         final relay = InboundWindowRelayChannel(spec.port);
@@ -87,13 +89,27 @@ class RemoteWindowWorker implements StreamWorker {
         await relay.connected.timeout(InboundWhisperWindowSpec.connectTimeout);
         channel = relay;
       } else {
-        channel = await dialMediaChannel(
-          uri,
-          MediaRoute.window,
-          sessionId: spec.sessionId,
-          proverPeerId: spec.viewerPeerId,
-          proofKey: spec.sendKey,
-        );
+        try {
+          channel = await dialMediaChannel(
+            uri,
+            MediaRoute.window,
+            sessionId: spec.sessionId,
+            proverPeerId: spec.viewerPeerId,
+            proofKey: spec.sendKey,
+          );
+        } catch (error) {
+          // Nothing answered there: the host is asked to dial this device,
+          // and the packets are bound to this device's token instead.
+          final back = spec.dialBackPort;
+          if (back == null || !mediaPeerUnreachable(error)) rethrow;
+          final dialed = await askWindowDialBack(back);
+          if (dialed == null) rethrow;
+          _channel = dialed.channel;
+          channel = dialed.channel;
+          uri = uri.replace(
+            queryParameters: {'session': spec.sessionId, 'token': dialed.token},
+          );
+        }
       }
       _channel = channel;
       _decoder = MediaRoute.window.decoder(

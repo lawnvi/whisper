@@ -27,8 +27,8 @@
 1303 lib/state/desktop_quick_send_inbox.dart
 2286 lib/theme/whisper_ui.dart
 1989 lib/widget/media_message_preview.dart
-1390 lib/window_stream/remote/remote_peer_source.dart
-1466 lib/window_stream/remote/window_stream_host.dart
+1355 lib/window_stream/remote/remote_peer_source.dart
+1443 lib/window_stream/remote/window_stream_host.dart
 1355 lib/window_stream/window_stream_coordinator.dart
 6676 linux/remote_input_plugin.cc
 4129 macos/Runner/MainFlutterWindow.swift

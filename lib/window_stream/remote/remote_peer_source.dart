@@ -17,8 +17,12 @@ import '../core/window_input_event.dart';
 import '../core/window_source.dart';
 import '../core/window_stream_models.dart';
 import 'inbound_window_relay.dart';
+import 'window_dial_back.dart';
 import 'remote_window_worker.dart';
+import 'window_peers.dart';
 import 'window_stream_control.dart';
+
+export 'window_peers.dart';
 
 /// Sends a window-stream control message to a peer.
 typedef WindowStreamPeerSender =
@@ -27,29 +31,6 @@ typedef WindowStreamPeerSender =
 /// Delivers input for a stream to wherever its transport runs.
 typedef StreamInputPort =
     void Function(String streamId, WindowInputEvent event);
-
-/// A Whisper peer connected now, as far as windows go.
-class WindowStreamPeer {
-  const WindowStreamPeer({
-    required this.peerId,
-    required this.name,
-    required this.platform,
-    required this.takesWindows,
-  });
-
-  final String peerId;
-  final String name;
-  final WindowStreamPlatform platform;
-
-  /// It shows windows sent to it ("送到"): an iPad only does that.
-  final bool takesWindows;
-
-  bool sameAs(WindowStreamPeer other) =>
-      peerId == other.peerId &&
-      name == other.name &&
-      platform == other.platform &&
-      takesWindows == other.takesWindows;
-}
 
 /// Viewer-side registry: every connected Whisper peer that offers windows,
 /// plus routing of the host's control replies to the right source.
@@ -67,7 +48,8 @@ class WindowStreamViewer extends ChangeNotifier {
   /// Set by the socket layer: issues a one-time `/window` token for a host
   /// that will dial this device ([WindowStreamMediaDial]). Unset (tests,
   /// no server), this viewer never offers `dialBack`.
-  String? Function(String hostPeerId, String sessionId)? issueInboundToken;
+  ({String token, int port})? Function(String hostPeerId, String sessionId)?
+  issueInboundToken;
 
   final _sources = <String, RemotePeerSource>{};
 
@@ -80,6 +62,7 @@ class WindowStreamViewer extends ChangeNotifier {
     final inbound = _inbound[claim.sessionId];
     return inbound != null &&
         inbound.awaiting &&
+        claim.reverse &&
         claim.route == WhisperWindowSpec.route &&
         claim.namespace == WhisperWindowSpec.namespace &&
         claim.peerId == inbound.hostPeerId &&
@@ -217,37 +200,6 @@ class WindowStreamViewer extends ChangeNotifier {
       receiveKey: receiveKey,
     );
   }
-}
-
-/// One window another device sent to this one.
-class WindowOffer {
-  WindowOffer({
-    required this.source,
-    required this.window,
-    this.thumbnail,
-    this.icon,
-  }) : receivedAt = DateTime.now();
-
-  static const lifetime = Duration(minutes: 2);
-
-  final RemotePeerSource source;
-  final RemoteWindowInfo window;
-  final Uint8List? thumbnail;
-
-  /// The app's icon, for when the window can't be pictured (minimized).
-  final Uint8List? icon;
-  final DateTime receivedAt;
-
-  /// Opens it like any other window of that device.
-  OpenTarget get target => OpenTask(
-    TaskEntry(
-      id: window.id,
-      appId: window.appId,
-      label: window.title.isEmpty || window.title == window.appName
-          ? window.appName
-          : '${window.appName} — ${window.title}',
-    ),
-  );
 }
 
 /// A Whisper peer's windows (a Mac today), seen from this device.
@@ -812,10 +764,10 @@ class RemotePeerSource implements WindowSource, ClosesTasks, ConfirmsTaskClose {
         }
         final port = message.transportPort ?? _port;
         final hostDials = payload[WindowStreamMediaDial.hostDialsKey] == true;
-        final inboundToken = hostDials
+        final inbound = hostDials
             ? _viewer.issueInboundToken?.call(peerId, message.sessionId)
             : null;
-        if (hostDials && inboundToken == null) {
+        if (hostDials && inbound == null) {
           // Asked to take a dial this device can't take: no stream.
           unawaited(handle._sendStop());
           completer.completeError(
@@ -830,39 +782,49 @@ class RemotePeerSource implements WindowSource, ClosesTasks, ConfirmsTaskClose {
           host: remoteHost.isNotEmpty ? remoteHost : _host,
           port: port,
           sessionId: message.sessionId,
-          token: inboundToken ?? message.transportToken,
+          token: inbound?.token ?? message.transportToken,
         );
-        if (inboundToken != null) {
-          final inbound = InboundWindowHostRelay(
+        Future<bool> sendDial(String token, int port) => _send(
+          _message(
+            WindowStreamControlAction.dial,
+            message.sessionId,
+          ).withTransport(token, port: port),
+        );
+        if (inbound != null) {
+          final relay = InboundWindowHostRelay(
             hostPeerId: peerId,
             binding: mediaPacketChannelBindingFromUri(uri),
           );
-          _viewer._inbound[message.sessionId] = inbound;
+          _viewer._inbound[message.sessionId] = relay;
           handle._transport = InboundWhisperWindowSpec(
             uri: uri,
             sessionId: message.sessionId,
             viewerPeerId: _local,
             sendKey: sendKey,
             receiveKey: receiveKey,
-            port: inbound.port,
+            port: relay.port,
           );
           // The host dials once it has the token; the stream isolate waits
           // for its socket (InboundWhisperWindowSpec.connectTimeout).
-          unawaited(
-            _send(
-              _message(
-                WindowStreamControlAction.dial,
-                message.sessionId,
-              ).withTransport(inboundToken),
-            ),
-          );
+          unawaited(sendDial(inbound.token, inbound.port));
         } else {
+          final issue = _viewer.issueInboundToken;
+          handle._dialBack = issue == null
+              ? null
+              : WindowDialBackResponder(
+                  hostPeerId: peerId,
+                  issue: () => issue(peerId, message.sessionId),
+                  onRelay: (relay) =>
+                      _viewer._inbound[message.sessionId] = relay,
+                  sendDial: sendDial,
+                );
           handle._transport = WhisperWindowSpec(
             uri: uri,
             sessionId: message.sessionId,
             viewerPeerId: _local,
             sendKey: sendKey,
             receiveKey: receiveKey,
+            dialBackPort: handle._dialBack?.port,
           );
         }
         final width = payload['width'];
@@ -1012,6 +974,7 @@ class RemoteStreamHandle implements StreamHandle {
   final OpenTarget target;
   RemoteWindowInfo window;
   StreamTransportSpec? _transport;
+  WindowDialBackResponder? _dialBack;
 
   /// The screen this window is shown on, in logical points.
   Size _viewport = Size.zero;
@@ -1039,6 +1002,7 @@ class RemoteStreamHandle implements StreamHandle {
   void onTransportEvent(StreamTransportEvent event) {
     switch (event) {
       case TransportConnected():
+        _dialBack?.close();
         _state.value = _state.value.copyWith(status: StreamStatus.live);
       case TransportVideoSize(:final width, :final height):
         _state.value = _state.value.copyWith(
@@ -1064,6 +1028,7 @@ class RemoteStreamHandle implements StreamHandle {
       return;
     }
     _closed = true;
+    _dialBack?.close();
     source._streams.remove(id);
     source._viewer._closeInbound(id);
     _state.value = _state.value.copyWith(

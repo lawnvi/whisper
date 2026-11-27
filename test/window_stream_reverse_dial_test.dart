@@ -21,8 +21,10 @@ import 'package:whisper/window_stream/remote/window_stream_control.dart';
 import 'package:whisper/window_stream/remote/window_stream_host.dart';
 
 /// `/window` between two in-process peers, both ways round: the viewer
-/// dialling the host (desktops), and a phone host that opened the Whisper
-/// session dialling the viewer back (a phone behind a VPN or AP isolation).
+/// dialling the host (desktops), and the host dialling the viewer back: a
+/// phone host that opened the Whisper session from the start (a phone
+/// behind a VPN or AP isolation), any host once the viewer found it
+/// unreachable.
 /// Real host, viewer, worker, proof handshake and packet envelope; only the
 /// Whisper servers' `/window` route is a stand-in.
 void main() {
@@ -52,6 +54,7 @@ void main() {
     required bool hostIsPhone,
     required bool hostDialledSession,
     bool viewerOffersDialBack = true,
+    bool hostUnreachable = false,
   }) async {
     WindowStreamHost.debugIsPhone = hostIsPhone;
     final p = _Peers(
@@ -63,11 +66,18 @@ void main() {
     await p.start(
       hostDialledSession: hostDialledSession,
       viewerOffersDialBack: viewerOffersDialBack,
+      hostUnreachable: hostUnreachable,
     );
     return p;
   }
 
-  Future<void> streamAndCheck(_Peers p, {required bool expectHostDials}) async {
+  Future<void> streamAndCheck(
+    _Peers p, {
+    required bool expectHostDials,
+    bool afterUnreachable = false,
+  }) async {
+    // Said in the accept, before any dial; the other way only on failure.
+    final upFront = expectHostDials && !afterUnreachable;
     final source = WindowStreamViewer.shared.sourceFor(hostId)!;
     final handle =
         await source.open(
@@ -78,19 +88,16 @@ void main() {
     final accept = p.toViewer.firstWhere(
       (m) => m.action == WindowStreamControlAction.accept,
     );
-    expect(
-      accept.payload[WindowStreamMediaDial.hostDialsKey] == true,
-      expectHostDials,
-    );
+    expect(accept.payload[WindowStreamMediaDial.hostDialsKey] == true, upFront);
     expect(handle.transport, isA<WhisperWindowSpec>());
     expect(
       handle.transport is InboundWhisperWindowSpec,
-      expectHostDials,
+      upFront,
       reason: 'the viewer follows the host',
     );
     expect(
       p.toHost.any((m) => m.action == WindowStreamControlAction.dial),
-      expectHostDials,
+      upFront,
     );
 
     final sink = _Sink();
@@ -193,6 +200,15 @@ void main() {
     await streamAndCheck(peers, expectHostDials: true);
   });
 
+  test('a host the viewer cannot reach dials it back', () async {
+    peers = await connect(
+      hostIsPhone: false,
+      hostDialledSession: false,
+      hostUnreachable: true,
+    );
+    await streamAndCheck(peers, expectHostDials: true, afterUnreachable: true);
+  });
+
   test('a viewer that does not offer dialBack is dialled never', () async {
     peers = await connect(
       hostIsPhone: true,
@@ -227,31 +243,32 @@ void main() {
     final hostToken = peers.toViewer
         .firstWhere((m) => m.action == WindowStreamControlAction.accept)
         .transportToken;
-    final other = peers.viewerTokens.issue(
-      route: '/window',
-      sessionId: sessionId,
-      peerId: hostId,
-      mediaMacKey: hostSend,
-      now: DateTime.now(),
-    );
-    final wrongBinding = peers.viewerTokens.lookup(
-      route: '/window',
-      sessionId: sessionId,
-      token: other,
-      now: DateTime.now(),
-    )!;
-    expect(WindowStreamViewer.shared.canAttachInbound(wrongBinding), isFalse);
     expect(hostToken, isNot(token));
-    // Another peer with this token is not the host.
-    final wrongPeer = SessionUpgradeClaim(
+    SessionUpgradeClaim claimFor({
+      String peerId = hostId,
+      String? binding,
+      bool reverse = true,
+    }) => SessionUpgradeClaim(
       route: '/window',
       namespace: 'window-stream',
       sessionId: sessionId,
-      peerId: 'someone-else',
+      peerId: peerId,
       mediaMacKey: hostSend,
-      channelBinding: base64Url.decode('$token='),
+      channelBinding: base64Url.decode('${binding ?? token}='),
+      reverse: reverse,
     );
-    expect(WindowStreamViewer.shared.canAttachInbound(wrongPeer), isFalse);
+    for (final (wrong, why) in [
+      (claimFor(binding: hostToken), 'another token'),
+      (claimFor(peerId: 'someone-else'), 'not the host'),
+      // A viewer's forward token (it is a host as well) never gets in here.
+      (claimFor(reverse: false), 'not issued for a dial back'),
+    ]) {
+      expect(
+        WindowStreamViewer.shared.canAttachInbound(wrong),
+        isFalse,
+        reason: why,
+      );
+    }
 
     // A dialler without the host's send key fails the proof.
     final uri = Uri(
@@ -360,7 +377,12 @@ class _Peers {
   Future<void> start({
     required bool hostDialledSession,
     required bool viewerOffersDialBack,
+    required bool hostUnreachable,
   }) async {
+    // A port nothing listens on: the viewer's dial there is refused.
+    final closed = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    final deadPort = closed.port;
+    await closed.close();
     viewerServer = await _mediaServer(
       tokens: viewerTokens,
       canAttach: WindowStreamViewer.shared.canAttachInbound,
@@ -385,13 +407,20 @@ class _Peers {
 
     T? dialScope<T>(
       String peerId,
-      T Function(Uri base, Uint8List sendKey, Uint8List receiveKey) action,
+      T Function(
+        String host,
+        bool dialledSession,
+        Uint8List sendKey,
+        Uint8List receiveKey,
+      )
+      action,
     ) {
-      if (!hostDialledSession || peerId != viewerId) {
+      if (peerId != viewerId) {
         return null;
       }
       return action(
-        Uri(scheme: 'ws', host: '127.0.0.1', port: viewerServer.port),
+        '127.0.0.1',
+        hostDialledSession,
         Uint8List.fromList(hostSend),
         Uint8List.fromList(viewerSend),
       );
@@ -412,7 +441,10 @@ class _Peers {
           mediaMacKey: viewerSend,
           now: DateTime.now(),
         );
-        outgoing = message.withTransport(token, port: hostServer.port);
+        outgoing = message.withTransport(
+          token,
+          port: hostUnreachable ? deadPort : hostServer.port,
+        );
       }
       final wire = _wire(outgoing);
       toViewer.add(wire);
@@ -448,13 +480,17 @@ class _Peers {
       }
       ..localPeerId = ((_) => viewerId)
       ..issueInboundToken = viewerOffersDialBack
-          ? (peerId, sessionId) => viewerTokens.issue(
-              route: '/window',
-              namespace: 'window-stream',
-              sessionId: sessionId,
-              peerId: peerId,
-              mediaMacKey: hostSend,
-              now: DateTime.now(),
+          ? (peerId, sessionId) => (
+              token: viewerTokens.issue(
+                route: '/window',
+                namespace: 'window-stream',
+                sessionId: sessionId,
+                peerId: peerId,
+                mediaMacKey: hostSend,
+                reverse: true,
+                now: DateTime.now(),
+              ),
+              port: viewerServer.port,
             )
           : null
       ..peerAvailable(

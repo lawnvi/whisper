@@ -45,7 +45,7 @@ xattr -dr com.apple.quarantine /Applications/Whisper.app
 | The protocol versions are incompatible | Update both devices to the same new version |
 | Pairing did not finish | Keep Whisper open on both devices and compare the pairing code again |
 
-**Windows Firewall**: the first time Whisper opens, Windows asks whether it may use the network; tick "Private networks". If the current network is set to "Public", Windows blocks other devices from connecting in. In Settings → Network & internet, open the current network's properties and set its network profile type to "Private", or tick "Private" for Whisper under "Allow an app through Windows Firewall".
+**Windows Firewall**: the first time Whisper opens, Windows asks whether it may use the network; tick "Private networks". If the current network is set to "Public", Windows blocks other devices from connecting in. In Settings → Network & internet, open the current network's properties and set its network profile type to "Private", or tick "Private" for Whisper under "Allow an app through Windows Firewall". When only one device blocks incoming connections, you can also connect from that device; sound, keyboard and mouse, and window flow then work as usual.
 
 **macOS Local Network permission**: from macOS 15, apps need permission to reach the local network. Open System Settings → Privacy & Security → Local Network and make sure Whisper is on.
 
