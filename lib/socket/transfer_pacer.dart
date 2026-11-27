@@ -5,68 +5,48 @@ import 'dart:math' as math;
 import 'package:whisper/socket/transfer_steering.dart';
 
 /// Keeps transfers from filling the link they share with sound, keyboard
-/// and mouse. Those need little, but must not wait behind file data. So
-/// while something live is going ([active]) a transfer takes what the link
-/// carries less a little ([_use]) and leaves the rest to them. With nothing
-/// live it holds nothing back.
+/// and mouse. Those need little, but must not wait behind file data. With
+/// nothing live ([active]) it holds nothing back.
 ///
-/// What the link carries is counted, not guessed from how late answers
-/// come: the bytes the receivers confirmed between two of their answers a
-/// couple of seconds apart. A late answer means something else on every
-/// receiver (a phone saving power, a slow disk, a large frame), and a pacer
-/// that slowed down for them crawled on some of them. Bytes over time mean
-/// the same everywhere.
+/// Where the live lanes can say how long their datagrams wait
+/// ([queueing]: the other end answers their stamps), it goes by that
+/// ([TransferPacerMode.steered], [TransferSteering]): a little faster while
+/// nothing waits, slower as soon as something does, and never unheld.
 ///
-/// - Nothing known yet: it goes unheld for the first seconds, as with
-///   nothing live, and what arrives then is what the link carries.
-/// - From then on it goes a little under that.
-/// - Less arriving than goes, or than may go while the sender waits for
-///   answers, twice running: the link has become slower, and that is what
-///   it carries now.
-/// - Every so often it goes a little over for a moment. All of that
-///   arriving, the link carries more, and it asks again, for more.
-/// - While this device's own event loop falls behind, which is its
-///   keyboard and mouse waiting, it gives way, down to half.
+/// Where they can't (a phone playing sound over its WebSocket, UDP blocked
+/// by a firewall, a dialled-back link), there is nothing to go by but what
+/// arrives, and that misleads: a phone saving power, a slow disk or a
+/// receiver that answers late all look like a slower link, and the
+/// counting this pacer once did on them went over, went unheld to count
+/// again, and crawled on some receivers. So it stays simple
+/// ([TransferPacerMode.capped]): what arrives over the first seconds with
+/// nothing held back is what the link carries, and it goes at half of
+/// that, never more, until the link is new again (another device, or
+/// minutes idle). Half leaves room for a link that slows down for a moment.
+/// When less arrives than goes, twice running, the link has slowed for
+/// good: it goes at half of what arrives, down to a quarter of what was
+/// counted. It never goes faster again by itself: finding out whether the
+/// link carries more means going over it, and the pointer lagged for as
+/// long.
 ///
-/// Going a little under the link on the whole is not enough. A frame is
-/// handed to the connection at once and fills the link until it is through:
-/// megabytes at a time kept it full for most of every quarter second, with
-/// all that was left over in one gap at the end, and the pointer waited
-/// behind each of them. So while it holds a transfer back, frames are ten
-/// milliseconds of what may go ([_slice]), one after the other: the link is
-/// never busy for longer than that, and what is live goes in between.
-///
-/// Trying how much more the link carries fills it for seconds, and the
-/// pointer lags for as long. So it is not tried while a key or the pointer
-/// is going over the link ([busy]), only once they rest.
-///
-/// All of the above guesses at a queue from bytes counted seconds apart.
-/// Where the keyboard and mouse lanes can say how long their datagrams wait
-/// ([queueing]: a newer version at the other end answers their stamps), it
-/// goes by that instead ([TransferPacerMode.steered]): a little faster while
-/// nothing waits, slower as soon as something does, and never unheld. On
-/// Wi-Fi that carried 2 to 3 MB/s and changed by the second, counting went
-/// over, went unheld to count again and let the pointer wait 200 ms.
+/// Going under the link on the whole is not enough. A frame is handed to
+/// the connection at once and fills the link until it is through: megabytes
+/// at a time kept it full for most of every quarter second, and the pointer
+/// waited behind each of them. So while it holds a transfer back, frames
+/// are ten milliseconds of what may go ([_slice]), one after the other: the
+/// link is never busy for longer than that, and what is live goes in
+/// between.
 ///
 /// Whatever is going, frames are kept to a quarter second of what the link
 /// has been seen to carry, and, with a receiver that answers every second,
 /// what is unconfirmed to two seconds of it: on a slow link a whole file
 /// handed to the connection at once would hold up every message behind it
 /// for minutes.
-/// What a pacer is doing: nothing held back while it finds out what the
-/// link carries ([measuring], [recounting]) or because the receiver cannot
-/// be gone under ([released]); or held, a little under the link ([held]),
-/// over it for a moment ([peeking]), or well under while what piled up
-/// clears ([draining]); or going by how long datagrams wait ([steered]).
-enum TransferPacerMode {
-  measuring,
-  recounting,
-  released,
-  held,
-  peeking,
-  draining,
-  steered,
-}
+///
+/// What a pacer is doing: nothing held back ([unheld]: nothing live, or
+/// counting what the link carries), held to half of that ([capped]), or
+/// going by how long datagrams wait ([steered]).
+enum TransferPacerMode { unheld, capped, steered }
 
 /// How a pacer was doing over its last few seconds, for diagnostics: bytes
 /// per second it allows (infinite when unheld) and takes the link to carry,
@@ -145,53 +125,13 @@ class TransferPacer {
   int _waitingLooks = 0;
   int _short = 0;
 
-  /// Going a little over what the link was found to carry, to see whether
-  /// all of that arrives: when next, how far apart, how much over, and
-  /// since when for the one going on.
-  DateTime? _peekAt;
-  Duration _peekGap = _peekSoon;
-  double _peekStep = _peekLittle;
-  DateTime? _peekSince;
-
-  /// Until when it goes at the least, for what piled up while it went
-  /// over or unheld to drain.
-  DateTime? _drainUntil;
-
-  /// The most that arrived the last time nothing was held back. When the link, held
-  /// to, comes to be taken for far less than that, either it is that much
-  /// slower now or this is a receiver that gets through less the less it
-  /// is sent: one that answers every frame it gets after a pause and takes
-  /// long over each answer. Going unheld for a moment tells which
-  /// ([_doubted] is what the link was taken for when that began). For such
-  /// a receiver the only speed that works is all it takes, so transfers
-  /// then go unheld until [_unheldUntil], longer each time.
-  double? _unheldRate;
-  double? _doubted;
-
-  /// How many counts running nothing was held back for, and how often
-  /// running going over showed the link to carry more. The first count of
-  /// a link is of a transfer still getting up to speed, so it takes two to
-  /// know one; and a link that carries more three times running is not
-  /// known at all, which a moment unheld puts right sooner than asking on.
+  /// How many counts running nothing was held back for: the first is of a
+  /// transfer still getting up to speed, so it takes two to know the link.
+  /// Steering knows it at once ([_linkKnown]). [_counted] is what the
+  /// counts found; held, it never goes under a quarter of that.
   int _unheldCounts = 0;
-  int _more = 0;
-
-  /// How many counts running far less arrived, held, than did unheld.
-  int _farShort = 0;
-
-  /// The count before, with nothing held back, and whether the last was
-  /// well over it: the transfer was still getting up to speed, and what
-  /// arrived is not yet what the link carries.
-  double? _unheldBefore;
-  bool _rising = false;
-  DateTime? _unheldUntil;
-  Duration _unheldFor = _unheldAtFirst;
-
-  /// Why nothing is held back until [_unheldUntil]: to count again what
-  /// the link carries, which can wait while it is busy, or because this
-  /// receiver cannot be gone under.
-  bool _recounting = false;
-  bool _released = false;
+  bool _linkKnown = false;
+  double? _countedLink;
 
   /// For [_report]: frames let go so far, what was told last, how many
   /// looks ago, and the furthest a look came late since.
@@ -202,12 +142,6 @@ class TransferPacer {
   int _looksSinceTold = 0;
   Duration _worstLag = Duration.zero;
   Duration _worstWake = Duration.zero;
-
-  /// Giving way to this device's own work: how much of the rate is left,
-  /// how often running it gave way, and until when it waits to see.
-  double _left = 1;
-  int _gaveWay = 0;
-  DateTime? _holdUntil;
 
   /// When each frame of each transfer went: its end offset and the time.
   final Map<String, Queue<(int, DateTime)>> _sent = {};
@@ -252,40 +186,26 @@ class TransferPacer {
   Duration? _answerTime;
 
   static const tick = Duration(milliseconds: 250);
-  static const _lagLimit = Duration(milliseconds: 40);
   static const _queueLimit = Duration(milliseconds: 80);
   static const _quickestMemory = Duration(seconds: 30);
   static const _idle = Duration(seconds: 2);
   static const _linkMemory = Duration(minutes: 5);
 
-  /// How much of what the link carries a transfer takes while something
-  /// live shares it, leaving at least [_spare] bytes a second: sound and
-  /// pointer take a few tens of kilobytes.
+  /// Steered, how much of what the link carries a transfer takes while
+  /// something live shares it, leaving at least [_spare] bytes a second:
+  /// sound and pointer take a few tens of kilobytes.
   static const _use = 0.9;
   static const _spare = 48e3;
 
-  /// Whatever slows it down, never below this much of the link, and the
-  /// link never taken for less than this much of what it was, at a time.
-  static const _share = 0.5;
+  /// Capped, how much of the counted link it takes, and the least it slows
+  /// down to when less arrives.
+  static const _capShare = 0.5;
+  static const _leastShare = 0.25;
 
   /// How long what arrives is counted for, and how long after a change of
   /// rate the count waits.
   static const _count = Duration(seconds: 2);
   static const _countAfter = Duration(seconds: 1);
-  static const _peekSoon = Duration(seconds: 10);
-  static const _peekEvery = Duration(seconds: 30);
-  static const _peekSeldom = Duration(minutes: 2);
-  static const _peekLongest = Duration(seconds: 8);
-  static const _peekLittle = 0.05;
-  static const _peekMuch = 0.2;
-  static const _drainFor = Duration(milliseconds: 1500);
-  static const _farLess = 0.7;
-  static const _farMore = 1.4;
-  static const _checkFor = Duration(seconds: 8);
-  static const _mostCounts = 6;
-  static const _unheldAtFirst = Duration(minutes: 2);
-  static const _unheldAtMost = Duration(minutes: 10);
-  static const _mostCuts = 3;
   static const _longestWait = Duration(seconds: 1);
 
   /// How much of what may go a frame is while transfers are held back, and
@@ -314,17 +234,9 @@ class TransferPacer {
   /// What it is doing now.
   TransferPacerMode get mode {
     if (_steering) return TransferPacerMode.steered;
-    if (_rate.isInfinite) {
-      if (_released) return TransferPacerMode.released;
-      return _recounting
-          ? TransferPacerMode.recounting
-          : TransferPacerMode.measuring;
-    }
-    if (_peekSince != null) return TransferPacerMode.peeking;
-    final drain = _drainUntil;
-    return drain != null && _now().isBefore(drain)
-        ? TransferPacerMode.draining
-        : TransferPacerMode.held;
+    return _rate.isInfinite
+        ? TransferPacerMode.unheld
+        : TransferPacerMode.capped;
   }
 
   /// What the receivers have confirmed lately, in bytes per second.
@@ -369,7 +281,8 @@ class TransferPacer {
     // answer every one of them, and write to disk each time.
     // Steered, always: a frame of a quarter second queues behind itself,
     // which reads as the link being full and slows it down for nothing.
-    if (rate.isFinite && (_steering || _minFrame / rate <= _closeEnough)) {
+    final link = _link ?? rate;
+    if (rate.isFinite && (_steering || _minFrame / link <= _closeEnough)) {
       final slice =
           rate * _slice.inMicroseconds ~/ Duration.microsecondsPerSecond;
       wanted = math.min(wanted, slice);
@@ -393,18 +306,14 @@ class TransferPacer {
       if (peer != peerBefore ||
           (idleSince != null && now.difference(idleSince) > _linkMemory)) {
         _link = null;
-        _unheldRate = null;
-        _doubted = null;
-        _unheldUntil = null;
-        _unheldFor = _unheldAtFirst;
-        _recounting = false;
-        _released = false;
+        _linkKnown = false;
+        _countedLink = null;
       }
       _timer = Timer.periodic(tick, (_) => evaluate());
       _lastTick = now;
       _countFrom = null;
       _countNotBefore = now.add(_countAfter);
-      _decide(now, Duration.zero, fresh: true);
+      _decide(now, fresh: true);
     } else if (_steering) {
       final queue = _active() ? _queueing?.call() : null;
       if (queue != null) _steer(queue, now);
@@ -574,14 +483,8 @@ class TransferPacer {
       _idleSince = now;
       _rate = double.infinity;
       _unheldCounts = 0;
-      _rising = false;
-      _more = 0;
       _nextSend = null;
       _countFrom = null;
-      _peekSince = null;
-      _drainUntil = null;
-      _left = 1;
-      _gaveWay = 0;
       _short = 0;
       _steering = false;
       _probe?.call(false);
@@ -589,7 +492,7 @@ class TransferPacer {
     }
     _looks++;
     if (_senderWaits) _waitingLooks++;
-    _decide(now, lag);
+    _decide(now);
     if (lag > _worstLag) _worstLag = lag;
     if (++_looksSinceTold >= _tellEvery) _tell();
   }
@@ -635,7 +538,7 @@ class TransferPacer {
 
   /// Sets the rate. [fresh] at the start of a transfer: nothing has piled
   /// up that would have to drain.
-  void _decide(DateTime now, Duration lag, {bool fresh = false}) {
+  void _decide(DateTime now, {bool fresh = false}) {
     final active = _active();
     _probe?.call(active);
     final queue = active ? _queueing?.call() : null;
@@ -644,85 +547,18 @@ class TransferPacer {
       return;
     }
     if (_steering) {
-      // The lanes went quiet: held where steering left it, as if counted.
+      // The lanes went quiet: capped from what steering found.
       _steering = false;
-      _countFrom = null;
-      _countNotBefore = now.add(_countAfter);
+      _countedLink ??= _link;
     }
     final link = _link;
-    final busy = _busy();
-    // Counting again what the link carries can wait until it is not busy:
-    // it goes on as it was.
-    final putOff = busy && _recounting && link != null;
-    if (putOff) _unheldUntil = null;
-    final unheld = _unheldUntil;
-    if (!_active() ||
-        link == null ||
-        (_rate.isInfinite && !fresh && !_upToSpeed && !putOff) ||
-        (unheld != null && now.isBefore(unheld))) {
-      // Nothing to give way to, nothing known to go a little under, or a
-      // receiver that cannot be gone under: unheld, and what arrives says
-      // what the link carries.
-      _peekSince = null;
-      _drainUntil = null;
-      _left = 1;
-      _gaveWay = 0;
+    if (!active || link == null || !_linkKnown) {
+      // Nothing to give way to, or nothing known yet: unheld, and what
+      // arrives says what the link carries.
       _setRate(double.infinity, now);
       return;
     }
-    final least = math.max(floor, link * _share);
-    final room = math.max(least, math.min(link * _use, link - _spare));
-    if (_rate.isInfinite) {
-      _doubted = null;
-      _recounting = false;
-      _released = false;
-      _askSoon(now);
-      if (!fresh) _drainUntil = now.add(_drainFor);
-    }
-    final hold = _holdUntil;
-    final waiting = hold != null && now.isBefore(hold);
-    if (lag > _lagLimit) {
-      // Once per bout: what is already on its way takes a moment to clear.
-      if (!waiting && _gaveWay < _mostCuts) {
-        _gaveWay++;
-        _left *= 0.8;
-        _holdUntil = now.add(const Duration(seconds: 1));
-        _peekSince = null;
-      }
-    } else if (!waiting) {
-      _gaveWay = 0;
-      _left = math.min(1, _left * 1.15);
-    }
-    final drain = _drainUntil;
-    final draining = drain != null && now.isBefore(drain);
-    if (busy && _peekSince != null) {
-      // Going over is given up, and asked again as soon as it is quiet.
-      _peekSince = null;
-      _peekAt = now;
-    }
-    final peekAt = _peekAt;
-    if (_peekSince == null &&
-        !busy &&
-        !draining &&
-        _left == 1 &&
-        peekAt != null &&
-        !now.isBefore(peekAt)) {
-      _peekSince = now;
-    }
-    final peekSince = _peekSince;
-    if (peekSince != null && now.difference(peekSince) > _peekLongest) {
-      // No answers to tell by: an old receiver, or a very slow link.
-      _askLater(now);
-    }
-    final double rate;
-    if (_peekSince != null) {
-      rate = link * (1 + _peekStep);
-    } else if (draining) {
-      rate = least;
-    } else {
-      rate = math.max(least, room * _left);
-    }
-    _setRate(rate, now);
+    if (_rate.isInfinite) _setRate(math.max(floor, link * _capShare), now);
   }
 
   /// One step by how long datagrams wait ([queue]): a little under what
@@ -730,13 +566,6 @@ class TransferPacer {
   void _steer(Duration queue, DateTime now, {bool fresh = false}) {
     if (!_steering) {
       _steering = true;
-      _peekSince = null;
-      _drainUntil = null;
-      _unheldUntil = null;
-      _doubted = null;
-      _recounting = false;
-      _released = false;
-      _left = 1;
       _steerer.reset();
     }
     var link = _steerer.step(
@@ -751,20 +580,15 @@ class TransferPacer {
     if (link == null) return;
     link = math.max(floor / _use, link);
     _link = link;
+    _linkKnown = true;
     final rate = math.max(floor, math.min(link * _use, link - _spare));
     if (rate != _rate) _setRate(rate, now);
   }
-
-  /// Whether a transfer with nothing held back has shown what the link
-  /// carries: two counts, and more while each is well over the one before.
-  bool get _upToSpeed =>
-      _unheldCounts >= 2 && (!_rising || _unheldCounts >= _mostCounts);
 
   void _setRate(double rate, DateTime now) {
     if (rate == _rate) return;
     if (rate.isInfinite) {
       _unheldCounts = 0;
-      _rising = false;
       // Held back, nothing queued and the caps opened all the way: let go
       // now, a whole window would go at once. They start again from two
       // seconds of the link, and open from there as answers come. Not held
@@ -822,110 +646,30 @@ class TransferPacer {
       // Nothing held it back. A sender that waited for answers sent all
       // the link takes; one that did not had no more to send, and the link
       // carries that much at least.
-      _link = math.max(
+      final carried = math.max(
         floor,
         waited || link == null ? arrived : math.max(link, arrived),
       );
-      final most = _unheldCounts == 0
-          ? arrived
-          : math.max(_unheldRate ?? 0, arrived);
-      final before = _unheldBefore;
-      _rising = _unheldCounts > 0 && before != null && arrived > before * 1.1;
-      _unheldBefore = arrived;
-      _unheldRate = most;
-      _unheldCounts++;
-      final doubted = _doubted;
-      if (doubted == null || !_upToSpeed) return;
-      _doubted = null;
-      if (most < doubted * _farMore) {
-        // No more than it was held to: the link is slower. Under that.
-        _unheldUntil = null;
-        return;
-      }
-      _released = true;
-      _unheldUntil = now.add(_unheldFor);
-      final longer = _unheldFor * 2;
-      _unheldFor = longer > _unheldAtMost ? _unheldAtMost : longer;
+      _link = carried;
+      _countedLink = carried;
+      if (++_unheldCounts >= 2) _linkKnown = true;
       return;
     }
-    if (link == null) return;
-    // The link is never taken for less than half of what it was at a time:
-    // a receiver that stood still for a moment is not a slower link.
-    double atLeast(double rate) =>
-        math.max(floor, math.max(link * _share, rate));
-    if (_peekSince != null) {
-      if (arrived >= may * 0.96) {
-        // All of it: the link carries that, and maybe more. Ask at once,
-        // for more.
-        _link = may;
-        _peekStep = math.min(_peekMuch, _peekStep * 2);
-        _peekSince = now;
-        if (++_more >= 3) {
-          _more = 0;
-          _recounting = true;
-          _unheldUntil = now.add(_checkFor);
-        }
-      } else {
-        _more = 0;
-        // Not all of it: no more than was known. Less is not concluded
-        // from this, a receiver may have stood still for a moment.
-        _askLater(now);
-        _drainUntil = now.add(_drainFor);
-      }
-      return;
-    }
-    // Far less gets through held than did with nothing held back, count
-    // after count: this may be a receiver that cannot be gone under, see
-    // [_unheldRate]. Not while it is giving way itself.
-    final unheldRate = _unheldRate;
-    if (unheldRate != null && _left == 1 && arrived < unheldRate * _farLess) {
-      if (++_farShort >= 3) {
-        _farShort = 0;
-        _short = 0;
-        _doubted = arrived;
-        _unheldUntil = now.add(_checkFor);
-        return;
-      }
-    } else {
-      _farShort = 0;
-    }
+    final counted = _countedLink;
     final behind = arrived < went * 0.9 || (waited && arrived < may * 0.9);
-    if (!behind) {
+    if (!behind || counted == null) {
       _short = 0;
       return;
     }
     if (++_short < 2) return;
-    // Less arrives than goes, and has for a while: the link is slower now.
+    // Less arrives than goes, and has for a while: the link is slower now,
+    // and carries what arrived. Half of that, as of any link.
     _short = 0;
-    final slower = atLeast(arrived);
-    _link = slower;
-    _askSoon(now);
-    final unheld = _unheldRate;
-    if (unheld != null && slower < unheld * _farLess) {
-      // Or is it: see [_unheldRate].
-      _doubted = slower;
-      _unheldUntil = now.add(_checkFor);
-    }
-  }
-
-  /// What the link carries is new: whether it carries more is asked soon.
-  void _askSoon(DateTime now) {
-    _peekSince = null;
-    _peekGap = _peekSoon;
-    _peekStep = _peekLittle;
-    _peekAt = now.add(_peekGap);
-  }
-
-  /// Going over did not show the link to carry more: it need not be asked
-  /// so soon again.
-  void _askLater(DateTime now) {
-    _peekSince = null;
-    _peekStep = _peekLittle;
-    final longer = _peekGap * 2;
-    _peekGap = longer < _peekEvery
-        ? _peekEvery
-        : (longer > _peekSeldom ? _peekSeldom : longer);
-    _peekAt = now.add(_peekGap);
+    final slower = math.max(
+      floor,
+      math.max(counted * _leastShare, arrived * _capShare),
+    );
+    if (slower < may) _setRate(slower, now);
   }
 
   void dispose() {

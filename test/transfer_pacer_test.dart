@@ -266,16 +266,19 @@ void main() {
   // standing still at the start. Each time the pacer had slowed down for
   // something that was not the transfer's doing: an answer as late as the
   // frame it answers is large, a phone that answers later the less it is
-  // sent, a speaker that is always about to run dry. It leaves a tenth of
-  // what the link is counted to carry now, and goes by nothing else.
-  group('with something live, over a link', () {
-    testWidgets('that is fine, it takes most of what the link carries, '
-        'leaves a little, and little queues', (tester) async {
+  // sent, a speaker that is always about to run dry.
+  //
+  // Without the lanes' stamps (a phone playing over its WebSocket, UDP
+  // blocked, a dialled-back link) it counts the link once and takes half.
+  group('with something live and no stamps, over a link', () {
+    testWidgets('that is steady, it takes half and nothing queues', (
+      tester,
+    ) async {
       for (final capacity in [1e6, 8e6, 50e6]) {
         final carried = await _transfer(tester, capacity: capacity);
         expect(
           carried.rate,
-          inInclusiveRange(capacity * 0.8, capacity * 0.95),
+          inInclusiveRange(capacity * 0.4, capacity * 0.55),
           reason: '$capacity',
         );
         expect(
@@ -288,13 +291,10 @@ void main() {
           lessThan(const Duration(seconds: 2)),
           reason: '$capacity',
         );
-        // The pointer lagged behind file data although a sixth of the
-        // link was left over: frames of megabytes kept the link full for
-        // most of every quarter second, and what was live waited 80 to
-        // 200 ms behind each. In slices it is about 20.
-        // Not on the slowest: its smallest frame alone is 16 ms of the
-        // link, and frames further apart than a receiver waits before it
-        // answers would have it answer every one.
+        // Frames of megabytes kept the link full for most of every quarter
+        // second, and what was live waited 80 to 200 ms behind each. In
+        // slices it is about 20. Not on the slowest: its smallest frame
+        // alone is 16 ms of the link.
         if (capacity > 2e6) {
           expect(
             carried.liveWait,
@@ -305,11 +305,7 @@ void main() {
       }
     });
 
-    // Every ten seconds to two minutes it went over what the link carries
-    // for a few seconds, to see whether it carries more, and the pointer
-    // lagged for as long.
-    testWidgets('while the pointer moves, it never goes over what the link '
-        'carries', (tester) async {
+    testWidgets('while the pointer moves, it never goes over', (tester) async {
       for (final capacity in [8e6, 50e6]) {
         final carried = await _transfer(
           tester,
@@ -317,8 +313,7 @@ void main() {
           busy: true,
           seconds: 120,
         );
-        expect(carried.rate, greaterThan(capacity * 0.8), reason: '$capacity');
-        // One slice of ten milliseconds is all that is ever ahead of it.
+        expect(carried.rate, greaterThan(capacity * 0.4), reason: '$capacity');
         expect(
           carried.worstLiveWait,
           lessThan(const Duration(milliseconds: 20)),
@@ -327,31 +322,75 @@ void main() {
       }
     });
 
-    testWidgets('that gets slower or faster, it follows', (tester) async {
-      final slower = await _transfer(
+    // Wi-Fi that carried 2 to 3 MB/s and changed by the second: counted
+    // seconds apart, the link was taken for more than it carried, then
+    // gone unheld to count again, and the pointer waited 200 ms. Half of
+    // what was counted fits under the slow half of this one.
+    testWidgets('that halves every 1.7 s, nothing live waits long', (
+      tester,
+    ) async {
+      bool halves(Duration at) => at.inMilliseconds ~/ 1700 % 2 == 1;
+      final carried = await _transfer(
+        tester,
+        capacity: 3e6,
+        capacityAt: (at) => halves(at) ? 1.5e6 : 3e6,
+        busy: true,
+        seconds: 60,
+      );
+      // Counting, the pointer waited 2.3 s here (p95); now under 10 ms, at
+      // a third of what the link carries on average.
+      expect(carried.rate, greaterThan(2.25e6 * 0.3));
+      expect(carried.liveWait, lessThan(const Duration(milliseconds: 40)));
+    });
+
+    testWidgets('that slows down for good, it follows it down', (tester) async {
+      final carried = await _transfer(
         tester,
         capacity: 50e6,
         capacityAt: (at) => at.inSeconds < 20 ? 50e6 : 20e6,
         seconds: 80,
       );
-      expect(slower.rate, inInclusiveRange(20e6 * 0.8, 20e6 * 0.95));
-      final faster = await _transfer(
-        tester,
-        capacity: 20e6,
-        capacityAt: (at) => at.inSeconds < 20 ? 20e6 : 50e6,
-        // It looks for more every half minute to two minutes.
-        seconds: 240,
-      );
-      expect(faster.rate, greaterThan(50e6 * 0.8));
+      // Down to a quarter of what was counted: 12.5 MB/s.
+      expect(carried.rate, inInclusiveRange(20e6 * 0.4, 20e6 * 0.65));
+      expect(carried.liveWait, lessThan(const Duration(milliseconds: 40)));
     });
 
-    // Wi-Fi that carried 2 to 3 MB/s and changed by the second: counted
-    // seconds apart, the link was taken for more than it carried, then
-    // gone unheld to count again, and the pointer waited 200 ms; on this
-    // simulated link that halves every 1.7 s, seconds. Where the lanes say
-    // how long their datagrams wait, it goes by that.
-    testWidgets('steered by how long datagrams wait, nothing live waits '
-        'long, and a steady link is used as well as counted', (tester) async {
+    testWidgets('whose receiver saves power, it does not slow to a crawl', (
+      tester,
+    ) async {
+      const capacity = 3.3e6;
+      final carried = await _transfer(
+        tester,
+        capacity: capacity,
+        sleepy: const Duration(milliseconds: 150),
+      );
+      expect(carried.rate, greaterThan(capacity * 0.2));
+      expect(carried.stillest, lessThan(const Duration(seconds: 2)));
+    });
+
+    // Such a receiver answers every frame that comes after a pause, and a
+    // held transfer is all pauses: counted on, it got through less the
+    // slower it was sent to, and going under what it takes never ended.
+    testWidgets('whose receiver takes long over every answer, it does not '
+        'crawl', (tester) async {
+      Future<_Carried> run({required bool live}) => _transfer(
+        tester,
+        capacity: 8e6,
+        answering: const Duration(milliseconds: 250),
+        live: live,
+        seconds: 100,
+      );
+      final unheld = await run(live: false);
+      final held = await run(live: true);
+      // Counting let such a receiver go unheld; capped, it gets a third.
+      expect(held.rate, greaterThan(unheld.rate * 0.3));
+    });
+  });
+
+  group('with something live, steered by the lanes\' stamps', () {
+    // Where the lanes say how long their datagrams wait, it goes by that.
+    testWidgets('nothing live waits long, and a steady link is used '
+        'well', (tester) async {
       // Halving at once, the queue grows for as long as it takes the lanes
       // to tell (the least of 200 ms): tens of milliseconds, not seconds.
       bool halves(Duration at) => at.inMilliseconds ~/ 1700 % 2 == 1;
@@ -379,36 +418,6 @@ void main() {
           reason: '$index',
         );
       }
-    });
-
-    testWidgets('whose receiver saves power, it does not slow to a crawl', (
-      tester,
-    ) async {
-      const capacity = 3.3e6;
-      final carried = await _transfer(
-        tester,
-        capacity: capacity,
-        sleepy: const Duration(milliseconds: 150),
-      );
-      expect(carried.rate, greaterThan(capacity * 0.2));
-      expect(carried.stillest, lessThan(const Duration(seconds: 2)));
-    });
-
-    // Such a receiver answers every frame that comes after a pause, and a
-    // held transfer is all pauses: it gets through less the slower it is
-    // sent to, and going under what it takes never ends.
-    testWidgets('whose receiver takes long over every answer, it lets go '
-        'rather than crawl', (tester) async {
-      Future<_Carried> run({required bool live}) => _transfer(
-        tester,
-        capacity: 8e6,
-        answering: const Duration(milliseconds: 250),
-        live: live,
-        seconds: 100,
-      );
-      final unheld = await run(live: false);
-      final held = await run(live: true);
-      expect(held.rate, greaterThan(unheld.rate * 0.8));
     });
   });
 
