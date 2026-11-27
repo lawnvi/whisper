@@ -58,10 +58,14 @@ extension _MediaChannels on WsSvrManager {
               token: credentials.token,
               now: DateTime.now(),
             );
-      if (claim == null ||
-          claim.reverse ||
-          !_isExpectedMediaPeerClaim(claim) ||
-          !_isExpectedAudioUpgradeClaim(claim)) {
+      // A dial back here is only for sound sent from this isolate (when
+      // the audio isolate is not running); see [_awaitAudioDialBackHere].
+      bool admits(SessionUpgradeClaim candidate) =>
+          _isExpectedMediaPeerClaim(candidate) &&
+          (candidate.reverse
+              ? _dialBacks.canAttach(candidate)
+              : _isExpectedAudioUpgradeClaim(candidate));
+      if (claim == null || !admits(claim)) {
         return shelf.Response.unauthorized('Unauthorized');
       }
       return _handleMediaUpgrade(
@@ -70,16 +74,24 @@ extension _MediaChannels on WsSvrManager {
         sessionId: credentials!.sessionId,
         token: credentials.token,
         provisionalClaim: claim,
-        canAttach: (candidate) =>
-            _isExpectedMediaPeerClaim(candidate) &&
-            _isExpectedAudioUpgradeClaim(candidate),
-        attach: (channel, consumed) => _audioManager.attachChannel(
-          channel,
-          claim: consumed,
-          additionalValidator: _isExpectedAudioGroupUpgradeClaim,
-          groupPacketValidator: _isExpectedAudioGroupPacket,
-          claimValidator: _isExpectedMediaPeerClaim,
-        ),
+        canAttach: admits,
+        attach: (channel, consumed) => consumed.reverse
+            ? _dialBacks.attach(
+                channel,
+                consumed,
+                encoder: () => _dialBackEncoder(
+                  consumed,
+                  maxPayloadBytes:
+                      AudioGroupWebSocketPacketTransport.maxPacketPayloadBytes,
+                ),
+              )
+            : _audioManager.attachChannel(
+                channel,
+                claim: consumed,
+                additionalValidator: _isExpectedAudioGroupUpgradeClaim,
+                groupPacketValidator: _isExpectedAudioGroupPacket,
+                claimValidator: _isExpectedMediaPeerClaim,
+              ),
       );
     }
     if (path == 'input') {
@@ -203,7 +215,7 @@ extension _MediaChannels on WsSvrManager {
     }
     if (claim.namespace != 'audio-group' ||
         !_isExpectedMediaPeerClaim(claim) ||
-        !_isExpectedAudioUpgradeClaim(claim)) {
+        !_isIsolateAudioClaim(claim)) {
       claim.destroy();
       return null;
     }
@@ -217,7 +229,7 @@ extension _MediaChannels on WsSvrManager {
     required SessionUpgradeClaim expected,
   }) {
     if (!_isExpectedMediaPeerClaim(expected) ||
-        !_isExpectedAudioUpgradeClaim(expected)) {
+        !_isIsolateAudioClaim(expected)) {
       return null;
     }
     return _sessionUpgradeTokens.consume(
@@ -475,12 +487,55 @@ extension _MediaChannels on WsSvrManager {
     MediaRoute route,
     String peerId,
     String sessionId,
-  ) {
-    final session = _sessionsByPeerId[peerId];
-    if (_server == null ||
+  ) => _dialBacks.isWaiting(route, peerId, sessionId)
+      ? _issueReverseToken(route, peerId, sessionId)
+      : null;
+
+  /// For sound: the audio isolate waits for the dial, not this one, so the
+  /// group says whether one may come: [sinkPeerId] is a sink of this
+  /// device's group, still in [sessionId].
+  String? _issueAudioDialBackToken(String sinkPeerId, String sessionId) =>
+      _awaitsAudioDialBack(sinkPeerId, sessionId)
+      ? _issueReverseToken(MediaRoute.audio, sinkPeerId, sessionId)
+      : null;
+
+  bool _awaitsAudioDialBack(String sinkPeerId, String sessionId) {
+    final group = AudioGroupCoordinator.shared.session;
+    final sink = group?.sinks[sinkPeerId];
+    return group != null &&
+        group.sourcePeerId == _sessionsByPeerId[sinkPeerId]?.localProfile.uid &&
+        sink != null &&
+        sink.sessionId == sessionId &&
+        !sink.isTerminal;
+  }
+
+  /// What the audio isolate's port takes: a token a sink of this device's
+  /// group was given, or one this device issued for a sink to dial back on.
+  bool _isIsolateAudioClaim(SessionUpgradeClaim claim) => claim.reverse
+      ? _awaitsAudioDialBack(claim.peerId, claim.sessionId)
+      : _isExpectedAudioUpgradeClaim(claim);
+
+  /// This device's send key of [claim]'s connection, for the audio isolate
+  /// to send on a channel dialled back to it; null once that connection is
+  /// gone or replaced.
+  Uint8List? _dialBackSendKey(SessionUpgradeClaim claim) {
+    final session = _sessionsByPeerId[claim.peerId];
+    if (!claim.reverse ||
         session == null ||
         !session.isAuthenticated ||
-        !_dialBacks.isWaiting(route, peerId, sessionId)) {
+        session.connectionGeneration != claim.connectionGeneration) {
+      return null;
+    }
+    return session.withMediaSendKey(Uint8List.fromList);
+  }
+
+  String? _issueReverseToken(
+    MediaRoute route,
+    String peerId,
+    String sessionId,
+  ) {
+    final session = _sessionsByPeerId[peerId];
+    if (_server == null || session == null || !session.isAuthenticated) {
       return null;
     }
     try {
@@ -545,65 +600,180 @@ extension _MediaChannels on WsSvrManager {
     );
   }
 
-  /// The controlling side could not reach this device's `/input` and sent
-  /// a token for its own: dial it once, for a session this device accepted
-  /// that has no channel yet. Not awaited: the dial must not hold up the
-  /// messages behind it.
-  void _answerInputDialBack(
-    PeerSocketSession session,
-    RemoteInputControlMessage request,
+  /// This device's source could not reach [sinkPeerId]: asks it to dial
+  /// [port] for [sessionId] instead.
+  Future<bool> _askAudioDialBack(
+    String sinkPeerId,
+    String sessionId,
+    int port,
   ) {
-    final peerId = session.remotePeerId;
-    final input = _remoteInputManager.session(request.sessionId);
+    final group = AudioGroupCoordinator.shared.session;
+    final sink = group?.sinks[sinkPeerId];
+    if (group == null || sink == null || sink.sessionId != sessionId) {
+      return Future<bool>.value(false);
+    }
+    return sendAudioGroupControlTo(
+      sinkPeerId,
+      group.dialBackFor(sink, port: port),
+    );
+  }
+
+  /// The same, for sound sent from this isolate: the sink dials the main
+  /// port, where [_dialBacks] waits for it.
+  Future<MediaDialedBack?> _awaitAudioDialBackHere(
+    String sinkPeerId,
+    String sessionId,
+  ) {
+    final port = _server?.port;
+    if (port == null) return Future<MediaDialedBack?>.value();
+    return _dialBacks.wait(
+      MediaRoute.audio,
+      peerId: sinkPeerId,
+      sessionId: sessionId,
+      ask: () => _askAudioDialBack(sinkPeerId, sessionId, port),
+      onGiveUp: () => _sessionUpgradeTokens.revoke(
+        route: '/audio',
+        sessionId: sessionId,
+        peerId: sinkPeerId,
+      ),
+    );
+  }
+
+  /// [session]'s device could not reach this device's [route] for
+  /// [sessionId] and sent a token for its own, on [port]: dial it once, if
+  /// the claim that token makes is one [admits] (a session this device
+  /// accepted, with no channel yet). Not awaited: the dial must not hold up
+  /// the messages behind it.
+  void _answerDialBack(
+    PeerSocketSession session,
+    MediaRoute route, {
+    required String sessionId,
+    required String token,
+    required int port,
+    required bool Function(SessionUpgradeClaim claim) admits,
+    required bool Function(WebSocketChannel channel, SessionUpgradeClaim claim)
+    attach,
+  }) {
     final host = _mediaDialHost(session);
-    if (input?.state != RemoteInputSessionState.connected ||
-        input?.sourcePeerId != peerId ||
-        _remoteInputManager.hasChannelFor(request.sessionId) ||
-        host == null ||
-        request.transportPort <= 0) {
+    if (host == null || port <= 0 || port > 65535) return;
+    final SessionUpgradeClaim claim;
+    try {
+      claim = session.withMediaReceiveKey(
+        (receiveKey) => dialBackClaim(
+          route,
+          sessionId: sessionId,
+          token: token,
+          peerId: session.remotePeerId,
+          connectionGeneration: session.connectionGeneration,
+          receiveKey: receiveKey,
+        ),
+      );
+    } on FormatException {
+      return;
+    }
+    if (!_isExpectedMediaPeerClaim(claim) || !admits(claim)) {
+      claim.destroy();
       return;
     }
     // One way in per session: the token this side gave goes.
     _sessionUpgradeTokens.revoke(
-      route: '/input',
-      sessionId: request.sessionId,
-      peerId: peerId,
+      route: route.path,
+      namespace: route.namespace,
+      sessionId: sessionId,
+      peerId: session.remotePeerId,
     );
-    final generation = session.connectionGeneration;
     unawaited(() async {
       try {
-        final dialed = await session.withMediaSendKeyAsync(
-          (sendKey) => session.withMediaReceiveKeyAsync(
-            (receiveKey) => dialBackMediaChannel(
-              MediaRoute.input,
-              host: host,
-              port: request.transportPort,
-              sessionId: request.sessionId,
-              token: request.transportToken,
-              localPeerId: session.localProfile.uid,
-              peerId: peerId,
-              connectionGeneration: generation,
-              sendKey: sendKey,
-              receiveKey: receiveKey,
-            ),
+        final channel = await session.withMediaSendKeyAsync(
+          (sendKey) => dialBack(
+            route,
+            host: host,
+            port: port,
+            sessionId: sessionId,
+            token: token,
+            localPeerId: session.localProfile.uid,
+            sendKey: sendKey,
           ),
         );
-        if (!_remoteInputManager.attachChannel(
-          dialed.channel,
-          claim: dialed.claim,
-          claimValidator: _isExpectedMediaPeerClaim,
-        )) {
-          dialed.claim.destroy();
-        }
+        if (attach(channel, claim)) return;
       } on Object {
-        // The controlling side stops waiting and fails as before.
+        // The asking side stops waiting and fails as before.
       }
+      claim.destroy();
     }());
   }
+
+  void _answerInputDialBack(
+    PeerSocketSession session,
+    RemoteInputControlMessage request,
+  ) => _answerDialBack(
+    session,
+    MediaRoute.input,
+    sessionId: request.sessionId,
+    token: request.transportToken,
+    port: request.transportPort,
+    admits: _remoteInputManager.canAttachClaim,
+    attach: (channel, claim) => _remoteInputManager.attachChannel(
+      channel,
+      claim: claim,
+      claimValidator: _isExpectedMediaPeerClaim,
+    ),
+  );
+
+  void _answerAudioDialBack(
+    PeerSocketSession session,
+    AudioGroupControlMessage request,
+  ) => _answerDialBack(
+    session,
+    MediaRoute.audio,
+    sessionId: request.sessionId,
+    token: request.transportToken,
+    port: request.mediaPort,
+    admits: _isExpectedAudioUpgradeClaim,
+    attach: (channel, claim) => _audioManager.attachChannel(
+      channel,
+      claim: claim,
+      additionalValidator: _isExpectedAudioGroupUpgradeClaim,
+      groupPacketValidator: _isExpectedAudioGroupPacket,
+      claimValidator: _isExpectedMediaPeerClaim,
+    ),
+  );
 
   /// [peerId]'s tokens and dial-back waits end with its connection.
   void _forgetPeerMedia(String peerId) {
     _sessionUpgradeTokens.clearPeer(peerId);
     _dialBacks.cancelPeer(peerId);
   }
+}
+
+final class _AudioMediaClaimBroker implements AudioMediaClaimBroker {
+  _AudioMediaClaimBroker(this._manager);
+
+  final WsSvrManager _manager;
+
+  @override
+  SessionUpgradeClaim? lookup({
+    required String sessionId,
+    required String token,
+    required Object remoteAddress,
+  }) => _manager._lookupIsolateAudioClaim(
+    sessionId: sessionId,
+    token: token,
+    remoteAddress: remoteAddress,
+  );
+
+  @override
+  SessionUpgradeClaim? consume({
+    required String sessionId,
+    required String token,
+    required SessionUpgradeClaim expected,
+  }) => _manager._consumeIsolateAudioClaim(
+    sessionId: sessionId,
+    token: token,
+    expected: expected,
+  );
+
+  @override
+  Uint8List? sendKeyFor(SessionUpgradeClaim claim) =>
+      _manager._dialBackSendKey(claim);
 }

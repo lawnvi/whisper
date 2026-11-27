@@ -645,7 +645,11 @@ Uint8List mediaPacketChannelBindingFromUri(Uri uri) {
   if (tokens == null || tokens.length != 1) {
     throw const FormatException('missing media channel binding');
   }
-  final token = tokens.single;
+  return mediaPacketChannelBindingFromToken(tokens.single);
+}
+
+/// The 32 bytes a one-time media token stands for: the channel binding.
+Uint8List mediaPacketChannelBindingFromToken(String token) {
   if (token.length != 43 ||
       token.contains('=') ||
       !RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(token)) {

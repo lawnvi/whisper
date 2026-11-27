@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:whisper/audio/audio_group_messages.dart';
 import 'package:whisper/audio/audio_protocol.dart';
 import 'package:whisper/model/message.dart';
 
@@ -69,7 +70,7 @@ void main() {
     expect(decoded.format, format);
   });
 
-  test('group accept exclusively carries the single-use transport token', () {
+  test('only a group accept or a dial back carries a transport token', () {
     const accept = AudioGroupControlMessage(
       action: AudioGroupControlAction.groupAccept,
       groupId: 'group-1',
@@ -85,8 +86,22 @@ void main() {
       AudioGroupControlMessage.fromJson(accept.toJson()).transportToken,
       'group-token',
     );
-    for (final action in AudioGroupControlAction.values
-        .where((action) => action != AudioGroupControlAction.groupAccept)) {
+    // The source's own token and port, for the sink to dial back on.
+    final dialBack = AudioGroupControlMessage.fromJson(
+      accept
+          .reply(AudioGroupControlAction.groupDialBack)
+          .withTransportToken('back-token')
+          .toJson()
+        ..['mediaPort'] = 50124,
+    );
+    expect(dialBack.action, AudioGroupControlAction.groupDialBack);
+    expect(dialBack.transportToken, 'back-token');
+    expect(dialBack.mediaPort, 50124);
+    for (final action in AudioGroupControlAction.values.where(
+      (action) =>
+          action != AudioGroupControlAction.groupAccept &&
+          action != AudioGroupControlAction.groupDialBack,
+    )) {
       final control = AudioGroupControlMessage(
         action: action,
         groupId: 'group-1',

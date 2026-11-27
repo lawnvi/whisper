@@ -26,6 +26,23 @@ extension AudioGroupSessionMessages on AudioGroupSession {
     targetLatencyMs: targetLatencyMs,
   );
 
+  /// Asks [sink] to dial this device's [port] for its session instead: the
+  /// source could not reach the sink (`media_dial_back.dart`).
+  AudioGroupControlMessage dialBackFor(
+    AudioGroupSink sink, {
+    required int port,
+  }) => AudioGroupControlMessage(
+    action: AudioGroupControlAction.groupDialBack,
+    groupId: groupId,
+    streamId: streamId,
+    sessionId: sink.sessionId,
+    sourcePeerId: sourcePeerId,
+    sinkPeerId: sink.sinkPeerId,
+    channelRole: sink.channelRole,
+    targetLatencyMs: targetLatencyMs,
+    mediaPort: port,
+  );
+
   /// The end of [sink]'s session in this group.
   AudioGroupControlMessage stopFor(AudioGroupSink sink) =>
       AudioGroupControlMessage(

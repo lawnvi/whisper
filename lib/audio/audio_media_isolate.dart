@@ -24,12 +24,15 @@ import 'package:whisper/helper/privacy_log.dart';
 import 'package:whisper/socket/aead_engine.dart';
 import 'package:whisper/socket/bounded_binary_websocket_session.dart';
 import 'package:whisper/socket/datagram_endpoint.dart';
+import 'package:whisper/socket/media_channel_dial.dart';
+import 'package:whisper/socket/media_dial_back.dart';
 import 'package:whisper/socket/media_upgrade_server.dart';
 import 'package:whisper/socket/no_delay_socket.dart';
 import 'package:whisper/socket/packet_byte_transport.dart';
 import 'package:whisper/socket/session_upgrade_token_registry.dart';
 
 part 'audio_media_isolate_messages.dart';
+part 'audio_media_server.dart';
 
 /// The sound's data on its own isolate, so it keeps going while the main
 /// thread is stopped (on macOS, for half a second whenever a window is
@@ -91,6 +94,7 @@ class DesktopAudioGroupMedia implements AudioGroupMedia {
     final linkId = await client.request<int>(
       (id) => _ConnectSink(
         id,
+        sinkPeerId: dial.sinkPeerId,
         sourcePeerId: dial.sourcePeerId,
         sessionId: dial.sessionId,
         uri: dial.uri,
@@ -488,6 +492,14 @@ class _IsolateClient implements AudioRemoteMediaChannels {
         _consumeClaim(message.requestId);
       case _ClaimRelease():
         _claims.remove(message.requestId)?._release();
+      case _DialBackAsk():
+        final ask = AudioGroupDialBack.ask;
+        unawaited(
+          (ask?.call(message.sinkPeerId, message.sessionId, message.port) ??
+                  Future<bool>.value(false))
+              .catchError((Object _) => false)
+              .then((asked) => send(_DialBackAsked(message.requestId, asked))),
+        );
       case _Log():
         _media._log(message.line);
     }
@@ -500,7 +512,11 @@ class _IsolateClient implements AudioRemoteMediaChannels {
       token: lookup.token,
       remoteAddress: lookup.remoteAddress,
     );
-    if (claim == null) {
+    final sendKey = claim != null && claim.reverse
+        ? broker?.sendKeyFor(claim)
+        : null;
+    if (claim != null && claim.reverse && sendKey == null) claim.destroy();
+    if (claim == null || claim.isDestroyed) {
       send(_ClaimAnswer(lookup.requestId, null));
       return;
     }
@@ -525,6 +541,7 @@ class _IsolateClient implements AudioRemoteMediaChannels {
             connectionGeneration: claim.connectionGeneration,
             mediaMacKey: Uint8List.fromList(mediaMacKey),
             channelBinding: Uint8List.fromList(channelBinding),
+            sendKey: sendKey,
           ),
         ),
       ),
@@ -673,6 +690,10 @@ class _AudioRuntime {
   final Map<int, Completer<_ClaimData?>> _claimLookups =
       <int, Completer<_ClaimData?>>{};
   final Map<int, Completer<bool>> _claimConsumes = <int, Completer<bool>>{};
+  final Map<int, Completer<bool>> _dialBackAsks = <int, Completer<bool>>{};
+
+  /// Dials back to this isolate's own port, for sinks it could not reach.
+  final MediaDialBackWaits dialBacks = MediaDialBackWaits();
   int _nextLinkId = 0;
   int _nextClaimId = 0;
 
@@ -749,6 +770,8 @@ class _AudioRuntime {
         _claimLookups.remove(message.requestId)?.complete(message.claim);
       case _ConsumeAnswer():
         _claimConsumes.remove(message.requestId)?.complete(message.consumed);
+      case _DialBackAsked():
+        _dialBackAsks.remove(message.requestId)?.complete(message.asked);
     }
   }
 
@@ -768,7 +791,58 @@ class _AudioRuntime {
   }
 
   Future<Object?> _connect(_ConnectSink command) async {
-    final transport = await connectAudioGroupSinkTransport(
+    AudioGroupPacketTransport transport;
+    try {
+      transport = await _connectForward(command);
+    } catch (error) {
+      if (!mediaPeerUnreachable(error)) rethrow;
+      final dialed = await _awaitDialBack(command);
+      if (dialed == null) rethrow;
+      // No UDP beside it: that would not get through either.
+      transport = AudioGroupWebSocketPacketTransport.forChannel(
+        dialed.channel,
+        dialed.encoder,
+      );
+    }
+    final linkId = ++_nextLinkId;
+    _links[linkId] = transport;
+    return linkId;
+  }
+
+  /// The sink could not be reached at all: it is asked to dial this
+  /// isolate's own port instead, which the main isolate passes on.
+  Future<MediaDialedBack?> _awaitDialBack(_ConnectSink command) async {
+    final server = await _ensureServer();
+    if (server == null) return null;
+    return dialBacks.wait(
+      MediaRoute.audio,
+      peerId: command.sinkPeerId,
+      sessionId: command.sessionId,
+      ask: () {
+        final requestId = ++_nextClaimId;
+        final asked = Completer<bool>();
+        _dialBackAsks[requestId] = asked;
+        _main.send(
+          _DialBackAsk(
+            requestId,
+            command.sinkPeerId,
+            command.sessionId,
+            server.port,
+          ),
+        );
+        return asked.future.timeout(
+          const Duration(seconds: 5),
+          onTimeout: () {
+            _dialBackAsks.remove(requestId);
+            return false;
+          },
+        );
+      },
+    );
+  }
+
+  Future<AudioGroupPacketTransport> _connectForward(_ConnectSink command) {
+    return connectAudioGroupSinkTransport(
       uri: command.uri,
       mediaUri: command.mediaUri,
       connect: (uri) {
@@ -785,9 +859,6 @@ class _AudioRuntime {
         );
       },
     );
-    final linkId = ++_nextLinkId;
-    _links[linkId] = transport;
-    return linkId;
   }
 
   Future<Object?> _prepareCapture(_PrepareCapture command) async {
@@ -930,6 +1001,7 @@ class _AudioRuntime {
     }
     claim.mediaMacKey.fillRange(0, claim.mediaMacKey.length, 0);
     claim.channelBinding.fillRange(0, claim.channelBinding.length, 0);
+    claim.sendKey?.fillRange(0, claim.sendKey!.length, 0);
   }
 
   Future<void> _closeChannels(_CloseChannels command) async {
@@ -1140,224 +1212,5 @@ class _IsolatePlayback {
           .toList(growable: false)
           .map((channel) => channel.close(expected: expected)),
     );
-  }
-}
-
-/// A source's packets arriving at this isolate's own port.
-class _MediaChannel {
-  _MediaChannel(this.claim, this.playback);
-
-  final _ClaimData claim;
-  final _IsolatePlayback playback;
-  BoundedBinaryWebSocketSession? session;
-  AuthenticatedMediaPacketDecoder? decoder;
-  DatagramLane? lane;
-  bool _expectedClose = false;
-
-  Future<void> close({required bool expected}) async {
-    _expectedClose = _expectedClose || expected;
-    await session?.close();
-  }
-
-  void handleBytes(Uint8List bytes, AudioShareDiagnostics diagnostics) =>
-      handlePacket(
-        AudioGroupPacketFrame.decode(decoder!.decode(bytes)),
-        diagnostics,
-      );
-
-  void handlePacket(
-    AudioGroupPacketFrame packet,
-    AudioShareDiagnostics diagnostics,
-  ) {
-    final spec = playback.pipeline.spec;
-    // Fanned out as is to every sink: sessionId is the shared streamId.
-    if (packet.sourcePeerId != claim.peerId ||
-        packet.groupId != spec.groupId ||
-        packet.streamId != spec.streamId ||
-        packet.sessionId != spec.streamId) {
-      throw const FormatException('audio group packet claim mismatch');
-    }
-    diagnostics.groupPacketDelivered(
-      groupId: packet.groupId,
-      streamId: packet.streamId,
-      sequence: packet.sequence,
-      payloadBytes: packet.payload.length,
-    );
-    playback.pipeline.deliver(packet);
-  }
-
-  void closed() {
-    lane?.close();
-    lane = null;
-    decoder?.destroy();
-    decoder = null;
-    playback.channels.remove(this);
-    if (!_expectedClose) {
-      playback.fail(AudioFailureReason.transport);
-    }
-  }
-}
-
-/// The audio isolate's own port, for sources that know it (`mediaPort` in
-/// the accept). Same rules as the main port's /audio: a one-time token the
-/// main isolate issued and checks, the media proof, one channel per token,
-/// and every packet checked against the playback it belongs to.
-class _MediaServer {
-  _MediaServer._(this._runtime, this._listening, this._server);
-
-  static Future<_MediaServer> bind(_AudioRuntime runtime) async {
-    final listening = await ServerSocket.bind('0.0.0.0', 0);
-    // Sound by UDP comes to the same port number (`audio_group_lane.dart`).
-    await AudioGroupDatagrams.listenAt(listening.port);
-    final server = HttpServer.listenOn(NoDelayServerSocket(listening));
-    server.idleTimeout = const Duration(seconds: 10);
-    final media = _MediaServer._(runtime, listening, server);
-    server.listen(
-      (request) => unawaited(media._handle(request)),
-      onError: (Object _) {},
-    );
-    return media;
-  }
-
-  final _AudioRuntime _runtime;
-  final ServerSocket _listening;
-  final HttpServer _server;
-  final MediaUpgradeServer _upgrades = MediaUpgradeServer(
-    maxProvisional: 8,
-    proofTimeout: const Duration(seconds: 3),
-  );
-
-  int get port => _listening.port;
-
-  Future<void> _handle(HttpRequest request) async {
-    if (request.uri.path != '/audio' ||
-        request.method != 'GET' ||
-        !WebSocketTransformer.isUpgradeRequest(request) ||
-        (request.headers.value('origin')?.trim().isNotEmpty ?? false) ||
-        request.headers.value('sec-websocket-version')?.trim() != '13') {
-      await _refuse(request, HttpStatus.badRequest);
-      return;
-    }
-    final credentials = mediaUpgradeCredentials(request.uri);
-    if (credentials == null) {
-      await _refuse(request, HttpStatus.unauthorized);
-      return;
-    }
-    final slot = _upgrades.reserve();
-    if (slot == null || !slot.ready) {
-      slot?.release();
-      await _refuse(
-        request,
-        slot == null
-            ? HttpStatus.tooManyRequests
-            : HttpStatus.internalServerError,
-      );
-      return;
-    }
-    final claim = await _runtime.lookupClaim(
-      credentials.sessionId,
-      credentials.token,
-      request.connectionInfo?.remoteAddress.address ?? '',
-    );
-    final playback = claim == null ? null : _runtime.playbackFor(claim);
-    if (claim == null || playback == null || claim.namespace != 'audio-group') {
-      if (claim != null) {
-        _runtime.releaseClaim(claim);
-      }
-      slot.release();
-      await _refuse(request, HttpStatus.unauthorized);
-      return;
-    }
-    final WebSocket socket;
-    try {
-      socket = await WebSocketTransformer.upgrade(request);
-    } catch (_) {
-      _runtime.releaseClaim(claim);
-      slot.release();
-      return;
-    }
-    socket.pingInterval = _upgrades.pingInterval;
-    // Until the proof holds, the claim is this upgrade's to give back.
-    var proven = false;
-    slot.onReleased = () {
-      if (!proven) _runtime.releaseClaim(claim);
-    };
-    try {
-      slot.prove(
-        IOWebSocketChannel(socket),
-        MediaUpgradeOffer(
-          route: '/audio',
-          namespace: claim.namespace,
-          sessionId: claim.sessionId,
-          peerId: claim.peerId,
-          connectionGeneration: claim.connectionGeneration,
-          token: credentials.token,
-        ),
-        mediaMacKey: claim.mediaMacKey,
-        // The token is used up only after the proof, as on the main port,
-        // and the channel is played from only once it is.
-        onProven: (authenticated) async {
-          if (playback.pipeline.isClosed) return false;
-          proven = true;
-          if (!await _runtime.consumeClaim(claim) ||
-              playback.pipeline.isClosed) {
-            _runtime.releaseClaim(claim);
-            return false;
-          }
-          _attach(_MediaChannel(claim, playback), authenticated);
-          return true;
-        },
-      );
-    } catch (_) {
-      slot.release();
-      unawaited(socket.close(4001, 'media_auth_failed'));
-    }
-  }
-
-  void _attach(_MediaChannel media, WebSocketChannel authenticated) {
-    media.decoder = AuthenticatedMediaPacketDecoder(
-      route: '/audio',
-      namespace: media.claim.namespace,
-      sessionId: media.claim.sessionId,
-      mediaMacKey: media.claim.mediaMacKey,
-      channelBinding: media.claim.channelBinding,
-      maxPayloadBytes: AudioShareManager.maxPacketPayloadBytes,
-    );
-    media.playback.channels.add(media);
-    final diagnostics = _runtime.diagnostics..audioChannelAttached();
-    media.lane = AudioGroupDatagrams.answer(
-      mediaKey: media.claim.mediaMacKey,
-      channelBinding: media.claim.channelBinding,
-      sessionId: media.claim.sessionId,
-      onPacket: (packet) {
-        try {
-          media.handlePacket(packet, diagnostics);
-        } on FormatException {
-          // Not this session's: the WebSocket would close; UDP just drops.
-        }
-      },
-    );
-    media.session = BoundedBinaryWebSocketSession(
-      channel: authenticated,
-      maxMessageBytes: AudioShareManager.maxChannelMessageBytes,
-      onMessage: (bytes) {
-        diagnostics.audioChannelMessageBytes(bytes.length);
-        media.handleBytes(bytes, diagnostics);
-      },
-      onError: diagnostics.audioChannelError,
-      onClosed: media.closed,
-    );
-  }
-
-  Future<void> _refuse(HttpRequest request, int status) async {
-    try {
-      request.response.statusCode = status;
-      await request.response.close();
-    } catch (_) {}
-  }
-
-  Future<void> close() async {
-    await _server.close(force: true);
-    await _listening.close();
   }
 }

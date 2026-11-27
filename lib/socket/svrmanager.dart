@@ -11,6 +11,9 @@ import 'package:whisper/debug/automation_hooks.dart' show DebugPairingRequests;
 import 'package:whisper/audio/audio_group_coordinator.dart';
 import 'package:whisper/audio/audio_protocol.dart';
 import 'package:whisper/audio/audio_share_manager.dart';
+import 'package:whisper/audio/audio_group_messages.dart';
+import 'package:whisper/audio/audio_fanout_transport.dart';
+import 'package:whisper/audio/audio_group_media.dart';
 import 'package:whisper/clipboard/clipboard_sync_coordinator.dart';
 import 'package:whisper/helper/clipboard_sync.dart';
 import 'package:whisper/helper/connection_request_notifications.dart';
@@ -1296,6 +1299,8 @@ class WsSvrManager {
       RemoteFilesClient.sendFolder = _sendCopiedFolder;
       RemoteFilesClient.sendWrite = _sendFileBrowseWrite;
       RemoteInputWebSocketPacketTransport.dialBack = _askInputDialBack;
+      AudioGroupDialBack.ask = _askAudioDialBack;
+      AudioGroupDialBack.here = _awaitAudioDialBackHere;
       RemoteMounts.shared.peerIdentityKey = remoteIdentityPublicKeyFor;
       TransferPlacements.shared
         ..relocateRecord = _database.relocateCompletedIncomingTransfer
@@ -4622,6 +4627,11 @@ class WsSvrManager {
                 context: '${control.groupId}\u0000${control.streamId}',
               )
               .requireAccepted();
+          if (control.action == AudioGroupControlAction.groupDialBack) {
+            _answerAudioDialBack(session, control);
+            await _ackMessage(message);
+            break;
+          }
           final self = await LocalSetting().instance();
           requireCurrentBusiness();
           final remoteDevice = _requireRemoteProfileForSession(session).device;
@@ -5377,6 +5387,10 @@ class WsSvrManager {
       if (token == null) {
         return Future<bool>.value(false);
       }
+      outgoing = control.withTransportToken(token);
+    } else if (control.action == AudioGroupControlAction.groupDialBack) {
+      final token = _issueAudioDialBackToken(peerId, control.sessionId);
+      if (token == null) return Future<bool>.value(false);
       outgoing = control.withTransportToken(token);
     }
     final message = _buildMessage(
@@ -6135,32 +6149,4 @@ class WsSvrManager {
 
   Future<void> cancelTransfer(String transferId) =>
       _transferEngine.cancelTransfer(transferId);
-}
-
-final class _AudioMediaClaimBroker implements AudioMediaClaimBroker {
-  _AudioMediaClaimBroker(this._manager);
-
-  final WsSvrManager _manager;
-
-  @override
-  SessionUpgradeClaim? lookup({
-    required String sessionId,
-    required String token,
-    required Object remoteAddress,
-  }) => _manager._lookupIsolateAudioClaim(
-    sessionId: sessionId,
-    token: token,
-    remoteAddress: remoteAddress,
-  );
-
-  @override
-  SessionUpgradeClaim? consume({
-    required String sessionId,
-    required String token,
-    required SessionUpgradeClaim expected,
-  }) => _manager._consumeIsolateAudioClaim(
-    sessionId: sessionId,
-    token: token,
-    expected: expected,
-  );
 }

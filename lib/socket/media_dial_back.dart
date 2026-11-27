@@ -118,49 +118,44 @@ final class MediaDialBackWaits {
   }
 }
 
-/// The answering side: dials [port] at [host], where the asking device's
-/// `/chat` is, with the [token] it sent, proving it with [sendKey] as a
-/// forward dial would. The channel comes with the claim this side reads it
-/// under, [receiveKey] and the token, as if this side had accepted it.
-Future<({WebSocketChannel channel, SessionUpgradeClaim claim})>
-dialBackMediaChannel(
+/// The answering side's claim for a dial back it was asked for: what it
+/// reads the channel under, [receiveKey] and the [token] it was sent, as if
+/// it had accepted the channel. A malformed token throws [FormatException].
+SessionUpgradeClaim dialBackClaim(
+  MediaRoute route, {
+  required String sessionId,
+  required String token,
+  required String peerId,
+  required int connectionGeneration,
+  required Uint8List receiveKey,
+}) => SessionUpgradeClaim(
+  route: route.path,
+  namespace: route.namespace,
+  sessionId: sessionId,
+  peerId: peerId,
+  mediaMacKey: receiveKey,
+  channelBinding: mediaPacketChannelBindingFromToken(token),
+  connectionGeneration: connectionGeneration,
+);
+
+/// The answering side's dial: [port] at [host], where the asking device's
+/// `/chat` is, with the [token] it sent, proved with [sendKey] as a forward
+/// dial would be.
+Future<WebSocketChannel> dialBack(
   MediaRoute route, {
   required String host,
   required int port,
   required String sessionId,
   required String token,
   required String localPeerId,
-  required String peerId,
-  required int connectionGeneration,
   required Uint8List sendKey,
-  required Uint8List receiveKey,
-}) async {
-  final uri = route.uri(
-    host: host,
-    port: port,
-    sessionId: sessionId,
-    token: token,
-  );
-  final channel = await dialMediaChannel(
-    uri,
-    route,
-    sessionId: sessionId,
-    proverPeerId: localPeerId,
-    proofKey: sendKey,
-  );
-  return (
-    channel: channel,
-    claim: SessionUpgradeClaim(
-      route: route.path,
-      namespace: route.namespace,
-      sessionId: sessionId,
-      peerId: peerId,
-      mediaMacKey: receiveKey,
-      channelBinding: mediaPacketChannelBindingFromUri(uri),
-      connectionGeneration: connectionGeneration,
-    ),
-  );
-}
+}) => dialMediaChannel(
+  route.uri(host: host, port: port, sessionId: sessionId, token: token),
+  route,
+  sessionId: sessionId,
+  proverPeerId: localPeerId,
+  proofKey: sendKey,
+);
 
 /// [host] as a dial-back target: an IPv4 address the server socket saw as
 /// IPv4-mapped IPv6 (`::ffff:a.b.c.d`) becomes plain IPv4.

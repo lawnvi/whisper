@@ -477,6 +477,8 @@ class AudioGroupCoordinator extends ChangeNotifier {
         }
         break;
       case AudioGroupControlAction.groupOffer:
+      // Answered by the server before it gets here.
+      case AudioGroupControlAction.groupDialBack:
         break;
       case AudioGroupControlAction.sinkJoinRequest:
         // Always honoured, whatever state the source thinks the sink is in:
@@ -537,9 +539,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
     required AudioGroupControlSender sendControl,
   }) async {
     final current = _session;
-    if (current == null) {
-      return;
-    }
+    if (current == null) return;
     for (final sink in current.sinks.values) {
       // Over already (the connection went, or it stopped): the device may
       // have restarted since and not know the session, and an older one

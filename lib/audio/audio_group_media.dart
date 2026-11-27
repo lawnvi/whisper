@@ -9,6 +9,7 @@ import 'package:whisper/audio/audio_group_playback_scheduler.dart';
 import 'package:whisper/audio/audio_packet_gaps.dart';
 import 'package:whisper/audio/audio_platform.dart';
 import 'package:whisper/audio/audio_protocol.dart';
+import 'package:whisper/socket/media_dial_back.dart';
 
 typedef AudioGroupCodecFactory =
     Future<AudioCodec> Function(AudioStreamFormat format);
@@ -153,6 +154,20 @@ abstract class AudioGroupMedia {
 /// Playback was no longer wanted by the time it could start.
 class AudioGroupStartCancelled implements Exception {
   const AudioGroupStartCancelled();
+}
+
+/// A source that could not reach a sink asks it to dial back instead
+/// (`media_dial_back.dart`). Set by the server, on the main isolate.
+abstract final class AudioGroupDialBack {
+  /// Sends the sink of [sessionId] the `groupDialBack` for [port]; false
+  /// when it could not. The audio isolate takes that dial on its own port.
+  static Future<bool> Function(String sinkPeerId, String sessionId, int port)?
+  ask;
+
+  /// Asks for the dial and waits for it on the main port, for sound sent
+  /// from the main isolate ([LocalAudioGroupMedia]).
+  static Future<MediaDialedBack?> Function(String sinkPeerId, String sessionId)?
+  here;
 }
 
 /// How long the sink's media port gets before the main port is tried.
@@ -488,7 +503,26 @@ class LocalAudioGroupMedia implements AudioGroupMedia {
 
   @override
   Future<AudioGroupSinkLink> connectSink(AudioGroupSinkDial dial) async {
-    final transport = await connectAudioGroupSinkTransport(
+    final AudioGroupPacketTransport transport;
+    try {
+      transport = await _connectSink(dial);
+    } catch (error) {
+      final here = AudioGroupDialBack.here;
+      if (here == null || !mediaPeerUnreachable(error)) rethrow;
+      final dialed = await here(dial.sinkPeerId, dial.sessionId);
+      if (dialed == null) rethrow;
+      return _LocalSinkLink(
+        AudioGroupWebSocketPacketTransport.forChannel(
+          dialed.channel,
+          dialed.encoder,
+        ),
+      );
+    }
+    return _LocalSinkLink(transport);
+  }
+
+  Future<AudioGroupPacketTransport> _connectSink(AudioGroupSinkDial dial) {
+    return connectAudioGroupSinkTransport(
       uri: dial.uri,
       mediaUri: dial.mediaUri,
       connect: (uri) {
@@ -508,7 +542,6 @@ class LocalAudioGroupMedia implements AudioGroupMedia {
         );
       },
     );
-    return _LocalSinkLink(transport);
   }
 
   @override

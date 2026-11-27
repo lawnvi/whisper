@@ -36,6 +36,11 @@ enum AudioGroupControlAction {
   clockReport,
   latencyReport,
   sinkJoinRequest,
+
+  /// Source → sink, when the accept's port could not be reached: a token
+  /// for the source's own port ([AudioGroupControlMessage.mediaPort]), to
+  /// be dialled instead (`media_dial_back.dart`).
+  groupDialBack,
   error;
 
   /// Whether this can come after its session ended here: a stop, refusal or
@@ -45,6 +50,7 @@ enum AudioGroupControlAction {
     groupReject || groupStop || error => true,
     clockProbe || clockReport || latencyReport => true,
     groupOffer || groupAccept || groupUpdate || sinkJoinRequest => false,
+    groupDialBack => false,
   };
 }
 
@@ -184,6 +190,7 @@ class AudioGroupControlMessage {
 
   /// In a [AudioGroupControlAction.groupAccept]: the port this sink's audio
   /// isolate listens on, or 0 for its main port only. Older sources ignore it.
+  /// In a [AudioGroupControlAction.groupDialBack]: the port to dial.
   final int mediaPort;
 
   AudioGroupControlMessage withTransportToken(String token) {
@@ -227,8 +234,7 @@ class AudioGroupControlMessage {
         if (format != null) 'format': format!.toJson(),
         'transport': transport.name,
         'path': path,
-        if (action == AudioGroupControlAction.groupAccept &&
-            transportToken.isNotEmpty)
+        if (action.carriesTransport && transportToken.isNotEmpty)
           'transportToken': transportToken,
         'channelRole': channelRole.name,
         'targetLatencyMs': targetLatencyMs,
@@ -243,12 +249,16 @@ class AudioGroupControlMessage {
         'latePacketCount': latePacketCount,
         'syncErrorMicros': syncErrorMicros,
         'errorMessage': errorMessage,
-        if (action == AudioGroupControlAction.groupAccept && mediaPort > 0)
-          'mediaPort': mediaPort,
+        if (action.carriesTransport && mediaPort > 0) 'mediaPort': mediaPort,
       };
 
   factory AudioGroupControlMessage.fromJson(Map<String, dynamic> json) {
     final formatJson = json['format'];
+    final carriesTransport =
+        AudioGroupControlAction.values
+            .asNameMap()[json['action']]
+            ?.carriesTransport ??
+        false;
     return AudioGroupControlMessage(
       action: enumByName(
         AudioGroupControlAction.values,
@@ -275,7 +285,7 @@ class AudioGroupControlMessage {
       path: json['path'] as String? ?? '',
       transportToken: _transportTokenFromJson(
         json,
-        allowed: json['action'] == AudioGroupControlAction.groupAccept.name,
+        allowed: carriesTransport,
       ),
       channelRole: enumByName(
         AudioChannelRole.values,
@@ -294,11 +304,16 @@ class AudioGroupControlMessage {
       latePacketCount: json['latePacketCount'] as int? ?? 0,
       syncErrorMicros: json['syncErrorMicros'] as int? ?? 0,
       errorMessage: json['errorMessage'] as String? ?? '',
-      mediaPort: json['action'] == AudioGroupControlAction.groupAccept.name
-          ? _mediaPortFromJson(json['mediaPort'])
-          : 0,
+      mediaPort: carriesTransport ? _mediaPortFromJson(json['mediaPort']) : 0,
     );
   }
+}
+
+extension on AudioGroupControlAction {
+  /// Carries a token and the port it is for.
+  bool get carriesTransport =>
+      this == AudioGroupControlAction.groupAccept ||
+      this == AudioGroupControlAction.groupDialBack;
 }
 
 int _mediaPortFromJson(Object? value) {

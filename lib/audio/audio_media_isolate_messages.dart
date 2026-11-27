@@ -13,6 +13,7 @@ class _IsolateStart {
 class _ConnectSink {
   const _ConnectSink(
     this.id, {
+    required this.sinkPeerId,
     required this.sourcePeerId,
     required this.sessionId,
     required this.uri,
@@ -22,6 +23,7 @@ class _ConnectSink {
   });
 
   final int id;
+  final String sinkPeerId;
   final String sourcePeerId;
   final String sessionId;
   final Uri uri;
@@ -142,6 +144,7 @@ class _ClaimData {
     required this.connectionGeneration,
     required this.mediaMacKey,
     required this.channelBinding,
+    this.sendKey,
   });
 
   final String namespace;
@@ -150,6 +153,35 @@ class _ClaimData {
   final int connectionGeneration;
   final Uint8List mediaMacKey;
   final Uint8List channelBinding;
+
+  /// Only for a token this device issued for a sink to dial back on: what
+  /// this isolate sends the sound with on that channel.
+  final Uint8List? sendKey;
+
+  bool get reverse => sendKey != null;
+}
+
+/// The audio isolate could not reach a sink: the main isolate is to ask it
+/// to dial [port] instead.
+class _DialBackAsk {
+  const _DialBackAsk(
+    this.requestId,
+    this.sinkPeerId,
+    this.sessionId,
+    this.port,
+  );
+
+  final int requestId;
+  final String sinkPeerId;
+  final String sessionId;
+  final int port;
+}
+
+class _DialBackAsked {
+  const _DialBackAsked(this.requestId, this.asked);
+
+  final int requestId;
+  final bool asked;
 }
 
 class _ClaimAnswer {

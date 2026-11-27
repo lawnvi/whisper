@@ -143,72 +143,181 @@ Future<String> _nextProvisionalOutcome(StreamIterator<dynamic> events) async {
   return isMediaUpgradeReady(events.current) ? 'ready' : 'unexpected';
 }
 
+/// A port nothing listens on any more: dialling it is refused.
+Future<Uri> _unreachableUri(String route, String sessionId) async {
+  final closed = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+  final port = closed.port;
+  await closed.close();
+  return _mediaUri(
+    port,
+    route,
+    sessionId: sessionId,
+    token: base64Url.encode(Uint8List(32)).replaceAll('=', ''),
+  );
+}
+
+/// The asking side of a dial back: its token table and wait, and its
+/// Whisper route as the server has it (a reverse token passes only to a
+/// wait for it, proved with [receiveKey]; what this side sends is sealed
+/// with [sendKey]).
+final class _DialBackHost {
+  _DialBackHost._(
+    this.route,
+    this._server, {
+    required this.receiveKey,
+    required this.sendKey,
+    required this.maxPayloadBytes,
+  });
+
+  static Future<_DialBackHost> start(
+    MediaRoute route, {
+    required Uint8List receiveKey,
+    required Uint8List sendKey,
+    required int maxPayloadBytes,
+  }) async {
+    final host = _DialBackHost._(
+      route,
+      await HttpServer.bind(InternetAddress.loopbackIPv4, 0),
+      receiveKey: receiveKey,
+      sendKey: sendKey,
+      maxPayloadBytes: maxPayloadBytes,
+    );
+    host._server.listen(host._handle);
+    return host;
+  }
+
+  final MediaRoute route;
+  final HttpServer _server;
+  final Uint8List receiveKey;
+  final Uint8List sendKey;
+  final int maxPayloadBytes;
+  final tokens = SessionUpgradeTokenRegistry();
+  final waits = MediaDialBackWaits(timeout: const Duration(seconds: 3));
+  final _upgrades = MediaUpgradeServer(
+    maxProvisional: 2,
+    proofTimeout: const Duration(seconds: 2),
+  );
+
+  /// Issues a reverse token for [peerId] and has [answer] play the far side
+  /// on the dial-back message.
+  Future<MediaDialedBack?> ask({
+    required String peerId,
+    required String sessionId,
+    required Future<void> Function(String token) answer,
+  }) => waits.wait(
+    route,
+    peerId: peerId,
+    sessionId: sessionId,
+    ask: () {
+      final token = tokens.issue(
+        route: route.path,
+        sessionId: sessionId,
+        peerId: peerId,
+        mediaMacKey: receiveKey,
+        reverse: true,
+        now: DateTime.now(),
+      );
+      unawaited(answer(token));
+      return true;
+    },
+  );
+
+  /// The far side's dial to this host's `/chat` address.
+  Future<WebSocketChannel> dialBackAs(
+    String peerId, {
+    required String sessionId,
+    required String token,
+    required Uint8List sendKey,
+  }) => dialBack(
+    route,
+    host: '127.0.0.1',
+    port: _server.port,
+    sessionId: sessionId,
+    token: token,
+    localPeerId: peerId,
+    sendKey: sendKey,
+  );
+
+  /// What the far side reads the channel under.
+  SessionUpgradeClaim claimOf({
+    required String sessionId,
+    required String token,
+    required Uint8List receiveKey,
+  }) => dialBackClaim(
+    route,
+    sessionId: sessionId,
+    token: token,
+    peerId: _sourcePeerId,
+    connectionGeneration: 0,
+    receiveKey: receiveKey,
+  );
+
+  Future<void> _handle(HttpRequest request) async {
+    final credentials = mediaUpgradeCredentials(request.uri)!;
+    final claim = tokens.lookup(
+      route: route.path,
+      sessionId: credentials.sessionId,
+      token: credentials.token,
+      now: DateTime.now(),
+    );
+    if (claim == null || !waits.canAttach(claim)) {
+      request.response.statusCode = HttpStatus.unauthorized;
+      await request.response.close();
+      return;
+    }
+    final slot = _upgrades.reserve()!;
+    final socket = await WebSocketTransformer.upgrade(request);
+    slot.prove(
+      IOWebSocketChannel(socket),
+      MediaUpgradeOffer.forClaim(claim, credentials.token),
+      mediaMacKey: receiveKey,
+      onProven: (channel) {
+        final consumed = tokens.consume(
+          route: route.path,
+          sessionId: credentials.sessionId,
+          token: credentials.token,
+          now: DateTime.now(),
+          expected: claim,
+        );
+        return consumed != null &&
+            waits.attach(
+              channel,
+              consumed,
+              encoder: () => consumed.withMediaPacketContext(
+                (_, binding) => AuthenticatedMediaPacketEncoder(
+                  route: route.path,
+                  namespace: route.namespace,
+                  sessionId: consumed.sessionId,
+                  mediaMacKey: sendKey,
+                  channelBinding: binding,
+                  maxPayloadBytes: maxPayloadBytes,
+                ),
+              ),
+            );
+      },
+    );
+  }
+
+  Future<void> close() => _server.close(force: true);
+}
+
 void main() {
-  // The controlled side cannot be reached (its firewall, a VPN, AP
-  // isolation): the controller issues a token for its own /input, the
-  // controlled side dials it with that, and input flows as before. Real
-  // dial, proof, packet keys and input manager; only the controller's
-  // Whisper route is a stand-in.
+  // The far side cannot be reached (its firewall, a VPN, AP isolation): the
+  // side that was to dial issues a token for its own port, the far side
+  // dials it with that, and the data flows the same way as before. Real
+  // dial, proof, packet keys and managers; only the asking side's Whisper
+  // route is a stand-in (_DialBackHost).
   test(
     'input the sink could not be reached for arrives over its dial back',
     () async {
       final controllerSend = Uint8List.fromList(List<int>.filled(32, 7));
       final sinkSend = Uint8List.fromList(List<int>.filled(32, 9));
-      final controllerTokens = SessionUpgradeTokenRegistry();
-      final waits = MediaDialBackWaits(timeout: const Duration(seconds: 3));
-      final upgrades = MediaUpgradeServer(
-        maxProvisional: 2,
-        proofTimeout: const Duration(seconds: 2),
+      final host = await _DialBackHost.start(
+        MediaRoute.input,
+        receiveKey: sinkSend,
+        sendKey: controllerSend,
+        maxPayloadBytes: RemoteInputManager.maxPacketPayloadBytes,
       );
-      final controllerServer = await HttpServer.bind(
-        InternetAddress.loopbackIPv4,
-        0,
-      );
-      controllerServer.listen((request) async {
-        final credentials = mediaUpgradeCredentials(request.uri)!;
-        final claim = controllerTokens.lookup(
-          route: '/input',
-          sessionId: credentials.sessionId,
-          token: credentials.token,
-          now: DateTime.now(),
-        );
-        if (claim == null || !waits.canAttach(claim)) {
-          request.response.statusCode = HttpStatus.unauthorized;
-          await request.response.close();
-          return;
-        }
-        final slot = upgrades.reserve()!;
-        final socket = await WebSocketTransformer.upgrade(request);
-        slot.prove(
-          IOWebSocketChannel(socket),
-          MediaUpgradeOffer.forClaim(claim, credentials.token),
-          mediaMacKey: sinkSend,
-          onProven: (channel) {
-            final consumed = controllerTokens.consume(
-              route: '/input',
-              sessionId: credentials.sessionId,
-              token: credentials.token,
-              now: DateTime.now(),
-              expected: claim,
-            );
-            return consumed != null &&
-                waits.attach(
-                  channel,
-                  consumed,
-                  encoder: () => consumed.withMediaPacketContext(
-                    (_, binding) => AuthenticatedMediaPacketEncoder(
-                      route: '/input',
-                      namespace: 'remote-input',
-                      sessionId: consumed.sessionId,
-                      mediaMacKey: controllerSend,
-                      channelBinding: binding,
-                      maxPayloadBytes: RemoteInputManager.maxPacketPayloadBytes,
-                    ),
-                  ),
-                );
-          },
-        );
-      });
       final received = <RemoteInputPacketFrame>[];
       final sink = RemoteInputManager(onPacket: received.add);
       sink.acceptOffer(
@@ -220,56 +329,32 @@ void main() {
           layoutEdge: RemoteInputEdge.right,
         ),
       );
-      RemoteInputWebSocketPacketTransport.dialBack = (accept) => waits.wait(
-        MediaRoute.input,
+      RemoteInputWebSocketPacketTransport.dialBack = (accept) => host.ask(
         peerId: _sinkPeerId,
         sessionId: accept.sessionId,
-        ask: () {
-          final token = controllerTokens.issue(
-            route: '/input',
+        // The sink, on the dialBack message, as its server would.
+        answer: (token) async => sink.attachChannel(
+          await host.dialBackAs(
+            _sinkPeerId,
             sessionId: accept.sessionId,
-            peerId: _sinkPeerId,
-            mediaMacKey: sinkSend,
-            reverse: true,
-            now: DateTime.now(),
-          );
-          // The sink, on the dialBack message: dials the controller's /chat
-          // address with the token, as its server would.
-          unawaited(() async {
-            final dialed = await dialBackMediaChannel(
-              MediaRoute.input,
-              host: '127.0.0.1',
-              port: controllerServer.port,
-              sessionId: accept.sessionId,
-              token: token,
-              localPeerId: _sinkPeerId,
-              peerId: _sourcePeerId,
-              connectionGeneration: 0,
-              sendKey: sinkSend,
-              receiveKey: controllerSend,
-            );
-            sink.attachChannel(dialed.channel, claim: dialed.claim);
-          }());
-          return true;
-        },
+            token: token,
+            sendKey: sinkSend,
+          ),
+          claim: host.claimOf(
+            sessionId: accept.sessionId,
+            token: token,
+            receiveKey: controllerSend,
+          ),
+        ),
       );
       addTearDown(() async {
         RemoteInputWebSocketPacketTransport.dialBack = null;
         await sink.closeChannels();
-        await controllerServer.close(force: true);
+        await host.close();
       });
-      // Where the accept said to dial: nothing listens there any more.
-      final closed = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
-      final unreachable = closed.port;
-      await closed.close();
 
       final transport = await RemoteInputWebSocketPacketTransport.connect(
-        _mediaUri(
-          unreachable,
-          '/input',
-          sessionId: _inputSessionId,
-          token: base64Url.encode(Uint8List(32)).replaceAll('=', ''),
-        ),
+        await _unreachableUri('/input', _inputSessionId),
         mediaMacKey: controllerSend,
         accept: const RemoteInputControlMessage(
           action: RemoteInputControlAction.accept,
@@ -290,6 +375,67 @@ void main() {
       await _waitFor(() => received.isNotEmpty);
       expect(received.single.sequence, 1);
       expect(sink.activeChannelCount, 1);
+      await transport.close();
+    },
+  );
+
+  test(
+    'sound a source could not deliver arrives over the sink dial back',
+    () async {
+      final sourceSend = Uint8List.fromList(List<int>.filled(32, 5));
+      final sinkSend = Uint8List.fromList(List<int>.filled(32, 6));
+      final host = await _DialBackHost.start(
+        MediaRoute.audio,
+        receiveKey: sinkSend,
+        sendKey: sourceSend,
+        maxPayloadBytes:
+            AudioGroupWebSocketPacketTransport.maxPacketPayloadBytes,
+      );
+      final received = <AudioGroupPacketFrame>[];
+      final sink = AudioShareManager(onGroupPacket: received.add);
+      addTearDown(() async {
+        await sink.closeChannels();
+        await host.close();
+      });
+
+      Object? forwardError;
+      try {
+        await AudioGroupWebSocketPacketTransport.connect(
+          await _unreachableUri('/audio', _audioSessionId),
+          mediaMacKey: sourceSend,
+          sessionId: _audioSessionId,
+          peerId: _sourcePeerId,
+        );
+      } catch (error) {
+        forwardError = error;
+      }
+      expect(mediaPeerUnreachable(forwardError!), isTrue);
+      final dialed = await host.ask(
+        peerId: _sinkPeerId,
+        sessionId: _audioSessionId,
+        answer: (token) async => sink.attachChannel(
+          await host.dialBackAs(
+            _sinkPeerId,
+            sessionId: _audioSessionId,
+            token: token,
+            sendKey: sinkSend,
+          ),
+          claim: host.claimOf(
+            sessionId: _audioSessionId,
+            token: token,
+            receiveKey: sourceSend,
+          ),
+          additionalValidator: (_) => true,
+          groupPacketValidator: (_, _) => true,
+        ),
+      );
+      final transport = AudioGroupWebSocketPacketTransport.forChannel(
+        dialed!.channel,
+        dialed.encoder,
+      );
+      await transport.send(_groupPacket(<int>[4, 5]));
+      await _waitFor(() => received.isNotEmpty);
+      expect(received.single.payload, <int>[4, 5]);
       await transport.close();
     },
   );

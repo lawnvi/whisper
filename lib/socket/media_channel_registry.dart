@@ -54,10 +54,6 @@ final class MediaChannelRegistry {
   bool isForRoute(SessionUpgradeClaim claim) =>
       claim.route == route.path && claim.namespace == route.namespace;
 
-  /// Whether [sessionId] has a channel, from whichever peer.
-  bool hasSession(String sessionId) =>
-      _channels.values.any((active) => active.sessionId == sessionId);
-
   /// Whether a channel for the same session and peer is attached.
   bool hasChannelFor(SessionUpgradeClaim claim) => _channels.values.any(
     (active) =>

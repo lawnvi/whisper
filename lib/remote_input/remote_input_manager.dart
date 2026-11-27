@@ -107,7 +107,6 @@ class RemoteInputManager {
 
   RemoteInputSession? session(String sessionId) => _sessions[sessionId];
   int get activeChannelCount => _channels.activeCount;
-  bool hasChannelFor(String sessionId) => _channels.hasSession(sessionId);
   bool get hasActiveChannels => _channels.activeCount > 0;
   bool get isClosingChannels => _channels.isClosing;
 

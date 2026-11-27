@@ -33,6 +33,11 @@ abstract interface class AudioMediaClaimBroker {
     required String token,
     required SessionUpgradeClaim expected,
   });
+
+  /// For a token this device issued for a sink to dial back on: this
+  /// device's send key of that token's connection, to send the sound with.
+  /// Null once that connection is gone or replaced.
+  Uint8List? sendKeyFor(SessionUpgradeClaim claim);
 }
 
 /// Media channels the audio isolate holds, closed along with this manager's.

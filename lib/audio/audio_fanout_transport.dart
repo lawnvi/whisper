@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:whisper/audio/audio_protocol.dart';
 import 'package:whisper/socket/media_channel_dial.dart';
 import 'package:whisper/socket/packet_byte_transport.dart';
@@ -64,20 +65,31 @@ class AudioGroupWebSocketPacketTransport extends AudioGroupPacketByteTransport {
       proverPeerId: peerId,
       proofKey: mediaMacKey,
     );
-    return AudioGroupWebSocketPacketTransport._(
-      PacketByteTransport.audio(
-        addStream: channel.sink.addStream,
-        closeSink: () => channel.sink.close(),
-        incoming: channel.stream,
-        packetEncoder: MediaRoute.audio.encoder(
-          uri,
-          sessionId: sessionId,
-          sendKey: mediaMacKey,
-          maxPayloadBytes: 256 * 1024,
-        ),
+    return AudioGroupWebSocketPacketTransport.forChannel(
+      channel,
+      MediaRoute.audio.encoder(
+        uri,
+        sessionId: sessionId,
+        sendKey: mediaMacKey,
+        maxPayloadBytes: maxPacketPayloadBytes,
       ),
     );
   }
+
+  static const int maxPacketPayloadBytes = 256 * 1024;
+
+  /// Sends on an authenticated [channel], whoever dialled it.
+  factory AudioGroupWebSocketPacketTransport.forChannel(
+    WebSocketChannel channel,
+    AuthenticatedMediaPacketEncoder encoder,
+  ) => AudioGroupWebSocketPacketTransport._(
+    PacketByteTransport.audio(
+      addStream: channel.sink.addStream,
+      closeSink: () => channel.sink.close(),
+      incoming: channel.stream,
+      packetEncoder: encoder,
+    ),
+  );
 }
 
 class AudioFanoutTransport {
