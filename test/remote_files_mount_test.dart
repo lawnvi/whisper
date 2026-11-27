@@ -106,6 +106,26 @@ class _FakeSource extends MountSource {
   }
 }
 
+class _StatCapableSource extends _FakeSource {
+  int stats = 0;
+
+  @override
+  Future<FsEntry?> stat(String root, String path) async {
+    stats++;
+    final full = path.isEmpty ? root : '$root/$path';
+    final parent = p.posix.dirname(full);
+    final name = p.posix.basename(full);
+    final entries = folders[parent];
+    if (entries == null) {
+      throw const MountException(MountError.notFound);
+    }
+    for (final entry in entries) {
+      if (entry.name == name) return entry;
+    }
+    throw const MountException(MountError.notFound);
+  }
+}
+
 Uint8List _bytes(int length, [int seed = 7]) =>
     Uint8List.fromList(List.generate(length, (i) => (i * 31 + seed) & 0xff));
 
@@ -637,6 +657,55 @@ void main() {
       final fresh = await tree.read(big.ino, 0, 4);
       expect(fresh, _bytes(4, 9));
     });
+
+    test(
+      'stat refreshes a single file via source.stat without re-listing parent',
+      () async {
+        final statSource = _StatCapableSource()
+          ..folder('home')
+          ..file('home/big.bin', _bytes(16, 1), modifiedMs: 1000)
+          ..file('home/other.txt', utf8.encode('keep'), modifiedMs: 1000);
+        var now = DateTime(2026);
+        final tree = MountTree(statSource, const [
+          MountRoot(id: 'home', name: 'x'),
+        ], clock: () => now);
+        final big = (await tree.lookup(MountTree.rootIno, 'big.bin'))!;
+        expect(statSource.lists, 1);
+        expect(statSource.stats, 0);
+
+        // Fresh within listingLifetime: no RPC.
+        await tree.stat(big.ino);
+        expect(statSource.lists, 1);
+        expect(statSource.stats, 0);
+
+        // Past listingLifetime: uses stat instead of listing the whole folder.
+        now = now.add(const Duration(seconds: 4));
+        statSource.file('home/big.bin', _bytes(42, 2), modifiedMs: 2000);
+        final updated = await tree.stat(big.ino);
+        expect(statSource.lists, 1);
+        expect(statSource.stats, 1);
+        expect(updated.size, 42);
+        expect(updated.modifiedMs, 2000);
+        expect(updated.generation, 1);
+
+        // Deleted remotely: stat marks node gone and throws notFound.
+        now = now.add(const Duration(seconds: 4));
+        statSource.files.remove('home/big.bin');
+        statSource.folders['home']!.removeWhere((e) => e.name == 'big.bin');
+        await expectLater(
+          tree.stat(big.ino),
+          throwsA(
+            isA<MountException>().having(
+              (e) => e.error,
+              'error',
+              MountError.notFound,
+            ),
+          ),
+        );
+        expect(big.gone, isTrue);
+        expect(statSource.lists, 1);
+      },
+    );
 
     test('a block the device sends short is read to its end', () async {
       // Read on a phone's shared storage can return early; taken as the

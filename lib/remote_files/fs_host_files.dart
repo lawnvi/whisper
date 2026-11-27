@@ -433,13 +433,36 @@ class FsHostFiles {
 
   Future<FsEntry> stat(String rootId, String relative) async {
     final real = await resolver.resolveExisting(rootId, relative);
+    final name = p.basename(real);
+    if (relative.isNotEmpty) {
+      if (FsUploads.isTemp(name)) {
+        throw const FsPathException('not found');
+      }
+      final skip = excluded();
+      if (skip.isNotEmpty) {
+        final normalizedReal = Platform.isWindows ? real.toLowerCase() : real;
+        for (final path in skip) {
+          final normalizedSkip = Platform.isWindows ? path.toLowerCase() : path;
+          if (FsPathResolver.isInside(normalizedSkip, normalizedReal)) {
+            throw const FsPathException('not shared');
+          }
+        }
+      }
+    }
     final stat = await FileStat.stat(real);
+    if (stat.type == FileSystemEntityType.notFound) {
+      throw const FsPathException('not found');
+    }
     final isDir = stat.type == FileSystemEntityType.directory;
+    final hidden =
+        name.startsWith('.') ||
+        (Platform.isWindows && FsPlatform.isHiddenWindows(real));
     return FsEntry(
-      name: p.basename(real),
+      name: name,
       isDir: isDir,
       size: isDir ? 0 : stat.size,
       modifiedMs: stat.modified.millisecondsSinceEpoch,
+      hidden: hidden,
     );
   }
 

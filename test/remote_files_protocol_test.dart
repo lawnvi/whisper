@@ -625,4 +625,43 @@ void main() {
       expect(replies.any((m) => m.requestId == 1), isTrue);
     },
   );
+
+  test(
+    'stat returns single entry metadata and enforces path boundaries',
+    () async {
+      final client = RemoteFilesClient('host');
+      await client.open();
+
+      final fileEntry = await client.stat('home', 'Documents/a.txt');
+      expect(fileEntry.name, 'a.txt');
+      expect(fileEntry.isDir, isFalse);
+      expect(fileEntry.size, 1);
+
+      final dirEntry = await client.stat('home', 'Documents');
+      expect(dirEntry.name, 'Documents');
+      expect(dirEntry.isDir, isTrue);
+
+      await expectLater(
+        client.stat('home', 'Documents/missing.txt'),
+        throwsA(
+          isA<RemoteFsException>().having(
+            (e) => e.reason,
+            'reason',
+            FileBrowseError.notFound,
+          ),
+        ),
+      );
+      await expectLater(
+        client.stat('home', '../outside'),
+        throwsA(
+          isA<RemoteFsException>().having(
+            (e) => e.reason,
+            'reason',
+            FileBrowseError.notAllowed,
+          ),
+        ),
+      );
+      await client.close();
+    },
+  );
 }

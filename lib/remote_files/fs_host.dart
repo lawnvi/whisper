@@ -314,6 +314,9 @@ class FileBrowseHost {
             'total': page.total,
             'offset': page.offset,
           });
+        case FileBrowseAction.stat:
+          final entry = await files.stat(text('root'), text('path'));
+          await _ok(message, {'entry': entry.toJson()});
         case FileBrowseAction.thumb:
           if (_thumbnailsRunning >= 2) {
             await _fail(message, FileBrowseError.busy);

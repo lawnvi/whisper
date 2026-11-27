@@ -42,6 +42,10 @@ class RemoteMountSource extends MountSource {
   }
 
   @override
+  Future<FsEntry?> stat(String root, String path) =>
+      _guard(() => client.stat(root, path));
+
+  @override
   Future<Uint8List> read(String root, String path, int offset, int length) =>
       _guard(() => client.read(root, path, offset, length));
 

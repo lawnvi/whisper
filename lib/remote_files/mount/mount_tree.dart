@@ -1,10 +1,12 @@
 import 'dart:async';
-import 'dart:collection';
 import 'dart:math';
 import 'dart:typed_data';
 
 import '../fs_host_files.dart';
 import 'package:whisper/remote_files/mount/mount_names.dart';
+import 'mount_reader.dart';
+
+export 'mount_reader.dart' show MountReader;
 
 /// Where mount code logs: the app's files log, also from a worker isolate
 /// (see MountWorker).
@@ -25,6 +27,10 @@ class MountRoot {
 abstract class MountSource {
   /// Everything in a folder, hidden entries too.
   Future<List<FsEntry>> list(String root, String path);
+
+  /// Attributes of one file or folder without listing its parent; null when
+  /// the source only supports folder listings.
+  Future<FsEntry?> stat(String root, String path) async => null;
 
   /// [length] bytes from [offset], fewer at the end of the file.
   Future<Uint8List> read(String root, String path, int offset, int length);
@@ -122,6 +128,8 @@ class MountNode {
   List<int>? _children;
   DateTime? _listedAt;
   Future<void>? _listing;
+  DateTime? _statedAt;
+  Future<void>? _stating;
 
   /// Bumps when something in this folder is changed from here: a listing
   /// asked for before that may not have it yet.
@@ -348,24 +356,66 @@ class MountTree {
     return null;
   }
 
-  /// [ino] with what its folder said of it lately.
+  /// [ino] with fresh attributes: uses single-entry [MountSource.stat] when
+  /// supported, falling back to listing its parent folder otherwise.
   Future<MountNode> stat(int ino) async {
     final node = _nodes[ino];
     if (node == null || node.gone) {
       throw const MountException(MountError.notFound);
     }
-    if (_kept.containsKey(ino)) {
+    if (_kept.containsKey(ino) || _uploads.containsKey(ino)) {
       return node;
     }
     final folder = _nodes[node.parent];
     if (!node.isDir && folder != null && !folder.isTop) {
-      // Its folder's listing carries its size; keep that fresh.
-      await children(node.parent);
+      final freshAt = node._statedAt ?? folder._listedAt;
+      if (freshAt == null || _clock().difference(freshAt) > listingLifetime) {
+        await (node._stating ??= _refreshStat(
+          node,
+        ).whenComplete(() => node._stating = null));
+      }
       if (node.gone) {
         throw const MountException(MountError.notFound);
       }
     }
     return node;
+  }
+
+  Future<void> _refreshStat(MountNode node) async {
+    final FsEntry? entry;
+    try {
+      entry = await source.stat(node.root, node.path);
+    } on MountException catch (error) {
+      if (error.error == MountError.notFound) {
+        node.gone = true;
+        reader.forget(node.ino);
+      }
+      rethrow;
+    } catch (_) {
+      throw const MountException(MountError.io);
+    }
+    if (entry == null) {
+      await children(node.parent);
+      return;
+    }
+    if (entry.isDir != node.isDir) {
+      node.gone = true;
+      reader.forget(node.ino);
+      throw const MountException(MountError.notFound);
+    }
+    if (_uploads.containsKey(node.ino)) {
+      return;
+    }
+    if (node.size != entry.size || node.modifiedMs != entry.modifiedMs) {
+      node.generation++;
+      reader.forget(node.ino);
+    }
+    node
+      ..size = entry.size
+      ..modifiedMs = entry.modifiedMs
+      ..hidden = entry.hidden
+      ..gone = false
+      .._statedAt = _clock();
   }
 
   Future<void> _list(MountNode folder) async {
@@ -396,6 +446,7 @@ class MountTree {
     ];
     previous.removeAll(kept);
     final children = <int>[];
+    final listedAt = _clock();
     for (final entry in entries) {
       if (entry.hidden && !showHiddenFiles && !entry.name.startsWith('.')) {
         continue;
@@ -431,7 +482,8 @@ class MountTree {
           ..size = entry.size
           ..modifiedMs = entry.modifiedMs
           ..hidden = entry.hidden
-          ..gone = false;
+          ..gone = false
+          .._statedAt = listedAt;
         children.add(existing.ino);
         previous.remove(existing.ino);
         continue;
@@ -441,7 +493,7 @@ class MountTree {
         reader.forget(existing.ino);
       }
       children.add(
-        _add(
+        (_add(
           _nextIno++,
           folder.ino,
           name,
@@ -451,7 +503,7 @@ class MountTree {
           size: entry.isDir ? 0 : entry.size,
           modifiedMs: entry.modifiedMs,
           hidden: entry.hidden,
-        ).ino,
+        ).._statedAt = listedAt).ino,
       );
     }
     for (final removed in previous) {
@@ -460,7 +512,7 @@ class MountTree {
     }
     folder
       .._children = [...children, ...kept]
-      .._listedAt = _clock();
+      .._listedAt = listedAt;
   }
 
   /// Reads part of a file through the block cache; one being written,
@@ -1114,6 +1166,7 @@ class MountTree {
         modifiedMs: entry.modifiedMs,
       );
     }
+    node._statedAt = _clock();
     final children = folder._children;
     if (children != null && !children.contains(node.ino)) {
       children.add(node.ino);
@@ -1182,174 +1235,6 @@ class MountTree {
   }
 }
 
-/// File contents in [blockSize] blocks: each read asks the other device
-/// only for blocks not already here, reading on ahead while a file is read
-/// from start to end.
-class MountReader {
-  MountReader(this.tree, {this.maxCached = 128 * 1024 * 1024});
-
-  static const blockSize = 1024 * 1024;
-  static const _maxAhead = 8;
-  static const _maxRunning = 8;
-
-  final MountTree tree;
-  final int maxCached;
-
-  final _blocks = <(int, int), _Block>{};
-  int _cachedBytes = 0;
-  final _ahead = <int, ({int end, int window})>{};
-  int _running = 0;
-  final _waiting = Queue<Completer<void>>();
-
-  Future<Uint8List> read(MountNode node, int offset, int length) async {
-    if (offset >= node.size || length <= 0) {
-      return Uint8List(0);
-    }
-    final end = (offset + length).clamp(0, node.size);
-    final first = offset ~/ blockSize;
-    final last = (end - 1) ~/ blockSize;
-    final blocks = [
-      for (var index = first; index <= last; index++) _block(node, index),
-    ];
-    _readAhead(node, offset, end, last);
-    final out = Uint8List(end - offset);
-    var at = 0;
-    for (var i = 0; i < blocks.length; i++) {
-      final data = await blocks[i].data;
-      final blockStart = (first + i) * blockSize;
-      final from = (i == 0 ? offset - blockStart : 0).clamp(0, data.length);
-      final to = (end - blockStart).clamp(from, data.length);
-      out.setRange(at, at + to - from, data, from);
-      at += to - from;
-      if (data.length < blockSize && i < blocks.length - 1) {
-        // The file is shorter there than it said.
-        return Uint8List.sublistView(out, 0, at);
-      }
-    }
-    return at == out.length ? out : Uint8List.sublistView(out, 0, at);
-  }
-
-  /// Read from start to end: fetch the blocks after this one before they
-  /// are asked for, more of them the longer it goes on.
-  void _readAhead(MountNode node, int offset, int end, int last) {
-    final previous = _ahead[node.ino];
-    final sequential =
-        previous != null &&
-        offset >= previous.end - blockSize &&
-        offset <= previous.end + blockSize;
-    final window = sequential
-        ? (previous.window * 2).clamp(1, _maxAhead)
-        : (offset == 0 ? 1 : 0);
-    _ahead[node.ino] = (end: end, window: window);
-    final blocksInFile = (node.size + blockSize - 1) ~/ blockSize;
-    for (var index = last + 1; index <= last + window; index++) {
-      if (index >= blocksInFile) {
-        break;
-      }
-      final block = _block(node, index);
-      // Nobody waits for these yet: a failure is only seen when they are.
-      block.data.ignore();
-    }
-  }
-
-  _Block _block(MountNode node, int index) {
-    final key = (node.ino, index);
-    final cached = _blocks.remove(key);
-    if (cached != null && cached.generation == node.generation) {
-      _blocks[key] = cached;
-      return cached;
-    }
-    if (cached != null) {
-      _cachedBytes -= cached.bytes;
-    }
-    final block = _Block(node.generation);
-    _blocks[key] = block;
-    block.data = _fetch(node, index).then(
-      (data) {
-        block.bytes = data.length;
-        if (identical(_blocks[key], block)) {
-          _cachedBytes += data.length;
-          _trim();
-        }
-        return data;
-      },
-      onError: (Object error) {
-        if (identical(_blocks[key], block)) {
-          _blocks.remove(key);
-        }
-        throw error;
-      },
-    );
-    return block;
-  }
-
-  Future<Uint8List> _fetch(MountNode node, int index) async {
-    if (_running >= _maxRunning) {
-      final turn = Completer<void>();
-      _waiting.add(turn);
-      await turn.future;
-    }
-    _running++;
-    try {
-      final start = index * blockSize;
-      final first = await tree.source.read(
-        node.root,
-        node.path,
-        start,
-        blockSize,
-      );
-      // A device may send less than asked before the end (read() on a
-      // phone's shared storage returns early): ask on for the rest, or
-      // the rest of the block would be served as nothing.
-      final whole = (node.size - start).clamp(0, blockSize);
-      final block = BytesBuilder(copy: false)..add(first);
-      while (first.isNotEmpty && block.length < whole) {
-        final more = await tree.source.read(
-          node.root,
-          node.path,
-          start + block.length,
-          blockSize - block.length,
-        );
-        if (more.isEmpty) {
-          break; // it ends there now
-        }
-        block.add(more);
-      }
-      // Never more than the block holds: a read would not fit it.
-      final data = block.takeBytes();
-      return data.length > whole ? Uint8List.sublistView(data, 0, whole) : data;
-    } on MountException {
-      rethrow;
-    } catch (_) {
-      throw const MountException(MountError.io);
-    } finally {
-      _running--;
-      if (_waiting.isNotEmpty) {
-        _waiting.removeFirst().complete();
-      }
-    }
-  }
-
-  void _trim() {
-    while (_cachedBytes > maxCached && _blocks.isNotEmpty) {
-      final oldest = _blocks.keys.first;
-      _cachedBytes -= _blocks.remove(oldest)!.bytes;
-    }
-  }
-
-  /// [ino] changed or went: what was read of it is no longer good.
-  void forget(int ino) {
-    _ahead.remove(ino);
-    _blocks.removeWhere((key, block) {
-      if (key.$1 == ino) {
-        _cachedBytes -= block.bytes;
-        return true;
-      }
-      return false;
-    });
-  }
-}
-
 /// A file being written: one upload on the device, and what is on its way.
 class _Upload {
   _Upload(this.node, this.opened, this.size) {
@@ -1382,12 +1267,4 @@ class _Upload {
       throw error;
     }
   }
-}
-
-class _Block {
-  _Block(this.generation);
-
-  final int generation;
-  late final Future<Uint8List> data;
-  int bytes = 0;
 }

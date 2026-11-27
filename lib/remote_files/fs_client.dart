@@ -378,6 +378,19 @@ class RemoteFilesClient {
     );
   }
 
+  /// Attributes of one file or folder without listing its parent.
+  Future<FsEntry> stat(String root, String path) async {
+    final result = await _request(FileBrowseAction.stat, {
+      'root': root,
+      'path': path,
+    });
+    final entry = result['entry'];
+    if (entry is! Map) {
+      throw const RemoteFsException(FileBrowseError.io);
+    }
+    return FsEntry.fromJson(entry.cast<String, Object?>());
+  }
+
   /// [length] bytes of a file from [offset] (fewer at its end), for hosts
   /// whose [RemoteFsInfo.canRead]; of what [upload] wrote so far, when
   /// given.

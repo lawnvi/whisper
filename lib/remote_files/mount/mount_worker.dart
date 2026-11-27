@@ -163,6 +163,8 @@ class MountWorker {
       switch (op) {
         case 'list':
           value = await source.list(text(0), text(1));
+        case 'stat':
+          value = await source.stat(text(0), text(1));
         case 'read':
           value = out(
             await source.read(text(0), text(1), number(2), number(3)),
@@ -344,6 +346,10 @@ class _PortSource extends MountSource {
   @override
   Future<List<FsEntry>> list(String root, String path) async =>
       (await _ask('list', [root, path])) as List<FsEntry>;
+
+  @override
+  Future<FsEntry?> stat(String root, String path) async =>
+      (await _ask('stat', [root, path])) as FsEntry?;
 
   @override
   Future<Uint8List> read(

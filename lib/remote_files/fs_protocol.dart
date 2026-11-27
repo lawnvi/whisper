@@ -22,6 +22,7 @@ enum FileBrowseAction {
   opened,
   denied,
   list,
+  stat,
   thumb,
   mkdir,
   rename,
