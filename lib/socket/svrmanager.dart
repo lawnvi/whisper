@@ -1518,6 +1518,8 @@ class WsSvrManager {
       _completeRemoteProfileRefreshWaiters(peerId: peerId);
     }
     if (_peers.removedBindingOwnsPeerState(binding)) {
+      // 会话生命周期终点:不论断因都结算稳定性复位,
+      // 稳定连接挣得的退避复位不因手动断开等断因而丢失。
       _dialer.onPeerSessionClosed(peerId);
       _dispatchToAll((event) => event.onClose());
     }
@@ -1584,12 +1586,8 @@ class WsSvrManager {
     final payload = encodeMessageFrame(
       Uint8List.fromList(utf8.encode(encodeWireMessage(message))),
     );
-    if (sink != null) {
-      return _sendBytesOnSink(sink, payload, rawAuth: rawAuth);
-    }
-    if (peerId == null || peerId.isEmpty) {
-      return false;
-    }
+    if (sink != null) return _sendBytesOnSink(sink, payload, rawAuth: rawAuth);
+    if (peerId == null || peerId.isEmpty) return false;
     return _peers.sendToAwaited(peerId, payload);
   }
 

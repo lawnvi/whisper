@@ -161,6 +161,8 @@ final class TransferChannelManager {
       <_PeerKindKey, _PeerKindSlot>{};
   final Map<String, _PendingTransferClaim> _pendingClaims =
       <String, _PendingTransferClaim>{};
+  final Map<_PeerKindKey, Future<void>> _inboundChains =
+      <_PeerKindKey, Future<void>>{};
 
   int _bulkFramesSent = 0;
   int _browseFramesSent = 0;
@@ -223,6 +225,7 @@ final class TransferChannelManager {
     }
     _slots.clear();
     _pendingClaims.clear();
+    _inboundChains.clear();
     await isolate?.close();
   }
 
@@ -450,21 +453,17 @@ final class TransferChannelManager {
   Future<int?> _ensureChannel(
     TransferConnectionBinding binding,
     TransferChannelKind kind,
-  ) async {
+  ) {
     final slot = _slotFor(binding.peerId, binding.generation, kind);
     if (slot.state == _SlotState.open && slot.activeChannelId != null) {
-      return slot.activeChannelId;
+      return Future<int?>.value(slot.activeChannelId);
     }
-    if (slot.state == _SlotState.fallback) {
-      return null;
-    }
+    if (slot.state == _SlotState.fallback) return Future<int?>.value(null);
     if (slot.state == _SlotState.opening && slot.openWaiter != null) {
       return slot.openWaiter!.future;
     }
     final localPeerId = _host.localPeerIdFor(binding.peerId);
-    if (localPeerId.isEmpty) {
-      return null;
-    }
+    if (localPeerId.isEmpty) return Future<int?>.value(null);
     final sessionId = _uuid.v4();
     final waiter = Completer<int?>();
     slot
@@ -474,19 +473,28 @@ final class TransferChannelManager {
       ..awaitingDialBack = false
       ..openWaiter = waiter;
     _armNegotiationTimer(slot, binding.peerId, kind, sessionId);
-    final sent = await _host.sendControl(
-      binding.peerId,
-      TransferChannelControlMessage(
-        action: TransferChannelAction.open,
-        kind: kind,
-        sessionId: sessionId,
-        sourcePeerId: localPeerId,
-        sinkPeerId: binding.peerId,
-      ),
-    );
-    if (!sent && slot.pendingSessionId == sessionId) {
-      _failToFallback(slot, binding.peerId, sessionId);
+    // Return waiter.future before awaiting sendControl so the first caller
+    // registers ahead of concurrent callers and preserves send FIFO order.
+    void failIfPending() {
+      if (slot.pendingSessionId == sessionId) {
+        _failToFallback(slot, binding.peerId, sessionId);
+      }
     }
+    unawaited(
+      _host
+          .sendControl(
+            binding.peerId,
+            TransferChannelControlMessage(
+              action: TransferChannelAction.open, kind: kind,
+              sessionId: sessionId, sourcePeerId: localPeerId,
+              sinkPeerId: binding.peerId,
+            ),
+          )
+          .then(
+            (sent) { if (!sent) failIfPending(); },
+            onError: (_) => failIfPending(),
+          ),
+    );
     return waiter.future;
   }
 
@@ -881,22 +889,45 @@ final class TransferChannelManager {
     }
   }
 
+  bool _isFrameCurrent(TransferDataInboundFrame frame) => isChannelCurrent(
+    peerId: frame.peerId,
+    generation: frame.connectionGeneration,
+    kind: frame.kind,
+    channelId: frame.channelId,
+  );
+
   FutureOr<void> _onInboundFrame(TransferDataInboundFrame frame) {
-    if (!isChannelCurrent(
-      peerId: frame.peerId,
-      generation: frame.connectionGeneration,
-      kind: frame.kind,
-      channelId: frame.channelId,
-    )) {
+    if (!_isFrameCurrent(frame)) {
       _staleFramesDropped += 1;
       return null;
     }
-    if (frame.kind == TransferChannelKind.bulk) {
-      _bulkFramesReceived += 1;
-    } else {
-      _browseFramesReceived += 1;
-    }
-    return _host.handleInboundFrame(frame);
+    // Serialize per (peerId, kind) like /chat's enqueueIncoming so async DB
+    // and disk I/O in fileData / browseWrite never process frames out of order.
+    final key = _PeerKindKey(frame.peerId, frame.kind);
+    final previous = _inboundChains[key] ?? Future<void>.value();
+    late final Future<void> next;
+    next = previous
+        .then((_) async {
+          if (!_isFrameCurrent(frame)) {
+            _staleFramesDropped += 1;
+            return;
+          }
+          if (frame.kind == TransferChannelKind.bulk) {
+            _bulkFramesReceived += 1;
+          } else {
+            _browseFramesReceived += 1;
+          }
+          try {
+            await _host.handleInboundFrame(frame);
+          } catch (_) {}
+        })
+        .whenComplete(() {
+          if (identical(_inboundChains[key], next)) {
+            _inboundChains.remove(key);
+          }
+        });
+    _inboundChains[key] = next;
+    return next;
   }
 
   Future<bool> _acquireSendSlot(
@@ -905,21 +936,25 @@ final class TransferChannelManager {
     required int byteLength,
     required bool paced,
   }) async {
+    var queued = false;
     while (true) {
       if (slot.state != _SlotState.open || slot.activeChannelId != channelId) {
         return false;
       }
-      final hasRoom = paced
-          ? slot.inflightSends < _maxPacedInflightFrames
-          : (slot.inflightSends == 0 ||
-                (slot.inflightSends < _maxUnpacedInflightFrames &&
-                    slot.inflightBytes + byteLength <=
-                        _maxUnpacedInflightBytes));
+      final hasRoom = (!queued && slot.sendWaiters.isNotEmpty)
+          ? false
+          : (paced
+                ? slot.inflightSends < _maxPacedInflightFrames
+                : (slot.inflightSends == 0 ||
+                      (slot.inflightSends < _maxUnpacedInflightFrames &&
+                          slot.inflightBytes + byteLength <=
+                              _maxUnpacedInflightBytes)));
       if (hasRoom) {
         slot.inflightSends += 1;
         slot.inflightBytes += byteLength;
         return true;
       }
+      queued = true;
       final waiter = Completer<void>();
       slot.sendWaiters.add(waiter);
       await waiter.future;
@@ -927,15 +962,11 @@ final class TransferChannelManager {
   }
 
   void _armNegotiationTimer(
-    _PeerKindSlot slot,
-    String peerId,
-    TransferChannelKind kind,
-    String sessionId,
+    _PeerKindSlot slot, String peerId, TransferChannelKind kind, String sessionId,
   ) {
     slot.negotiationTimer?.cancel();
     slot.negotiationTimer = Timer(_negotiationTimeout, () {
-      if (slot.state == _SlotState.opening &&
-          slot.pendingSessionId == sessionId) {
+      if (slot.state == _SlotState.opening && slot.pendingSessionId == sessionId) {
         _failToFallback(slot, peerId, sessionId);
       }
     });
@@ -950,10 +981,7 @@ final class TransferChannelManager {
   void _resetSlot(_PeerKindSlot slot, {required _SlotState newState}) {
     slot.negotiationTimer?.cancel();
     slot.negotiationTimer = null;
-    final pendingSession = slot.pendingSessionId;
-    if (pendingSession != null) {
-      _pendingClaims.remove(pendingSession);
-    }
+    if (slot.pendingSessionId != null) _pendingClaims.remove(slot.pendingSessionId);
     slot
       ..state = newState
       ..activeChannelId = null
@@ -962,9 +990,7 @@ final class TransferChannelManager {
       ..awaitingDialBack = false;
     final waiter = slot.openWaiter;
     slot.openWaiter = null;
-    if (waiter != null && !waiter.isCompleted) {
-      waiter.complete(null);
-    }
+    if (waiter != null && !waiter.isCompleted) waiter.complete(null);
     slot.wakeSendWaiters();
   }
 }

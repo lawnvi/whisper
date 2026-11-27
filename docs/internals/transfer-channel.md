@@ -26,12 +26,12 @@
 ## 调速、背压与跨连接一致性
 
 - **调速器留主 isolate**：`TransferPacer`（`TransferPacing`）留在主 isolate，与 `LinkDelay.shared` 同处一处；同设备的 `/transfer` 与 `/chat` 回退天然共用调速器。拨出和接受端都使用 `BackpressureWebSocketChannel`，worker 的写出回执（`_SendAck`）严格在 `WebSocket.addStream` 真正完成后发出，不合并也不切分帧；限速态下主→worker 每设备最多 2 帧在途，避免突发。
-- **入站背压**：worker 统计每条连接的未确认入站字节，达到 8 MiB 时 `subscription.pause()` 施加 TCP 窗口反压；主 isolate 交付完成后回发信用，降至 4 MiB 以下恢复。
+- **入站串行与背压**：worker 统计每条连接的未确认入站字节，达到 8 MiB 时 `subscription.pause()` 施加 TCP 窗口反压；主 isolate 在 `TransferChannelManager` 按 `(peerId, kind)` 串行成 Future 链逐帧交付（保证 `fileData` 序号推进和 `browseWrite` 落盘在后台数据库/磁盘 `await` 让出事件循环时也不会并发交错），单帧处理完成后再向 worker 归还信用，降至 4 MiB 以下恢复。
 - **同代重开与旧帧丢弃**：每条 `/transfer` 连接在 worker 中分配全局单调递增的 `channelId`。通道关闭或新连接接管时，`TransferChannelManager` 立即清除/推进该 `(peerId, kind)` 的活跃 `channelId`，旧 `channelId` 残留入站帧在进入业务引擎前一律丢弃。
-- **中途断线恢复**：`bulk` 通道意外断开而 `/chat` 仍存活时，`FileTransferEngine.handleBulkChannelDropped` 立即取消当前发送窗口并转入 `waitingReconnect` 退避重协商（文件和文件夹均从接收端持久化断点安全续传）；`browse` 断开时 `RemoteFilesClient.failInflightDataForPeer` 立即结束在途读请求避免干等超时。
+- **中途断线恢复**：`bulk` 通道意外断开而 `/chat` 仍存活时，`FileTransferEngine.handleBulkChannelDropped` 立即取消当前发送窗口并转入 `waitingReconnect` 退避重协商（文件和文件夹均从接收端持久化断点安全续传）；`browse` 断开时 `RemoteFilesClient.failInflightDataForPeer` 立即结束在途读写请求避免干等超时。
 - **跨连接先后约束**：
   - `/chat` 上的 `fileCancel` / `fileError` 可能早于 `/transfer` 上的尾包 `fileData` 到达，已终止/非活跃传输的迟到 `fileData` 静默丢弃，不关 `/transfer` 也不关 `/chat`。
-  - 挂载写由 `RemoteFilesClient` 在发出 `writeSize` / `writeClose` 前强制等待同一 `uploadId` 的全部在途 `write()` 回复，并在 `writeClose(commit: true)` 中携带确认长度 `size`；主机 `FsUploads.close` 提交前核对临时文件长度，不等则拒绝提交并删临时文件。
+  - 挂载写由 `RemoteFilesClient` 在发出 `writeSize` / `writeClose` 前强制等待同一 `uploadId` 的全部在途 `write()` 回复，按客户端实际发出的写入边界记录 `size` 并在 `writeClose(commit: true)` 中携带（若任意写失败则拒绝提交并清理远端临时文件）；主机 `FsUploads.close` 提交前核对临时文件长度，不等则拒绝提交并删临时文件。
 
 ## 代码位置
 
@@ -43,5 +43,5 @@
 
 ## 测试与未验证项
 
-- `test/transfer_channel_integration_test.dart` 在真实 socket + 真实工作 isolate 上覆盖了：文件/文件夹走 `bulk`、挂载读写走独立 `browse`（不排在文件后）、挂载 `writeClose` 截断拒交与客户端在途写屏障、`bulk` 中途断开同代重开与新 `channelId` 续传、未授权/带 `Origin` 升级拒绝、非法控制帧关闭 `bulk`、反拨、同时 `open` glare、无能力回退 `/chat`。
+- `test/transfer_channel_integration_test.dart` 在真实 socket + 真实工作 isolate + 后台数据库（`NativeDatabase.createInBackground`）上覆盖了：文件/文件夹走 `bulk`、32 MiB 大文件传输全程 `bulk` `channelId` 不变、入站帧按 `(peerId, kind)` 严格串行、挂载读写走独立 `browse`（不排在文件后）、挂载 `writeClose` 截断拒交与客户端在途写屏障、`bulk` 中途断开同代重开与新 `channelId` 续传、未授权/带 `Origin` 升级拒绝、非法控制帧关闭 `bulk`、反拨、同时 `open` glare、无能力回退 `/chat`。
 - **尚未在真机实测的**：Windows 与 Linux 防火墙下 `10005` TCP 放行与反拨、千兆/弱 Wi-Fi 真机下与键鼠/声音并发时的吞吐和指针延迟实测、DSCP CS1 在物理路由器上的实际标记效果。

@@ -543,36 +543,30 @@ void main() {
 
       final receivedOnA = <TransferDataInboundFrame>[];
       final receivedOnB = <TransferDataInboundFrame>[];
+      final receivedSeqsOnB = <int>[];
+      var activeInboundOnB = 0;
+      var maxConcurrentOnB = 0;
       late _LoopbackTransferHost hostA;
       late _LoopbackTransferHost hostB;
       late TransferChannelManager mgrA;
       late TransferChannelManager mgrB;
 
       hostA = _LoopbackTransferHost(
-        localPeerId: 'peer-a',
-        remotePeerId: 'peer-b',
-        sendKey: keyAtoB,
-        receiveKey: keyBtoA,
-        tokens: tokensA,
-        onControlOut: (control) => mgrB.handleControl(
-          remotePeerId: 'peer-a',
-          localGeneration: 1,
-          control: control,
+        localPeerId: 'peer-a', remotePeerId: 'peer-b',
+        sendKey: keyAtoB, receiveKey: keyBtoA, tokens: tokensA,
+        onControlOut: (c) => mgrB.handleControl(
+          remotePeerId: 'peer-a', localGeneration: 1, control: c,
         ),
         onInbound: receivedOnA.add,
       );
       hostB = _LoopbackTransferHost(
-        localPeerId: 'peer-b',
-        remotePeerId: 'peer-a',
-        sendKey: keyBtoA,
-        receiveKey: keyAtoB,
-        tokens: tokensB,
+        localPeerId: 'peer-b', remotePeerId: 'peer-a',
+        sendKey: keyBtoA, receiveKey: keyAtoB, tokens: tokensB,
         // Corrupt responder's accept port to unreachablePort to force dial-back!
         onControlOut: (control) {
           final rewritten = control.action == TransferChannelAction.accept
               ? TransferChannelControlMessage(
-                  action: control.action,
-                  kind: control.kind,
+                  action: control.action, kind: control.kind,
                   sessionId: control.sessionId,
                   sourcePeerId: control.sourcePeerId,
                   sinkPeerId: control.sinkPeerId,
@@ -581,12 +575,22 @@ void main() {
                 )
               : control;
           return mgrA.handleControl(
-            remotePeerId: 'peer-b',
-            localGeneration: 1,
-            control: rewritten,
+            remotePeerId: 'peer-b', localGeneration: 1, control: rewritten,
           );
         },
-        onInbound: receivedOnB.add,
+        onInbound: (frame) async {
+          activeInboundOnB += 1;
+          if (activeInboundOnB > maxConcurrentOnB) {
+            maxConcurrentOnB = activeInboundOnB;
+          }
+          try {
+            await Future<void>.delayed(const Duration(milliseconds: 15));
+            receivedOnB.add(frame);
+            receivedSeqsOnB.add(WhisperFrameV3.decode(frame.bytes).sequence);
+          } finally {
+            activeInboundOnB -= 1;
+          }
+        },
       );
 
       mgrA = TransferChannelManager(
@@ -609,64 +613,134 @@ void main() {
       expect(await mgrA.startWorker(mainPort: 0), greaterThan(0));
       expect(await mgrB.startWorker(mainPort: 0), greaterThan(0));
 
-      const bindingA = TransferConnectionBinding(
-        peerId: 'peer-b',
-        generation: 1,
+      const bindingA = TransferConnectionBinding(peerId: 'peer-b', generation: 1);
+      final transferId = const Uuid().v4();
+      final frames = List<Uint8List>.generate(
+        3,
+        (seq) => WhisperFrameV3(
+          type: WhisperFrameType.fileData,
+          transferId: transferId,
+          offset: seq * 5,
+          sequence: seq,
+          payload: Uint8List.fromList(<int>[seq, 1, 2, 3, 4]),
+        ).encode(),
       );
-      final dataFrame = WhisperFrameV3(
-        type: WhisperFrameType.fileData,
-        transferId: const Uuid().v4(),
-        offset: 0,
-        sequence: 0,
-        payload: Uint8List.fromList(<int>[1, 2, 3, 4, 5]),
-      ).encode();
 
-      final sent = await mgrA.sendFrame(
-        binding: bindingA,
-        kind: TransferChannelKind.bulk,
-        encodedFrame: dataFrame,
+      final sendResults = await Future.wait<bool>(
+        frames.map(
+          (f) => mgrA.sendFrame(
+            binding: bindingA, kind: TransferChannelKind.bulk, encodedFrame: f,
+          ),
+        ),
       );
-      expect(sent, isTrue);
+      expect(sendResults, <bool>[true, true, true]);
       expect(hostA.fallbackCount, 0);
       await _waitUntil(
-        () => receivedOnB.length == 1,
-        description: 'peerB receives fileData over dial-backed /transfer',
+        () => receivedOnB.length == 3,
+        description: 'peerB receives all 3 serialized fileData frames over dial-backed /transfer',
       );
-      expect(receivedOnB.single.bytes, equals(dataFrame));
+      expect(maxConcurrentOnB, 1);
+      expect(receivedSeqsOnB, <int>[0, 1, 2]);
+      expect(receivedOnB.first.bytes, equals(frames.first));
 
       // Sending a disallowed control frame (`WhisperFrameType.message`) over
       // the `bulk` /transfer channel must be rejected by peerB's worker and
       // close the channel without delivering it to peerB's business handler.
       final badControlFrame = WhisperFrameV3(
-        type: WhisperFrameType.message,
-        transferId: '',
-        offset: 0,
-        sequence: 0,
+        type: WhisperFrameType.message, transferId: '', offset: 0, sequence: 0,
         payload: Uint8List.fromList(<int>[0x7b, 0x7d]),
       ).encode();
       await mgrA.sendFrame(
-        binding: bindingA,
-        kind: TransferChannelKind.bulk,
+        binding: bindingA, kind: TransferChannelKind.bulk,
         encodedFrame: badControlFrame,
       );
       await _waitUntil(
-        () =>
-            mgrB.activeChannelIdFor('peer-a', 1, TransferChannelKind.bulk) ==
-            null,
+        () => mgrB.activeChannelIdFor('peer-a', 1, TransferChannelKind.bulk) == null,
         description: 'disallowed frame closes bulk channel on receiver',
       );
-      expect(receivedOnB.length, 1);
+      expect(receivedOnB.length, 3);
 
       // Verify stale channelId frames are dropped when channel is not active.
       expect(
         mgrB.isChannelCurrent(
-          peerId: 'peer-a',
-          generation: 1,
-          kind: TransferChannelKind.bulk,
-          channelId: receivedOnB.single.channelId,
+          peerId: 'peer-a', generation: 1,
+          kind: TransferChannelKind.bulk, channelId: receivedOnB.first.channelId,
         ),
         isFalse,
       );
+    },
+  );
+
+  test(
+    '32 MiB file transfer over /transfer with background SQLite keeps the same bulk channelId end-to-end',
+    () async {
+      final pair = await _ConnectedPair.create(
+        name: 'large_32m_stable',
+        transferChannelA: true,
+        transferChannelB: true,
+      );
+      addTearDown(pair.dispose);
+
+      // Warm up bulk channel so we capture both peers' initial channelIds.
+      final warmup = File('${pair.tempDir.path}/warmup32.bin');
+      await warmup.writeAsBytes(Uint8List(64 * 1024), flush: true);
+      expect(await pair.peerA.sendFileTo('peer-b', warmup.path), isTrue);
+      await _waitForCompletedIncomingTransfer(pair.dbB, name: 'warmup32.bin');
+      final bulkIdA = pair.peerA.debugActiveTransferChannelId(
+        'peer-b', TransferChannelKind.bulk,
+      );
+      final bulkIdB = pair.peerB.debugActiveTransferChannelId(
+        'peer-a', TransferChannelKind.bulk,
+      );
+      expect(bulkIdA, isNotNull);
+      expect(bulkIdB, isNotNull);
+
+      // Write a 32 MiB file with per-block tagged 64 KiB chunks.
+      const blockSize = 64 * 1024;
+      const blockCount = 512; // 32 MiB
+      final basePattern = Uint8List.fromList(
+        List<int>.generate(blockSize, (i) => (i * 29 + 7) & 255),
+      );
+      final largeFile = File('${pair.tempDir.path}/large_32m.bin');
+      final sink = largeFile.openWrite();
+      for (var b = 0; b < blockCount; b++) {
+        basePattern[0] = b & 255;
+        basePattern[1] = (b >> 8) & 255;
+        sink.add(Uint8List.fromList(basePattern));
+      }
+      await sink.flush();
+      await sink.close();
+
+      expect(await pair.peerA.sendFileTo('peer-b', largeFile.path), isTrue);
+      final received = await _waitForCompletedIncomingTransfer(
+        pair.dbB,
+        name: 'large_32m.bin',
+        timeout: const Duration(seconds: 60),
+      );
+      final receivedFile = File(received.finalPath);
+      expect(await receivedFile.length(), blockSize * blockCount);
+      final raf = await receivedFile.open();
+      try {
+        for (var b = 0; b < blockCount; b++) {
+          final chunk = await raf.read(blockSize);
+          expect(chunk.length, blockSize);
+          expect(chunk[0], b & 255);
+          expect(chunk[1], (b >> 8) & 255);
+          expect(chunk[blockSize - 1], basePattern[blockSize - 1]);
+        }
+      } finally {
+        await raf.close();
+      }
+      expect(
+        pair.peerA.debugActiveTransferChannelId('peer-b', TransferChannelKind.bulk),
+        bulkIdA,
+      );
+      expect(
+        pair.peerB.debugActiveTransferChannelId('peer-a', TransferChannelKind.bulk),
+        bulkIdB,
+      );
+      expect(pair.peerB.debugTransferChannelStats.staleDropped, 0);
+      expect(pair.peerB.debugTransferChannelStats.bulkReceived, greaterThanOrEqualTo(64));
     },
   );
 }
@@ -676,19 +750,11 @@ void main() {
 // ---------------------------------------------------------------------------
 
 final class _ConnectedPair {
-  _ConnectedPair._({
-    required this.tempDir,
-    required this.dbA,
-    required this.dbB,
-    required this.peerA,
-    required this.peerB,
-  });
+  _ConnectedPair._(this.tempDir, this.dbA, this.dbB, this.peerA, this.peerB);
 
   final Directory tempDir;
-  final LocalDatabase dbA;
-  final LocalDatabase dbB;
-  final WsSvrManager peerA;
-  final WsSvrManager peerB;
+  final LocalDatabase dbA, dbB;
+  final WsSvrManager peerA, peerB;
 
   static Future<_ConnectedPair> create({
     required String name,
@@ -696,43 +762,37 @@ final class _ConnectedPair {
     required bool transferChannelB,
     List<Duration>? retryDelays,
   }) async {
-    final tempDir = await Directory.systemTemp.createTemp(
-      'whisper_tc_${name}_',
-    );
+    final tempDir = await Directory.systemTemp.createTemp('whisper_tc_${name}_');
     final dlA = await Directory('${tempDir.path}/dl_a').create();
     final dlB = await Directory('${tempDir.path}/dl_b').create();
     final stageA = await Directory('${tempDir.path}/stage_a').create();
     final stageB = await Directory('${tempDir.path}/stage_b').create();
-    final dbA = LocalDatabase.forTesting(NativeDatabase.memory());
-    final dbB = LocalDatabase.forTesting(NativeDatabase.memory());
+    final dbA = LocalDatabase.forTesting(
+      NativeDatabase.createInBackground(
+        File('${tempDir.path}/db_a.sqlite'), setup: configureWhisperDatabase,
+      ),
+    );
+    final dbB = LocalDatabase.forTesting(
+      NativeDatabase.createInBackground(
+        File('${tempDir.path}/db_b.sqlite'), setup: configureWhisperDatabase,
+      ),
+    );
 
     final peerA = WsSvrManager.forTesting(
-      database: dbA,
-      identityStore: _identityStore(11),
-      localPeerProfileLoader: () async =>
-          _profile('peer-a', transferChannel: transferChannelA),
-      autoConnectEnabled: () async => true,
-      manageSharedCoordinators: false,
+      database: dbA, identityStore: _identityStore(11),
+      localPeerProfileLoader: () async => _profile('peer-a', transferChannel: transferChannelA),
+      autoConnectEnabled: () async => true, manageSharedCoordinators: false,
       transferDownloadDirectory: () async => dlA,
-      folderTransferStore: FolderTransferStore(
-        directory: () async => stageA,
-      ),
-      transferRetryDelays: retryDelays,
-      enableTransferChannel: transferChannelA,
+      folderTransferStore: FolderTransferStore(directory: () async => stageA),
+      transferRetryDelays: retryDelays, enableTransferChannel: transferChannelA,
     );
     final peerB = WsSvrManager.forTesting(
-      database: dbB,
-      identityStore: _identityStore(77),
-      localPeerProfileLoader: () async =>
-          _profile('peer-b', transferChannel: transferChannelB),
-      autoConnectEnabled: () async => true,
-      manageSharedCoordinators: false,
+      database: dbB, identityStore: _identityStore(77),
+      localPeerProfileLoader: () async => _profile('peer-b', transferChannel: transferChannelB),
+      autoConnectEnabled: () async => true, manageSharedCoordinators: false,
       transferDownloadDirectory: () async => dlB,
-      folderTransferStore: FolderTransferStore(
-        directory: () async => stageB,
-      ),
-      transferRetryDelays: retryDelays,
-      enableTransferChannel: transferChannelB,
+      folderTransferStore: FolderTransferStore(directory: () async => stageB),
+      transferRetryDelays: retryDelays, enableTransferChannel: transferChannelB,
     );
     peerA.registerEvent(_AutoApproveEvents(), uid: 'peer-a', primary: true);
     peerB.registerEvent(_AutoApproveEvents(), uid: 'peer-b', primary: true);
@@ -757,13 +817,7 @@ final class _ConnectedPair {
       () => peerA.isConnectedTo('peer-b') && peerB.isConnectedTo('peer-a'),
       description: 'peers authenticated',
     );
-    return _ConnectedPair._(
-      tempDir: tempDir,
-      dbA: dbA,
-      dbB: dbB,
-      peerA: peerA,
-      peerB: peerB,
-    );
+    return _ConnectedPair._(tempDir, dbA, dbB, peerA, peerB);
   }
 
   Future<void> dispose() async {
@@ -820,11 +874,11 @@ PeerProfile _profile(String uid, {required bool transferChannel}) => PeerProfile
 Future<FileTransferData> _waitForCompletedIncomingTransfer(
   LocalDatabase db, {
   required String name,
+  Duration timeout = const Duration(seconds: 30),
 }) async {
-  final deadline = DateTime.now().add(const Duration(seconds: 15));
+  final deadline = DateTime.now().add(timeout);
   while (DateTime.now().isBefore(deadline)) {
-    final rows = await db.select(db.fileTransfer).get();
-    for (final row in rows) {
+    for (final row in await db.select(db.fileTransfer).get()) {
       if (row.direction == FileTransferDirection.incoming &&
           row.state == FileTransferState.completed &&
           row.finalPath.endsWith(name)) {
@@ -851,121 +905,60 @@ Future<void> _waitUntil(
 
 final class _LoopbackTransferHost implements TransferChannelHost {
   _LoopbackTransferHost({
-    required this.localPeerId,
-    required this.remotePeerId,
-    required this.sendKey,
-    required this.receiveKey,
-    required this.tokens,
-    required this.onControlOut,
-    required this.onInbound,
+    required this.localPeerId, required this.remotePeerId,
+    required this.sendKey, required this.receiveKey,
+    required this.tokens, required this.onControlOut, required this.onInbound,
   });
 
-  final String localPeerId;
-  final String remotePeerId;
-  final Uint8List sendKey;
-  final Uint8List receiveKey;
+  final String localPeerId, remotePeerId;
+  final Uint8List sendKey, receiveKey;
   final SessionUpgradeTokenRegistry tokens;
-  final Future<void> Function(TransferChannelControlMessage control)
-  onControlOut;
-  final void Function(TransferDataInboundFrame frame) onInbound;
+  final Future<void> Function(TransferChannelControlMessage control) onControlOut;
+  final FutureOr<void> Function(TransferDataInboundFrame frame) onInbound;
   int fallbackCount = 0;
 
-  @override
-  bool get enabled => true;
-  @override
-  String localPeerIdFor(String peerId) => localPeerId;
-  @override
-  bool peerSupportsTransferChannel(String peerId) => peerId == remotePeerId;
-  @override
-  TransferConnectionBinding? currentBinding(String peerId) =>
-      peerId == remotePeerId
-      ? TransferConnectionBinding(peerId: remotePeerId, generation: 1)
-      : null;
-  @override
-  String? dialHostFor(String peerId, int generation) =>
+  @override bool get enabled => true;
+  @override String localPeerIdFor(String peerId) => localPeerId;
+  @override bool peerSupportsTransferChannel(String peerId) => peerId == remotePeerId;
+  @override TransferConnectionBinding? currentBinding(String peerId) => peerId == remotePeerId
+      ? TransferConnectionBinding(peerId: remotePeerId, generation: 1) : null;
+  @override String? dialHostFor(String peerId, int generation) =>
       peerId == remotePeerId && generation == 1 ? '127.0.0.1' : null;
-  @override
-  T? withSessionKeys<T>(
-    String peerId,
-    int generation,
-    T Function(Uint8List sendKey, Uint8List receiveKey) action,
-  ) => action(Uint8List.fromList(sendKey), Uint8List.fromList(receiveKey));
-  @override
-  String? issueTransferToken({
-    required String peerId,
-    required int generation,
-    required String sessionId,
-    required bool reverse,
-  }) => tokens.issue(
-    route: MediaRoute.transfer.path,
-    namespace: MediaRoute.transfer.namespace,
-    sessionId: sessionId,
-    peerId: peerId,
-    mediaMacKey: receiveKey,
-    connectionGeneration: generation,
-    reverse: reverse,
-    now: DateTime.now(),
+  @override T? withSessionKeys<T>(String peerId, int generation,
+      T Function(Uint8List sendKey, Uint8List receiveKey) action) =>
+      action(Uint8List.fromList(sendKey), Uint8List.fromList(receiveKey));
+  @override String? issueTransferToken({required String peerId, required int generation,
+      required String sessionId, required bool reverse}) => tokens.issue(
+    route: MediaRoute.transfer.path, namespace: MediaRoute.transfer.namespace,
+    sessionId: sessionId, peerId: peerId, mediaMacKey: receiveKey,
+    connectionGeneration: generation, reverse: reverse, now: DateTime.now(),
   );
-  @override
-  void revokeTransferToken({
-    required String peerId,
-    required String sessionId,
-  }) => tokens.revoke(
-    route: MediaRoute.transfer.path,
-    namespace: MediaRoute.transfer.namespace,
-    sessionId: sessionId,
-    peerId: peerId,
-  );
-  @override
-  Future<bool> sendControl(
-    String peerId,
-    TransferChannelControlMessage control,
-  ) async {
+  @override void revokeTransferToken({required String peerId, required String sessionId}) =>
+      tokens.revoke(route: MediaRoute.transfer.path, namespace: MediaRoute.transfer.namespace,
+        sessionId: sessionId, peerId: peerId);
+  @override Future<bool> sendControl(String peerId, TransferChannelControlMessage control) async {
     unawaited(onControlOut(control));
     return true;
   }
-
-  @override
-  Future<bool> sendFallbackOnChat(
-    TransferConnectionBinding binding,
-    Object payload,
-  ) async {
+  @override Future<bool> sendFallbackOnChat(TransferConnectionBinding binding, Object payload) async {
     fallbackCount += 1;
     return true;
   }
-
-  @override
-  void handleInboundFrame(TransferDataInboundFrame frame) => onInbound(frame);
-  @override
-  void onUnexpectedChannelDrop(
-    String peerId,
-    int generation,
-    TransferChannelKind kind,
-  ) {}
+  @override FutureOr<void> handleInboundFrame(TransferDataInboundFrame frame) => onInbound(frame);
+  @override void onUnexpectedChannelDrop(String peerId, int generation, TransferChannelKind kind) {}
 }
 
 final class _LoopbackClaimBroker implements TransferClaimBroker {
-  _LoopbackClaimBroker({
-    required this.tokens,
-    required this.sendKey,
-    required this.manager,
-  });
-
+  _LoopbackClaimBroker({required this.tokens, required this.sendKey, required this.manager});
   final SessionUpgradeTokenRegistry tokens;
   final Uint8List sendKey;
   final TransferChannelManager manager;
 
-  @override
-  TransferClaimLookupResult? lookup({
-    required String sessionId,
-    required String token,
-    required Object remoteAddress,
+  @override TransferClaimLookupResult? lookup({
+    required String sessionId, required String token, required Object remoteAddress,
   }) {
     final claim = tokens.lookup(
-      route: MediaRoute.transfer.path,
-      sessionId: sessionId,
-      token: token,
-      now: DateTime.now(),
+      route: MediaRoute.transfer.path, sessionId: sessionId, token: token, now: DateTime.now(),
     );
     if (claim == null) return null;
     final kind = manager.lookupPendingClaimKind(claim);
@@ -973,26 +966,16 @@ final class _LoopbackClaimBroker implements TransferClaimBroker {
       claim.destroy();
       return null;
     }
-    return TransferClaimLookupResult(
-      claim: claim,
-      kind: kind,
-      sendKey: Uint8List.fromList(sendKey),
-    );
+    return TransferClaimLookupResult(claim: claim, kind: kind, sendKey: Uint8List.fromList(sendKey));
   }
 
-  @override
-  bool consume({
-    required String sessionId,
-    required String token,
-    required SessionUpgradeClaim expected,
+  @override bool consume({
+    required String sessionId, required String token, required SessionUpgradeClaim expected,
   }) {
     if (!manager.consumePendingClaim(expected)) return false;
     final consumed = tokens.consume(
-      route: MediaRoute.transfer.path,
-      sessionId: sessionId,
-      token: token,
-      now: DateTime.now(),
-      expected: expected,
+      route: MediaRoute.transfer.path, sessionId: sessionId, token: token,
+      now: DateTime.now(), expected: expected,
     );
     consumed?.destroy();
     return consumed != null;
