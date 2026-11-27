@@ -85,13 +85,16 @@ enum MediaRoute {
 /// device holds the token in it. Returns the socket once the other side
 /// says it is ready. A failure comes as [PacketWebSocketConnectException],
 /// whose text never shows the token or the session.
+/// How long reaching the other side and its upgrade may take.
+const Duration mediaChannelConnectTimeout = Duration(seconds: 6);
+
 Future<WebSocketChannel> dialMediaChannel(
   Uri uri,
   MediaRoute route, {
   required String sessionId,
   required String proverPeerId,
   required Uint8List proofKey,
-  Duration connectTimeout = const Duration(seconds: 6),
+  Duration connectTimeout = mediaChannelConnectTimeout,
 }) async {
   WebSocketChannel? channel;
   try {

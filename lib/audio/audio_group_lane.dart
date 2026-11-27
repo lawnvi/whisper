@@ -50,12 +50,14 @@ abstract final class AudioGroupDatagrams {
     required String sessionId,
     required String peerId,
     required bool mediaPort,
+    Duration connectTimeout = mediaChannelConnectTimeout,
   }) async {
     final socket = await AudioGroupWebSocketPacketTransport.connect(
       uri,
       mediaMacKey: mediaMacKey,
       sessionId: sessionId,
       peerId: peerId,
+      connectTimeout: connectTimeout,
     );
     final lane = MediaDatagrams.dial(
       mediaPort ? await _dialer() : null,

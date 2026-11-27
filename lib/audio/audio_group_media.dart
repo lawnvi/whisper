@@ -9,6 +9,7 @@ import 'package:whisper/audio/audio_group_playback_scheduler.dart';
 import 'package:whisper/audio/audio_packet_gaps.dart';
 import 'package:whisper/audio/audio_platform.dart';
 import 'package:whisper/audio/audio_protocol.dart';
+import 'package:whisper/socket/media_channel_dial.dart';
 import 'package:whisper/socket/media_dial_back.dart';
 
 typedef AudioGroupCodecFactory =
@@ -170,31 +171,35 @@ abstract final class AudioGroupDialBack {
   here;
 }
 
-/// How long the sink's media port gets before the main port is tried.
+/// How long the sink's media port gets to answer before the main port is
+/// tried.
 const Duration audioGroupMediaPortConnectTimeout = Duration(milliseconds: 1500);
 
 /// Connects to [mediaUri] when there is one, and to [uri] when that fails.
+///
+/// Only reaching the media port is timed, never its proof: the token is
+/// spent once a proof passes there, and the main port would refuse it.
+/// (Timing the whole attempt let a slow proof spend the token after the
+/// main port had been tried, and the sink stayed silent.) A failed attempt
+/// has closed its socket without spending the token.
 Future<AudioGroupPacketTransport> connectAudioGroupSinkTransport({
   required Uri uri,
   Uri? mediaUri,
-  required Future<AudioGroupPacketTransport> Function(Uri uri) connect,
+  required Future<AudioGroupPacketTransport> Function(
+    Uri uri,
+    Duration connectTimeout,
+  )
+  connect,
   Duration mediaPortTimeout = audioGroupMediaPortConnectTimeout,
 }) async {
   if (mediaUri != null) {
-    final attempt = connect(mediaUri);
     try {
-      return await attempt.timeout(mediaPortTimeout);
+      return await connect(mediaUri, mediaPortTimeout);
     } catch (_) {
-      // Too late now: close it if it still connects.
-      unawaited(
-        attempt.then(
-          (transport) => transport.close().catchError((Object _) {}),
-          onError: (Object _) {},
-        ),
-      );
+      // Its firewall, or no isolate there any more: the main port then.
     }
   }
-  return connect(uri);
+  return connect(uri, mediaChannelConnectTimeout);
 }
 
 /// Schedules a source's packets: each right after the one before, so the
@@ -525,7 +530,7 @@ class LocalAudioGroupMedia implements AudioGroupMedia {
     return connectAudioGroupSinkTransport(
       uri: dial.uri,
       mediaUri: dial.mediaUri,
-      connect: (uri) {
+      connect: (uri, connectTimeout) {
         final factory = _transportFactory;
         if (factory != null) {
           return factory(uri);
@@ -539,6 +544,7 @@ class LocalAudioGroupMedia implements AudioGroupMedia {
           mediaMacKey: mediaSendKey,
           sessionId: dial.sessionId,
           peerId: dial.sourcePeerId,
+          connectTimeout: connectTimeout,
         );
       },
     );

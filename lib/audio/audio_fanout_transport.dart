@@ -57,6 +57,7 @@ class AudioGroupWebSocketPacketTransport extends AudioGroupPacketByteTransport {
     required Uint8List mediaMacKey,
     required String sessionId,
     required String peerId,
+    Duration connectTimeout = mediaChannelConnectTimeout,
   }) async {
     final channel = await dialMediaChannel(
       uri,
@@ -64,6 +65,7 @@ class AudioGroupWebSocketPacketTransport extends AudioGroupPacketByteTransport {
       sessionId: sessionId,
       proverPeerId: peerId,
       proofKey: mediaMacKey,
+      connectTimeout: connectTimeout,
     );
     return AudioGroupWebSocketPacketTransport.forChannel(
       channel,

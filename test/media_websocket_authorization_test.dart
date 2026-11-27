@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:whisper/audio/audio_fanout_transport.dart';
+import 'package:whisper/audio/audio_group_media.dart';
 import 'package:whisper/audio/audio_protocol.dart';
 import 'package:whisper/audio/audio_share_manager.dart';
 import 'package:whisper/remote_input/remote_input_manager.dart';
@@ -504,6 +505,89 @@ void main() {
           expect(admitted, isFalse);
         }
         await server.close(force: true);
+      }
+    },
+  );
+
+  // A source first tries the sink's own media port and falls back to the
+  // main one. It used to time the whole attempt, proof included: a proof
+  // slower than that spent the token on the media port after the main port
+  // had been tried with it, and the sink stayed silent. Only reaching the
+  // media port is timed now.
+  test(
+    'a media port that answered is waited for; one that did not is not',
+    () async {
+      final token = base64Url
+          .encode(List<int>.filled(32, 3))
+          .replaceAll('=', '');
+      Future<(HttpServer, Completer<void>)> sink({
+        Duration proofDelay = Duration.zero,
+      }) async {
+        final upgrades = MediaUpgradeServer(
+          maxProvisional: 1,
+          proofTimeout: const Duration(seconds: 2),
+        );
+        final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+        final received = Completer<void>();
+        server.listen((request) async {
+          final slot = upgrades.reserve()!;
+          final socket = await WebSocketTransformer.upgrade(request);
+          await Future<void>.delayed(proofDelay);
+          slot.prove(
+            IOWebSocketChannel(socket),
+            MediaUpgradeOffer(
+              route: '/audio',
+              namespace: 'audio-group',
+              sessionId: _audioSessionId,
+              peerId: _sourcePeerId,
+              connectionGeneration: 1,
+              token: token,
+            ),
+            mediaMacKey: _mediaKey,
+            onProven: (channel) {
+              channel.stream.listen((_) {
+                if (!received.isCompleted) received.complete();
+              });
+              return true;
+            },
+          );
+        });
+        return (server, received);
+      }
+
+      Uri audioAt(int port) =>
+          _mediaUri(port, '/audio', sessionId: _audioSessionId, token: token);
+      final dead = (await _unreachableUri('/audio', _audioSessionId)).port;
+      final (slow, slowGot) = await sink(
+        proofDelay: const Duration(milliseconds: 600),
+      );
+      final (main, mainGot) = await sink();
+      addTearDown(() async {
+        await slow.close(force: true);
+        await main.close(force: true);
+      });
+      for (final (mediaPort, mainPort, got) in [
+        // Answered, proved late: no going to the (unreachable) main port.
+        (slow.port, dead, slowGot),
+        // Refused: the main port.
+        (dead, main.port, mainGot),
+      ]) {
+        final transport = await connectAudioGroupSinkTransport(
+          uri: audioAt(mainPort),
+          mediaUri: audioAt(mediaPort),
+          mediaPortTimeout: const Duration(milliseconds: 200),
+          connect: (uri, connectTimeout) =>
+              AudioGroupWebSocketPacketTransport.connect(
+                uri,
+                mediaMacKey: _mediaKey,
+                sessionId: _audioSessionId,
+                peerId: _sourcePeerId,
+                connectTimeout: connectTimeout,
+              ),
+        );
+        await transport.send(_groupPacket(<int>[1]));
+        await got.future.timeout(const Duration(seconds: 2));
+        await transport.close();
       }
     },
   );
