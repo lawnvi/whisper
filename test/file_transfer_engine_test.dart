@@ -472,6 +472,7 @@ void main() {
         ),
         WhisperFrameType.fileReady,
       );
+      await engine.waitUntilOutgoingIdle();
       await sendControl(
         FileTransferV3Control(
           action: FileTransferV3Action.ack,

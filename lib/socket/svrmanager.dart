@@ -43,6 +43,7 @@ import 'package:whisper/socket/peer_connection.dart';
 import 'package:whisper/socket/peer_socket_session.dart';
 import 'package:whisper/socket/pending_outgoing_connection.dart';
 import 'package:whisper/socket/quick_send_identity_gate.dart';
+import 'package:whisper/socket/transfer_ack_watchdog.dart';
 import 'package:whisper/socket/socket_admission.dart';
 import 'package:whisper/socket/socket_events.dart';
 export 'package:whisper/socket/socket_events.dart';
@@ -194,6 +195,8 @@ class WsSvrManager {
     SecureRandomBytes? mediaProofRandomBytes,
     Future<Directory> Function()? transferDownloadDirectory,
     FolderTransferStore? folderTransferStore,
+    TransferAckWatchdog? transferAckWatchdog,
+    List<Duration>? transferRetryDelays,
   }) : _admission = admission ?? SocketAdmissionController(),
        _audioManager = audioManager ?? AudioShareManager.shared,
        _remoteInputManager = remoteInputManager ?? RemoteInputManager.shared,
@@ -223,7 +226,9 @@ class WsSvrManager {
            mediaProofRandomBytes ?? _secureMediaProofRandomBytes,
        _transferDownloadDirectory = transferDownloadDirectory,
        _folderTransferStore =
-           folderTransferStore ?? const FolderTransferStore();
+           folderTransferStore ?? const FolderTransferStore(),
+       _transferAckWatchdog = transferAckWatchdog,
+       _transferRetryDelays = transferRetryDelays;
 
   @visibleForTesting
   WsSvrManager.forTesting({
@@ -249,16 +254,16 @@ class WsSvrManager {
     SecureRandomBytes? mediaProofRandomBytes,
     Future<Directory> Function()? transferDownloadDirectory,
     FolderTransferStore? folderTransferStore,
+    TransferAckWatchdog? transferAckWatchdog,
+    List<Duration>? transferRetryDelays,
   }) : this._internal(
-         admission: admission,
-         audioManager: audioManager,
+         admission: admission, audioManager: audioManager,
          remoteInputManager: remoteInputManager,
          sessionUpgradeTokens: sessionUpgradeTokens,
          audioGroupClaimValidator: audioGroupClaimValidator,
          audioGroupPacketValidator: audioGroupPacketValidator,
          mediaPeerClaimValidator: mediaPeerClaimValidator,
-         database: database,
-         autoConnectEnabled: autoConnectEnabled,
+         database: database, autoConnectEnabled: autoConnectEnabled,
          setAutoConnectEnabled: setAutoConnectEnabled,
          reconnectControllerFactory: reconnectControllerFactory,
          identityStore: identityStore,
@@ -272,6 +277,8 @@ class WsSvrManager {
          mediaProofRandomBytes: mediaProofRandomBytes,
          transferDownloadDirectory: transferDownloadDirectory,
          folderTransferStore: folderTransferStore,
+         transferAckWatchdog: transferAckWatchdog,
+         transferRetryDelays: transferRetryDelays,
        );
 
   // 工厂构造函数，返回单例实例
@@ -409,6 +416,8 @@ class WsSvrManager {
   PeerProfile? _remoteProfile;
   final Map<String, Set<Completer<PeerProfile?>>> _remoteProfileRefreshWaiters =
       <String, Set<Completer<PeerProfile?>>>{};
+  final TransferAckWatchdog? _transferAckWatchdog;
+  final List<Duration>? _transferRetryDelays;
   late final FileTransferEngine _transferEngine = FileTransferEngine(
     currentConnectionBinding: _peerConnections.currentBinding,
     outgoingPacerFor: _transferPacing.forTransfer,
@@ -433,6 +442,10 @@ class WsSvrManager {
     },
     sendBytesToConnection: _peerConnections.sendToAwaitedIfCurrent,
     enqueueBytesToConnection: _peerConnections.sendToAwaitedIfCurrent,
+    pruneInvalidOutbound: (peerId) =>
+        _sessionsByPeerId[peerId]?.dropInvalidOutbound(),
+    ackWatchdog: _transferAckWatchdog,
+    watchdogRetryDelays: _transferRetryDelays,
     markPeerUnresponsive: _removeUnresponsivePeerIfCurrent,
     emitTransferUpdated: (snapshot) {
       // Copies made in the file manager go to the folder chosen there.
@@ -1249,7 +1262,7 @@ class WsSvrManager {
         ..sender = sendFileBrowseControlTo
         ..sendFile = _sendCopiedFile
         ..sendFolder = _sendCopiedFolder
-        ..sendData = sendFileBrowseData;
+        ..sendData = _sendFileBrowseData;
       RemoteFilesClient.sender = sendFileBrowseControlTo;
       RemoteFilesClient.localPeerId = localPeerIdFor;
       RemoteFilesClient.sendFile = _sendCopiedFile;
@@ -3353,7 +3366,7 @@ class WsSvrManager {
   }) async {
     final session = _sessionsBySink[sink];
     final buffered = message is AuthenticatedPayloadBuffer ? message : null;
-    final bytes = buffered?.payload ?? _outgoingBytes(message);
+    final bytes = buffered?.payload ?? outgoingPayloadBytes(message);
     if (session == null || bytes == null) {
       await _closeSocketSink(sink);
       return false;
@@ -3392,34 +3405,15 @@ class WsSvrManager {
     );
   }
 
-  Uint8List? _outgoingBytes(Object message) => switch (message) {
-    Uint8List b => b,
-    List<int> b => Uint8List.fromList(b),
-    String s => Uint8List.fromList(utf8.encode(s)),
-    _ => null,
-  };
-
-  Uint8List _messageFrame(Uint8List payload) => WhisperFrameV3(
-    type: WhisperFrameType.message,
-    transferId: '',
-    offset: 0,
-    sequence: 0,
-    payload: payload,
-  ).encode();
-
   Future<bool> _sendMessageData(
     MessageData message, {
     String? peerId,
     WebSocketSink? sink,
     bool rawAuth = false,
   }) async {
-    final payload = WhisperFrameV3(
-      type: WhisperFrameType.message,
-      transferId: '',
-      offset: 0,
-      sequence: 0,
-      payload: Uint8List.fromList(utf8.encode(encodeWireMessage(message))),
-    ).encode();
+    final payload = encodeMessageFrame(
+      Uint8List.fromList(utf8.encode(encodeWireMessage(message))),
+    );
     if (sink != null) {
       return _sendBytesOnSink(sink, payload, rawAuth: rawAuth);
     }
@@ -3435,7 +3429,9 @@ class WsSvrManager {
   }
 
   Future<bool> _send(String message) async {
-    final payload = _messageFrame(Uint8List.fromList(utf8.encode(message)));
+    final payload = encodeMessageFrame(
+      Uint8List.fromList(utf8.encode(message)),
+    );
     if (_peerConnections.isConnectedTo(receiver)) {
       return _peerConnections.sendToAwaited(receiver, payload);
     }
@@ -5806,7 +5802,7 @@ class WsSvrManager {
 
   /// The bytes a mounted folder on [peerId] asked for, on the same
   /// connection as the session's other replies.
-  Future<bool> sendFileBrowseData(
+  Future<bool> _sendFileBrowseData(
     String peerId,
     String sessionId,
     int requestId,

@@ -254,10 +254,15 @@ void main() {
       await engine.waitUntilOutgoingIdle();
 
       final data = _dataFrames(sent, _firstId).toList(growable: false);
-      expect(data, hasLength(8));
+      const expectedEmitSize =
+          fileTransferV3MobileFramePayloadSize <
+              fileTransferV3EmitFramePayloadSize
+          ? fileTransferV3MobileFramePayloadSize
+          : fileTransferV3EmitFramePayloadSize;
+      expect(data, hasLength((8 * 1024 * 1024) ~/ expectedEmitSize));
       expect(
         data.map((frame) => frame.payload.length),
-        everyElement(fileTransferV3MobileFramePayloadSize),
+        everyElement(expectedEmitSize),
       );
       expect(data.last.offset + data.last.payload.length, 8 * 1024 * 1024);
     },
@@ -837,7 +842,7 @@ void main() {
         for (
           var offset = 0;
           offset < fileTransferV3AckIntervalSize;
-          offset += fileTransferV3FramePayloadSize
+          offset += fileTransferV3EmitFramePayloadSize
         )
           offset,
         fileTransferV3AckIntervalSize,

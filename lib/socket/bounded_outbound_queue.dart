@@ -23,6 +23,47 @@ enum OutboundQueueResult { sent, dropped, closed, writerFailure }
 
 enum _OutboundPolicy { failClosed, dropOldest, remoteInput, video }
 
+enum _OutboundTier { control, mount, bulk }
+
+final class _TierQueue {
+  _TierQueue({required this.maxItems, required this.maxBytes});
+
+  final int maxItems;
+  final int maxBytes;
+  final Queue<_OutboundItem> waiting = Queue<_OutboundItem>();
+  final Queue<Completer<bool>> waiters = Queue<Completer<bool>>();
+  int pendingItems = 0;
+  int pendingBytes = 0;
+
+  bool wouldOverflow(int byteLength) =>
+      pendingItems >= maxItems || byteLength > maxBytes - pendingBytes;
+
+  bool hasWaitSpace(int byteLength) {
+    if (pendingItems == 0) {
+      return true;
+    }
+    return pendingItems < maxItems && byteLength <= maxBytes - pendingBytes;
+  }
+
+  void wakeWaiters() {
+    while (waiters.isNotEmpty) {
+      final waiter = waiters.removeFirst();
+      if (!waiter.isCompleted) {
+        waiter.complete(true);
+      }
+    }
+  }
+
+  void failWaiters() {
+    while (waiters.isNotEmpty) {
+      final waiter = waiters.removeFirst();
+      if (!waiter.isCompleted) {
+        waiter.complete(false);
+      }
+    }
+  }
+}
+
 final class BoundedOutboundQueue {
   BoundedOutboundQueue._({
     required Future<void> Function(Stream<Object>) addStream,
@@ -30,8 +71,10 @@ final class BoundedOutboundQueue {
     required _OutboundPolicy policy,
     required this.maxItems,
     required this.maxBytes,
-    int? waitMaxItems,
-    int? waitMaxBytes,
+    int? mountMaxItems,
+    int? mountMaxBytes,
+    int? bulkMaxItems,
+    int? bulkMaxBytes,
     required this.writerTimeout,
     int? minWriteBytesPerSecond,
     Duration? maxWriterTimeout,
@@ -39,14 +82,23 @@ final class BoundedOutboundQueue {
   }) : _addStream = addStream,
        _add = add,
        _policy = policy,
-       _waitMaxItems = waitMaxItems ?? maxItems,
-       _waitMaxBytes = waitMaxBytes ?? maxBytes,
+       _control = _TierQueue(maxItems: maxItems, maxBytes: maxBytes),
+       _mount = _TierQueue(
+         maxItems: mountMaxItems ?? maxItems,
+         maxBytes: mountMaxBytes ?? maxBytes,
+       ),
+       _bulk = _TierQueue(
+         maxItems: bulkMaxItems ?? maxItems,
+         maxBytes: bulkMaxBytes ?? maxBytes,
+       ),
        _minWriteBytesPerSecond = minWriteBytesPerSecond,
        _maxWriterTimeout = maxWriterTimeout ?? writerTimeout {
     if (maxItems <= 0 ||
         maxBytes <= 0 ||
-        _waitMaxItems <= 0 ||
-        _waitMaxBytes <= 0 ||
+        _mount.maxItems <= 0 ||
+        _mount.maxBytes <= 0 ||
+        _bulk.maxItems <= 0 ||
+        _bulk.maxBytes <= 0 ||
         writerTimeout <= Duration.zero) {
       throw ArgumentError('outbound queue limits must be positive');
     }
@@ -57,8 +109,10 @@ final class BoundedOutboundQueue {
     void Function(Object)? add,
     int maxItems = 512,
     int maxBytes = 32 * 1024 * 1024,
-    int waitMaxItems = 16,
-    int waitMaxBytes = 8 * 1024 * 1024,
+    int mountMaxItems = 16,
+    int mountMaxBytes = 8 * 1024 * 1024,
+    int bulkMaxItems = 8,
+    int bulkMaxBytes = 2 * 1024 * 1024,
     Duration writerTimeout = const Duration(seconds: 30),
     int? minWriteBytesPerSecond,
     Duration maxWriterTimeout = const Duration(seconds: 120),
@@ -69,8 +123,10 @@ final class BoundedOutboundQueue {
     policy: _OutboundPolicy.failClosed,
     maxItems: maxItems,
     maxBytes: maxBytes,
-    waitMaxItems: waitMaxItems,
-    waitMaxBytes: waitMaxBytes,
+    mountMaxItems: mountMaxItems,
+    mountMaxBytes: mountMaxBytes,
+    bulkMaxItems: bulkMaxItems,
+    bulkMaxBytes: bulkMaxBytes,
     writerTimeout: writerTimeout,
     minWriteBytesPerSecond: minWriteBytesPerSecond,
     maxWriterTimeout: maxWriterTimeout,
@@ -139,14 +195,19 @@ final class BoundedOutboundQueue {
   final _OutboundPolicy _policy;
   final int maxItems;
   final int maxBytes;
-  final int _waitMaxItems;
-  final int _waitMaxBytes;
   final Duration writerTimeout;
   final int? _minWriteBytesPerSecond;
   final Duration _maxWriterTimeout;
   final void Function()? onOverflow;
-  final Queue<_OutboundItem> _waiting = Queue<_OutboundItem>();
-  final Queue<Completer<bool>> _spaceWaiters = Queue<Completer<bool>>();
+  final _TierQueue _control;
+  final _TierQueue _mount;
+  final _TierQueue _bulk;
+
+  Queue<_OutboundItem> get _waiting => _control.waiting;
+  bool get _hasWaiting =>
+      _control.waiting.isNotEmpty ||
+      _mount.waiting.isNotEmpty ||
+      _bulk.waiting.isNotEmpty;
 
   _OutboundItem? _active;
   Future<void>? _pumpFuture;
@@ -157,14 +218,34 @@ final class BoundedOutboundQueue {
   int _writerAttempt = 0;
   int _pendingItems = 0;
   int _pendingBytes = 0;
-  int _pendingWaitItems = 0;
-  int _pendingWaitBytes = 0;
   int _droppedItems = 0;
 
   int get pendingItems => _pendingItems;
   int get pendingBytes => _pendingBytes;
   int get droppedItems => _droppedItems;
   bool get isClosed => !_accepting;
+
+  _OutboundTier _tierFor(OutboundPacketKind kind) => switch (kind) {
+    OutboundPacketKind.mount => _OutboundTier.mount,
+    OutboundPacketKind.file => _OutboundTier.bulk,
+    _ => _OutboundTier.control,
+  };
+
+  _TierQueue _queueFor(_OutboundTier tier) => switch (tier) {
+    _OutboundTier.control => _control,
+    _OutboundTier.mount => _mount,
+    _OutboundTier.bulk => _bulk,
+  };
+
+  void _enqueueItem(_OutboundItem item) {
+    final tierQueue = _queueFor(item.tier);
+    tierQueue.waiting.addLast(item);
+    tierQueue.pendingItems += 1;
+    tierQueue.pendingBytes += item.byteLength;
+    _pendingItems += 1;
+    _pendingBytes += item.byteLength;
+    _ensurePump();
+  }
 
   /// Enqueues a control frame and resolves immediately upon admission without
   /// waiting for the underlying socket write to complete, so inbound receive
@@ -189,56 +270,61 @@ final class BoundedOutboundQueue {
     if (!_accepting || _terminal) {
       return false;
     }
-    if (_wouldOverflowControl(byteLength)) {
+    if (_control.wouldOverflow(byteLength)) {
       _accepting = false;
-      _failSpaceWaiters();
+      _failAllSpaceWaiters();
       _signalOverflow();
       return false;
     }
-    final item = _OutboundItem(
-      produce: produce,
-      byteLength: byteLength,
-      kind: kind,
+    _enqueueItem(
+      _OutboundItem(
+        produce: produce,
+        byteLength: byteLength,
+        kind: kind,
+        tier: _OutboundTier.control,
+      ),
     );
-    _waiting.addLast(item);
-    _pendingItems += 1;
-    _pendingBytes += byteLength;
-    _ensurePump();
     return true;
   }
 
-  /// Waits until bulk/mount capacity is available, then enqueues [produce]
-  /// lazily and returns `true` upon admission (or `false` if the queue closes
-  /// while waiting). Never fails closed on capacity limits.
+  /// Waits until mount or bulk tier capacity is available, then enqueues
+  /// [produce] lazily and returns `true` upon admission (or `false` if the
+  /// queue closes or [isValid] becomes `false` while waiting). Never fails
+  /// closed on capacity limits.
   Future<bool> enqueueWhenSpaceAvailable(
     Future<Object> Function() produce, {
     required int byteLength,
     OutboundPacketKind kind = OutboundPacketKind.file,
+    bool Function()? isValid,
   }) async {
     if (byteLength < 0) {
       throw ArgumentError.value(byteLength, 'byteLength');
     }
+    final tier = kind == OutboundPacketKind.mount
+        ? _OutboundTier.mount
+        : _OutboundTier.bulk;
+    final tierQueue = _queueFor(tier);
     while (true) {
       if (!_accepting || _terminal) {
         return false;
       }
-      if (_hasWaitSpace(byteLength)) {
-        final item = _OutboundItem(
-          produce: produce,
-          byteLength: byteLength,
-          kind: kind,
-          countsTowardWaitCap: true,
+      if (isValid != null && !isValid()) {
+        return false;
+      }
+      if (tierQueue.hasWaitSpace(byteLength)) {
+        _enqueueItem(
+          _OutboundItem(
+            produce: produce,
+            byteLength: byteLength,
+            kind: kind,
+            tier: tier,
+            isValid: isValid,
+          ),
         );
-        _waiting.addLast(item);
-        _pendingItems += 1;
-        _pendingBytes += byteLength;
-        _pendingWaitItems += 1;
-        _pendingWaitBytes += byteLength;
-        _ensurePump();
         return true;
       }
       final waiter = Completer<bool>();
-      _spaceWaiters.addLast(waiter);
+      tierQueue.waiters.addLast(waiter);
       final resumed = await waiter.future;
       if (!resumed) {
         return false;
@@ -246,36 +332,44 @@ final class BoundedOutboundQueue {
     }
   }
 
-  bool _hasWaitSpace(int byteLength) {
-    if (_pendingWaitItems == 0) {
-      return true;
+  /// Drops queued wait-tier items whose [isValid] predicate now returns false
+  /// and wakes waiting producers so invalidated attempts exit immediately.
+  void dropInvalid() {
+    _dropInvalidFromTier(_mount);
+    _dropInvalidFromTier(_bulk);
+    if (_pendingItems == 0 && !_accepting) {
+      _completeDrain();
     }
-    return _pendingWaitItems < _waitMaxItems &&
-        byteLength <= _waitMaxBytes - _pendingWaitBytes;
   }
 
-  bool _wouldOverflowControl(int byteLength) {
-    final controlItems = _pendingItems - _pendingWaitItems;
-    final controlBytes = _pendingBytes - _pendingWaitBytes;
-    return controlItems >= maxItems || byteLength > maxBytes - controlBytes;
-  }
-
-  void _wakeSpaceWaiters() {
-    while (_spaceWaiters.isNotEmpty && _accepting && !_terminal) {
-      final waiter = _spaceWaiters.removeFirst();
-      if (!waiter.isCompleted) {
-        waiter.complete(true);
+  void _dropInvalidFromTier(_TierQueue tierQueue) {
+    var removed = false;
+    final kept = <_OutboundItem>[];
+    while (tierQueue.waiting.isNotEmpty) {
+      final item = tierQueue.waiting.removeFirst();
+      if (item.isValid != null && !item.isValid!()) {
+        tierQueue.pendingItems -= 1;
+        tierQueue.pendingBytes -= item.byteLength;
+        _pendingItems -= 1;
+        _pendingBytes -= item.byteLength;
+        _droppedItems += 1;
+        if (!item.completion.isCompleted) {
+          item.completion.complete(OutboundQueueResult.dropped);
+        }
+        removed = true;
+      } else {
+        kept.add(item);
       }
     }
+    tierQueue.waiting.addAll(kept);
+    if ((removed || tierQueue.waiters.isNotEmpty) && _accepting && !_terminal) {
+      tierQueue.wakeWaiters();
+    }
   }
 
-  void _failSpaceWaiters() {
-    while (_spaceWaiters.isNotEmpty) {
-      final waiter = _spaceWaiters.removeFirst();
-      if (!waiter.isCompleted) {
-        waiter.complete(false);
-      }
-    }
+  void _failAllSpaceWaiters() {
+    _mount.failWaiters();
+    _bulk.failWaiters();
   }
 
   Future<bool> add(
@@ -355,15 +449,16 @@ final class BoundedOutboundQueue {
       return Future<OutboundQueueResult>.value(OutboundQueueResult.dropped);
     }
 
+    final tier = _policy == _OutboundPolicy.failClosed
+        ? _tierFor(kind)
+        : _OutboundTier.control;
     final item = _OutboundItem(
       produce: produce,
       byteLength: byteLength,
       kind: kind,
+      tier: tier,
     );
-    _waiting.addLast(item);
-    _pendingItems += 1;
-    _pendingBytes += byteLength;
-    _ensurePump();
+    _enqueueItem(item);
     return item.completion.future;
   }
 
@@ -436,6 +531,9 @@ final class BoundedOutboundQueue {
   }
 
   void _drop(_OutboundItem item) {
+    final tierQueue = _queueFor(item.tier);
+    tierQueue.pendingItems -= 1;
+    tierQueue.pendingBytes -= item.byteLength;
     _pendingItems -= 1;
     _pendingBytes -= item.byteLength;
     _droppedItems += 1;
@@ -458,7 +556,7 @@ final class BoundedOutboundQueue {
     }
     _pumpFuture = _pump().whenComplete(() {
       _pumpFuture = null;
-      if (_waiting.isNotEmpty) {
+      if (_hasWaiting && !_terminal) {
         _ensurePump();
       } else if (_pendingItems == 0) {
         _completeDrain();
@@ -476,9 +574,39 @@ final class BoundedOutboundQueue {
     return scaled > _maxWriterTimeout ? _maxWriterTimeout : scaled;
   }
 
+  _OutboundItem? _dequeueNext() {
+    if (_policy != _OutboundPolicy.failClosed) {
+      return _waiting.isNotEmpty ? _waiting.removeFirst() : null;
+    }
+    for (final tierQueue in <_TierQueue>[_control, _mount, _bulk]) {
+      while (tierQueue.waiting.isNotEmpty) {
+        final item = tierQueue.waiting.removeFirst();
+        if (item.isValid != null && !item.isValid!()) {
+          tierQueue.pendingItems -= 1;
+          tierQueue.pendingBytes -= item.byteLength;
+          _pendingItems -= 1;
+          _pendingBytes -= item.byteLength;
+          _droppedItems += 1;
+          if (!item.completion.isCompleted) {
+            item.completion.complete(OutboundQueueResult.dropped);
+          }
+          if (_accepting && !_terminal) {
+            tierQueue.wakeWaiters();
+          }
+          continue;
+        }
+        return item;
+      }
+    }
+    return null;
+  }
+
   Future<void> _pump() async {
-    while (_waiting.isNotEmpty && !_terminal) {
-      final item = _waiting.removeFirst();
+    while (!_terminal) {
+      final item = _dequeueNext();
+      if (item == null) {
+        return;
+      }
       _active = item;
       final attempt = ++_writerAttempt;
       try {
@@ -498,6 +626,9 @@ final class BoundedOutboundQueue {
   }
 
   Future<void> _write(_OutboundItem item) async {
+    if (item.isValid != null && !item.isValid!()) {
+      return;
+    }
     final add = _add;
     if (add != null) {
       add(await item.produce());
@@ -515,15 +646,29 @@ final class BoundedOutboundQueue {
       return;
     }
     _active = null;
+    final tierQueue = _queueFor(item.tier);
+    tierQueue.pendingItems -= 1;
+    tierQueue.pendingBytes -= item.byteLength;
     _pendingItems -= 1;
     _pendingBytes -= item.byteLength;
-    if (item.countsTowardWaitCap) {
-      _pendingWaitItems -= 1;
-      _pendingWaitBytes -= item.byteLength;
-      _wakeSpaceWaiters();
+    if (_accepting && !_terminal) {
+      tierQueue.wakeWaiters();
     }
     if (!item.completion.isCompleted) {
       item.completion.complete(result);
+    }
+  }
+
+  void _drainTierAsClosed(_TierQueue tierQueue) {
+    while (tierQueue.waiting.isNotEmpty) {
+      final waiting = tierQueue.waiting.removeFirst();
+      tierQueue.pendingItems -= 1;
+      tierQueue.pendingBytes -= waiting.byteLength;
+      _pendingItems -= 1;
+      _pendingBytes -= waiting.byteLength;
+      if (!waiting.completion.isCompleted) {
+        waiting.completion.complete(OutboundQueueResult.closed);
+      }
     }
   }
 
@@ -532,26 +677,17 @@ final class BoundedOutboundQueue {
     _terminal = true;
     _writerAttempt += 1;
     _finishActive(item, OutboundQueueResult.writerFailure);
-    while (_waiting.isNotEmpty) {
-      final waiting = _waiting.removeFirst();
-      _pendingItems -= 1;
-      _pendingBytes -= waiting.byteLength;
-      if (waiting.countsTowardWaitCap) {
-        _pendingWaitItems -= 1;
-        _pendingWaitBytes -= waiting.byteLength;
-      }
-      if (!waiting.completion.isCompleted) {
-        waiting.completion.complete(OutboundQueueResult.closed);
-      }
-    }
-    _failSpaceWaiters();
+    _drainTierAsClosed(_control);
+    _drainTierAsClosed(_mount);
+    _drainTierAsClosed(_bulk);
+    _failAllSpaceWaiters();
     _completeDrain();
     _signalOverflow();
   }
 
   void abort() {
     if (_terminal && _pendingItems == 0) {
-      _failSpaceWaiters();
+      _failAllSpaceWaiters();
       return;
     }
     _accepting = false;
@@ -561,25 +697,16 @@ final class BoundedOutboundQueue {
     if (active != null) {
       _finishActive(active, OutboundQueueResult.closed);
     }
-    while (_waiting.isNotEmpty) {
-      final waiting = _waiting.removeFirst();
-      _pendingItems -= 1;
-      _pendingBytes -= waiting.byteLength;
-      if (waiting.countsTowardWaitCap) {
-        _pendingWaitItems -= 1;
-        _pendingWaitBytes -= waiting.byteLength;
-      }
-      if (!waiting.completion.isCompleted) {
-        waiting.completion.complete(OutboundQueueResult.closed);
-      }
-    }
-    _failSpaceWaiters();
+    _drainTierAsClosed(_control);
+    _drainTierAsClosed(_mount);
+    _drainTierAsClosed(_bulk);
+    _failAllSpaceWaiters();
     _completeDrain();
   }
 
   Future<void> closeAndDrain() {
     _accepting = false;
-    _failSpaceWaiters();
+    _failAllSpaceWaiters();
     if (_pendingItems == 0) {
       return Future<void>.value();
     }
@@ -599,13 +726,15 @@ final class _OutboundItem {
     required this.produce,
     required this.byteLength,
     required this.kind,
-    this.countsTowardWaitCap = false,
+    required this.tier,
+    this.isValid,
   });
 
   final Future<Object> Function() produce;
   final int byteLength;
   final OutboundPacketKind kind;
-  final bool countsTowardWaitCap;
+  final _OutboundTier tier;
+  final bool Function()? isValid;
   final Completer<OutboundQueueResult> completion =
       Completer<OutboundQueueResult>();
 }

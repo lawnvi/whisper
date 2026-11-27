@@ -8,6 +8,11 @@ const int fileTransferV3LegacyFramePayloadSize = 512 * 1024;
 const int fileTransferV3LegacyAckIntervalSize = 2 * 1024 * 1024;
 const int fileTransferV3LegacyWindowSize = 4 * 1024 * 1024;
 const int fileTransferV3FramePayloadSize = 4 * 1024 * 1024;
+/// Upper bound on each emitted fileData frame payload so higher-priority
+/// control and mount frames can overtake bulk traffic within one frame.
+/// Kept separate from negotiated [fileTransferV3FramePayloadSize] so wire
+/// flow-parameter validation remains unchanged.
+const int fileTransferV3EmitFramePayloadSize = 512 * 1024;
 const int fileTransferV3AckIntervalSize = 32 * 1024 * 1024;
 const int fileTransferV3WindowSize = 64 * 1024 * 1024;
 const int fileTransferV3MaxOfferWindowSize = 64 * 1024 * 1024;

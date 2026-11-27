@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -18,6 +19,7 @@ import 'package:whisper/socket/aead_engine.dart';
 import 'package:whisper/socket/device_identity.dart';
 import 'package:whisper/socket/peer_socket_session.dart';
 import 'package:whisper/socket/svrmanager.dart';
+import 'package:whisper/socket/transfer_ack_watchdog.dart';
 import 'package:whisper/state/connection_attempt.dart';
 import 'package:whisper/state/pairing_request.dart';
 import 'package:whisper/state/peer_endpoint.dart';
@@ -157,6 +159,135 @@ void main() {
       expect(pair.peerB.isConnectedTo('peer-a'), isTrue);
     },
   );
+
+  // Verifies Tier 0 (text/control) and Tier 1 (mount read) overtake queued
+  // Tier 2 (fileData) frames over a throttled real socket instead of waiting
+  // behind an entire bulk transfer.
+  test(
+    'control text and mount reads overtake queued file data on a throttled link',
+    () async {
+      final pair = await _PeerPair.start(
+        throttlePauseEveryBytes: 128 * 1024,
+        throttlePause: const Duration(milliseconds: 40),
+        enableBrowseRead: true,
+      );
+      addTearDown(pair.dispose);
+
+      final bulkFile = await pair.createSourceFile(
+        'large_bulk.bin',
+        12 * 1024 * 1024,
+      );
+      final mountRel = await pair.createBrowseFile('mounted.bin', 256 * 1024);
+
+      var transferCompleted = false;
+      final transferring = pair.peerAEvents.waitTransferState(
+        FileTransferState.transferring,
+        direction: FileTransferDirection.outgoing,
+      );
+      final done = pair.peerAEvents
+          .waitTransferState(
+            FileTransferState.completed,
+            direction: FileTransferDirection.outgoing,
+          )
+          .then((_) => transferCompleted = true);
+
+      expect(await pair.peerA.sendFileTo('peer-b', bulkFile.path), isTrue);
+      await transferring.timeout(const Duration(seconds: 5));
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+
+      final textReachedB = pair.peerBEvents.waitText('tier0-overtake');
+      final textSw = Stopwatch()..start();
+      expect(
+        await pair.peerA.sendMessageTo('peer-b', 'tier0-overtake'),
+        isTrue,
+      );
+      await textReachedB.timeout(const Duration(seconds: 4));
+      textSw.stop();
+      expect(transferCompleted, isFalse);
+
+      // A mount read from B to A sends browseData from A -> B on the same
+      // saturated A -> B direction as the ongoing file transfer.
+      final mountData = await pair.browseReadB!
+          .read(pair.browseRootId!, mountRel, 0, 256 * 1024)
+          .timeout(const Duration(seconds: 5));
+      expect(mountData.length, 256 * 1024);
+      expect(transferCompleted, isFalse);
+
+      await done.timeout(const Duration(seconds: 25));
+      expect(transferCompleted, isTrue);
+    },
+  );
+
+  // Regression (cc 1b review #1): when a stalled outgoing transfer retries on
+  // the same connection, the retry fileOffer goes via Tier 0 and overtakes any
+  // stale Tier 2 fileData frames left from the stalled attempt. Without attempt
+  // invalidation and pruning before fileOffer, the receiver resets its expected
+  // sequence to 0 on fileOffer and then tears down the entire peer connection
+  // when the stale Tier 2 fileData arrives with an old sequence number.
+  test(
+    'stalled transfer retry drops stale Tier 2 fileData so the connection stays up and finishes intact',
+    () async {
+      final pair = await _PeerPair.start(
+        peerATransferAckWatchdog: TransferAckWatchdog(
+          timeout: const Duration(milliseconds: 300),
+        ),
+        peerATransferRetryDelays: const <Duration>[
+          Duration(milliseconds: 150),
+          Duration(seconds: 2),
+        ],
+      );
+      addTearDown(pair.dispose);
+
+      final sourceFile = await pair.createSourceFile(
+        'stall_retry_payload.bin',
+        6 * 1024 * 1024,
+      );
+      final expectedHash = sha256
+          .convert(await sourceFile.readAsBytes())
+          .toString();
+
+      final transferring = pair.peerAEvents.waitTransferState(
+        FileTransferState.transferring,
+        direction: FileTransferDirection.outgoing,
+      );
+      final waitingReconnect = pair.peerAEvents.waitTransferState(
+        FileTransferState.waitingReconnect,
+        direction: FileTransferDirection.outgoing,
+      );
+      final outgoingDone = pair.peerAEvents.waitTransferState(
+        FileTransferState.completed,
+        direction: FileTransferDirection.outgoing,
+      );
+      final incomingDone = pair.peerBEvents.waitTransferCompleted(
+        direction: FileTransferDirection.incoming,
+      );
+
+      expect(await pair.peerA.sendFileTo('peer-b', sourceFile.path), isTrue);
+      await transferring.timeout(const Duration(seconds: 5));
+
+      // Pause A -> B immediately so Tier 2 fills with stale fileData frames
+      // and the 300ms ACK watchdog triggers a stall while they are queued.
+      pair.proxy.pauseAToB();
+      await waitingReconnect.timeout(const Duration(seconds: 5));
+
+      // Wait past the 150ms retry backoff while A -> B is still paused so the
+      // retry fileOffer enters Tier 0 while the link is still stalled.
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      pair.proxy.resumeAToB();
+
+      await outgoingDone.timeout(const Duration(seconds: 15));
+      final completed = await incomingDone.timeout(const Duration(seconds: 15));
+
+      expect(pair.peerA.isConnectedTo('peer-b'), isTrue);
+      expect(pair.peerB.isConnectedTo('peer-a'), isTrue);
+      final receivedFile = File(completed.finalPath);
+      expect(await receivedFile.exists(), isTrue);
+      expect(
+        sha256.convert(await receivedFile.readAsBytes()).toString(),
+        expectedHash,
+      );
+    },
+  );
 }
 
 final class _PeerPair {
@@ -194,6 +325,8 @@ final class _PeerPair {
     int? throttlePauseEveryBytes,
     Duration? throttlePause,
     bool enableBrowseRead = false,
+    TransferAckWatchdog? peerATransferAckWatchdog,
+    List<Duration>? peerATransferRetryDelays,
   }) async {
     final root = await Directory.systemTemp.createTemp('whisper-bp-test-');
 
@@ -209,19 +342,25 @@ final class _PeerPair {
 
     final eventsA = _TestEvents();
     final eventsB = _TestEvents();
+    final prevHostSender = FileBrowseHost.shared.sender;
+    final prevHostSendData = FileBrowseHost.shared.sendData;
+    final prevClientSender = RemoteFilesClient.sender;
+    final prevClientLocalPeer = RemoteFilesClient.localPeerId;
     final peerA = WsSvrManager.forTesting(
       database: dbA,
       identityStore: storeA,
       localPeerProfileLoader: () async => _profile('peer-a'),
       autoConnectEnabled: () async => false,
-      manageSharedCoordinators: false,
+      manageSharedCoordinators: enableBrowseRead,
+      transferAckWatchdog: peerATransferAckWatchdog,
+      transferRetryDelays: peerATransferRetryDelays,
     );
     final peerB = WsSvrManager.forTesting(
       database: dbB,
       identityStore: storeB,
       localPeerProfileLoader: () async => _profile('peer-b'),
       autoConnectEnabled: () async => false,
-      manageSharedCoordinators: false,
+      manageSharedCoordinators: enableBrowseRead,
     );
     peerA
       ..setSender('peer-a')
@@ -230,8 +369,18 @@ final class _PeerPair {
       ..setSender('peer-b')
       ..setEvent(eventsB);
 
+    Future<bool> Function(String, String, int, int, Uint8List)? sendDataA;
+    Future<bool> Function(String, String, int, int, Uint8List)? sendDataB;
+    if (enableBrowseRead) {
+      final startedA = await peerA.startServer(0);
+      expect(startedA.isSuccess, isTrue);
+      sendDataA = FileBrowseHost.shared.sendData;
+    }
     final startedB = await peerB.startServer(0);
     expect(startedB.isSuccess, isTrue);
+    if (enableBrowseRead) {
+      sendDataB = FileBrowseHost.shared.sendData;
+    }
 
     final proxy = await _ControllableTcpProxy.start(
       upstreamPort: startedB.port,
@@ -259,11 +408,6 @@ final class _PeerPair {
     if (enableBrowseRead) {
       // Wire the shared FileBrowseHost/RemoteFilesClient singletons for this
       // two-peer in-process test, routing outbound browse traffic by peerId.
-      final prevHostSender = FileBrowseHost.shared.sender;
-      final prevHostSendData = FileBrowseHost.shared.sendData;
-      final prevClientSender = RemoteFilesClient.sender;
-      final prevClientLocalPeer = RemoteFilesClient.localPeerId;
-
       await FileBrowseHost.shared.permissions.setAlways('peer-a', true);
       await FileBrowseHost.shared.permissions.setAlways('peer-b', true);
       WsSvrManager ownerFor(String targetPeerId) =>
@@ -272,7 +416,7 @@ final class _PeerPair {
           ownerFor(targetPeerId).sendFileBrowseControlTo(targetPeerId, msg);
       FileBrowseHost.shared.sendData =
           (targetPeerId, sessionId, requestId, offset, data) =>
-              ownerFor(targetPeerId).sendFileBrowseData(
+              (targetPeerId == 'peer-b' ? sendDataA! : sendDataB!)(
                 targetPeerId,
                 sessionId,
                 requestId,
@@ -418,6 +562,11 @@ final class _ControllableTcpProxy {
     _aToBSub?.pause();
   }
 
+  void resumeAToB() {
+    _aToBPaused = false;
+    _aToBSub?.resume();
+  }
+
   Future<void> _accept(Socket client) async {
     final upstream = await Socket.connect(
       InternetAddress.loopbackIPv4,
@@ -480,7 +629,7 @@ final class _TestEvents implements ISocketEvent {
         ({
           FileTransferState state,
           FileTransferDirection? direction,
-          Completer<void> completer,
+          Completer<TransferSnapshot> completer,
         })
       >[];
   final _textWaiters = <String, Completer<void>>{};
@@ -489,8 +638,17 @@ final class _TestEvents implements ISocketEvent {
   Future<void> waitTransferState(
     FileTransferState state, {
     FileTransferDirection? direction,
+  }) => waitTransferSnapshot(state, direction: direction).then((_) {});
+
+  Future<TransferSnapshot> waitTransferCompleted({
+    FileTransferDirection? direction,
+  }) => waitTransferSnapshot(FileTransferState.completed, direction: direction);
+
+  Future<TransferSnapshot> waitTransferSnapshot(
+    FileTransferState state, {
+    FileTransferDirection? direction,
   }) {
-    final completer = Completer<void>();
+    final completer = Completer<TransferSnapshot>();
     _transferWaiters.add((
       state: state,
       direction: direction,
@@ -541,7 +699,7 @@ final class _TestEvents implements ISocketEvent {
               waiter.direction == snapshot.direction)) {
         _transferWaiters.remove(waiter);
         if (!waiter.completer.isCompleted) {
-          waiter.completer.complete();
+          waiter.completer.complete(snapshot);
         }
       }
     }

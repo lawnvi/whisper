@@ -271,23 +271,29 @@ void main() {
   );
 
   test(
-    'waiting bulk/mount producers pause when full without overflow and wake cleanly',
+    'chat queue schedules control > mount > bulk, runs lazy producers in wire order, and isolates tier caps',
     () async {
       final firstGate = Completer<void>();
       final writer = _RecordingStreamWriter()..blockFirst = firstGate;
       var overflows = 0;
+      var nextSeq = 0;
+      Future<Object> produce(String label) async => '$label#${nextSeq++}';
+
       final queue = BoundedOutboundQueue.chat(
         addStream: writer.addStream,
         maxItems: 4,
         maxBytes: 64,
-        waitMaxItems: 2,
-        waitMaxBytes: 16,
+        mountMaxItems: 2,
+        mountMaxBytes: 16,
+        bulkMaxItems: 2,
+        bulkMaxBytes: 16,
         onOverflow: () => overflows++,
       );
 
+      // Fill Tier 2 (bulk) to capacity while bulk-1 blocks the writer.
       expect(
         await queue.enqueueWhenSpaceAvailable(
-          () async => 'bulk-1',
+          () => produce('bulk-1'),
           byteLength: 8,
           kind: OutboundPacketKind.file,
         ),
@@ -295,38 +301,74 @@ void main() {
       );
       expect(
         await queue.enqueueWhenSpaceAvailable(
-          () async => 'bulk-2',
+          () => produce('bulk-2'),
+          byteLength: 8,
+          kind: OutboundPacketKind.file,
+        ),
+        isTrue,
+      );
+
+      var thirdBulkAdmitted = false;
+      final thirdBulk = queue
+          .enqueueWhenSpaceAvailable(
+            () => produce('bulk-3'),
+            byteLength: 8,
+            kind: OutboundPacketKind.file,
+          )
+          .then((ok) {
+            thirdBulkAdmitted = ok;
+            return ok;
+          });
+      await Future<void>.delayed(Duration.zero);
+      expect(thirdBulkAdmitted, isFalse);
+      expect(overflows, 0);
+
+      // Tier 1 (mount) has an independent cap and admits immediately even
+      // while Tier 2 (bulk) is full and waiting.
+      expect(
+        await queue.enqueueWhenSpaceAvailable(
+          () => produce('mount-1'),
+          byteLength: 8,
+          kind: OutboundPacketKind.mount,
+        ),
+        isTrue,
+      );
+      expect(
+        await queue.enqueueWhenSpaceAvailable(
+          () => produce('mount-2'),
           byteLength: 8,
           kind: OutboundPacketKind.mount,
         ),
         isTrue,
       );
 
-      var thirdAdmitted = false;
-      final third = queue
-          .enqueueWhenSpaceAvailable(
-            () async => 'bulk-3',
-            byteLength: 8,
-            kind: OutboundPacketKind.file,
-          )
-          .then((ok) {
-            thirdAdmitted = ok;
-            return ok;
-          });
-      await Future<void>.delayed(Duration.zero);
-      expect(thirdAdmitted, isFalse);
-      expect(overflows, 0);
-
-      // Control admission succeeds immediately even while writer is blocked
-      // and bulk waiters are paused.
-      expect(queue.enqueueControl('ctrl-1', byteLength: 4), isTrue);
+      // Tier 0 (control) admits immediately and overtakes both mount and bulk.
+      expect(
+        queue.enqueueControlLazy(() => produce('ctrl-1'), byteLength: 4),
+        isTrue,
+      );
+      expect(
+        queue.enqueueControlLazy(() => produce('ctrl-2'), byteLength: 4),
+        isTrue,
+      );
       expect(overflows, 0);
 
       firstGate.complete();
-      expect(await third, isTrue);
+      expect(await thirdBulk, isTrue);
       await queue.closeAndDrain();
       expect(overflows, 0);
-      expect(writer.sent, ['bulk-1', 'bulk-2', 'ctrl-1', 'bulk-3']);
+
+      // Control drains first (FIFO), then mount (FIFO), then remaining bulk
+      // (FIFO), and lazy sequence numbers stay strictly contiguous (0..6).
+      expect(writer.sent, [
+        'bulk-1#0',
+        'ctrl-1#1',
+        'ctrl-2#2',
+        'mount-1#3',
+        'mount-2#4',
+        'bulk-2#5',
+        'bulk-3#6',
+      ]);
     },
   );
 
@@ -337,8 +379,8 @@ void main() {
       final writer = _RecordingStreamWriter()..blockFirst = firstGate;
       final queue = BoundedOutboundQueue.chat(
         addStream: writer.addStream,
-        waitMaxItems: 1,
-        waitMaxBytes: 8,
+        bulkMaxItems: 1,
+        bulkMaxBytes: 8,
       );
 
       expect(
@@ -379,6 +421,59 @@ void main() {
       expect(await queue.add('large-on-slow-link', byteLength: 1024), isTrue);
       expect(writerDone.isCompleted, isTrue);
       await queue.closeAndDrain();
+    },
+  );
+
+  test(
+    'dropInvalid removes stale queued bulk frames and wakes blocked waiters without encrypting them',
+    () async {
+      final firstGate = Completer<void>();
+      final writer = _RecordingStreamWriter()..blockFirst = firstGate;
+      var produced = 0;
+      var attemptValid = true;
+      final queue = BoundedOutboundQueue.chat(
+        addStream: writer.addStream,
+        bulkMaxItems: 2,
+        bulkMaxBytes: 16,
+      );
+
+      expect(
+        await queue.enqueueWhenSpaceAvailable(
+          () async => 'active#${produced++}',
+          byteLength: 8,
+          isValid: () => attemptValid,
+        ),
+        isTrue,
+      );
+      expect(
+        await queue.enqueueWhenSpaceAvailable(
+          () async => 'stale-queued#${produced++}',
+          byteLength: 8,
+          isValid: () => attemptValid,
+        ),
+        isTrue,
+      );
+
+      final staleWaiter = queue.enqueueWhenSpaceAvailable(
+        () async => 'stale-waiter#${produced++}',
+        byteLength: 8,
+        isValid: () => attemptValid,
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      attemptValid = false;
+      queue.dropInvalid();
+      expect(queue.enqueueControl('retry-offer', byteLength: 4), isTrue);
+
+      expect(
+        await staleWaiter.timeout(const Duration(milliseconds: 100)),
+        isFalse,
+      );
+      firstGate.complete();
+      await queue.closeAndDrain();
+
+      expect(writer.sent, <Object>['active#0', 'retry-offer']);
+      expect(produced, 1);
     },
   );
 }

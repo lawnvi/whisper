@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:whisper/socket/bounded_outbound_queue.dart';
@@ -7,6 +8,21 @@ typedef OutboundFrameClassification = ({
   OutboundPacketKind kind,
   bool waitForSpace,
 });
+
+Uint8List? outgoingPayloadBytes(Object message) => switch (message) {
+  Uint8List b => b,
+  List<int> b => Uint8List.fromList(b),
+  String s => Uint8List.fromList(utf8.encode(s)),
+  _ => null,
+};
+
+Uint8List encodeMessageFrame(Uint8List payload) => WhisperFrameV3(
+  type: WhisperFrameType.message,
+  transferId: '',
+  offset: 0,
+  sequence: 0,
+  payload: payload,
+).encode();
 
 /// Classifies an encoded [WhisperFrameV3] payload by inspecting its fixed
 /// header type byte (offset 5) without re-allocating or parsing JSON.

@@ -70,6 +70,7 @@ class FileTransferEngine {
     sendBytesToConnection,
     FutureOr<bool> Function(TransferConnectionBinding connection, Object bytes)?
     enqueueBytesToConnection,
+    void Function(String peerId)? pruneInvalidOutbound,
     FutureOr<bool> Function(TransferConnectionBinding connection)?
     markPeerUnresponsive,
     TransferAckWatchdog? ackWatchdog,
@@ -113,6 +114,7 @@ class FileTransferEngine {
            authenticatedIdentityHashForConnection,
        _sendBytesToConnection = sendBytesToConnection,
        _enqueueBytesToConnection = enqueueBytesToConnection,
+       _pruneInvalidOutbound = pruneInvalidOutbound,
        _ownsAckWatchdog = ackWatchdog == null,
        _ackWatchdog = ackWatchdog ?? TransferAckWatchdog(),
        _timeoutRetries = TransferTimeoutRetryTracker(
@@ -174,17 +176,13 @@ class FileTransferEngine {
     Object bytes,
   )
   _sendBytesToConnection;
-  final FutureOr<bool> Function(
-    TransferConnectionBinding connection,
-    Object bytes,
-  )?
+  final FutureOr<bool> Function(TransferConnectionBinding, Object)?
   _enqueueBytesToConnection;
+  final void Function(String peerId)? _pruneInvalidOutbound;
   late final OutgoingWindowPump _outgoingWindowPump = OutgoingWindowPump(
     (work) => _sendFileTransferV3WindowSafely(
-      work.transfer,
-      work.message,
-      offset: work.offset,
-    ),
+      work.transfer, work.message, offset: work.offset),
+    onInvalidate: _pruneInvalidOutbound,
   );
   final bool _ownsAckWatchdog;
   TransferAckWatchdog _ackWatchdog;
@@ -1798,6 +1796,7 @@ class FileTransferEngine {
     MessageData message, {
     required TransferConnectionBinding connection,
   }) {
+    _outgoingWindowPump.cancel(message.uuid, peerId: peerId);
     _ackWatchdog.cancel(message.uuid);
     _outgoingTransferSequences[message.uuid] = 0;
     _outgoingWindowEndOffsets.remove(message.uuid);
@@ -2551,6 +2550,9 @@ class FileTransferEngine {
         pacer?.inFlight(transfer.transferId, flow.windowSize, timely: timely) ??
         flow.windowSize;
     final pacedEnd = math.min(windowEnd, durableOffset + allowed);
+    final attemptEpoch = _outgoingWindowPump.currentEpoch(transfer.transferId);
+    bool isAttemptValid() =>
+        _outgoingWindowPump.isCurrentEpoch(transfer.transferId, attemptEpoch);
     var sequence = _outgoingTransferSequences[transfer.transferId] ?? 0;
     var cursor =
         _outgoingWindowEndOffsets[transfer.transferId] ?? durableOffset;
@@ -2559,14 +2561,11 @@ class FileTransferEngine {
     }
     final checksumState = transfer.checksumValue.isEmpty
         ? await _outgoingChecksumStateFor(
-            transfer,
-            source,
-            requiredOffset: cursor,
-          )
+            transfer, source, requiredOffset: cursor)
         : null;
     while (cursor < pacedEnd) {
       if (_transferRuntime.activeOutgoingFor(transfer.peerUid) !=
-          transfer.transferId) {
+          transfer.transferId || !isAttemptValid()) {
         return null;
       }
       if (_outgoingStopRequests.contains(transfer.transferId)) {
@@ -2575,35 +2574,32 @@ class FileTransferEngine {
       final expectedWindow = armWatchdog
           ? _ackWatchdog.currentWindow(transfer.transferId)
           : null;
+      final maxFrame = math.min(
+        flow.chunkSize, fileTransferV3EmitFramePayloadSize);
       final length = math.min(
-        pacer?.frameBytes(flow.chunkSize, transfer.transferId) ??
-            flow.chunkSize,
+        pacer?.frameBytes(maxFrame, transfer.transferId) ?? maxFrame,
         pacedEnd - cursor,
       );
       if (pacer != null) {
         await pacer.take(length, peer: transfer.peerUid);
         if (_transferRuntime.activeOutgoingFor(transfer.peerUid) !=
                 transfer.transferId ||
+            !isAttemptValid() ||
             _outgoingStopRequests.contains(transfer.transferId)) {
           return cursor;
         }
       }
       final buffer = AuthenticatedPayloadBuffer.allocate(
         WhisperFrameV3.headerLength + length,
+        isValid: isAttemptValid,
       );
       final payload = Uint8List.sublistView(
-        buffer.payload,
-        WhisperFrameV3.headerLength,
-      );
+        buffer.payload, WhisperFrameV3.headerLength);
       final readLength = await readTransferSourceRangeInto(
-        source,
-        payload,
-        destinationOffset: 0,
-        sourceOffset: cursor,
-        length: length,
-      );
+        source, payload, destinationOffset: 0, sourceOffset: cursor, length: length);
       if (_transferRuntime.activeOutgoingFor(transfer.peerUid) !=
               transfer.transferId ||
+          !isAttemptValid() ||
           _outgoingConnectionBindings[transfer.transferId] != connection ||
           _outgoingStopRequests.contains(transfer.transferId)) {
         return cursor;
@@ -2643,11 +2639,9 @@ class FileTransferEngine {
         connection: connection,
       );
       if (!sent) {
+        if (!isAttemptValid()) return cursor;
         if (_currentConnectionBinding(transfer.peerUid) != connection ||
             !_isConnectedTo(transfer.peerUid)) {
-          // The connection went away under the frame. The transfer is put
-          // on hold with the rest of that connection's work and continues
-          // on the next one.
           return null;
         }
         throw StateError('generation-bound transfer send failed');

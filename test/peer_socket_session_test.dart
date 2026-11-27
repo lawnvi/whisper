@@ -563,20 +563,32 @@ void main() {
       onOverflow: () => fail('outbound queue overflowed'),
     );
 
-    final active = pair.client.enqueueOutgoing(
-      Uint8List.fromList(<int>[1]),
-      byteLength: 1,
+    expect(
+      await pair.client.enqueueOutgoing(
+        Uint8List.fromList(<int>[1]),
+        byteLength: 1,
+      ),
+      isTrue,
     );
     await firstWriteStarted.future;
-    final waiting = pair.client.enqueueOutgoing(
-      Uint8List.fromList(<int>[2]),
-      byteLength: 1,
+    expect(
+      await pair.client.enqueueOutgoing(
+        Uint8List.fromList(<int>[2]),
+        byteLength: 1,
+      ),
+      isTrue,
     );
+    expect(pair.client.pendingOutboundItems, 2);
 
     pair.client.close();
 
-    expect(await active.timeout(const Duration(milliseconds: 100)), isFalse);
-    expect(await waiting, isFalse);
+    expect(
+      await pair.client.enqueueOutgoing(
+        Uint8List.fromList(<int>[3]),
+        byteLength: 1,
+      ),
+      isFalse,
+    );
     await pair.client.drainOutbound().timeout(
       const Duration(milliseconds: 100),
     );

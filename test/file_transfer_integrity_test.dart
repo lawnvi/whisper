@@ -293,6 +293,7 @@ void main() {
           _controlFrame(matching),
           requireCurrent: () {},
         );
+        await engine.waitUntilOutgoingIdle();
         expect(
           sent.where((frame) => frame.type == WhisperFrameType.fileData),
           isNotEmpty,

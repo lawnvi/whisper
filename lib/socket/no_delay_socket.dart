@@ -47,8 +47,8 @@ void widenTransferBuffers(Socket socket) {
 }
 
 /// Caps unsent bytes queued inside the kernel send buffer on `/chat` sockets
-/// (macOS and Linux) so network-bottlenecked bulk traffic stays in the
-/// application scheduler where control and mount frames can overtake it.
+/// (macOS, Linux, and Android) so network-bottlenecked bulk traffic stays in
+/// the application scheduler where control and mount frames can overtake it.
 ///
 /// Never call on media connections (`/audio`, `/input`, `/window`).
 void setTcpNotSentLowat(
@@ -58,7 +58,7 @@ void setTcpNotSentLowat(
   final int? option;
   if (Platform.isMacOS) {
     option = _tcpNotSentLowatMac;
-  } else if (Platform.isLinux) {
+  } else if (Platform.isLinux || Platform.isAndroid) {
     option = _tcpNotSentLowatLinux;
   } else {
     option = null;

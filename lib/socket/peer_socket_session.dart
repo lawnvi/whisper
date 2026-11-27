@@ -316,29 +316,26 @@ final class PeerSocketSession {
     byteLength: byteLength,
     kind: kind,
     waitForSpace: waitForSpace,
+    isValid: buffer.isValid,
   );
+
+  void dropInvalidOutbound() => _outboundQueue?.dropInvalid();
 
   Future<bool> _enqueueLazy(
     Future<Object> Function() produce, {
     required int byteLength,
     required OutboundPacketKind kind,
     required bool waitForSpace,
+    bool Function()? isValid,
   }) {
     final queue = _outboundQueue;
     if (queue == null) return Future<bool>.value(false);
-    return waitForSpace
-        ? queue.enqueueWhenSpaceAvailable(
-            produce,
-            byteLength: byteLength,
-            kind: kind,
-          )
-        : Future<bool>.value(
-            queue.enqueueControlLazy(
-              produce,
-              byteLength: byteLength,
-              kind: kind,
-            ),
-          );
+    if (waitForSpace) {
+      return queue.enqueueWhenSpaceAvailable(
+        produce, byteLength: byteLength, kind: kind, isValid: isValid);
+    }
+    return Future<bool>.value(
+      queue.enqueueControlLazy(produce, byteLength: byteLength, kind: kind));
   }
 
   void markTransportAuthenticated() {

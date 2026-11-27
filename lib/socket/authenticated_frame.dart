@@ -18,25 +18,33 @@ final class AuthenticatedFrameException implements Exception {
 /// authenticated encryption. This avoids copying large file frames through an
 /// intermediate plaintext allocation.
 final class AuthenticatedPayloadBuffer {
-  AuthenticatedPayloadBuffer._(this.bytes, int payloadLength)
+  AuthenticatedPayloadBuffer._(this.bytes, int payloadLength, {this.isValid})
     : payload = Uint8List.sublistView(
         bytes,
         AuthenticatedFrameCodec.headerLength,
         AuthenticatedFrameCodec.headerLength + payloadLength,
       );
 
-  factory AuthenticatedPayloadBuffer.allocate(int payloadLength) {
+  factory AuthenticatedPayloadBuffer.allocate(
+    int payloadLength, {
+    bool Function()? isValid,
+  }) {
     if (payloadLength < 0) {
       throw ArgumentError.value(payloadLength, 'payloadLength');
     }
     return AuthenticatedPayloadBuffer._(
       Uint8List(AuthenticatedFrameCodec.overheadBytes + payloadLength),
       payloadLength,
+      isValid: isValid,
     );
   }
 
   final Uint8List bytes;
   final Uint8List payload;
+
+  /// Optional predicate checked right before encryption/sending; when false,
+  /// the outbound queue drops the frame without consuming an AEAD sequence.
+  final bool Function()? isValid;
   bool _encoded = false;
 }
 
