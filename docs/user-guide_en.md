@@ -333,7 +333,7 @@ On Linux, what is available depends on the screenshot service your desktop envir
 
 ## Android notifications
 
-After granting the notification access permission on Android, choose which apps to forward. This suits short messages such as verification codes.
+After granting the notification access permission on Android, choose which apps to forward. This suits short messages such as verification codes. Notifications go to every connected device; to stop them on one device, turn on "Ignore Android Notifications" in that device's settings.
 
 ## TV casting
 
