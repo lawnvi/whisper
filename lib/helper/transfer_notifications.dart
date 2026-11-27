@@ -22,8 +22,9 @@ class TransferNotificationBridge implements ISocketEvent {
 
   TransferNotificationBridge._internal();
 
-  static const MethodChannel _channel =
-      MethodChannel('com.vireen.whisper/transfer_notifications');
+  static const MethodChannel _channel = MethodChannel(
+    'com.vireen.whisper/transfer_notifications',
+  );
 
   TransferNotificationAggregator? _aggregator;
 
@@ -74,8 +75,8 @@ class TransferNotificationBridge implements ISocketEvent {
       kind: platform.isEmpty
           ? null
           : platform == 'android' || platform == 'ios'
-              ? 'phone'
-              : 'computer',
+          ? 'phone'
+          : 'computer',
       name: name.isEmpty ? null : name,
     );
   };
@@ -90,12 +91,19 @@ class TransferNotificationBridge implements ISocketEvent {
         title: (count) => l10n.transferNotificationTitle(count),
         bodySending: (percent, speed, remaining) {
           _speed = speed;
-          return l10n.transferNotificationBodySending(percent, speed, remaining);
+          return l10n.transferNotificationBodySending(
+            percent,
+            speed,
+            remaining,
+          );
         },
         bodyReceiving: (percent, speed, remaining) {
           _speed = speed;
           return l10n.transferNotificationBodyReceiving(
-              percent, speed, remaining);
+            percent,
+            speed,
+            remaining,
+          );
         },
         bodyMixed: (percent, speed, remaining) {
           _speed = speed;
@@ -145,11 +153,15 @@ class TransferNotificationBridge implements ISocketEvent {
         // 否则后台恢复无法刷新通知,且已停服务再收终态命令会违反
         // startForegroundService 契约直接崩溃(R3)。
         _channel.invokeMethod<void>(
-            'showStatus', _summaryArguments(command, l10n));
+          'showStatus',
+          _summaryArguments(command, l10n),
+        );
         break;
       case TransferNotificationKind.terminal:
         _channel.invokeMethod<void>(
-            'showTerminal', _summaryArguments(command, l10n));
+          'showTerminal',
+          _summaryArguments(command, l10n),
+        );
         _aggregator = null;
         break;
       case TransferNotificationKind.cancel:
@@ -264,7 +276,9 @@ class TransferNotificationBridge implements ISocketEvent {
   );
 
   Map<String, Object?> _summaryArguments(
-      TransferNotificationCommand command, AppLocalizations l10n) {
+    TransferNotificationCommand command,
+    AppLocalizations l10n,
+  ) {
     return <String, Object?>{
       'title': command.title,
       'text': command.text,
@@ -275,7 +289,7 @@ class TransferNotificationBridge implements ISocketEvent {
   }
 
   @override
-  void onError(String message) {}
+  void onError(String message, {String? peerId}) {}
 
   @override
   void onNotice(String message) {}
@@ -290,10 +304,7 @@ class TransferNotificationBridge implements ISocketEvent {
   void onConnect() {}
 
   @override
-  void onPairing(
-    PairingRequest request,
-    void Function(bool) resolve,
-  ) {}
+  void onPairing(PairingRequest request, void Function(bool) resolve) {}
 
   @override
   void afterAuth(bool allow, DeviceData? device) {}

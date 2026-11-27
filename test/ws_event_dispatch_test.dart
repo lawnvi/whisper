@@ -22,7 +22,7 @@ class _RecordingSocketEvent implements ISocketEvent {
   void onConnect() {}
 
   @override
-  void onError(String message) {}
+  void onError(String message, {String? peerId}) {}
 
   @override
   void onNotice(String message) {}
@@ -76,10 +76,7 @@ void main() {
     manager.registerEvent(throwingListener, primary: true);
     manager.registerEvent(chatListener);
 
-    expect(
-      () => manager.dispatchMessage(_buildMessage()),
-      returnsNormally,
-    );
+    expect(() => manager.dispatchMessage(_buildMessage()), returnsNormally);
     expect(chatListener.messages, hasLength(1));
   });
 }

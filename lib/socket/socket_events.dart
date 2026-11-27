@@ -7,7 +7,7 @@ import 'package:whisper/state/peer_profile.dart';
 import 'package:whisper/state/peer_reconnect_controller.dart';
 
 abstract class ISocketEvent {
-  void onError(String message);
+  void onError(String message, {String? peerId});
 
   void onNotice(String message);
 

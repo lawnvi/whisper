@@ -301,7 +301,8 @@ class _Events implements ISocketEvent {
   @override
   void onConnect() => emit('connected', {});
   @override
-  void onError(String message) => emit('socket_error', {'message': message});
+  void onError(String message, {String? peerId}) =>
+      emit('socket_error', {'message': message, 'peerId': peerId});
   @override
   void onNotice(String message) => emit('notice', {'message': message});
   @override

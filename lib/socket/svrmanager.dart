@@ -40,6 +40,7 @@ import 'package:whisper/socket/pairing_attempt_limiter.dart';
 import 'package:whisper/socket/pre_auth_byte_cap.dart';
 import 'package:whisper/socket/peer_connection.dart';
 import 'package:whisper/socket/peer_socket_session.dart';
+import 'package:whisper/socket/pending_outgoing_connection.dart';
 import 'package:whisper/socket/quick_send_identity_gate.dart';
 import 'package:whisper/socket/socket_admission.dart';
 import 'package:whisper/socket/socket_events.dart';
@@ -79,7 +80,6 @@ import 'package:whisper/state/peer_profile.dart';
 import 'package:whisper/state/peer_traits.dart';
 
 import '../helper/notification.dart';
-import 'package:whisper/socket/direct_peer_http_client.dart';
 
 final class _SocketAuthResult {
   const _SocketAuthResult(this.allow, this.message);
@@ -106,82 +106,6 @@ enum _PeerAuthSuppressionReason {
 }
 
 const Duration _outgoingConnectionTimeout = Duration(seconds: 8);
-
-final class _PendingOutgoingConnection {
-  _PendingOutgoingConnection(
-    this.request, {
-    required this.globalPolicyEpoch,
-    required this.peerPolicyEpoch,
-    required this.startedPolicyRevision,
-    required this.socketCloseTimeout,
-  }) : httpClient = newDirectPeerHttpClient();
-
-  final ConnectionAttemptRequest request;
-  final int globalPolicyEpoch;
-  int peerPolicyEpoch;
-  int startedPolicyRevision;
-  final Duration socketCloseTimeout;
-  final HttpClient httpClient;
-  WebSocketChannel? channel;
-  HttpClientRequest? transportRequest;
-  PeerSocketSession? session;
-  String verifiedPeerId = '';
-  Future<ConnectionAttemptResult>? completion;
-  TransportCloseGuard? _sinkCloseGuard;
-  bool isCancelled = false;
-  bool isReady = false;
-  bool allowsDeviceRepair = false;
-  bool allowsTrustRepair = false;
-  ConnectionAttemptReason cancellationReason =
-      ConnectionAttemptReason.requestCancelled;
-
-  void resetTransportForProtocolRetry() {
-    channel = null;
-    transportRequest = null;
-    session = null;
-    isReady = false;
-    _sinkCloseGuard = null;
-  }
-
-  Future<void> cancel({
-    ConnectionAttemptReason reason = ConnectionAttemptReason.requestCancelled,
-  }) {
-    session?.close();
-    if (!isCancelled) {
-      cancellationReason = reason;
-    }
-    isCancelled = true;
-    transportRequest?.abort(const _OutgoingConnectionCancelled());
-    httpClient.close(force: true);
-    final sink = channel?.sink;
-    if (sink != null) {
-      _sinkCloseGuard ??= TransportCloseGuard(
-        close: () async {
-          await sink.close();
-        },
-        timeout: socketCloseTimeout,
-      );
-      unawaited(
-        _sinkCloseGuard!.close().catchError((Object _, StackTrace __) {}),
-      );
-    }
-    if (isReady && _sinkCloseGuard != null) {
-      return _sinkCloseGuard!.close();
-    }
-    return Future<void>.value();
-  }
-}
-
-final class _OutgoingConnectionCancelled implements Exception {
-  const _OutgoingConnectionCancelled();
-}
-
-final class _WebSocketUpgradeRejected implements Exception {
-  const _WebSocketUpgradeRejected(this.reason, this.statusCode);
-
-  final String reason;
-  final int statusCode;
-}
 
 final class _WorkspaceClipboardOrigin {
   const _WorkspaceClipboardOrigin({
@@ -406,14 +330,14 @@ class WsSvrManager {
   final Map<WebSocketSink, PeerDisconnectCause> _terminalDisconnectCauses =
       <WebSocketSink, PeerDisconnectCause>{};
   final Set<Future<void>> _pendingSocketAttachments = <Future<void>>{};
-  final Set<_PendingOutgoingConnection> _pendingOutgoingConnections =
-      <_PendingOutgoingConnection>{};
-  final Map<String, _PendingOutgoingConnection> _pendingOutgoingByRequestId =
-      <String, _PendingOutgoingConnection>{};
-  final Map<String, Set<_PendingOutgoingConnection>> _pendingOutgoingByPeerId =
-      <String, Set<_PendingOutgoingConnection>>{};
-  final Map<WebSocketSink, _PendingOutgoingConnection> _pendingOutgoingBySink =
-      <WebSocketSink, _PendingOutgoingConnection>{};
+  final Set<PendingOutgoingConnection> _pendingOutgoingConnections =
+      <PendingOutgoingConnection>{};
+  final Map<String, PendingOutgoingConnection> _pendingOutgoingByRequestId =
+      <String, PendingOutgoingConnection>{};
+  final Map<String, Set<PendingOutgoingConnection>> _pendingOutgoingByPeerId =
+      <String, Set<PendingOutgoingConnection>>{};
+  final Map<WebSocketSink, PendingOutgoingConnection> _pendingOutgoingBySink =
+      <WebSocketSink, PendingOutgoingConnection>{};
   final OutgoingTextRetryRegistry _outgoingTextRetries =
       OutgoingTextRetryRegistry();
   final OutgoingTextSendLocks _outgoingTextSendLocks = OutgoingTextSendLocks();
@@ -1132,9 +1056,19 @@ class WsSvrManager {
         );
       },
       onError: (Object error, StackTrace stackTrace) {
-        AuthSocketLifecycle.closeBeforeQueuedCleanup(_sessionsBySink[sink], () {
+        final session = _sessionsBySink[sink];
+        final peerId =
+            _peerIdsBySink[sink] ??
+            session?.remotePeerId ??
+            _pendingOutgoingBySink[sink]?.verifiedPeerId ??
+            _pendingOutgoingBySink[sink]?.request.expectedPeerId ??
+            '';
+        final failingPeerId = peerId.isEmpty ? null : peerId;
+        AuthSocketLifecycle.closeBeforeQueuedCleanup(session, () {
           logger.i('${asServer ? '连接服务' : '客户端服务'}异常: ${error.runtimeType}');
-          _dispatchToPrimary((event) => event.onError(error.toString()));
+          _dispatchToPrimary(
+            (event) => event.onError(error.toString(), peerId: failingPeerId),
+          );
           _completeSocketAuth(sink, false, 'socket_error');
           _ignoreFuture(
             _handlePeerSocketDoneQueued(sink),
@@ -2103,7 +2037,7 @@ class WsSvrManager {
 
   bool _isPeerAuthenticationAllowed(
     String peerId, {
-    _PendingOutgoingConnection? attempt,
+    PendingOutgoingConnection? attempt,
     bool allowTrustRepair = false,
   }) {
     final suppressions = _peerAuthSuppressions[peerId];
@@ -2124,7 +2058,7 @@ class WsSvrManager {
   }
 
   void _authorizeInteractiveAttemptForPeer(
-    _PendingOutgoingConnection attempt,
+    PendingOutgoingConnection attempt,
     String peerId,
   ) {
     if (!attempt.request.isAutomatic) {
@@ -2147,7 +2081,7 @@ class WsSvrManager {
   }
 
   void _completeDeviceRepairIfNeeded(
-    _PendingOutgoingConnection? attempt,
+    PendingOutgoingConnection? attempt,
     String peerId,
   ) {
     if (attempt?.allowsDeviceRepair != true) {
@@ -2177,13 +2111,13 @@ class WsSvrManager {
   Future<void> _cancelPendingAttemptsForPeer(
     String peerId,
     ConnectionAttemptReason reason, {
-    bool Function(_PendingOutgoingConnection attempt)? where,
+    bool Function(PendingOutgoingConnection attempt)? where,
   }) async {
     final attempts =
         _pendingOutgoingByPeerId[peerId]
             ?.where((attempt) => where?.call(attempt) ?? true)
             .toList(growable: false) ??
-        const <_PendingOutgoingConnection>[];
+        const <PendingOutgoingConnection>[];
     final cancellations = attempts
         .map((attempt) => attempt.cancel(reason: reason))
         .toList(growable: false);
@@ -2232,7 +2166,7 @@ class WsSvrManager {
     await _authCommitBarrier?.call(stage, peerId);
   }
 
-  bool _isPendingPolicyCurrent(_PendingOutgoingConnection attempt) {
+  bool _isPendingPolicyCurrent(PendingOutgoingConnection attempt) {
     if (attempt.isCancelled ||
         (attempt.request.isAutomatic &&
             attempt.globalPolicyEpoch != _globalPolicyEpoch)) {
@@ -2433,7 +2367,7 @@ class WsSvrManager {
         ),
       );
     }
-    final attempt = _PendingOutgoingConnection(
+    final attempt = PendingOutgoingConnection(
       request,
       globalPolicyEpoch: _globalPolicyEpoch,
       peerPolicyEpoch: _peerPolicyEpochs[request.expectedPeerId] ?? 0,
@@ -2516,26 +2450,26 @@ class WsSvrManager {
     }
   }
 
-  void _trackPendingOutgoing(_PendingOutgoingConnection attempt) {
+  void _trackPendingOutgoing(PendingOutgoingConnection attempt) {
     _pendingOutgoingConnections.add(attempt);
     _pendingOutgoingByRequestId[attempt.request.requestId] = attempt;
     _indexPendingOutgoingPeer(attempt, attempt.request.expectedPeerId);
   }
 
   void _indexPendingOutgoingPeer(
-    _PendingOutgoingConnection attempt,
+    PendingOutgoingConnection attempt,
     String peerId,
   ) {
     if (peerId.isEmpty) {
       return;
     }
     _pendingOutgoingByPeerId
-        .putIfAbsent(peerId, () => <_PendingOutgoingConnection>{})
+        .putIfAbsent(peerId, () => <PendingOutgoingConnection>{})
         .add(attempt);
   }
 
   void _bindPendingOutgoingPeer(
-    _PendingOutgoingConnection attempt,
+    PendingOutgoingConnection attempt,
     String peerId,
   ) {
     if (attempt.verifiedPeerId == peerId) {
@@ -2556,7 +2490,7 @@ class WsSvrManager {
     _indexPendingOutgoingPeer(attempt, peerId);
   }
 
-  void _untrackPendingOutgoing(_PendingOutgoingConnection attempt) {
+  void _untrackPendingOutgoing(PendingOutgoingConnection attempt) {
     _pendingOutgoingConnections.remove(attempt);
     if (identical(
       _pendingOutgoingByRequestId[attempt.request.requestId],
@@ -2580,14 +2514,14 @@ class WsSvrManager {
     }
   }
 
-  static bool _isAutomaticAttempt(_PendingOutgoingConnection attempt) =>
+  static bool _isAutomaticAttempt(PendingOutgoingConnection attempt) =>
       attempt.request.isAutomatic;
 
   /// 手动连接优先:先取消同 peer 的在途自动尝试,并有界等待其清理完成
   /// (含释放出站鉴权门),再真正拨号;否则手动尝试会同步撞门,
   /// 直接得到 duplicateRequest 而无任何网络活动。
   Future<ConnectionAttemptResult> _preemptAutomaticAttemptsThenConnect(
-    _PendingOutgoingConnection attempt,
+    PendingOutgoingConnection attempt,
   ) async {
     final peerId = attempt.request.expectedPeerId;
     final hasAutomaticInFlight =
@@ -2614,7 +2548,7 @@ class WsSvrManager {
   }
 
   Future<ConnectionAttemptResult> _connectToServer(
-    _PendingOutgoingConnection attempt,
+    PendingOutgoingConnection attempt,
   ) async {
     for (
       var version = PeerSocketSession.protocolVersion;
@@ -2639,7 +2573,7 @@ class WsSvrManager {
   }
 
   Future<ConnectionAttemptResult> _connectToServerVersion(
-    _PendingOutgoingConnection attempt,
+    PendingOutgoingConnection attempt,
     int protocolVersion,
   ) async {
     final request = attempt.request;
@@ -2674,7 +2608,7 @@ class WsSvrManager {
       await connectedChannel.ready;
       attempt.isReady = true;
       if (attempt.isCancelled) {
-        throw const _OutgoingConnectionCancelled();
+        throw const OutgoingConnectionCancelled();
       }
       final channelSink = connectedChannel.sink;
       _pendingOutgoingBySink[channelSink] = attempt;
@@ -2695,14 +2629,14 @@ class WsSvrManager {
       );
       attempt.session = session;
       if (attempt.isCancelled) {
-        throw const _OutgoingConnectionCancelled();
+        throw const OutgoingConnectionCancelled();
       }
       _attachSocketTransport(connectedChannel, session, asServer: false);
       await _sendAuthEnvelope(channelSink, await session.createHello());
       final authResult = await authCompleter.future;
       _releaseOutgoingAuthForSink(channelSink);
       if (attempt.isCancelled) {
-        throw const _OutgoingConnectionCancelled();
+        throw const OutgoingConnectionCancelled();
       }
       if (!authResult.allow) {
         await _closeSocketSink(channelSink);
@@ -2733,9 +2667,9 @@ class WsSvrManager {
     } catch (error) {
       final wasCancelled =
           attempt.isCancelled ||
-          error is _OutgoingConnectionCancelled ||
+          error is OutgoingConnectionCancelled ||
           (error is WebSocketChannelException &&
-              error.inner is _OutgoingConnectionCancelled);
+              error.inner is OutgoingConnectionCancelled);
       try {
         await attempt.cancel();
       } catch (_) {
@@ -2768,9 +2702,9 @@ class WsSvrManager {
     Object error,
   ) {
     final upgradeRejected =
-        error is _WebSocketUpgradeRejected ||
+        error is WebSocketUpgradeRejected ||
         (error is WebSocketChannelException &&
-            error.inner is _WebSocketUpgradeRejected);
+            error.inner is WebSocketUpgradeRejected);
     if (upgradeRejected) {
       return ConnectionAttemptResult.rejected(
         requestId: request.requestId,
@@ -2826,7 +2760,7 @@ class WsSvrManager {
 
   Future<WebSocket> _connectOutgoingWebSocket(
     Uri webSocketUri,
-    _PendingOutgoingConnection attempt,
+    PendingOutgoingConnection attempt,
   ) async {
     final requestUri = webSocketUri.replace(
       scheme: webSocketUri.scheme == 'wss' ? 'https' : 'http',
@@ -2838,8 +2772,8 @@ class WsSvrManager {
     attempt.transportRequest = request;
     request.followRedirects = false;
     if (attempt.isCancelled) {
-      request.abort(const _OutgoingConnectionCancelled());
-      throw const _OutgoingConnectionCancelled();
+      request.abort(const OutgoingConnectionCancelled());
+      throw const OutgoingConnectionCancelled();
     }
     setWebSocketUpgradeHeaders(request.headers, nonce);
     final response = await request.close().timeout(_outgoingConnectionTimeout);
@@ -2847,7 +2781,7 @@ class WsSvrManager {
     if (attempt.isCancelled) {
       final socket = await response.detachSocket();
       socket.destroy();
-      throw const _OutgoingConnectionCancelled();
+      throw const OutgoingConnectionCancelled();
     }
     final connectionTokens =
         (response.headers[HttpHeaders.connectionHeader] ?? const <String>[])
@@ -2858,7 +2792,7 @@ class WsSvrManager {
     Future<Never> rejectResponse(String reason) async {
       final socket = await response.detachSocket();
       socket.destroy();
-      throw _WebSocketUpgradeRejected(reason, response.statusCode);
+      throw WebSocketUpgradeRejected(reason, response.statusCode);
     }
 
     if (response.statusCode != HttpStatus.switchingProtocols ||
@@ -2876,11 +2810,13 @@ class WsSvrManager {
     final socket = await response.detachSocket();
     if (attempt.isCancelled) {
       socket.destroy();
-      throw const _OutgoingConnectionCancelled();
+      throw const OutgoingConnectionCancelled();
     }
     setTcpNoDelay(socket);
     widenTransferBuffers(socket);
-    return cappedClientWebSocket(socket, () => attempt.session);
+    final webSocket = cappedClientWebSocket(socket, () => attempt.session);
+    webSocket.pingInterval = _serverPingInterval;
+    return webSocket;
   }
 
   void _cancelPendingOutgoingConnections() {
@@ -3093,9 +3029,21 @@ class WsSvrManager {
       );
       await RemoteInputCoordinator.shared.stopLocal();
     }
+    final disconnectedPeerIds = <String>{
+      ..._peerConnections.connectedPeerIds,
+      for (final session in authenticatedSessions)
+        if (session.remotePeerId.isNotEmpty) session.remotePeerId,
+    };
     await _audioManager.closeChannels();
     await _remoteInputManager.closeChannels();
     await WindowStreamHost.shared.closeAll();
+    for (final peerId in disconnectedPeerIds) {
+      await _remoteClipboardTransfer.clearPeer(peerId);
+      WindowStreamViewer.shared.peerDisconnected(peerId);
+      FileBrowseHost.shared.closePeer(peerId);
+      RemoteFilesClient.peerGone(peerId);
+    }
+    _fileBrowseTrustCache.clear();
     for (final session in authenticatedSessions) {
       await session.drainOutbound();
     }
@@ -3697,6 +3645,21 @@ class WsSvrManager {
       throw const AuthHandshakeException('session_expired');
     }
     _bindPendingOutgoingPeer(attempt, session.remotePeerId);
+    final incomingSink = _activeIncomingAuthSinkForPeer(session.remotePeerId);
+    if (incomingSink != null) {
+      final decision = resolveSimultaneousDial(
+        localUid: session.localProfile.uid,
+        remoteUid: session.remotePeerId,
+      );
+      if (decision == SimultaneousDialDecision.acceptIncoming) {
+        _completeSocketAuth(sink, false, 'superseded');
+        await attempt.cancel(reason: ConnectionAttemptReason.superseded);
+        await _closeSocketSink(sink);
+        return;
+      }
+      _sessionsBySink[incomingSink]?.close();
+      await _closeSocketSink(incomingSink);
+    }
     if (!_isPendingPolicyCurrent(attempt)) {
       throw const AuthHandshakeException('session_expired');
     }
@@ -3776,7 +3739,7 @@ class WsSvrManager {
   }
 
   Future<bool> _automaticAttemptStillEligible(
-    _PendingOutgoingConnection attempt,
+    PendingOutgoingConnection attempt,
     PeerSocketSession session,
   ) async {
     if (!_isPendingPolicyCurrent(attempt) ||
@@ -3828,7 +3791,8 @@ class WsSvrManager {
       host: '',
       port: 0,
     );
-    if (_authRequestGate.hasOutgoing(outgoingKey)) {
+    if (_authRequestGate.hasOutgoing(outgoingKey) ||
+        _hasActivePendingOutgoingForPeer(session.remotePeerId)) {
       final decision = resolveSimultaneousDial(
         localUid: session.localProfile.uid,
         remoteUid: session.remotePeerId,
@@ -3838,9 +3802,45 @@ class WsSvrManager {
         await _closeSocketSink(sink);
         return;
       }
+      _cancelLosingOutgoingForPeer(session.remotePeerId);
     }
     await _ensureServerPairingDecision(session, sink);
     await _tryCompleteServerPairing(session, sink);
+  }
+
+  bool _hasActivePendingOutgoingForPeer(String peerId) {
+    if (peerId.isEmpty) return false;
+    final attempts = _pendingOutgoingByPeerId[peerId];
+    return attempts != null && attempts.any((attempt) => !attempt.isCancelled);
+  }
+
+  WebSocketSink? _activeIncomingAuthSinkForPeer(String peerId) {
+    if (peerId.isEmpty) return null;
+    for (final entry in _incomingAuthPeerIdsBySink.entries) {
+      final session = _sessionsBySink[entry.key];
+      if (session != null &&
+          !session.isClosed &&
+          session.remotePeerId == peerId) {
+        return entry.key;
+      }
+    }
+    return null;
+  }
+
+  void _cancelLosingOutgoingForPeer(String peerId) {
+    final attempts =
+        _pendingOutgoingByPeerId[peerId]?.toList(growable: false) ??
+        const <PendingOutgoingConnection>[];
+    for (final attempt in attempts) {
+      final outgoingSink = attempt.channel?.sink;
+      if (outgoingSink != null) {
+        _completeSocketAuth(outgoingSink, false, 'superseded');
+      }
+      _ignoreFuture(
+        attempt.cancel(reason: ConnectionAttemptReason.superseded),
+        context: 'cancel losing simultaneous outgoing dial',
+      );
+    }
   }
 
   Future<void> _handleServerApproval(

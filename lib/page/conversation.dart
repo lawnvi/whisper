@@ -33,6 +33,7 @@ import 'package:whisper/model/message.dart';
 import 'package:whisper/page/conversation_drafts.dart';
 import 'package:whisper/page/conversation_peer.dart';
 import 'package:whisper/widget/app_dialogs.dart' as app_dialogs;
+import 'package:whisper/widget/socket_error_dialog.dart';
 import 'package:whisper/page/remote_files/remote_files_page.dart';
 import 'package:whisper/remote_files/fs_placement.dart';
 import 'package:whisper/page/settings.dart' as app_settings;
@@ -77,7 +78,6 @@ import '../helper/file.dart';
 import '../helper/helper.dart';
 
 import '../helper/notification.dart';
-
 
 import '../l10n/app_localizations.dart';
 import 'package:whisper/widget/subtle_motion.dart';
@@ -1485,8 +1485,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
     return Navigator.push<void>(
       context,
       WhisperPageRoute<void>(
-        builder: (context) =>
-            TransferAssistantScreen(peerId: device.uid),
+        builder: (context) => TransferAssistantScreen(peerId: device.uid),
       ),
     );
   }
@@ -2635,8 +2634,11 @@ class _SendMessageScreen extends State<SendMessageScreen>
         progress: transfer?.progress ?? 0,
         statusKey: (failed, transfer?.state),
         statusText: (progress) {
-          final status =
-              _fileStatusText(message, transfer, progressOverride: progress);
+          final status = _fileStatusText(
+            message,
+            transfer,
+            progressOverride: progress,
+          );
           final speed = _speed.trim();
           return isActiveTransfer &&
                   transfer.transferId == _activeTransferId &&
@@ -2855,20 +2857,15 @@ class _SendMessageScreen extends State<SendMessageScreen>
   var _isAlert = false;
 
   @override
-  void onError(String message) {
-    if (_isAlert || !_isCurrentRoute) {
-      return;
-    }
+  void onError(String message, {String? peerId}) {
+    if (_isAlert || !_isCurrentRoute) return;
     _isAlert = true;
     unawaited(() async {
-      final confirmed = await app_dialogs.confirmAction(
+      await confirmReleasePeerConnection(
         context,
-        title: AppLocalizations.of(context)?.timeoutTitle ?? "是否释放连接",
-        description: l10n.connectFailed,
-        confirmButtonText: AppLocalizations.of(context)?.disconnect ?? "断开",
-        cancelButtonText: AppLocalizations.of(context)?.cancel ?? "取消",
+        peerId: peerId,
+        fallbackPeerId: widget.device.uid,
       );
-      if (confirmed) unawaited(WsSvrManager().close());
       _isAlert = false;
     }());
   }

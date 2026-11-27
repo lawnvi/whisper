@@ -5,10 +5,17 @@ import 'dart:typed_data';
 
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/file_transfer.dart';
 import 'package:whisper/model/message.dart';
+import 'package:whisper/remote_files/fs_client.dart';
+import 'package:whisper/remote_files/fs_host.dart';
+import 'package:whisper/remote_files/fs_placement.dart';
+import 'package:whisper/remote_files/fs_protocol.dart';
 import 'package:whisper/remote_input/remote_input_layout.dart';
+import 'package:whisper/window_stream/core/window_stream_models.dart';
+import 'package:whisper/window_stream/remote/remote_peer_source.dart';
 import 'package:whisper/socket/auth_protocol.dart';
 import 'package:whisper/socket/auth_transcript.dart';
 import 'package:whisper/socket/device_identity.dart';
@@ -1224,6 +1231,200 @@ void main() {
       profileGateA.complete();
     },
   );
+
+  test(
+    'F22 & F31: closeGracefully cleans up peer subsystems and disconnectPeer '
+    'only drops the failing peer',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final database = LocalDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      final hub = WsSvrManager.forTesting(
+        database: database,
+        identityStore: _identityStore(1),
+        localPeerProfileLoader: () async => _profile('hub-peer'),
+        autoConnectEnabled: () async => true,
+        manageSharedCoordinators: false,
+      );
+      final peerA = WsSvrManager.forTesting(
+        database: database,
+        identityStore: _identityStore(40),
+        localPeerProfileLoader: () async => _profile('peer-a'),
+        autoConnectEnabled: () async => true,
+        manageSharedCoordinators: false,
+      );
+      final peerB = WsSvrManager.forTesting(
+        database: database,
+        identityStore: _identityStore(80),
+        localPeerProfileLoader: () async => _profile('peer-b'),
+        autoConnectEnabled: () async => true,
+        manageSharedCoordinators: false,
+      );
+      hub.setEvent(_ApprovingEvents());
+      peerA.setEvent(_ApprovingEvents());
+      peerB.setEvent(_ApprovingEvents());
+      addTearDown(
+        () => peerB.closeGracefully(closeServer: true, forceServerClose: true),
+      );
+      addTearDown(
+        () => peerA.closeGracefully(closeServer: true, forceServerClose: true),
+      );
+      addTearDown(
+        () => hub.closeGracefully(closeServer: true, forceServerClose: true),
+      );
+      final started = await hub.startServer(0);
+      expect(started.isSuccess, isTrue);
+
+      final resA = await peerA.connectToServer(
+        ConnectionAttemptRequest(
+          requestId: 'connect-a',
+          endpoint: PeerEndpoint.loopbackForTesting(port: started.port),
+          expectedPeerId: 'hub-peer',
+          mode: ConnectionAttemptMode.interactive,
+        ),
+      );
+      final resB = await peerB.connectToServer(
+        ConnectionAttemptRequest(
+          requestId: 'connect-b',
+          endpoint: PeerEndpoint.loopbackForTesting(port: started.port),
+          expectedPeerId: 'hub-peer',
+          mode: ConnectionAttemptMode.interactive,
+        ),
+      );
+      expect(resA.isAuthenticated, isTrue);
+      expect(resB.isAuthenticated, isTrue);
+      expect(hub.isConnectedTo('peer-a'), isTrue);
+      expect(hub.isConnectedTo('peer-b'), isTrue);
+
+      // F31: disconnecting peer-a leaves peer-b connected.
+      await hub.disconnectPeer('peer-a');
+      expect(hub.isConnectedTo('peer-a'), isFalse);
+      expect(hub.isConnectedTo('peer-b'), isTrue);
+
+      // F22: closeGracefully cleans up FileBrowseHost, TransferPlacements,
+      // WindowStreamViewer, and RemoteFilesClient for connected peers.
+      const browseSessionId = '5a4f1f0e-1c2b-4d3e-8f9a-0b1c2d3e4f99';
+      await FileBrowseHost.shared.permissions.setAlways('peer-b', true);
+      await FileBrowseHost.shared.handle(
+        const FileBrowseMessage(
+          action: FileBrowseAction.open,
+          sessionId: browseSessionId,
+          clientPeerId: 'peer-b',
+          hostPeerId: 'hub-peer',
+        ),
+        remotePeerId: 'peer-b',
+        deviceName: 'Peer B',
+      );
+      expect(FileBrowseHost.shared.isOpen(browseSessionId), isTrue);
+      TransferPlacements.shared.expect(
+        'f22-placement',
+        Directory.systemTemp.path,
+        peerId: 'peer-b',
+        fromRemote: true,
+      );
+      WindowStreamViewer.shared.peerConnected(
+        const WindowStreamPeer(
+          peerId: 'peer-b',
+          name: 'Peer B',
+          platform: WindowStreamPlatform.macos,
+          takesWindows: true,
+        ),
+      );
+      WindowStreamViewer.shared.peerAvailable(
+        peerId: 'peer-b',
+        name: 'Peer B',
+        platform: WindowStreamPlatform.macos,
+        host: '127.0.0.1',
+        port: 10002,
+      );
+      expect(WindowStreamViewer.shared.isConnected('peer-b'), isTrue);
+      expect(WindowStreamViewer.shared.sourceFor('peer-b'), isNotNull);
+      final client = RemoteFilesClient('peer-b');
+      RemoteFilesClient.sender = (_, _) async => true;
+      final pendingOpen = client.open();
+      final openFailed = expectLater(
+        pendingOpen,
+        throwsA(isA<RemoteFsException>()),
+      );
+
+      await hub.closeGracefully();
+
+      expect(FileBrowseHost.shared.isOpen(browseSessionId), isFalse);
+      expect(TransferPlacements.shared.isExpected('f22-placement'), isFalse);
+      expect(WindowStreamViewer.shared.isConnected('peer-b'), isFalse);
+      expect(WindowStreamViewer.shared.sourceFor('peer-b'), isNull);
+      await openFailed;
+    },
+  );
+
+  test('F7: manual IP dial without expectedPeerId joins simultaneous-dial '
+      'tie-break and cancels the losing outgoing attempt', () async {
+    final serverDb = LocalDatabase.forTesting(NativeDatabase.memory());
+    final clientDb = LocalDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(serverDb.close);
+    addTearDown(clientDb.close);
+    final serverKey = await _publicKey(10);
+    final clientKey = await _publicKey(60);
+    // Pre-trust both sides so handshake completes without manual prompt.
+    await _trust(serverDb, 'aaa-peer', clientKey);
+    await _trust(clientDb, 'zzz-peer', serverKey);
+
+    final server = WsSvrManager.forTesting(
+      database: serverDb,
+      identityStore: _identityStore(10),
+      localPeerProfileLoader: () async => _profile('zzz-peer'),
+      autoConnectEnabled: () async => true,
+      manageSharedCoordinators: false,
+    );
+    final client = WsSvrManager.forTesting(
+      database: clientDb,
+      identityStore: _identityStore(60),
+      localPeerProfileLoader: () async => _profile('aaa-peer'),
+      autoConnectEnabled: () async => true,
+      manageSharedCoordinators: false,
+    );
+    server.setEvent(_ApprovingEvents());
+    client.setEvent(_ApprovingEvents());
+    addTearDown(
+      () => client.closeGracefully(closeServer: true, forceServerClose: true),
+    );
+    addTearDown(
+      () => server.closeGracefully(closeServer: true, forceServerClose: true),
+    );
+    final serverStarted = await server.startServer(0);
+    final clientStarted = await client.startServer(0);
+    expect(serverStarted.isSuccess, isTrue);
+    expect(clientStarted.isSuccess, isTrue);
+
+    // zzz-peer (larger uid -> losing side) dials aaa-peer manually by IP
+    // (expectedPeerId is empty) while aaa-peer dials zzz-peer at the same
+    // time.
+    final results = await Future.wait(<Future<ConnectionAttemptResult>>[
+      server.connectToServer(
+        ConnectionAttemptRequest(
+          requestId: 'manual-ip-dial',
+          endpoint: PeerEndpoint.loopbackForTesting(port: clientStarted.port),
+          expectedPeerId: '',
+          mode: ConnectionAttemptMode.interactive,
+        ),
+      ),
+      client.connectToServer(
+        ConnectionAttemptRequest(
+          requestId: 'peer-dial',
+          endpoint: PeerEndpoint.loopbackForTesting(port: serverStarted.port),
+          expectedPeerId: 'zzz-peer',
+          mode: ConnectionAttemptMode.interactive,
+        ),
+      ),
+    ]).timeout(const Duration(seconds: 5));
+
+    // aaa-peer < zzz-peer: aaa-peer's outgoing wins; zzz-peer's manual IP dial
+    // loses and is cancelled instead of creating a duplicate link.
+    expect(results[1].isAuthenticated, isTrue);
+    expect(results[0].isAuthenticated, isFalse);
+    expect(server.isConnectedTo('aaa-peer'), isTrue);
+    expect(client.isConnectedTo('zzz-peer'), isTrue);
+  });
 }
 
 final class _LegacyCloseThenProxy {
@@ -1558,7 +1759,7 @@ class _ApprovingEvents implements ISocketEvent {
   void onConnect() {}
 
   @override
-  void onError(String message) {}
+  void onError(String message, {String? peerId}) {}
 
   @override
   void onMessage(MessageData messageData) {}

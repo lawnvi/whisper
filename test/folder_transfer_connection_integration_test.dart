@@ -107,7 +107,7 @@ final class _Events implements ISocketEvent {
   void onConnect() {}
 
   @override
-  void onError(String message) {}
+  void onError(String message, {String? peerId}) {}
 
   @override
   void onMessage(MessageData messageData) => messages.add(messageData);

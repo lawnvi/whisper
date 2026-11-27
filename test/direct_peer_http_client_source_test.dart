@@ -11,8 +11,12 @@ void main() {
     ).readAsStringSync();
     expect(helper, contains("findProxy = (_) => 'DIRECT'"));
 
+    final pendingOutgoing = File(
+      'lib/socket/pending_outgoing_connection.dart',
+    ).readAsStringSync();
+    expect(pendingOutgoing, contains('httpClient = newDirectPeerHttpClient()'));
+    expect(pendingOutgoing, isNot(contains('httpClient = HttpClient()')));
     final svrmanager = File('lib/socket/svrmanager.dart').readAsStringSync();
-    expect(svrmanager, contains('httpClient = newDirectPeerHttpClient()'));
     expect(svrmanager, isNot(contains('httpClient = HttpClient()')));
 
     for (final path in <String>[

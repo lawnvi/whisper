@@ -101,6 +101,7 @@ import 'package:whisper/state/pairing_request.dart';
 import 'package:whisper/socket/device_identity.dart';
 import 'package:whisper/socket/peer_socket_session.dart';
 import 'package:whisper/widget/app_dialogs.dart' as app_dialogs;
+import 'package:whisper/widget/socket_error_dialog.dart';
 import 'package:whisper/widget/context_menu_region.dart';
 import 'package:whisper/widget/desktop_quick_send_dialog.dart';
 import 'package:whisper/remote_files/fs_placement.dart';
@@ -3669,31 +3670,25 @@ class _DeviceListScreen extends State<DeviceListScreen>
   var _isAlert = false;
 
   @override
-  void onError(String message) {
-    if (_isAlert) {
-      return;
-    }
+  void onError(String message, {String? peerId}) {
+    if (_isAlert) return;
     _isAlert = true;
-    unawaited(_handleSocketError(message));
+    unawaited(_handleSocketError(message, peerId: peerId));
   }
 
-  Future<void> _handleSocketError(String message) async {
+  Future<void> _handleSocketError(String message, {String? peerId}) async {
     if (!mounted) {
       _isAlert = false;
       return;
     }
     final l10n = AppLocalizations.of(context);
     try {
-      final confirmed = await app_dialogs.confirmAction(
+      await confirmReleasePeerConnection(
         context,
-        title: l10n?.timeoutTitle ?? "是否释放连接",
-        description: l10n?.connectFailed ?? 'Connection Failed',
-        confirmButtonText: l10n?.disconnect ?? "断开",
-        cancelButtonText: l10n?.keepConnect ?? "取消",
+        peerId: peerId,
+        fallbackPeerId: WsSvrManager().receiver,
+        cancelButtonText: l10n?.keepConnect ?? '取消',
       );
-      if (confirmed) {
-        await WsSvrManager().close();
-      }
     } catch (error) {
       _logDeviceListFailure(DeviceListOperationKind.socketDialog, error);
       if (mounted) {
