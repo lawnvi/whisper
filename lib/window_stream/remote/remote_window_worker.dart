@@ -1,9 +1,7 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:isolate';
 import 'dart:typed_data';
 
-import 'package:stream_channel/stream_channel.dart';
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
@@ -20,7 +18,10 @@ import '../pipeline/media_sink.dart';
 import '../pipeline/native_input_decoder.dart';
 import '../pipeline/stream_worker.dart';
 import '../pipeline/worker_opus.dart';
+import 'inbound_window_relay.dart';
 import 'window_stream_control.dart';
+
+export 'inbound_window_relay.dart' show InboundWindowRelay;
 
 /// A `/window` stream the host dials (see [WindowStreamMediaDial]): the
 /// connection reaches this device's Whisper server in the UI isolate, which
@@ -41,115 +42,6 @@ class InboundWhisperWindowSpec extends WhisperWindowSpec {
 
   /// How long the host has to dial and prove its token.
   static const Duration connectTimeout = Duration(seconds: 10);
-}
-
-/// The relay between the Whisper server (UI isolate), which accepted and
-/// authenticated the host's `/window` socket, and the stream isolate,
-/// which decrypts its packets. Ports carry packets as [Uint8List] and
-/// these markers:
-/// - worker → UI: its own [SendPort] first, then packets to write, then
-///   [close];
-/// - UI → worker: [connected] once the host's socket is in, packets read
-///   from it, then [closed].
-abstract final class InboundWindowRelay {
-  static const String connected = 'connected';
-  static const String closed = 'closed';
-  static const String close = 'close';
-}
-
-/// The worker's side of [InboundWindowRelay], shaped as a WebSocket channel
-/// so the stream runs exactly as over a socket it dialled itself.
-class _RelayChannel extends StreamChannelMixin<dynamic>
-    implements WebSocketChannel {
-  _RelayChannel(SendPort toMain) : _sink = _RelaySink(toMain) {
-    _receive.listen((message) {
-      if (message is Uint8List) {
-        _incoming.add(message);
-      } else if (message == InboundWindowRelay.connected) {
-        if (!_connected.isCompleted) {
-          _connected.complete();
-        }
-      } else if (message == InboundWindowRelay.closed) {
-        _shutdown();
-      }
-    });
-    toMain.send(_receive.sendPort);
-  }
-
-  final _receive = ReceivePort('window-inbound');
-  final _incoming = StreamController<dynamic>();
-  final _connected = Completer<void>();
-  final _RelaySink _sink;
-
-  Future<void> get connected => _connected.future;
-
-  void _shutdown() {
-    if (!_connected.isCompleted) {
-      _connected.completeError(const SocketException('relay closed'));
-    }
-    _receive.close();
-    unawaited(_incoming.close());
-    _sink._finish();
-  }
-
-  @override
-  Stream<dynamic> get stream => _incoming.stream;
-
-  @override
-  WebSocketSink get sink => _sink;
-
-  @override
-  String? get protocol => null;
-
-  @override
-  int? get closeCode => null;
-
-  @override
-  String? get closeReason => null;
-
-  @override
-  Future<void> get ready => _connected.future;
-}
-
-class _RelaySink implements WebSocketSink {
-  _RelaySink(this._toMain);
-
-  final SendPort _toMain;
-  final _done = Completer<void>();
-
-  void _finish() {
-    if (!_done.isCompleted) {
-      _done.complete();
-    }
-  }
-
-  @override
-  void add(dynamic data) {
-    if (_done.isCompleted) {
-      return;
-    }
-    _toMain.send(
-      data is Uint8List ? data : Uint8List.fromList(data as List<int>),
-    );
-  }
-
-  @override
-  void addError(Object error, [StackTrace? stackTrace]) {}
-
-  @override
-  Future<void> addStream(Stream<dynamic> stream) => stream.forEach(add);
-
-  @override
-  Future<void> close([int? closeCode, String? closeReason]) {
-    if (!_done.isCompleted) {
-      _toMain.send(InboundWindowRelay.close);
-      _finish();
-    }
-    return _done.future;
-  }
-
-  @override
-  Future<void> get done => _done.future;
 }
 
 /// Viewer side of a `/window` stream, run in the stream isolate: dials the
@@ -193,7 +85,7 @@ class RemoteWindowWorker implements StreamWorker {
       final WebSocketChannel channel;
       if (spec is InboundWhisperWindowSpec) {
         // The host dials this device; the UI isolate checked its proof.
-        final relay = _RelayChannel(spec.port);
+        final relay = InboundWindowRelayChannel(spec.port);
         _channel = relay;
         await relay.connected.timeout(InboundWhisperWindowSpec.connectTimeout);
         channel = relay;
@@ -400,8 +292,8 @@ class RemoteWindowWorker implements StreamWorker {
     _decoder?.destroy();
     final channel = _channel;
     await channel?.sink.close().catchError((Object _) {});
-    if (channel is _RelayChannel) {
-      channel._shutdown();
+    if (channel is InboundWindowRelayChannel) {
+      channel.shutdown();
     }
   }
 }

@@ -382,7 +382,7 @@ void main() {
   );
 
   test(
-    'watchdog retransmits two durable windows then removes one generation',
+    'watchdog retransmits two durable windows then fails only that transfer',
     () async {
       final database = LocalDatabase.forTesting(NativeDatabase.memory());
       addTearDown(database.close);
@@ -415,7 +415,21 @@ void main() {
       final data = _dataFrames(sent, _firstId).toList();
       expect(data.map((frame) => frame.offset), <int>[0, 0, 0]);
       expect(data.map((frame) => frame.sequence), <int>[0, 1, 2]);
-      expect(unresponsive, <TransferConnectionBinding>[_binding]);
+      // F17: peer connection stays alive; only this transfer fails and sends
+      // an error frame to clean up the receiver.
+      expect(unresponsive, isEmpty);
+      expect(
+        (await database.fetchFileTransfer(_firstId))?.state,
+        FileTransferState.failed,
+      );
+      expect(
+        sent.where(
+          (frame) =>
+              frame.type == WhisperFrameType.fileError &&
+              frame.transferId == _firstId,
+        ),
+        isNotEmpty,
+      );
     },
   );
 

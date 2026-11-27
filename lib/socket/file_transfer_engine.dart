@@ -68,7 +68,7 @@ class FileTransferEngine {
     sendBytesToConnection,
     bool Function(TransferConnectionBinding connection, Object bytes)?
     enqueueBytesToConnection,
-    required FutureOr<bool> Function(TransferConnectionBinding connection)
+    FutureOr<bool> Function(TransferConnectionBinding connection)?
     markPeerUnresponsive,
     TransferAckWatchdog? ackWatchdog,
     required void Function(TransferSnapshot snapshot) emitTransferUpdated,
@@ -109,7 +109,6 @@ class FileTransferEngine {
            authenticatedIdentityHashForConnection,
        _sendBytesToConnection = sendBytesToConnection,
        _enqueueBytesToConnection = enqueueBytesToConnection,
-       _markPeerUnresponsive = markPeerUnresponsive,
        _ownsAckWatchdog = ackWatchdog == null,
        _ackWatchdog = ackWatchdog ?? TransferAckWatchdog(),
        _emitTransferUpdated = emitTransferUpdated,
@@ -168,8 +167,6 @@ class FileTransferEngine {
   _sendBytesToConnection;
   final bool Function(TransferConnectionBinding connection, Object bytes)?
   _enqueueBytesToConnection;
-  final FutureOr<bool> Function(TransferConnectionBinding connection)
-  _markPeerUnresponsive;
   final bool _ownsAckWatchdog;
   TransferAckWatchdog _ackWatchdog;
   final void Function(TransferSnapshot snapshot) _emitTransferUpdated;
@@ -2569,6 +2566,7 @@ class FileTransferEngine {
     FileTransferData transfer,
     FileTransferFailureReason failureReason,
   ) async {
+    _ackWatchdog.cancel(transfer.transferId);
     await _updateTransfer(
       transfer.transferId,
       state: FileTransferState.failed,
@@ -2920,21 +2918,34 @@ class FileTransferEngine {
     );
   }
 
-  Future<void> _markTimedOutTransferUnresponsive(
-    TransferAckWindow timeout,
-  ) async {
-    if (_outgoingConnectionBindings[timeout.transferId] != timeout.connection ||
-        _transferRuntime.activeOutgoingFor(timeout.connection.peerId) !=
-            timeout.transferId) {
-      return;
-    }
-    final transfer = await _database().fetchFileTransfer(timeout.transferId);
-    if (_outgoingConnectionBindings[timeout.transferId] != timeout.connection ||
-        transfer == null ||
-        isTerminalFileTransferState(transfer.state)) {
-      return;
-    }
-    await _markPeerUnresponsive(timeout.connection);
+  Future<void> _markTimedOutTransferUnresponsive(TransferAckWindow timeout) {
+    return _runTransferOperation<void>(
+      timeout.transferId,
+      connection: timeout.connection,
+      operation: () async {
+        if (_outgoingConnectionBindings[timeout.transferId] !=
+                timeout.connection ||
+            _transferRuntime.activeOutgoingFor(timeout.connection.peerId) !=
+                timeout.transferId) {
+          return;
+        }
+        final transfer = await _database().fetchFileTransfer(
+          timeout.transferId,
+        );
+        if (_outgoingConnectionBindings[timeout.transferId] !=
+                timeout.connection ||
+            transfer == null ||
+            isTerminalFileTransferState(transfer.state)) {
+          return;
+        }
+        // Fail only this transfer; leave the peer connection and other
+        // subsystems (audio, input, mounts, window stream) intact.
+        await _failOutgoingFileTransferV3(
+          transfer,
+          FileTransferFailureReason.receiver,
+        );
+      },
+    );
   }
 
   Future<void> _yieldAfterFileTransferFrame() {

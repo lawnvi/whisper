@@ -19,7 +19,6 @@ import 'package:whisper/socket/folder_transfer_scan.dart';
 import 'package:whisper/socket/transfer_ack_watchdog.dart';
 import 'package:whisper/socket/whisper_frame_v3.dart';
 import 'package:whisper/helper/privacy_log.dart';
-import 'package:whisper/socket/wire_input_policy.dart';
 import 'package:whisper/socket/wire_message_replay.dart';
 import 'package:whisper/state/peer_profile.dart';
 
@@ -740,7 +739,7 @@ void main() {
       expect(sender.rejections, isEmpty);
     });
 
-    test('is given up on once that has gone on too long', () async {
+    test('fails only that transfer once that has gone on too long', () async {
       connect(
         ackTimeout: const Duration(milliseconds: 200),
         keepAliveInterval: const Duration(milliseconds: 60),
@@ -749,31 +748,39 @@ void main() {
         quietLimit: const Duration(milliseconds: 400),
       );
       // Held until the test is over, so only the sender can end the wait.
-      // How soon it does depends on how busy the machine is: the receiver
-      // has to get ready first, which was seen to take 0.6 s on its own.
       final release = Completer<void>();
-      addTearDown(release.complete);
+      addTearDown(() {
+        if (!release.isCompleted) {
+          release.complete();
+        }
+      });
       await sendWithLastFrameHeld(() => release.future);
-      final deadline = DateTime.now().add(const Duration(seconds: 10));
-      while (sender.unresponsiveVerdicts == 0 &&
-          DateTime.now().isBefore(deadline)) {
-        await Future<void>.delayed(const Duration(milliseconds: 20));
-      }
+      final transferId = _onlyTransferId(sender);
+      await sender.waitForState(transferId, FileTransferState.failed);
 
-      expect(sender.unresponsiveVerdicts, 1);
+      // F17: the peer connection stays alive instead of tearing down the
+      // whole device, and late keep-alive ACKs are ignored cleanly.
+      expect(sender.unresponsiveVerdicts, 0);
+      expect(sender.linked, isTrue);
       expect(receiver.rejections, isEmpty);
-      // The receiver goes on saying it is still writing until the connection
-      // is gone. One such message can reach the sender between its giving
-      // up and the disconnect; it finds no transfer waiting and is refused.
+      expect(sender.rejections, isEmpty);
+      release.complete();
+      await receiver.waitForState(transferId, FileTransferState.failed);
+
+      // A subsequent file transfer succeeds on the same live connection.
+      final after = File(p.join(temp.path, 'after-timeout.txt'))
+        ..writeAsStringSync('still connected');
+      sender.beforeDeliver = null;
+      const nextId = '22222222-2222-4222-8222-222222222222';
       expect(
-        sender.rejections.every(
-          (error) =>
-              error is WireInputRejected &&
-              error.reason == WireInputReason.sessionNotCurrent,
+        await sender.engine.sendFileTo(
+          'receiver',
+          after.path,
+          messageId: nextId,
         ),
         isTrue,
-        reason: '${sender.rejections}',
       );
+      await receiver.waitForState(nextId, FileTransferState.completed);
     });
   });
 

@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:isolate';
 import 'dart:math' as math;
 import 'dart:ui' show PlatformDispatcher, Size;
 
@@ -16,6 +15,7 @@ import '../../socket/session_upgrade_token_registry.dart';
 import '../core/window_input_event.dart';
 import '../core/window_source.dart';
 import '../core/window_stream_models.dart';
+import 'inbound_window_relay.dart';
 import 'remote_window_worker.dart';
 import 'window_stream_control.dart';
 
@@ -71,7 +71,7 @@ class WindowStreamViewer extends ChangeNotifier {
   final _sources = <String, RemotePeerSource>{};
 
   /// Streams whose host dials this device, by session, until they end.
-  final _inbound = <String, _InboundWindow>{};
+  final _inbound = <String, InboundWindowHostRelay>{};
 
   /// Whether [claim] is the token this viewer gave a host in its `dial`,
   /// for a stream still waiting for that host's socket.
@@ -836,7 +836,7 @@ class RemotePeerSource implements WindowSource, ClosesTasks, ConfirmsTaskClose {
           },
         );
         if (inboundToken != null) {
-          final inbound = _InboundWindow(
+          final inbound = InboundWindowHostRelay(
             hostPeerId: peerId,
             binding: mediaPacketChannelBindingFromUri(uri),
           );
@@ -1183,82 +1183,6 @@ class RemoteStreamHandle implements StreamHandle {
     }
     await _sendStop();
     _remoteClosed(null);
-  }
-}
-
-/// The UI isolate's end of [InboundWindowRelay] for one stream: the host's
-/// `/window` socket, once the Whisper server has checked its proof, and the
-/// stream isolate's port. Packets pass through still encrypted.
-class _InboundWindow {
-  _InboundWindow({required this.hostPeerId, required this.binding}) {
-    _fromWorker.listen(_onWorker);
-  }
-
-  final String hostPeerId;
-
-  /// The token this viewer issued, as the packets' channel binding.
-  final Uint8List binding;
-  final _fromWorker = ReceivePort('window-inbound-relay');
-  SendPort? _toWorker;
-  WebSocketChannel? _channel;
-  StreamSubscription<dynamic>? _reading;
-  bool _closed = false;
-
-  SendPort get port => _fromWorker.sendPort;
-
-  bool get awaiting => !_closed && _channel == null;
-
-  bool attach(WebSocketChannel channel) {
-    if (!awaiting) {
-      unawaited(channel.sink.close().catchError((Object _) {}));
-      return false;
-    }
-    _channel = channel;
-    _relay();
-    return true;
-  }
-
-  void _onWorker(Object? message) {
-    if (message is SendPort) {
-      _toWorker = message;
-      _relay();
-    } else if (message is Uint8List) {
-      _channel?.sink.add(message);
-    } else if (message == InboundWindowRelay.close) {
-      close();
-    }
-  }
-
-  void _relay() {
-    final toWorker = _toWorker;
-    final channel = _channel;
-    if (toWorker == null || channel == null || _reading != null || _closed) {
-      return;
-    }
-    toWorker.send(InboundWindowRelay.connected);
-    _reading = channel.stream.listen(
-      (message) {
-        if (message is Uint8List) {
-          toWorker.send(message);
-        } else if (message is List<int>) {
-          toWorker.send(Uint8List.fromList(message));
-        }
-      },
-      onError: (Object _) {},
-      onDone: close,
-    );
-  }
-
-  void close() {
-    if (_closed) {
-      return;
-    }
-    _closed = true;
-    _toWorker?.send(InboundWindowRelay.closed);
-    unawaited(_reading?.cancel());
-    unawaited(_channel?.sink.close().catchError((Object _) {}));
-    _fromWorker.close();
-    binding.fillRange(0, binding.length, 0);
   }
 }
 
