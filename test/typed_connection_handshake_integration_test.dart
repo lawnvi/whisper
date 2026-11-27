@@ -6,6 +6,8 @@ import 'dart:typed_data';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:web_socket_channel/io.dart';
+import 'package:whisper/audio/audio_share_manager.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/file_transfer.dart';
 import 'package:whisper/model/message.dart';
@@ -19,8 +21,11 @@ import 'package:whisper/window_stream/core/window_stream_models.dart';
 import 'package:whisper/window_stream/remote/remote_peer_source.dart';
 import 'package:whisper/socket/auth_protocol.dart';
 import 'package:whisper/socket/device_identity.dart';
+import 'package:whisper/socket/media_upgrade_proof.dart';
+import 'package:whisper/socket/packet_byte_transport.dart';
 import 'package:whisper/socket/peer_socket_session.dart';
 import 'package:whisper/socket/pre_auth_byte_cap.dart';
+import 'package:whisper/socket/session_upgrade_token_registry.dart';
 import 'package:whisper/socket/svrmanager.dart';
 import 'package:whisper/socket/whisper_frame_v3.dart';
 import 'package:whisper/socket/wire_message_codec.dart';
@@ -1586,6 +1591,370 @@ void main() {
     expect(mounts.of('server-peer'), isNull);
     expect(stops, 1);
   });
+
+  test(
+    'J14: staggered dial bypasses blackhole and falls back on identityMismatch',
+    () async {
+      final harness = await _HandshakeHarness.start();
+      final blackhole = await ServerSocket.bind(
+        InternetAddress.loopbackIPv4,
+        0,
+      );
+      final accepted = <Socket>[];
+      blackhole.listen(accepted.add);
+      addTearDown(() async {
+        for (final s in accepted) {
+          s.destroy();
+        }
+        await blackhole.close();
+      });
+
+      // Part A: primary is silent blackhole, fallback is live server-peer.
+      final sw = Stopwatch()..start();
+      final viaFallback = await harness.client
+          .connectToServer(
+            ConnectionAttemptRequest(
+              requestId: 'j14-staggered-blackhole',
+              endpoint: PeerEndpoint.loopbackForTesting(port: blackhole.port),
+              fallbackEndpoints: <PeerEndpoint>[
+                PeerEndpoint.loopbackForTesting(port: harness.port),
+              ],
+              expectedPeerId: 'server-peer',
+              mode: ConnectionAttemptMode.interactive,
+            ),
+          )
+          .timeout(const Duration(seconds: 5));
+      sw.stop();
+
+      expect(viaFallback.isAuthenticated, isTrue);
+      expect(viaFallback.peerId, 'server-peer');
+      expect(sw.elapsedMilliseconds, lessThan(2000));
+      expect(
+        harness.client.reconnectTargetFor('server-peer')?.port,
+        harness.port,
+      );
+      await harness.client.disconnectPeer('server-peer');
+
+      // Part B: primary is a different live Whisper server (wrong-peer),
+      // fallback is the expected server-peer. Must skip wrong-peer on
+      // identityMismatch and authenticate with server-peer.
+      final wrongDb = LocalDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(wrongDb.close);
+      final wrongServer = WsSvrManager.forTesting(
+        database: wrongDb,
+        identityStore: _identityStore(99),
+        localPeerProfileLoader: () async => _profile('wrong-peer'),
+        autoConnectEnabled: () async => true,
+        manageSharedCoordinators: false,
+      );
+      addTearDown(
+        () => wrongServer.closeGracefully(
+          closeServer: true,
+          forceServerClose: true,
+        ),
+      );
+      final wrongStarted = await wrongServer.startServer(0);
+      expect(wrongStarted.isSuccess, isTrue);
+
+      final serverPkh = identityPublicKeyHash(await _publicKey(1));
+      final viaIdentityFallback = await harness.client
+          .connectToServer(
+            ConnectionAttemptRequest(
+              requestId: 'j14-identity-fallback',
+              endpoint: PeerEndpoint.loopbackForTesting(
+                port: wrongStarted.port,
+              ),
+              fallbackEndpoints: <PeerEndpoint>[
+                PeerEndpoint.loopbackForTesting(port: harness.port),
+              ],
+              expectedPeerId: 'server-peer',
+              expectedPublicKeyHash: serverPkh,
+              mode: ConnectionAttemptMode.interactive,
+            ),
+          )
+          .timeout(const Duration(seconds: 5));
+
+      expect(viaIdentityFallback.isAuthenticated, isTrue);
+      expect(viaIdentityFallback.peerId, 'server-peer');
+      expect(harness.client.isConnectedTo('server-peer'), isTrue);
+      expect(wrongServer.isConnectedTo('client-peer'), isFalse);
+    },
+  );
+
+  test(
+    'J14: superseded same-direction reconnect resumes in-flight transfer, closes old audio channel, and stays online',
+    () async {
+      final clientDb = LocalDatabase.forTesting(NativeDatabase.memory());
+      final serverDb = LocalDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(clientDb.close);
+      addTearDown(serverDb.close);
+      final tempDir = await Directory.systemTemp.createTemp('whisper_j14_sup_');
+      addTearDown(() => tempDir.delete(recursive: true));
+      final downloadDir = await Directory('${tempDir.path}/downloads').create();
+      final sourceFile = File('${tempDir.path}/payload.bin');
+      final payloadBytes = Uint8List.fromList(
+        List<int>.generate(2 * 1024 * 1024, (i) => (i * 31 + 7) & 0xff),
+      );
+      await sourceFile.writeAsBytes(payloadBytes, flush: true);
+
+      final serverAudio = AudioShareManager();
+      final serverTokens = SessionUpgradeTokenRegistry();
+      const audioSessionId = '11111111-1111-4111-8111-111111111111';
+      final clientEvents = _ApprovingEvents();
+      final serverEvents = _ApprovingEvents();
+
+      int? allowedMediaGeneration;
+      final server = WsSvrManager.forTesting(
+        database: serverDb,
+        identityStore: _identityStore(1),
+        localPeerProfileLoader: () async => _profile('server-peer'),
+        autoConnectEnabled: () async => true,
+        manageSharedCoordinators: false,
+        audioManager: serverAudio,
+        sessionUpgradeTokens: serverTokens,
+        audioGroupClaimValidator: (claim) =>
+            claim.peerId == 'client-peer' && claim.sessionId == audioSessionId,
+        mediaPeerClaimValidator: (claim) =>
+            allowedMediaGeneration != null &&
+            claim.connectionGeneration == allowedMediaGeneration,
+        transferDownloadDirectory: () async => downloadDir,
+      );
+      final client = WsSvrManager.forTesting(
+        database: clientDb,
+        identityStore: _identityStore(33),
+        localPeerProfileLoader: () async => _profile('client-peer'),
+        autoConnectEnabled: () async => true,
+        manageSharedCoordinators: false,
+        transferDownloadDirectory: () async => downloadDir,
+      );
+      server.setEvent(serverEvents);
+      client.setEvent(clientEvents);
+      addTearDown(
+        () => server.closeGracefully(closeServer: true, forceServerClose: true),
+      );
+      addTearDown(() => client.closeGracefully());
+
+      final serverStarted = await server.startServer(0);
+      expect(serverStarted.isSuccess, isTrue);
+
+      // Gen 1 goes through a TCP proxy that pauses client->server after 384 KiB
+      // so the 2 MiB transfer is guaranteed to be mid-flight on gen 1.
+      final proxy = await _PausingTcpProxy.start(
+        targetPort: serverStarted.port,
+        pauseClientToServerAfterBytes: 384 * 1024,
+      );
+      addTearDown(proxy.close);
+
+      final gen1 = await client
+          .connectToServer(
+            ConnectionAttemptRequest(
+              requestId: 'j14-sup-gen1',
+              endpoint: PeerEndpoint.loopbackForTesting(port: proxy.port),
+              expectedPeerId: 'server-peer',
+              mode: ConnectionAttemptMode.interactive,
+            ),
+          )
+          .timeout(const Duration(seconds: 5));
+      expect(gen1.isAuthenticated, isTrue);
+      allowedMediaGeneration = gen1.generation;
+
+      // Attach a real /audio media channel bound to gen 1's key/generation.
+      final oldGenMediaKey = Uint8List.fromList(
+        List<int>.generate(32, (i) => i + 5),
+      );
+      final audioToken = serverTokens.issue(
+        route: '/audio',
+        namespace: 'audio-group',
+        sessionId: audioSessionId,
+        peerId: 'client-peer',
+        mediaMacKey: oldGenMediaKey,
+        connectionGeneration: gen1.generation,
+        now: DateTime.now(),
+      );
+      final audioUri = buildPeerPacketUri(
+        host: '127.0.0.1',
+        port: serverStarted.port,
+        path: '/audio',
+        queryParameters: <String, String>{
+          'session': audioSessionId,
+          'token': audioToken,
+        },
+      );
+      final rawAudio = IOWebSocketChannel.connect(audioUri);
+      await rawAudio.ready;
+      final audioChannel = await authenticateMediaWebSocketClient(
+        rawAudio,
+        uri: audioUri,
+        route: '/audio',
+        namespace: 'audio-group',
+        sessionId: audioSessionId,
+        peerId: 'client-peer',
+        mediaMacKey: oldGenMediaKey,
+      );
+      addTearDown(() => audioChannel.sink.close());
+      await _waitUntil(() => serverAudio.activeChannelCount == 1);
+
+      // Start the 2 MiB file transfer on gen 1 and wait until the proxy pauses
+      // mid-transfer so receiver holds partial bytes and transfer is active.
+      expect(
+        await client.sendFileTo('server-peer', sourceFile.path),
+        isTrue,
+      );
+      await proxy.paused.timeout(const Duration(seconds: 5));
+      await _waitUntil(
+        () => clientEvents.transfers.any(
+          (t) =>
+              t.direction == FileTransferDirection.outgoing &&
+              (t.state == FileTransferState.transferring ||
+                  t.state == FileTransferState.negotiating),
+        ),
+      );
+
+      // Start a profile refresh waiter on gen 1 (which is paused) and verify
+      // superseding resolves it immediately rather than waiting out its timeout.
+      clientEvents.closeCount = 0;
+      serverEvents.closeCount = 0;
+      final refreshWatch = Stopwatch()..start();
+      final pendingRefresh = client.requestRemoteProfileRefresh(
+        peerId: 'server-peer',
+        timeout: const Duration(seconds: 5),
+      );
+
+      // Gen 2 dials directly to server (simulating network-switch reconnect).
+      final gen2 = await client
+          .connectToServer(
+            ConnectionAttemptRequest(
+              requestId: 'j14-sup-gen2',
+              endpoint: PeerEndpoint.loopbackForTesting(
+                port: serverStarted.port,
+              ),
+              expectedPeerId: 'server-peer',
+              mode: ConnectionAttemptMode.interactive,
+            ),
+          )
+          .timeout(const Duration(seconds: 5));
+      expect(gen2.isAuthenticated, isTrue);
+      expect(gen2.generation, greaterThan(gen1.generation));
+
+      // Pending profile refresh completes promptly without timing out.
+      await pendingRefresh.timeout(const Duration(seconds: 2));
+      refreshWatch.stop();
+      expect(refreshWatch.elapsedMilliseconds, lessThan(2000));
+
+      // Old-generation audio channel is closed as superseded, and neither peer
+      // fired a spurious offline onClose().
+      await _waitUntil(() => serverAudio.activeChannelCount == 0);
+      expect(clientEvents.closeCount, 0);
+      expect(serverEvents.closeCount, 0);
+      expect(client.isConnectedTo('server-peer'), isTrue);
+      expect(server.isConnectedTo('client-peer'), isTrue);
+
+      // In-flight file transfer automatically resumes and completes on gen 2
+      // without waiting for ACK watchdog timeout.
+      await _waitUntil(
+        () => serverEvents.transfers.any(
+          (t) =>
+              t.direction == FileTransferDirection.incoming &&
+              t.state == FileTransferState.completed,
+        ),
+        timeout: const Duration(seconds: 8),
+      );
+      await _waitUntil(
+        () => clientEvents.transfers.any(
+          (t) =>
+              t.direction == FileTransferDirection.outgoing &&
+              t.state == FileTransferState.completed,
+        ),
+        timeout: const Duration(seconds: 8),
+      );
+      final completed = serverEvents.transfers.lastWhere(
+        (t) =>
+            t.direction == FileTransferDirection.incoming &&
+            t.state == FileTransferState.completed,
+      );
+      final receivedBytes = await File(completed.finalPath).readAsBytes();
+      expect(receivedBytes, payloadBytes);
+    },
+  );
+
+  test(
+    'J14: simultaneous overlapping dual-auth converges to one connection without offline churn',
+    () async {
+      final dbA = LocalDatabase.forTesting(NativeDatabase.memory());
+      final dbZ = LocalDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(dbA.close);
+      addTearDown(dbZ.close);
+      await _trust(dbA, 'zzz-peer', await _publicKey(33));
+      await _trust(dbZ, 'aaa-peer', await _publicKey(1));
+
+      final eventsA = _ApprovingEvents();
+      final eventsZ = _ApprovingEvents();
+      final aaa = WsSvrManager.forTesting(
+        database: dbA,
+        identityStore: _identityStore(1),
+        localPeerProfileLoader: () async => _profile('aaa-peer'),
+        autoConnectEnabled: () async => true,
+        manageSharedCoordinators: false,
+      );
+      final zzz = WsSvrManager.forTesting(
+        database: dbZ,
+        identityStore: _identityStore(33),
+        localPeerProfileLoader: () async => _profile('zzz-peer'),
+        autoConnectEnabled: () async => true,
+        manageSharedCoordinators: false,
+      );
+      aaa.setEvent(eventsA);
+      zzz.setEvent(eventsZ);
+      addTearDown(
+        () => aaa.closeGracefully(closeServer: true, forceServerClose: true),
+      );
+      addTearDown(
+        () => zzz.closeGracefully(closeServer: true, forceServerClose: true),
+      );
+
+      final aaaStarted = await aaa.startServer(0);
+      final zzzStarted = await zzz.startServer(0);
+      expect(aaaStarted.isSuccess, isTrue);
+      expect(zzzStarted.isSuccess, isTrue);
+
+      final results = await Future.wait<ConnectionAttemptResult>(
+        <Future<ConnectionAttemptResult>>[
+          aaa.connectToServer(
+            ConnectionAttemptRequest(
+              requestId: 'j14-dual-a',
+              endpoint: PeerEndpoint.loopbackForTesting(port: zzzStarted.port),
+              expectedPeerId: 'zzz-peer',
+              mode: ConnectionAttemptMode.interactive,
+            ),
+          ),
+          zzz.connectToServer(
+            ConnectionAttemptRequest(
+              requestId: 'j14-dual-z',
+              endpoint: PeerEndpoint.loopbackForTesting(port: aaaStarted.port),
+              expectedPeerId: 'aaa-peer',
+              mode: ConnectionAttemptMode.interactive,
+            ),
+          ),
+        ],
+      ).timeout(const Duration(seconds: 5));
+
+      expect(results.any((r) => r.isAuthenticated), isTrue);
+      await _waitUntil(
+        () => aaa.isConnectedTo('zzz-peer') && zzz.isConnectedTo('aaa-peer'),
+      );
+      expect(aaa.connectedPeerIds, <String>{'zzz-peer'});
+      expect(zzz.connectedPeerIds, <String>{'aaa-peer'});
+
+      // Single surviving connection works in both directions.
+      expect(await aaa.sendMessageTo('zzz-peer', 'hello-from-aaa'), isTrue);
+      expect(await zzz.sendMessageTo('aaa-peer', 'hello-from-zzz'), isTrue);
+      await _waitUntil(
+        () =>
+            eventsZ.messages.any((m) => m.content == 'hello-from-aaa') &&
+            eventsA.messages.any((m) => m.content == 'hello-from-zzz'),
+      );
+    },
+  );
 }
 
 final class _CountingConnectEvents extends _ApprovingEvents {
@@ -1901,6 +2270,9 @@ final class _SeedStorage implements DeviceIdentitySeedStorage {
 class _ApprovingEvents implements ISocketEvent {
   int afterAuthCount = 0;
   int pairingCount = 0;
+  int closeCount = 0;
+  final List<MessageData> messages = <MessageData>[];
+  final List<TransferSnapshot> transfers = <TransferSnapshot>[];
 
   @override
   void afterAuth(bool allow, DeviceData? device) {
@@ -1914,7 +2286,9 @@ class _ApprovingEvents implements ISocketEvent {
   }
 
   @override
-  void onClose() {}
+  void onClose() {
+    closeCount += 1;
+  }
 
   @override
   void onConnect() {}
@@ -1923,13 +2297,17 @@ class _ApprovingEvents implements ISocketEvent {
   void onError(String message, {String? peerId}) {}
 
   @override
-  void onMessage(MessageData messageData) {}
+  void onMessage(MessageData messageData) {
+    messages.add(messageData);
+  }
 
   @override
   void onNotice(String message) {}
 
   @override
-  void onTransferUpdated(TransferSnapshot snapshot) {}
+  void onTransferUpdated(TransferSnapshot snapshot) {
+    transfers.add(snapshot);
+  }
 }
 
 final class _BlockingPairingEvents extends _ApprovingEvents {
@@ -2016,10 +2394,83 @@ final class _HeldTimer implements Timer {
   }
 }
 
-Future<void> _waitUntil(bool Function() predicate) async {
-  for (var attempt = 0; attempt < 100; attempt += 1) {
+Future<void> _waitUntil(
+  bool Function() predicate, {
+  Duration timeout = const Duration(seconds: 2),
+}) async {
+  final deadline = DateTime.now().add(timeout);
+  while (DateTime.now().isBefore(deadline)) {
     if (predicate()) return;
     await Future<void>.delayed(const Duration(milliseconds: 5));
   }
   throw TimeoutException('condition was not reached');
+}
+
+final class _PausingTcpProxy {
+  _PausingTcpProxy._(this._server, this._pauseAfterBytes, this._targetPort);
+
+  final ServerSocket _server;
+  final int _pauseAfterBytes;
+  final int _targetPort;
+  final Completer<void> _paused = Completer<void>();
+  final List<Socket> _sockets = <Socket>[];
+  int _forwardedClientBytes = 0;
+
+  int get port => _server.port;
+  Future<void> get paused => _paused.future;
+
+  static Future<_PausingTcpProxy> start({
+    required int targetPort,
+    required int pauseClientToServerAfterBytes,
+  }) async {
+    final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    final proxy = _PausingTcpProxy._(
+      server,
+      pauseClientToServerAfterBytes,
+      targetPort,
+    );
+    server.listen(proxy._accept);
+    return proxy;
+  }
+
+  Future<void> _accept(Socket client) async {
+    _sockets.add(client);
+    late final Socket upstream;
+    try {
+      upstream = await Socket.connect(
+        InternetAddress.loopbackIPv4,
+        _targetPort,
+      );
+    } catch (_) {
+      client.destroy();
+      return;
+    }
+    _sockets.add(upstream);
+    late final StreamSubscription<Uint8List> cToS;
+    cToS = client.listen(
+      (data) {
+        upstream.add(data);
+        _forwardedClientBytes += data.length;
+        if (_forwardedClientBytes >= _pauseAfterBytes && !_paused.isCompleted) {
+          cToS.pause();
+          _paused.complete();
+        }
+      },
+      onError: (Object _) => upstream.destroy(),
+      onDone: () => upstream.destroy(),
+    );
+    upstream.listen(
+      client.add,
+      onError: (Object _) => client.destroy(),
+      onDone: () => client.destroy(),
+    );
+  }
+
+  Future<void> close() async {
+    for (final s in _sockets) {
+      s.destroy();
+    }
+    _sockets.clear();
+    await _server.close();
+  }
 }

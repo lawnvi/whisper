@@ -36,6 +36,7 @@ Future<StaggeredDialWin<T>> dialStaggered<T>({
   Duration stagger = const Duration(milliseconds: 250),
   int maxConcurrent = 4,
   bool Function()? isCancelled,
+  void Function()? onSettled,
 }) async {
   if (endpoints.isEmpty) {
     throw ArgumentError.value(endpoints, 'endpoints', 'must not be empty');
@@ -74,6 +75,7 @@ Future<StaggeredDialWin<T>> dialStaggered<T>({
     settled = true;
     nextTimer?.cancel();
     nextTimer = null;
+    onSettled?.call();
     if (!completer.isCompleted) {
       completer.completeError(error, stackTrace);
     }
@@ -94,6 +96,7 @@ Future<StaggeredDialWin<T>> dialStaggered<T>({
 
     if (nextIndex < candidates.length && inFlight < limit) {
       nextTimer?.cancel();
+      nextTimer = null;
       nextTimer = Timer(stagger, launchNext);
     }
 
@@ -111,6 +114,7 @@ Future<StaggeredDialWin<T>> dialStaggered<T>({
           settled = true;
           nextTimer?.cancel();
           nextTimer = null;
+          onSettled?.call();
           final remaining = <PeerEndpoint>[
             for (var i = 0; i < candidates.length; i += 1)
               if (i != index && !failedIndices.contains(i)) candidates[i],
@@ -153,4 +157,59 @@ Future<StaggeredDialWin<T>> dialStaggered<T>({
 
   launchNext();
   return completer.future;
+}
+
+/// Races [endpoints] via [dialStaggered] and authenticates the winning
+/// transport. When [shouldRetryNextCandidate] returns true (for example on an
+/// identity mismatch against a reused LAN IP), continues trying the remaining
+/// unfailed candidates sequentially until one succeeds or fails definitively.
+Future<R> dialAndAuthenticateCandidates<T, R>({
+  required List<PeerEndpoint> endpoints,
+  required Future<T> Function(PeerEndpoint endpoint) dial,
+  required Future<void> Function(T connection) close,
+  required Future<R> Function(PeerEndpoint endpoint, T connection) authenticate,
+  required bool Function(R result) shouldRetryNextCandidate,
+  Duration stagger = const Duration(milliseconds: 250),
+  int maxConcurrent = 4,
+  bool Function()? isCancelled,
+  void Function()? onSettled,
+}) async {
+  final win = await dialStaggered<T>(
+    endpoints: endpoints,
+    dial: dial,
+    close: close,
+    stagger: stagger,
+    maxConcurrent: maxConcurrent,
+    isCancelled: isCancelled,
+    onSettled: onSettled,
+  );
+  var result = await authenticate(win.endpoint, win.connection);
+  if (!shouldRetryNextCandidate(result) || win.remaining.isEmpty) {
+    return result;
+  }
+  for (final candidate in win.remaining) {
+    if (isCancelled?.call() == true) {
+      throw const StaggeredDialCancelled();
+    }
+    late final T connection;
+    try {
+      connection = await dial(candidate);
+    } on StaggeredDialCancelled {
+      rethrow;
+    } catch (_) {
+      if (isCancelled?.call() == true) {
+        throw const StaggeredDialCancelled();
+      }
+      continue;
+    }
+    if (isCancelled?.call() == true) {
+      unawaited(close(connection).catchError((Object _) {}));
+      throw const StaggeredDialCancelled();
+    }
+    result = await authenticate(candidate, connection);
+    if (!shouldRetryNextCandidate(result)) {
+      return result;
+    }
+  }
+  return result;
 }

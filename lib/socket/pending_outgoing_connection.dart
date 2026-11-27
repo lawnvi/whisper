@@ -6,6 +6,7 @@ import 'package:whisper/socket/direct_peer_http_client.dart';
 import 'package:whisper/socket/peer_socket_session.dart';
 import 'package:whisper/socket/transport_close_guard.dart';
 import 'package:whisper/state/connection_attempt.dart';
+import 'package:whisper/state/peer_endpoint.dart';
 
 final class PendingOutgoingConnection {
   PendingOutgoingConnection(
@@ -22,8 +23,11 @@ final class PendingOutgoingConnection {
   int startedPolicyRevision;
   final Duration socketCloseTimeout;
   final HttpClient httpClient;
+  final Set<HttpClient> _dialHttpClients = <HttpClient>{};
+  final Set<HttpClientRequest> _activeTransportRequests = <HttpClientRequest>{};
   WebSocketChannel? channel;
   HttpClientRequest? transportRequest;
+  PeerEndpoint? connectedEndpoint;
   PeerSocketSession? session;
   String verifiedPeerId = '';
   Future<ConnectionAttemptResult>? completion;
@@ -35,10 +39,47 @@ final class PendingOutgoingConnection {
   ConnectionAttemptReason cancellationReason =
       ConnectionAttemptReason.requestCancelled;
 
-  void resetTransportForProtocolRetry() {
-    channel = null;
+  HttpClient createDialHttpClient() {
+    final client = newDirectPeerHttpClient();
+    _dialHttpClients.add(client);
+    return client;
+  }
+
+  void releaseDialHttpClient(HttpClient client, {bool force = false}) {
+    _dialHttpClients.remove(client);
+    client.close(force: force);
+  }
+
+  void trackTransportRequest(HttpClientRequest request) {
+    transportRequest = request;
+    _activeTransportRequests.add(request);
+  }
+
+  void untrackTransportRequest(HttpClientRequest request) {
+    _activeTransportRequests.remove(request);
+    if (identical(transportRequest, request)) {
+      transportRequest = _activeTransportRequests.isEmpty
+          ? null
+          : _activeTransportRequests.last;
+    }
+  }
+
+  void abortPendingDialClients() {
+    for (final request in _activeTransportRequests.toList(growable: false)) {
+      request.abort(const OutgoingConnectionCancelled());
+    }
+    _activeTransportRequests.clear();
     transportRequest = null;
+    for (final client in _dialHttpClients.toList(growable: false)) {
+      client.close(force: true);
+    }
+    _dialHttpClients.clear();
+  }
+
+  void resetTransportForCandidateRetry() {
+    channel = null;
     session = null;
+    connectedEndpoint = null;
     isReady = false;
     _sinkCloseGuard = null;
   }
@@ -51,7 +92,7 @@ final class PendingOutgoingConnection {
       cancellationReason = reason;
     }
     isCancelled = true;
-    transportRequest?.abort(const OutgoingConnectionCancelled());
+    abortPendingDialClients();
     httpClient.close(force: true);
     final sink = channel?.sink;
     if (sink != null) {

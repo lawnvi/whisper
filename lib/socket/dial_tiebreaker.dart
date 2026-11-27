@@ -13,3 +13,19 @@ SimultaneousDialDecision resolveSimultaneousDial({
       ? SimultaneousDialDecision.keepOutgoing
       : SimultaneousDialDecision.acceptIncoming;
 }
+
+/// True when an already-authenticated session of the opposite role should be
+/// kept over an overlapping handshake from the same peer.
+bool existingSessionWinsOverlap({
+  required String localUid,
+  required String remoteUid,
+  required bool existingIsClient,
+}) {
+  final decision = resolveSimultaneousDial(
+    localUid: localUid,
+    remoteUid: remoteUid,
+  );
+  return decision == SimultaneousDialDecision.keepOutgoing
+      ? existingIsClient
+      : !existingIsClient;
+}

@@ -9,6 +9,7 @@ import 'package:whisper/model/file_transfer.dart';
 import 'package:whisper/model/message.dart';
 import 'package:whisper/socket/file_transfer_v3.dart';
 import 'package:whisper/socket/folder_transfer_sink.dart';
+import 'package:whisper/socket/whisper_frame_v3.dart';
 
 /// Writes what arrives for one transfer in order, without making the frame
 /// that brought it wait for the disk. An error is kept and raised by
@@ -235,3 +236,50 @@ Future<void> deleteCanceledIncomingTempPath({
     onError(error);
   }
 }
+
+FileTransferV3Control incomingTransferTerminalControl(
+  FileTransferData transfer,
+) {
+  final action = switch (transfer.state) {
+    FileTransferState.completed => FileTransferV3Action.complete,
+    FileTransferState.canceled => FileTransferV3Action.cancel,
+    _ => FileTransferV3Action.error,
+  };
+  final failureReason = transfer.state == FileTransferState.failed
+      ? switch (transfer.lastError) {
+          'queue_full' => FileTransferFailureReason.queueFull,
+          'storage' => FileTransferFailureReason.storage,
+          'integrity' => FileTransferFailureReason.integrity,
+          _ => FileTransferFailureReason.receiver,
+        }
+      : FileTransferFailureReason.none;
+  return FileTransferV3Control(
+    action: action,
+    transferId: transfer.transferId,
+    durableOffset: transfer.state == FileTransferState.completed
+        ? transfer.size
+        : transfer.committedBytes,
+    size: transfer.size,
+    failureReason: failureReason,
+    skippedEntries: transfer.state == FileTransferState.completed
+        ? transfer.skippedEntries ?? 0
+        : 0,
+  );
+}
+
+WhisperFrameType whisperFrameTypeForControlAction(
+  FileTransferV3Action action,
+) => switch (action) {
+  FileTransferV3Action.ready => WhisperFrameType.fileReady,
+  FileTransferV3Action.ack => WhisperFrameType.fileAck,
+  FileTransferV3Action.verify => WhisperFrameType.fileAck,
+  FileTransferV3Action.complete => WhisperFrameType.fileComplete,
+  FileTransferV3Action.cancel => WhisperFrameType.fileCancel,
+  FileTransferV3Action.error => WhisperFrameType.fileError,
+};
+
+bool isActiveSupersededOutgoingState(FileTransferState state) =>
+    state == FileTransferState.negotiating ||
+    state == FileTransferState.transferring ||
+    state == FileTransferState.verifying ||
+    state == FileTransferState.queued;

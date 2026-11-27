@@ -292,6 +292,8 @@ class FileTransferEngine {
       <String, TransferOperationLane>{};
   final Map<String, int> _outgoingIntentEpochs = <String, int>{};
   final Set<String> _blockedOutgoingPeers = <String>{};
+  final Map<String, Set<String>> _supersededOutgoingByPeer =
+      <String, Set<String>>{};
 
   /// Transfers asked to stop sending. A window is sent inside the transfer's
   /// lane, and for a folder of small files reading one can take seconds; a
@@ -1580,11 +1582,108 @@ class FileTransferEngine {
   /// 标记该 peer 的传输等待重连,并清空其运行时队列。
   Future<void> waitUntilOutgoingIdle() => _outgoingWindowPump.waitUntilIdle();
 
-  Future<void> handlePeerDisconnected(String peerId) async {
+  Future<void> handlePeerDisconnected(
+    String peerId, {
+    bool handoverInProgress = false,
+  }) async {
+    final active = await _resetPeerTransfersForConnectionChange(
+      peerId,
+      markWaitingReconnect: true,
+    );
+    if (handoverInProgress && active.isNotEmpty) {
+      _supersededOutgoingByPeer[peerId] = active;
+    } else {
+      _supersededOutgoingByPeer.remove(peerId);
+    }
+  }
+
+  bool hasSupersededOutgoingForPeer(String peerId) =>
+      _supersededOutgoingByPeer[peerId]?.isNotEmpty == true;
+
+  /// Releases old-generation transfer handles so incoming bytes flush and
+  /// active outgoing transfers can re-offer immediately on the new generation.
+  Future<void> preparePeerSuperseded(String peerId) async {
+    final active = await _resetPeerTransfersForConnectionChange(
+      peerId,
+      markWaitingReconnect: false,
+    );
+    if (active.isNotEmpty) {
+      _supersededOutgoingByPeer[peerId] = active;
+    } else {
+      _supersededOutgoingByPeer.remove(peerId);
+    }
+  }
+
+  Future<Set<String>> _resetPeerTransfersForConnectionChange(
+    String peerId, {
+    required bool markWaitingReconnect,
+  }) async {
     _outgoingWindowPump.cancelPeer(peerId);
     _timeoutRetries.clearPeer(peerId);
-    await _markPeerTransfersWaitingReconnect(peerId);
+    final items = await _database().fetchRecoverableFileTransfersForPeer(peerId);
+    final activeOutgoing = <String>{};
+    for (final item in items) {
+      if (isTerminalFileTransferState(item.state)) continue;
+      if (item.direction == FileTransferDirection.outgoing &&
+          isActiveSupersededOutgoingState(item.state)) {
+        activeOutgoing.add(item.transferId);
+      }
+      final connection = _outgoingConnectionBindings[item.transferId] ??
+          _incomingConnectionBindings[item.transferId] ??
+          TransferConnectionBinding(peerId: peerId, generation: -1);
+      _outgoingStopRequests.add(item.transferId);
+      try {
+        await _runTransferOperation<void>(
+          item.transferId,
+          connection: connection,
+          operation: () async {
+            final current = await _database().fetchFileTransfer(item.transferId);
+            if (current == null || isTerminalFileTransferState(current.state)) {
+              return;
+            }
+            _ackWatchdog.cancel(current.transferId);
+            if (current.direction == FileTransferDirection.incoming) {
+              await _clearActiveIncomingTransfer(current.transferId, flush: true);
+            }
+            _incomingFlows.remove(current.transferId);
+            _incomingConnectionBindings.remove(current.transferId);
+            await _clearOutgoingTracking(current.transferId);
+            if (markWaitingReconnect) {
+              await _updateTransfer(
+                current.transferId,
+                state: FileTransferState.waitingReconnect,
+                lastError: '',
+              );
+            }
+          },
+        );
+      } finally {
+        _outgoingStopRequests.remove(item.transferId);
+      }
+    }
     _transferRuntime.clearPeer(peerId);
+    return activeOutgoing;
+  }
+
+  Future<void> resumeSupersededOutgoingForPeer(
+    String peerId, {
+    required int newGeneration,
+  }) async {
+    final ids = _supersededOutgoingByPeer.remove(peerId);
+    if (ids == null || ids.isEmpty || !_supportsFileTransferV3For(peerId)) return;
+    final connection = _currentConnectionBinding(peerId);
+    if (connection == null || connection.generation != newGeneration) return;
+    await _reofferOutgoingTransfers(peerId, connection, onlyIds: ids);
+  }
+
+  Future<void> _clearOutgoingTracking(String transferId) async {
+    _outgoingWindowEndOffsets.remove(transferId);
+    _outgoingProgress.untrack(transferId);
+    _outgoingTransferSequences.remove(transferId);
+    _outgoingFlows.remove(transferId);
+    await _outgoingChecksums.remove(transferId)?.dispose();
+    await _closeOutgoingTransferSource(transferId);
+    _outgoingConnectionBindings.remove(transferId);
   }
 
   Future<void> reconcileInterruptedTransfersOnStartup() {
@@ -1641,13 +1740,8 @@ class FileTransferEngine {
     );
     for (final transfer in canceled) {
       _outgoingWindowPump.cancel(transfer.transferId);
-    _ackWatchdog.cancel(transfer.transferId);
-      _outgoingWindowEndOffsets.remove(transfer.transferId);
-      _outgoingProgress.untrack(transfer.transferId);
-      _outgoingTransferSequences.remove(transfer.transferId);
-      await _outgoingChecksums.remove(transfer.transferId)?.dispose();
-      await _closeOutgoingTransferSource(transfer.transferId);
-      _outgoingConnectionBindings.remove(transfer.transferId);
+      _ackWatchdog.cancel(transfer.transferId);
+      await _clearOutgoingTracking(transfer.transferId);
       _transferRuntime.release(
         peerId: peerId,
         transferId: transfer.transferId,
@@ -1747,48 +1841,6 @@ class FileTransferEngine {
     return updated;
   }
 
-  Future<void> _markPeerTransfersWaitingReconnect(String peerId) async {
-    final items = await _database().fetchRecoverableFileTransfersForPeer(
-      peerId,
-    );
-    for (final item in items) {
-      if (isTerminalFileTransferState(item.state)) {
-        continue;
-      }
-      final connection =
-          _outgoingConnectionBindings[item.transferId] ??
-          TransferConnectionBinding(peerId: peerId, generation: -1);
-      await _runTransferOperation<void>(
-        item.transferId,
-        connection: connection,
-        operation: () async {
-          final current = await _database().fetchFileTransfer(item.transferId);
-          if (current == null || isTerminalFileTransferState(current.state)) {
-            return;
-          }
-          _ackWatchdog.cancel(current.transferId);
-          if (current.direction == FileTransferDirection.incoming) {
-            await _clearActiveIncomingTransfer(current.transferId, flush: true);
-          }
-          _outgoingWindowEndOffsets.remove(current.transferId);
-          _outgoingProgress.untrack(current.transferId);
-          _outgoingTransferSequences.remove(current.transferId);
-          _outgoingFlows.remove(current.transferId);
-          _incomingFlows.remove(current.transferId);
-          await _outgoingChecksums.remove(current.transferId)?.dispose();
-          await _closeOutgoingTransferSource(current.transferId);
-          _outgoingConnectionBindings.remove(current.transferId);
-          _incomingConnectionBindings.remove(current.transferId);
-          await _updateTransfer(
-            current.transferId,
-            state: FileTransferState.waitingReconnect,
-            lastError: '',
-          );
-        },
-      );
-    }
-  }
-
   Future<bool> _sendFileTransferV3OfferTo(
     String peerId,
     MessageData message, {
@@ -1819,27 +1871,17 @@ class FileTransferEngine {
     String peerId,
     FileTransferV3Control control, {
     TransferConnectionBinding? connection,
-  }) {
-    final type = switch (control.action) {
-      FileTransferV3Action.ready => WhisperFrameType.fileReady,
-      FileTransferV3Action.ack => WhisperFrameType.fileAck,
-      FileTransferV3Action.verify => WhisperFrameType.fileAck,
-      FileTransferV3Action.complete => WhisperFrameType.fileComplete,
-      FileTransferV3Action.cancel => WhisperFrameType.fileCancel,
-      FileTransferV3Action.error => WhisperFrameType.fileError,
-    };
-    return _sendFileTransferV3FrameTo(
-      peerId,
-      WhisperFrameV3(
-        type: type,
-        transferId: control.transferId,
-        offset: control.durableOffset,
-        sequence: 0,
-        payload: Uint8List.fromList(utf8.encode(jsonEncode(control.toJson()))),
-      ),
-      connection: connection,
-    );
-  }
+  }) => _sendFileTransferV3FrameTo(
+    peerId,
+    WhisperFrameV3(
+      type: whisperFrameTypeForControlAction(control.action),
+      transferId: control.transferId,
+      offset: control.durableOffset,
+      sequence: 0,
+      payload: Uint8List.fromList(utf8.encode(jsonEncode(control.toJson()))),
+    ),
+    connection: connection,
+  );
 
   Future<bool> _sendFileTransferV3FrameTo(
     String peerId,
@@ -2016,36 +2058,10 @@ class FileTransferEngine {
 
   Future<void> _replayIncomingTransferTerminal(
     FileTransferData transfer,
-  ) async {
-    final action = switch (transfer.state) {
-      FileTransferState.completed => FileTransferV3Action.complete,
-      FileTransferState.canceled => FileTransferV3Action.cancel,
-      _ => FileTransferV3Action.error,
-    };
-    final failureReason = transfer.state == FileTransferState.failed
-        ? switch (transfer.lastError) {
-            'queue_full' => FileTransferFailureReason.queueFull,
-            'storage' => FileTransferFailureReason.storage,
-            'integrity' => FileTransferFailureReason.integrity,
-            _ => FileTransferFailureReason.receiver,
-          }
-        : FileTransferFailureReason.none;
-    await _sendFileTransferV3ControlTo(
-      transfer.peerUid,
-      FileTransferV3Control(
-        action: action,
-        transferId: transfer.transferId,
-        durableOffset: transfer.state == FileTransferState.completed
-            ? transfer.size
-            : transfer.committedBytes,
-        size: transfer.size,
-        failureReason: failureReason,
-        skippedEntries: transfer.state == FileTransferState.completed
-            ? transfer.skippedEntries ?? 0
-            : 0,
-      ),
-    );
-  }
+  ) => _sendFileTransferV3ControlTo(
+    transfer.peerUid,
+    incomingTransferTerminalControl(transfer),
+  );
 
   Future<void> _releaseFailedIncomingReadyAttempt(
     FileTransferData transfer, {
@@ -3433,13 +3449,7 @@ class FileTransferEngine {
     if (clearTimeoutRetry) {
       _timeoutRetries.clear(transfer.transferId);
     }
-    _outgoingWindowEndOffsets.remove(transfer.transferId);
-    _outgoingProgress.untrack(transfer.transferId);
-    _outgoingTransferSequences.remove(transfer.transferId);
-    _outgoingFlows.remove(transfer.transferId);
-    await _outgoingChecksums.remove(transfer.transferId)?.dispose();
-    await _closeOutgoingTransferSource(transfer.transferId);
-    _outgoingConnectionBindings.remove(transfer.transferId);
+    await _clearOutgoingTracking(transfer.transferId);
     final released = _transferRuntime.release(
       peerId: transfer.peerUid,
       transferId: transfer.transferId,
@@ -4772,48 +4782,35 @@ class FileTransferEngine {
       if (_defaultPeerId().isNotEmpty) _defaultPeerId(),
     };
     for (final peerId in peerIds) {
-      if (!_supportsFileTransferV3For(peerId)) {
-        continue;
-      }
+      if (!_supportsFileTransferV3For(peerId)) continue;
       final connection = _currentConnectionBinding(peerId);
-      if (connection == null) {
-        continue;
-      }
-      final items = await _database().fetchRecoverableFileTransfersForPeer(
-        peerId,
-        direction: FileTransferDirection.outgoing,
+      if (connection == null) continue;
+      await _reofferOutgoingTransfers(peerId, connection);
+    }
+  }
+
+  Future<void> _reofferOutgoingTransfers(
+    String peerId,
+    TransferConnectionBinding connection, {
+    Set<String>? onlyIds,
+  }) async {
+    final items = await _database().fetchRecoverableFileTransfersForPeer(
+      peerId,
+      direction: FileTransferDirection.outgoing,
+    );
+    items.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    for (final item in items) {
+      if (isTerminalFileTransferState(item.state)) continue;
+      if (onlyIds != null && !onlyIds.contains(item.transferId)) continue;
+      final message = await _database().fetchAssociatedFileTransferMessage(item);
+      if (message == null) continue;
+      final sent = await _sendFileTransferV3OfferTo(
+        item.peerUid, message, connection: connection,
       );
-      items.sort((a, b) => a.createdAt.compareTo(b.createdAt));
-      for (final item in items) {
-        if (item.state == FileTransferState.completed ||
-            item.state == FileTransferState.failed ||
-            item.state == FileTransferState.canceled) {
-          continue;
-        }
-        final message = await _database().fetchAssociatedFileTransferMessage(
-          item,
-        );
-        if (message != null) {
-          final sent = await _sendFileTransferV3OfferTo(
-            item.peerUid,
-            message,
-            connection: connection,
-          );
-          if (!sent) {
-            await _updateTransfer(
-              item.transferId,
-              state: FileTransferState.waitingReconnect,
-            );
-            continue;
-          }
-        } else {
-          continue;
-        }
-        await _updateTransfer(
-          item.transferId,
-          state: FileTransferState.negotiating,
-        );
-      }
+      await _updateTransfer(
+        item.transferId,
+        state: sent ? FileTransferState.negotiating : FileTransferState.waitingReconnect,
+      );
     }
   }
 }

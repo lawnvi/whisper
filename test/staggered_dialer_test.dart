@@ -101,6 +101,51 @@ void main() {
         expect(closed, ['late']);
       },
     );
+
+    test(
+      'dialAndAuthenticateCandidates falls back on identityMismatch and stops on definitive rejection',
+      () async {
+        final ep1 = PeerEndpoint.loopbackForTesting(port: 10041);
+        final ep2 = PeerEndpoint.loopbackForTesting(port: 10042);
+        final ep3 = PeerEndpoint.loopbackForTesting(port: 10043);
+        final authed = <int>[];
+
+        final fallbackResult = await dialAndAuthenticateCandidates<String, String>(
+          endpoints: [ep1, ep2, ep3],
+          stagger: const Duration(milliseconds: 20),
+          dial: (ep) async {
+            if (ep == ep2) throw const SocketException('unreachable');
+            return 'conn-${ep.port}';
+          },
+          close: (_) async {},
+          authenticate: (ep, conn) async {
+            authed.add(ep.port);
+            return ep == ep1 ? 'identityMismatch' : 'authenticated';
+          },
+          shouldRetryNextCandidate: (result) => result == 'identityMismatch',
+        );
+
+        expect(fallbackResult, 'authenticated');
+        expect(authed, [10041, 10043]);
+
+        // Definitive rejections (e.g. peerRejected) must not try other candidates.
+        final rejectedAuthed = <int>[];
+        final rejectedResult = await dialAndAuthenticateCandidates<String, String>(
+          endpoints: [ep1, ep3],
+          stagger: const Duration(milliseconds: 20),
+          dial: (ep) async => 'conn-${ep.port}',
+          close: (_) async {},
+          authenticate: (ep, conn) async {
+            rejectedAuthed.add(ep.port);
+            return 'peerRejected';
+          },
+          shouldRetryNextCandidate: (result) => result == 'identityMismatch',
+        );
+
+        expect(rejectedResult, 'peerRejected');
+        expect(rejectedAuthed, [10041]);
+      },
+    );
   });
 
   group('NetworkChangeWatcher', () {

@@ -30,6 +30,7 @@ import 'package:whisper/socket/auth_failure_result.dart';
 import 'package:whisper/socket/authenticated_frame.dart';
 import 'package:whisper/socket/device_identity.dart';
 import 'package:whisper/socket/dial_tiebreaker.dart';
+import 'package:whisper/socket/direct_peer_http_client.dart';
 import 'package:whisper/socket/file_browse_trust_cache.dart';
 import 'package:whisper/socket/file_transfer_engine.dart';
 import 'package:whisper/socket/file_transfer_v3.dart';
@@ -48,6 +49,7 @@ import 'package:whisper/socket/transfer_ack_watchdog.dart';
 import 'package:whisper/socket/socket_admission.dart';
 import 'package:whisper/socket/socket_events.dart';
 export 'package:whisper/socket/socket_events.dart';
+import 'package:whisper/socket/staggered_dialer.dart';
 import 'package:whisper/socket/session_upgrade_token_registry.dart';
 import 'package:whisper/remote_files/fs_client.dart';
 import 'package:whisper/remote_files/mount/remote_mounts.dart';
@@ -79,6 +81,7 @@ import 'package:whisper/remote_input/remote_input_workspace_coordinator.dart';
 import 'package:whisper/state/connection_coordinator.dart';
 import 'package:whisper/state/connection_attempt.dart';
 import 'package:whisper/state/pairing_request.dart';
+import 'package:whisper/state/peer_endpoint.dart';
 import 'package:whisper/state/peer_reconnect_controller.dart';
 import 'package:whisper/state/peer_profile.dart';
 import 'package:whisper/state/peer_traits.dart';
@@ -384,6 +387,12 @@ class WsSvrManager {
       <String, Set<_PeerAuthSuppressionReason>>{};
   final Map<PeerSocketSession, int> _sessionStartedPolicyRevisions =
       <PeerSocketSession, int>{};
+  final Map<PeerSocketSession, int> _sessionAuthCommitWatermarks =
+      <PeerSocketSession, int>{};
+  final Set<PeerSocketSession> _supersededOnAuth = <PeerSocketSession>{};
+  final Set<WebSocketSink> _deferSinkCloseForSuperseded = <WebSocketSink>{};
+  final Map<PeerSocketSession, WebSocketSink> _deferredSupersededSinks =
+      <PeerSocketSession, WebSocketSink>{};
   final Map<String, Future<void>> _peerAuthenticationTails =
       <String, Future<void>>{};
   int _globalPolicyEpoch = 0;
@@ -866,59 +875,109 @@ class WsSvrManager {
     return false;
   }
 
-  Future<void> _registerPeerConnection({
+  WebSocketSink? _findSinkForSession(PeerSocketSession? target) {
+    if (target == null) return null;
+    for (final entry in _sessionsBySink.entries) {
+      if (identical(entry.value, target)) return entry.key;
+    }
+    return null;
+  }
+
+  void _closeDeferredSupersededSink(PeerSocketSession session) {
+    final deferred = _deferredSupersededSinks.remove(session);
+    if (deferred != null) {
+      _ignoreFuture(_closeSocketSink(deferred), context: 'close superseded');
+    }
+  }
+
+  Future<bool> _registerPeerConnection({
     required String peerId,
     required WebSocketSink sink,
     required PeerSocketSession session,
     PeerProfile? profile,
   }) async {
-    if (peerId.isEmpty || !session.isAuthenticationReady) {
-      return;
+    if (peerId.isEmpty || !session.isAuthenticationReady) return false;
+    var superseded = false;
+    final deferredOldSink = session.role == PeerSocketRole.server
+        ? _findSinkForSession(_sessionsByPeerId[peerId])
+        : null;
+    if (deferredOldSink != null) {
+      _deferSinkCloseForSuperseded.add(deferredOldSink);
     }
-    await _peerConnections.register(
-      PeerConnection(
-        peerId: peerId,
-        connectionId: session.connectionGeneration,
-        send: (message) {
-          if (session.isAuthenticated) {
-            _ignoreFuture(
-              _sendBytesOnSink(sink, message).then<void>((_) {}),
-              context: 'send peer message',
-            );
+    try {
+      await _peerConnections.register(
+        PeerConnection(
+          peerId: peerId,
+          connectionId: session.connectionGeneration,
+          send: (message) {
+            if (session.isAuthenticated) {
+              _ignoreFuture(
+                _sendBytesOnSink(sink, message).then<void>((_) {}),
+                context: 'send peer message',
+              );
+            }
+          },
+          sendAsync: (message) => session.isAuthenticated
+              ? _sendBytesOnSink(sink, message)
+              : Future<bool>.value(false),
+          close: () async {
+            _peerIdsBySink.remove(sink);
+            session.close();
+            if (_deferSinkCloseForSuperseded.remove(sink)) return;
+            await _closeSocketSink(sink);
+          },
+        ),
+        afterRemove: (binding) async {
+          superseded = true;
+          final previous = _sessionsByPeerId[peerId];
+          if (previous?.connectionGeneration == binding.generation) {
+            _sessionsByPeerId.remove(peerId);
           }
+          await _handlePeerSupersededPreRegister(peerId);
         },
-        sendAsync: (message) {
-          if (!session.isAuthenticated) {
-            return Future<bool>.value(false);
+        afterRegister: (binding) {
+          if (binding.generation != session.connectionGeneration ||
+              !session.isAuthenticationReady) {
+            throw StateError('stale peer registration');
           }
-          return _sendBytesOnSink(sink, message);
+          _sessionsByPeerId[peerId] = session;
+          _peerIdsBySink[sink] = peerId;
+          if (session.role == PeerSocketRole.server &&
+              (receiver.isEmpty || receiver == peerId)) {
+            receiver = peerId;
+            _sink = sink;
+          }
+          _setRemoteProfile(profile, peerId: peerId);
         },
-        close: () async {
-          _peerIdsBySink.remove(sink);
-          session.close();
-          await _closeSocketSink(sink);
-        },
-      ),
-      afterRemove: (binding) => _afterPeerRemoved(
-        binding,
-        closingSession: _sessionsByPeerId[peerId],
-        cause: PeerDisconnectCause.superseded,
-      ),
-      afterRegister: (binding) {
-        if (binding.generation != session.connectionGeneration ||
-            !session.isAuthenticationReady) {
-          throw StateError('stale peer registration');
-        }
-        _sessionsByPeerId[peerId] = session;
-        _peerIdsBySink[sink] = peerId;
-        if (session.role == PeerSocketRole.server &&
-            (receiver.isEmpty || receiver == peerId)) {
-          receiver = peerId;
-          _sink = sink;
-        }
-        _setRemoteProfile(profile, peerId: peerId);
-      },
-    );
+      );
+      if (deferredOldSink != null &&
+          !_deferSinkCloseForSuperseded.remove(deferredOldSink)) {
+        _deferredSupersededSinks[session] = deferredOldSink;
+      }
+    } catch (_) {
+      if (deferredOldSink != null &&
+          !_deferSinkCloseForSuperseded.remove(deferredOldSink)) {
+        _ignoreFuture(
+          _closeSocketSink(deferredOldSink),
+          context: 'close superseded',
+        );
+      }
+      rethrow;
+    }
+    return superseded;
+  }
+
+  /// Cleans up per-generation state on a superseded connection without taking
+  /// the peer offline. Media channels close via [_closeSupersededMediaChannels]
+  /// and active outgoing transfers re-offer in [_announceAuthenticatedSession].
+  Future<void> _handlePeerSupersededPreRegister(String peerId) async {
+    _pingTracker.clearPeer(peerId);
+    _completeRemoteProfileRefreshWaiters(peerId: peerId);
+    _outgoingTextAcknowledgements.disconnectPeer(peerId);
+    _sessionUpgradeTokens.clearPeer(peerId);
+    FileBrowseHost.shared.closePeer(peerId);
+    RemoteFilesClient.peerGone(peerId, reason: 'offline');
+    await _transferEngine.preparePeerSuperseded(peerId);
   }
 
   Future<void> _handlePeerSocketDoneQueued(WebSocketSink sink) {
@@ -952,6 +1011,12 @@ class WsSvrManager {
     final disconnectCause =
         _terminalDisconnectCauses.remove(sink) ?? PeerDisconnectCause.network;
     final session = _sessionsBySink.remove(sink);
+    final wasAuthenticated = session?.isAuthenticated == true;
+    if (session != null) {
+      _sessionAuthCommitWatermarks.remove(session);
+      _supersededOnAuth.remove(session);
+      _closeDeferredSupersededSink(session);
+    }
     if (session != null &&
         !_peerAuthenticationTails.containsKey(session.remotePeerId)) {
       _sessionStartedPolicyRevisions.remove(session);
@@ -966,13 +1031,21 @@ class WsSvrManager {
     _releaseIncomingAuthForSink(sink);
     _pingTracker.stopKeepalive(sink);
     final peerId = _peerIdsBySink.remove(sink);
-    final currentSession = peerId == null ? null : _sessionsByPeerId[peerId];
     if (peerId == null) {
       if (identical(_sink, sink)) {
         _sink = null;
       }
       return;
     }
+    // Wait for any already-verified replacement session for this peer to
+    // finish committing before firing offline disconnect cleanup.
+    final pendingAuthTail = wasAuthenticated
+        ? _peerAuthenticationTails[peerId]
+        : null;
+    if (pendingAuthTail != null) {
+      await pendingAuthTail.catchError((Object _) {});
+    }
+    final currentSession = _sessionsByPeerId[peerId];
     if (!await AuthSocketLifecycle.removeConnectionIfCurrent(
       connections: _peerConnections,
       peerId: peerId,
@@ -1709,27 +1782,8 @@ class WsSvrManager {
         packet.sourcePeerId == claim.peerId;
   }
 
-  bool _isValidWebSocketUpgrade(shelf.Request request) {
-    final connection = request.headers[HttpHeaders.connectionHeader];
-    final upgrade = request.headers[HttpHeaders.upgradeHeader];
-    final version = request.headers['sec-websocket-version'];
-    final key = request.headers['sec-websocket-key'];
-    if (connection == null ||
-        !connection
-            .split(',')
-            .map((token) => token.trim().toLowerCase())
-            .contains('upgrade') ||
-        upgrade?.trim().toLowerCase() != 'websocket' ||
-        version?.trim() != '13' ||
-        key == null) {
-      return false;
-    }
-    try {
-      return base64.decode(key.trim()).length == 16;
-    } on FormatException {
-      return false;
-    }
-  }
+  bool _isValidWebSocketUpgrade(shelf.Request request) =>
+      isValidWebSocketUpgradeRequest(request);
 
   PeerReconnectController _reconnectControllerFor(String peerId) {
     return _reconnectControllers.putIfAbsent(
@@ -1870,11 +1924,18 @@ class WsSvrManager {
     } on Object {
       return ConnectionAttemptStatus.rejected;
     }
+    final allCandidates = _manageSharedCoordinators
+        ? ConnectionCoordinator().candidateEndpointsFor(
+            target.peerId, primary: target.endpoint,
+          )
+        : <PeerEndpoint>[target.endpoint];
     final result = await connectToServer(
       ConnectionAttemptRequest(
-        requestId:
-            'reconnect:${target.peerId}:${context.generation}:${uuid.v4()}',
+        requestId: 'reconnect:${target.peerId}:${context.generation}:${uuid.v4()}',
         endpoint: target.endpoint,
+        fallbackEndpoints: allCandidates.length > 1
+            ? allCandidates.sublist(1)
+            : const <PeerEndpoint>[],
         expectedPeerId: target.peerId,
         expectedPublicKeyHash: publicKeyHash,
         mode: ConnectionAttemptMode.automatic,
@@ -1919,9 +1980,12 @@ class WsSvrManager {
       return;
     }
     final pending = _pendingOutgoingBySink[sink];
-    final endpoint = pending?.request.endpoint;
+    final endpoint = pending?.connectedEndpoint ?? pending?.request.endpoint;
     if (pending == null || endpoint == null) {
       return;
+    }
+    if (_manageSharedCoordinators) {
+      ConnectionCoordinator().rememberWorkingEndpoint(device.uid, endpoint);
     }
     final target = ReconnectTarget.endpoint(
       peerId: device.uid,
@@ -2549,11 +2613,11 @@ class WsSvrManager {
         reason: ConnectionAttemptReason.managerClosed,
       );
     }
-    final endpoint = request.endpoint;
+    final primaryEndpoint = request.endpoint;
     final authRequestKey = _authRequestKey(
       peerId: request.expectedPeerId,
-      host: endpoint.host,
-      port: endpoint.port,
+      host: primaryEndpoint.host,
+      port: primaryEndpoint.port,
     );
     if (!_authRequestGate.tryClaimOutgoing(authRequestKey)) {
       return ConnectionAttemptResult.rejected(
@@ -2561,224 +2625,129 @@ class WsSvrManager {
         reason: ConnectionAttemptReason.duplicateRequest,
       );
     }
-    WebSocketChannel? channel;
-    // claim 的所有权在写入 _outgoingAuthKeysBySink 时移交给 sink 映射;
-    // 在此之前失败必须直接释放,否则该 key 会永久占用鉴权门。
-    var authKeyBoundToSink = false;
+    var authClaimOwnedLocally = true;
+    WebSocketChannel? activeChannel;
+    bool isRetryableCandidateFailure(ConnectionAttemptReason reason) =>
+        (reason == ConnectionAttemptReason.identityMismatch ||
+            reason == ConnectionAttemptReason.transportClosed) &&
+        !attempt.isCancelled;
     try {
-      final upgraded = await _connectOutgoingWebSocket(
-        endpoint.chatUri,
-        attempt,
-      );
-      channel = BackpressureWebSocketChannel(
-        upgraded.webSocket,
-        socket: upgraded.socket,
-      );
-      attempt.channel = channel;
-      final connectedChannel = channel;
-      attempt.isReady = true;
-      if (attempt.isCancelled) throw const OutgoingConnectionCancelled();
-      final channelSink = connectedChannel.sink;
-      _pendingOutgoingBySink[channelSink] = attempt;
-      _outgoingAuthKeysBySink[channelSink] = authRequestKey;
-      authKeyBoundToSink = true;
-      _endpointsBySink[channelSink] = (
-        host: endpoint.host,
-        port: endpoint.port,
-      );
-      final authCompleter = Completer<_SocketAuthResult>();
-      _authResultsBySink[channelSink] = authCompleter;
-      final session = await _createSocketSession(
-        sink: channelSink,
-        role: PeerSocketRole.client,
-        intendedPeerId: request.expectedPeerId,
-        intendedPublicKeyHash: request.expectedPublicKeyHash,
-        protocolVersion: protocolVersion,
-      );
-      attempt.session = session;
-      if (attempt.isCancelled) {
-        throw const OutgoingConnectionCancelled();
-      }
-      _attachSocketTransport(connectedChannel, session, asServer: false);
-      await _sendAuthEnvelope(channelSink, await session.createHello());
-      final authResult = await authCompleter.future;
-      _releaseOutgoingAuthForSink(channelSink);
-      if (attempt.isCancelled) {
-        throw const OutgoingConnectionCancelled();
-      }
-      if (!authResult.allow) {
-        await _closeSocketSink(channelSink);
-        await _handlePeerSocketDoneQueued(channelSink);
-        return authFailureResult(request, authResult.message);
-      }
-      final peerId = session.remotePeerId;
-      final generation = session.connectionGeneration;
-      if (!_peerConnections.isCurrent(peerId, generation) ||
-          !identical(_sessionsByPeerId[peerId], session)) {
-        return ConnectionAttemptResult.cancelled(
-          requestId: request.requestId,
-          reason: ConnectionAttemptReason.superseded,
-        );
-      }
-      return ConnectionAttemptResult.authenticated(
-        requestId: request.requestId,
-        peerId: peerId,
-        generation: generation,
+      return await dialAndAuthenticateCandidates<
+        ({WebSocket webSocket, Socket socket}),
+        ConnectionAttemptResult
+      >(
+        endpoints: request.candidateEndpoints,
+        dial: (endpoint) => connectOutgoingWebSocket(
+          endpoint.chatUri, attempt,
+          timeout: _outgoingConnectionTimeout, pingInterval: _serverPingInterval,
+        ),
+        close: (upgraded) async {
+          upgraded.socket.destroy();
+          unawaited(upgraded.webSocket.close().catchError((Object _) {}));
+        },
+        isCancelled: () => attempt.isCancelled,
+        onSettled: attempt.abortPendingDialClients,
+        shouldRetryNextCandidate: (result) =>
+            isRetryableCandidateFailure(result.reason),
+        authenticate: (endpoint, upgraded) async {
+          attempt.resetTransportForCandidateRetry();
+          final channel = BackpressureWebSocketChannel(
+            upgraded.webSocket, socket: upgraded.socket,
+          );
+          activeChannel = channel;
+          attempt.channel = channel;
+          attempt.connectedEndpoint = endpoint;
+          attempt.isReady = true;
+          if (attempt.isCancelled) throw const OutgoingConnectionCancelled();
+          final channelSink = channel.sink;
+          _pendingOutgoingBySink[channelSink] = attempt;
+          if (authClaimOwnedLocally) {
+            _outgoingAuthKeysBySink[channelSink] = authRequestKey;
+            authClaimOwnedLocally = false;
+          }
+          _endpointsBySink[channelSink] = (host: endpoint.host, port: endpoint.port);
+          final authCompleter = Completer<_SocketAuthResult>();
+          _authResultsBySink[channelSink] = authCompleter;
+          final session = await _createSocketSession(
+            sink: channelSink,
+            role: PeerSocketRole.client,
+            intendedPeerId: request.expectedPeerId,
+            intendedPublicKeyHash: request.expectedPublicKeyHash,
+            protocolVersion: protocolVersion,
+          );
+          attempt.session = session;
+          if (attempt.isCancelled) throw const OutgoingConnectionCancelled();
+          _attachSocketTransport(channel, session, asServer: false);
+          await _sendAuthEnvelope(channelSink, await session.createHello());
+          final authResult = await authCompleter.future;
+          if (attempt.isCancelled) throw const OutgoingConnectionCancelled();
+          if (!authResult.allow) {
+            final failure = authFailureResult(request, authResult.message);
+            if (isRetryableCandidateFailure(failure.reason) &&
+                _outgoingAuthKeysBySink.remove(channelSink) == authRequestKey) {
+              authClaimOwnedLocally = true;
+            } else {
+              _releaseOutgoingAuthForSink(channelSink);
+            }
+            activeChannel = null;
+            await _closeSocketSink(channelSink);
+            await _handlePeerSocketDoneQueued(channelSink);
+            return failure;
+          }
+          _releaseOutgoingAuthForSink(channelSink);
+          activeChannel = null;
+          final peerId = session.remotePeerId;
+          final generation = session.connectionGeneration;
+          if (!_peerConnections.isCurrent(peerId, generation) ||
+              !identical(_sessionsByPeerId[peerId], session)) {
+            return ConnectionAttemptResult.cancelled(
+              requestId: request.requestId, reason: ConnectionAttemptReason.superseded,
+            );
+          }
+          return ConnectionAttemptResult.authenticated(
+            requestId: request.requestId, peerId: peerId, generation: generation,
+          );
+        },
       );
     } catch (error) {
       final wasCancelled =
           attempt.isCancelled ||
           error is OutgoingConnectionCancelled ||
+          error is StaggeredDialCancelled ||
           (error is WebSocketChannelException &&
               error.inner is OutgoingConnectionCancelled);
       try {
         await attempt.cancel();
-      } catch (_) {
-        // The typed result below remains authoritative.
-      }
+      } catch (_) {}
+      final channel = activeChannel;
       if (channel != null) {
         _completeSocketAuth(channel.sink, false, 'connection_failed');
         _releaseOutgoingAuthForSink(channel.sink);
         await _handlePeerSocketDoneQueued(channel.sink);
       }
-      if (!authKeyBoundToSink) {
-        // pre-ready 失败(或 channel 构造失败)时映射尚未写入,
-        // 按 sink 查找释放不到,需直接释放本次 claim;
-        // 绑定之后统一走幂等的 _releaseOutgoingAuthForSink,
-        // 避免误释放新一轮 attempt 重新 claim 的同名 key。
+      if (authClaimOwnedLocally) {
         _authRequestGate.releaseOutgoing(authRequestKey);
+        authClaimOwnedLocally = false;
       }
       if (wasCancelled) {
         return ConnectionAttemptResult.cancelled(
-          requestId: request.requestId,
-          reason: attempt.cancellationReason,
+          requestId: request.requestId, reason: attempt.cancellationReason,
         );
       }
-      return _connectionExceptionResult(request, error);
+      return connectionExceptionResult(request, error);
+    } finally {
+      attempt.abortPendingDialClients();
+      if (authClaimOwnedLocally) {
+        _authRequestGate.releaseOutgoing(authRequestKey);
+      }
     }
-  }
-
-  ConnectionAttemptResult _connectionExceptionResult(
-    ConnectionAttemptRequest request,
-    Object error,
-  ) {
-    final upgradeRejected =
-        error is WebSocketUpgradeRejected ||
-        (error is WebSocketChannelException &&
-            error.inner is WebSocketUpgradeRejected);
-    if (upgradeRejected) {
-      return ConnectionAttemptResult.rejected(
-        requestId: request.requestId,
-        reason: ConnectionAttemptReason.authenticationFailed,
-      );
-    }
-    final transportError =
-        error is WebSocketChannelException && error.inner != null
-        ? error.inner!
-        : error;
-    final isNetworkFailure =
-        transportError is SocketException ||
-        transportError is HttpException ||
-        transportError is TimeoutException ||
-        transportError is WebSocketException ||
-        error is WebSocketChannelException;
-    if (isNetworkFailure) {
-      final reason = switch (transportError) {
-        TimeoutException() => ConnectionAttemptReason.connectionTimedOut,
-        SocketException(:final osError) => _socketDiagnosticReason(
-          osError?.errorCode,
-        ),
-        WebSocketException() => ConnectionAttemptReason.transportClosed,
-        HttpException() => ConnectionAttemptReason.connectionRefused,
-        _ => ConnectionAttemptReason.transportClosed,
-      };
-      return ConnectionAttemptResult.networkFailure(
-        requestId: request.requestId,
-        reason: reason,
-      );
-    }
-    return ConnectionAttemptResult.rejected(
-      requestId: request.requestId,
-      reason: error is AuthHandshakeException
-          ? ConnectionAttemptReason.authenticationFailed
-          : ConnectionAttemptReason.localStateFailure,
-    );
-  }
-
-  ConnectionAttemptReason _socketDiagnosticReason(int? errorCode) {
-    return switch (errorCode) {
-      61 || 111 || 10061 => ConnectionAttemptReason.connectionRefused,
-      60 || 110 || 10060 => ConnectionAttemptReason.connectionTimedOut,
-      _ => ConnectionAttemptReason.networkUnavailable,
-    };
   }
 
   @visibleForTesting
   ConnectionAttemptResult debugClassifyConnectionException(
     ConnectionAttemptRequest request,
     Object error,
-  ) => _connectionExceptionResult(request, error);
-
-  Future<({WebSocket webSocket, Socket socket})> _connectOutgoingWebSocket(
-    Uri webSocketUri,
-    PendingOutgoingConnection attempt,
-  ) async {
-    final requestUri = webSocketUri.replace(
-      scheme: webSocketUri.scheme == 'wss' ? 'https' : 'http',
-    );
-    final nonce = newWebSocketKey();
-    final request = await attempt.httpClient
-        .openUrl('GET', requestUri)
-        .timeout(_outgoingConnectionTimeout);
-    attempt.transportRequest = request;
-    request.followRedirects = false;
-    if (attempt.isCancelled) {
-      request.abort(const OutgoingConnectionCancelled());
-      throw const OutgoingConnectionCancelled();
-    }
-    setWebSocketUpgradeHeaders(request.headers, nonce);
-    final response = await request.close().timeout(_outgoingConnectionTimeout);
-    attempt.transportRequest = null;
-    if (attempt.isCancelled) {
-      final socket = await response.detachSocket();
-      socket.destroy();
-      throw const OutgoingConnectionCancelled();
-    }
-    final connectionTokens =
-        (response.headers[HttpHeaders.connectionHeader] ?? const <String>[])
-            .expand((value) => value.split(','))
-            .map((value) => value.trim().toLowerCase());
-    final upgrade = response.headers.value(HttpHeaders.upgradeHeader);
-    final accept = response.headers.value('Sec-WebSocket-Accept');
-    Future<Never> rejectResponse(String reason) async {
-      final socket = await response.detachSocket();
-      socket.destroy();
-      throw WebSocketUpgradeRejected(reason, response.statusCode);
-    }
-
-    if (response.statusCode != HttpStatus.switchingProtocols ||
-        !connectionTokens.contains('upgrade') ||
-        upgrade?.trim().toLowerCase() != 'websocket' ||
-        accept?.trim() != WebSocketChannel.signKey(nonce)) {
-      return rejectResponse(
-        "Connection to '$webSocketUri' was not upgraded to websocket",
-      );
-    }
-    if (response.headers.value('Sec-WebSocket-Protocol') != null ||
-        response.headers.value('Sec-WebSocket-Extensions') != null) {
-      return rejectResponse('unexpected_websocket_negotiation');
-    }
-    final socket = await response.detachSocket();
-    if (attempt.isCancelled) {
-      socket.destroy();
-      throw const OutgoingConnectionCancelled();
-    }
-    setTcpNoDelay(socket);
-    tuneChatSocket(socket);
-    final webSocket = cappedClientWebSocket(socket, () => attempt.session)
-      ..pingInterval = _serverPingInterval;
-    return (webSocket: webSocket, socket: socket);
-  }
+  ) => connectionExceptionResult(request, error);
 
   void _cancelPendingOutgoingConnections() {
     for (final attempt in _pendingOutgoingConnections.toList(growable: false)) {
@@ -3282,7 +3251,12 @@ class WsSvrManager {
     if (!ownsCleanup()) {
       return;
     }
-    await _transferEngine.handlePeerDisconnected(peerId);
+    await _transferEngine.handlePeerDisconnected(
+      peerId,
+      handoverInProgress:
+          cause == PeerDisconnectCause.network &&
+          _hasReadyPendingOutgoingForPeer(peerId),
+    );
     if (!ownsCleanup()) {
       return;
     }
@@ -4081,9 +4055,24 @@ class WsSvrManager {
       _outgoingTextRetries.clearPeer(session.remotePeerId);
     }
     _requireCurrentAuthenticationCommit(session, sink, generation);
+    final existing = _sessionsByPeerId[session.remotePeerId];
+    if (existing != null &&
+        !existing.isClosed &&
+        existing.isAuthenticated &&
+        existing.role != session.role &&
+        (_sessionAuthCommitWatermarks[existing] ?? -1) >=
+            session.connectionGeneration &&
+        existingSessionWinsOverlap(
+          localUid: session.localProfile.uid,
+          remoteUid: session.remotePeerId,
+          existingIsClient: existing.role == PeerSocketRole.client,
+        )) {
+      throw const AuthHandshakeException('superseded');
+    }
     DeviceData? storedDevice;
     PeerProfile? runtimeProfile;
     var published = false;
+    var superseded = false;
     try {
       final committed = await session.commitAuthentication(
         generation: generation,
@@ -4129,7 +4118,7 @@ class WsSvrManager {
           _requireCurrentRegisterableSession(session, sink, generation);
           _requireCurrentAuthenticationCommit(session, sink, generation);
           final peerId = session.remotePeerId;
-          await _registerPeerConnection(
+          superseded = await _registerPeerConnection(
             peerId: peerId,
             sink: sink,
             session: session,
@@ -4156,6 +4145,10 @@ class WsSvrManager {
         throw const AuthHandshakeException('identity_pin_state_missing');
       }
       session.markTransportAuthenticated();
+      _sessionAuthCommitWatermarks[session] = _nextConnectionGeneration;
+      if (superseded) {
+        _supersededOnAuth.add(session);
+      }
       _transferEngine.allowOutgoingTransfersForPeer(session.remotePeerId);
       _removePeerAuthSuppression(
         session.remotePeerId,
@@ -4237,6 +4230,17 @@ class WsSvrManager {
     if (session.role == PeerSocketRole.server) {
       _dispatchToAll((event) => event.afterAuth(true, storedDevice));
     }
+    _closeDeferredSupersededSink(session);
+    if (_supersededOnAuth.remove(session) ||
+        _transferEngine.hasSupersededOutgoingForPeer(session.remotePeerId)) {
+      _ignoreFuture(
+        _transferEngine.resumeSupersededOutgoingForPeer(
+          session.remotePeerId,
+          newGeneration: session.connectionGeneration,
+        ),
+        context: 'resume superseded peer transfers',
+      );
+    }
     _ignoreFuture(
       _transferEngine.markRecoverableTransfersPausedForPeer(
         session.remotePeerId,
@@ -4246,21 +4250,13 @@ class WsSvrManager {
   }
 
   bool _isSameSession(
-    PeerSocketSession session,
-    WebSocketSink sink,
-    int generation,
-  ) {
-    return identical(_sessionsBySink[sink], session) &&
-        session.connectionGeneration == generation;
-  }
+    PeerSocketSession session, WebSocketSink sink, int generation,
+  ) => identical(_sessionsBySink[sink], session) &&
+      session.connectionGeneration == generation;
 
   bool _isCurrentSession(
-    PeerSocketSession session,
-    WebSocketSink sink,
-    int generation,
-  ) {
-    return _isSameSession(session, sink, generation) && !session.isClosed;
-  }
+    PeerSocketSession session, WebSocketSink sink, int generation,
+  ) => _isSameSession(session, sink, generation) && !session.isClosed;
 
   void _requireCurrentSession(
     PeerSocketSession session,
