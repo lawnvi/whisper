@@ -13,7 +13,7 @@ Android 和插数据线时看到的一样：内部存储，加上插着的 SD �
 | `lib/remote_files/fs_share_policy.dart` | `FsSharePolicy`（每种用途能不能做，含排除）和 `FsProtectedAreas`（无论怎么设都不给的底线） |
 | `lib/remote_files/fs_paths.dart` | `FsPathResolver` 带上 policy：`resolveExisting(use:)`、`resolveEntry`、`resolveNewChild`、`checkChange` |
 | `lib/remote_files/fs_host*.dart`、`fs_placement.dart` | 每个请求按用途解析路径；拷进来的文件落地前再查（`FsHostFiles.mayPlace`） |
-| `lib/socket/folder_transfer_scan.dart` | `scanFolderInBackground`：文件夹发出去时留下 Whisper 自己的文件（`AppPrivatePaths`，现在是数据库） |
+| `lib/socket/folder_transfer_scan.dart` | `scanFolderInBackground`：文件夹发出去时留下 Whisper 自己的文件（`AppPrivatePaths`，现在是数据库），传入 `FsSharePolicy` 时跳过不共享或受保护的子目录并计入 `skippedAtSource` |
 | `lib/new_ui/settings/settings_shared_folders.dart` | 设置里「共享与权限 → 共享的目录」：磁盘和分区的开关、不共享的目录 |
 
 只有主机这一侧受限：`FileBrowseHost.shared` 的 `FsHostFiles(sharing: FileBrowseHost.sharedFolders)`。本机自己的文件页（`LocalFsBrowser`）和调试钩子用不带 policy 的 `FsHostFiles`，照旧看全部；Linux 上它列的盘也来自 `fsOtherDisks`，和设置里的一样。
@@ -46,7 +46,7 @@ Android 和插数据线时看到的一样：内部存储，加上插着的 SD �
 | 用途（`FsUse`） | 哪些请求 | 要求 |
 | --- | --- | --- |
 | `read` | `list`、`read`、`thumb`、`stat`、改动的父文件夹 | 在共享的盘里，不在排除的目录里，不在底线里 |
-| `copy` | `fetch` | 能读，并且里面不含底线里的地方（主目录本身或它的上层、私有目录、挂载），也不含排除的目录；数据库这类 Whisper 自己的文件由扫描留下 |
+| `copy` | `fetch` | 能读；文件夹本身发出时把当前的 `FsSharePolicy` 快照传给 `scanFolderInBackground`，跳过底线里和排除掉的子目录并计入 `skippedAtSource`，数据库这类 Whisper 自己的文件仍由扫描静默留下 |
 | `fill` | `incoming`、新建和移动的目标文件夹 | 能读，不是 git 的控制项 |
 | `change` | 写入、新建、重命名、移动（两头）、删除、改时间 | 能读，不是共享的盘根本身，不是 git 的控制项，里面不含排除的目录、底线里的地方、Whisper 自己的文件和挂载（这些都按路径认，上层一改名就脱离规则，一删就跟着没了）；指向不共享地方的符号链接（列表里本来就藏着）也不能动，否则对方能在检查和打开之间把它换到要读的文件的位置上。已经存在的条目再按它的真实路径查一次，换个大小写或 Windows 短名（`GIT~1`）绕不过去 |
 
@@ -75,7 +75,6 @@ Android 和插数据线时看到的一样：内部存储，加上插着的 SD �
 - 测试只在 macOS 上跑过，用真实文件和符号链接。磁盘识别只用临时用例核对过 `mount` 和 `/proc/self/mounts` 的解析。Windows 的系统属性、已知文件夹、盘符根，Linux 的 XDG 目录和卷，都要真机看；Windows 上靠 Dart 的 `resolveSymbolicLinks`（`GetFinalPathNameByHandle`）把路径规范成长名和真实大小写。
 - 系统目录是按名字和系统属性认的。系统盘只给主目录，所以这只影响另外打开的盘：装在 D 盘根上的程序目录（`D:\Games`、`D:\Python`）会当普通目录共享，允许修改时对方能改那里的程序。主目录里的程序（`~/bin`、`AppData` 以外装的）也一样。底线只挡住登录时会自动运行的地方和 git。
 - 常用目录被挪到系统盘上主目录以外（`C:\文档`）时不共享。
-- 对方拷整个文件夹时，里面有排除的目录就整个拒绝，没有做成跳过那一部分（要把排除项一路传到发送端的扫描）。
 - 删除整个含 `.git` 的文件夹（整个仓库）是允许的，这不会让别的东西跑起来。
 - 不在 `.git` 名下的裸仓库（`foo.git/config`）不在底线里。
 - Linux 上不分大小写的卷（vfat、exfat）：允许判断用精确路径，换大小写的请求会被拒绝而不是放过。

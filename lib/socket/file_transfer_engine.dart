@@ -20,6 +20,7 @@ import 'package:whisper/helper/whisper_file_picker.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/file_transfer.dart';
 import 'package:whisper/model/message.dart';
+import 'package:whisper/remote_files/fs_share_policy.dart';
 import 'package:whisper/socket/authenticated_frame.dart';
 import 'package:whisper/socket/file_path_policy.dart';
 import 'package:whisper/socket/file_transfer_source.dart';
@@ -41,22 +42,6 @@ import 'package:whisper/socket/wire_message_codec.dart';
 import 'package:whisper/socket/wire_message_replay.dart';
 import 'package:whisper/state/peer_profile.dart';
 
-/// 与 svrmanager `_buildMessage` 现签名逐字对应(msg/fileName/path/uid/fileTimestamp 原本未标类型)。
-typedef TransferMessageBuilder =
-    MessageData Function(
-      MessageEnum type,
-      String content,
-      dynamic msg,
-      dynamic fileName,
-      int size,
-      bool clipboard, {
-      String md5,
-      dynamic path,
-      dynamic uid,
-      dynamic fileTimestamp,
-      String? receiverOverride,
-    });
-
 enum _IncomingReadyResult { retained, sendFailed, unavailable }
 
 /// A folder being received: the worker writing it, and how much of its
@@ -65,12 +50,8 @@ enum _IncomingReadyResult { retained, sendFailed, unavailable }
 /// when deciding whether a folder fits: the usual allocation block.
 const int _folderEntryStorageOverhead = 4096;
 
-Future<FolderScanResult> _scanFolderInBackground(String path) =>
-    scanFolderInBackground(path);
-
-Future<void> _setFileLastModified(File file, int timestamp) {
-  return file.setLastModified(DateTime.fromMillisecondsSinceEpoch(timestamp));
-}
+Future<void> _setFileLastModified(File file, int timestamp) =>
+    file.setLastModified(DateTime.fromMillisecondsSinceEpoch(timestamp));
 
 /// V3 文件传输引擎:从 WsSvrManager 机械抽离的发送/接收/断点恢复栈。
 /// 与 socket 层的全部交互经构造注入的回调完成,不直接持有连接对象。
@@ -162,7 +143,7 @@ class FileTransferEngine {
        _now = now ?? DateTime.now,
        _progressTimerFactory = progressTimerFactory ?? Timer.new,
        _folderStore = folderStore,
-       _scanFolder = scanFolder ?? _scanFolderInBackground,
+       _scanFolder = scanFolder ?? scanFolderInBackground,
        _caseInsensitiveFolderNames =
            caseInsensitiveFolderNames ?? !Platform.isLinux,
        _folderCheckpointInterval = folderCheckpointInterval,
@@ -771,6 +752,7 @@ class FileTransferEngine {
     String peerId,
     String path, {
     String? messageId,
+    FsSharePolicy? sharePolicy,
   }) async {
     if (peerId.isEmpty ||
         path.isEmpty ||
@@ -801,7 +783,9 @@ class FileTransferEngine {
     }
     final FolderScanResult scan;
     try {
-      scan = await _scanFolder(rootPath);
+      scan = sharePolicy != null
+          ? await scanFolderInBackground(rootPath, sharePolicy: sharePolicy)
+          : await _scanFolder(rootPath);
     } catch (error) {
       _logFailure(
         FileTransferDiagnosticKind.outgoingFailed,
@@ -3109,7 +3093,10 @@ class FileTransferEngine {
   }
 
   Future<void> _ackIncoming(FileTransferData transfer, int received) async {
-    final durableOffset = await _flushIncomingFileTransferV3(transfer, received);
+    final durableOffset = await _flushIncomingFileTransferV3(
+      transfer,
+      received,
+    );
     final updated = await _updateTransfer(
       transfer.transferId,
       state: FileTransferState.transferring,

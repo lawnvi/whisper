@@ -5,6 +5,8 @@ import 'package:path/path.dart' as p;
 import 'package:whisper/remote_files/fs_host_files.dart';
 import 'package:whisper/remote_files/fs_paths.dart';
 import 'package:whisper/remote_files/fs_share_policy.dart';
+import 'package:whisper/socket/folder_transfer_manifest.dart';
+import 'package:whisper/socket/folder_transfer_scan.dart';
 
 void main() {
   late Directory sandbox;
@@ -212,6 +214,14 @@ void main() {
           'Projects/app',
           use: FsUse.copy,
         ),
+        'copy out the whole home (protected dirs skipped on scan)': () =>
+            whole.resolver.resolveExisting('home', '', use: FsUse.copy),
+        'copy out a folder holding one left out (excluded skipped on scan)':
+            () => leftOut.resolver.resolveExisting(
+              'home',
+              'Documents',
+              use: FsUse.copy,
+            ),
       };
       final refused = <String, Future<Object?> Function()>{
         'read beside it': () => folders.stat('home', 'Music/song.mp3'),
@@ -258,8 +268,6 @@ void main() {
         ),
         'move a .git away': () =>
             folders.move('home', 'Documents/repo/.git', 'Documents', 'old'),
-        'copy out the whole home': () =>
-            whole.resolver.resolveExisting('home', '', use: FsUse.copy),
         'place a copy that brings a .git': () =>
             place(outsideRepo.parent.path, 'Documents/proj'),
         'place a copy on the way': () =>
@@ -270,8 +278,6 @@ void main() {
             leftOut.stat('home', 'Projects/notes.txt'),
         'make a folder in one left out': () =>
             leftOut.mkdir('home', 'Music', 'New'),
-        'copy out a folder holding one left out': () => leftOut.resolver
-            .resolveExisting('home', 'Documents', use: FsUse.copy),
         // What is left out, Whisper's files and mounts are known by where
         // they are: a folder holding one renamed, moved or deleted would
         // take it out from under its rule, or delete it.
@@ -302,6 +308,40 @@ void main() {
           reason: name,
         );
       }
+
+      // Folder scan with sharePolicy skips excluded and protected subtrees
+      // and reports them in skippedCount (sent on the wire as skippedAtSource).
+      final docsScan = await scanFolderInBackground(
+        p.join(real, 'Documents'),
+        sharePolicy: leftOut.resolver.policy!(),
+      );
+      expect(docsScan.failure, isNull);
+      final docsManifest = FolderManifest.parse(docsScan.manifest);
+      final docsPaths = [
+        for (var i = 0; i < docsManifest.entryCount; i++)
+          docsManifest.portablePath(i),
+      ];
+      expect(docsPaths, contains('A.txt'));
+      expect(docsPaths.any((path) => path.startsWith('repo')), isFalse);
+      expect(docsPaths, isNot(contains('db')));
+      expect(docsScan.skippedCount, greaterThanOrEqualTo(2));
+
+      final homeScan = await scanFolderInBackground(
+        real,
+        sharePolicy: leftOut.resolver.policy!(),
+      );
+      expect(homeScan.failure, isNull);
+      final homeManifest = FolderManifest.parse(homeScan.manifest);
+      final homePaths = [
+        for (var i = 0; i < homeManifest.entryCount; i++)
+          homeManifest.portablePath(i),
+      ];
+      expect(homePaths, contains('Documents/A.txt'));
+      expect(homePaths.any((path) => path.startsWith('.ssh')), isFalse);
+      expect(homePaths.any((path) => path.startsWith('Library')), isFalse);
+      expect(homePaths.any((path) => path.startsWith('Music')), isFalse);
+      expect(homePaths.any((path) => path.startsWith('Projects')), isFalse);
+      expect(homeScan.skippedCount, greaterThanOrEqualTo(4));
     });
 
     test('list only what is shared, and never the floor', () async {

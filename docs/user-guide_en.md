@@ -112,7 +112,7 @@ Whatever you set, these are never shared: the folders of the system and its prog
 
 The settings are the same for every device allowed to browse. Changes apply from the other device's next action, without reconnecting; a disk you turn on shows up the next time it opens your files.
 
-- A shared disk itself can't be renamed, moved or deleted. When the other device opens a folder that holds one not shared, it doesn't see that one and can't copy, rename, move or delete the whole folder, though it can copy and change everything else in it.
+- A shared disk itself can't be renamed, moved or deleted. When the other device opens a folder that holds one not shared, it doesn't see that one and can't rename, move or delete the whole folder; copying the whole folder skips the unshared folders inside (and reports how many items were skipped), while everything else in it can be copied and changed as usual.
 - In a Git repository, the other device can look at the hooks and config (`hooks` and `config` in `.git`) but not change them, and it can't create, delete or replace `.git` either.
 - A device with an older version of Whisper can still browse.
 

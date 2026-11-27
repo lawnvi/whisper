@@ -82,6 +82,13 @@ class FsProtectedAreas {
   final List<String> _files;
   final Iterable<String> Function() _mounts;
 
+  /// A closure-free copy that can cross into a worker isolate.
+  FsProtectedAreas snapshot() => FsProtectedAreas(
+    home: _home,
+    private: [..._private, ..._mounts()],
+    files: _files,
+  );
+
   /// This computer's, with everything resolved the way requests are.
   static Future<FsProtectedAreas> forThisDevice({
     Iterable<String> Function()? mounts,
@@ -214,6 +221,13 @@ class FsSharePolicy {
   final List<String> _folded;
   final List<String> _excludedFolded;
 
+  /// A closure-free copy that can cross into a worker isolate.
+  FsSharePolicy snapshot() => FsSharePolicy(
+    shared: shared,
+    excluded: excluded,
+    protected: protected.snapshot(),
+  );
+
   bool _inShared(String path) => shared.any((folder) => _within(folder, path));
 
   /// One of the shared folders itself, which stays where it is.
@@ -262,10 +276,9 @@ class FsSharePolicy {
   bool allows(String path, FsUse use) => switch (use) {
     FsUse.read =>
       _inShared(path) && !_isExcluded(path) && !protected.blocksRead(path),
-    FsUse.copy =>
-      allows(path, FsUse.read) &&
-          !protected.holdsProtected(path) &&
-          !_holdsExcluded(path),
+    // Copying a folder skips excluded and protected subdirectories during scan
+    // (reported via skippedAtSource), so any readable folder can be copied.
+    FsUse.copy => allows(path, FsUse.read),
     FsUse.fill => allows(path, FsUse.read) && !protected.blocksWrite(path),
     // A folder holding something left out or never reached stays where it
     // is: both are known by where they are.

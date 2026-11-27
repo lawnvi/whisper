@@ -25,6 +25,16 @@ typedef FileBrowseSender =
 typedef FileBrowseSendPath =
     Future<bool> Function(String peerId, String path, String transferId);
 
+/// Starts an ordinary folder transfer of [path] to [peerId], applying
+/// [policy] when scanning so excluded subdirectories are skipped.
+typedef FileBrowseSendFolder =
+    Future<bool> Function(
+      String peerId,
+      String path,
+      String transferId, {
+      FsSharePolicy? policy,
+    });
+
 /// Sends the bytes a `read` asked for, as a `browseData` frame.
 typedef FileBrowseSendData =
     Future<bool> Function(
@@ -149,9 +159,11 @@ class FileBrowseHost {
     FsHostFiles? files,
     FileBrowseGate? gate,
     FileBrowsePermissions? permissions,
+    TransferPlacements? placements,
   }) : files = files ?? FsHostFiles(),
        gate = gate ?? FileBrowseGate(),
-       permissions = permissions ?? FileBrowsePermissions() {
+       permissions = permissions ?? FileBrowsePermissions(),
+       placements = placements ?? TransferPlacements.shared {
     uploads = FsUploads(this.files);
   }
 
@@ -168,9 +180,10 @@ class FileBrowseHost {
   final FsHostFiles files;
   final FileBrowseGate gate;
   final FileBrowsePermissions permissions;
+  final TransferPlacements placements;
   FileBrowseSender? sender;
   FileBrowseSendPath? sendFile;
-  FileBrowseSendPath? sendFolder;
+  FileBrowseSendFolder? sendFolder;
   FileBrowseSendData? sendData;
 
   /// Files being written from other devices' mounted folders.
@@ -185,11 +198,28 @@ class FileBrowseHost {
   /// Opens still waiting for an answer here, by session.
   final _asking = <String, FileBrowseRequest>{};
 
+  /// Serializes control requests, `browseWrite` frames, and permission
+  /// revocation per peer so writes never overtake control checks.
+  final _peerQueues = <String, Future<void>>{};
+
   int _thumbnailsRunning = 0;
   int _readsRunning = 0;
   final _readTurns = Queue<Completer<void>>();
   static const _maxReadsRunning = 8;
   static const _uuid = Uuid();
+
+  Future<void> _enqueuePeer(String peerId, Future<void> Function() operation) {
+    final previous = _peerQueues[peerId] ?? Future<void>.value();
+    final next = previous.then((_) => operation());
+    late final Future<void> tracked;
+    tracked = next.then<void>((_) {}, onError: (Object _) {}).whenComplete(() {
+      if (identical(_peerQueues[peerId], tracked)) {
+        _peerQueues.remove(peerId);
+      }
+    });
+    _peerQueues[peerId] = tracked;
+    return next;
+  }
 
   @visibleForTesting
   bool isOpen(String sessionId) => _sessions.containsKey(sessionId);
@@ -198,24 +228,35 @@ class FileBrowseHost {
     FileBrowseMessage message, {
     required String remotePeerId,
     required String deviceName,
-  }) async {
+  }) {
     if (message.clientPeerId != remotePeerId || message.fromHost) {
-      return;
+      return Future<void>.value();
     }
     if (message.action == FileBrowseAction.open) {
-      await _open(message, remotePeerId, deviceName);
-      return;
+      return _open(message, remotePeerId, deviceName);
     }
     if (message.action == FileBrowseAction.close) {
-      _sessions.remove(message.sessionId);
-      await uploads.discardOwner(message.sessionId);
-      // Closed while still waiting for an answer here: the question goes.
+      // Closed while still waiting for an answer here: the question goes at
+      // once, without waiting behind any queued request.
       final asking = _asking.remove(message.sessionId);
       if (asking != null) {
         gate.withdraw(asking);
       }
-      return;
+      return _enqueuePeer(remotePeerId, () async {
+        _sessions.remove(message.sessionId);
+        await uploads.discardOwner(message.sessionId);
+      });
     }
+    return _enqueuePeer(
+      remotePeerId,
+      () => _handleSessionAction(message, remotePeerId: remotePeerId),
+    );
+  }
+
+  Future<void> _handleSessionAction(
+    FileBrowseMessage message, {
+    required String remotePeerId,
+  }) async {
     final session = _sessions[message.sessionId];
     if (session?.peerId != remotePeerId) {
       await _fail(message, FileBrowseError.notAllowed);
@@ -328,9 +369,11 @@ class FileBrowseHost {
               FileSystemEntityType.directory) {
             throw const FsPathException('not a folder');
           }
-          TransferPlacements.shared.expect(
+          placements.expect(
             transferId,
             folder,
+            peerId: remotePeerId,
+            fromRemote: true,
             guard: files.mayPlace,
           );
           await _ok(message);
@@ -432,8 +475,27 @@ class FileBrowseHost {
 
   /// Bytes a mounted folder writes, from a `browseWrite` frame whose
   /// transferId is `<session>/<upload>`; answered like any request of
-  /// that session, with the file's size so far.
+  /// that session, with the file's size so far. Runs on the same per-peer
+  /// serial path as control messages so writes never overtake open/close
+  /// or permission checks.
   Future<void> handleWrite({
+    required String remotePeerId,
+    required String transferId,
+    required int requestId,
+    required int offset,
+    required Uint8List data,
+  }) => _enqueuePeer(
+    remotePeerId,
+    () => _handleWriteSerialized(
+      remotePeerId: remotePeerId,
+      transferId: transferId,
+      requestId: requestId,
+      offset: offset,
+      data: data,
+    ),
+  );
+
+  Future<void> _handleWriteSerialized({
     required String remotePeerId,
     required String transferId,
     required int requestId,
@@ -456,9 +518,11 @@ class FileBrowseHost {
       hostPeerId: session.hostPeerId,
       requestId: requestId,
     );
+    if (await permissions.isReadOnly(remotePeerId)) {
+      await _fail(request, FileBrowseError.readOnly);
+      return;
+    }
     try {
-      // Taken in the order the frames came: writes that overlap land as
-      // they were made. A device made read-only has no uploads left.
       final upload = _upload(request, transferId.substring(slash + 1));
       final size = await upload.write(offset, data);
       await _ok(request, {'size': size});
@@ -507,35 +571,39 @@ class FileBrowseHost {
         return;
       }
     }
-    _sessions[message.sessionId] = _Session(
-      peerId,
-      message.hostPeerId,
-      deviceName,
-    );
-    final readOnly = await permissions.isReadOnly(peerId);
-    // Drives, volumes and shared folders come and go; list what is there now.
-    await files.refreshRoots();
-    final roots = <Map<String, Object?>>[];
-    for (final root in files.resolver.roots) {
-      roots.add({
-        ...root.toJson(),
-        'shortcuts': [
-          for (final shortcut in root.shortcuts)
-            if (await Directory('${root.directory}/${shortcut.path}').exists())
-              {'kind': shortcut.kind, 'path': shortcut.path},
-        ],
-      });
-    }
-    await sender?.call(
-      peerId,
-      message.reply(FileBrowseAction.opened, {
-        'roots': roots,
-        'platform': Platform.operatingSystem,
-        'trash': FsPlatform.hasTrash,
-        if (sendData != null) 'read': FileBrowseRead.version,
-        if (readOnly) 'readOnly': true else 'write': FileBrowseWrite.version,
-      }),
-    );
+    await _enqueuePeer(peerId, () async {
+      _sessions[message.sessionId] = _Session(
+        peerId,
+        message.hostPeerId,
+        deviceName,
+      );
+      final readOnly = await permissions.isReadOnly(peerId);
+      // Drives, volumes and shared folders come and go; list what is there now.
+      await files.refreshRoots();
+      final roots = <Map<String, Object?>>[];
+      for (final root in files.resolver.roots) {
+        roots.add({
+          ...root.toJson(),
+          'shortcuts': [
+            for (final shortcut in root.shortcuts)
+              if (await Directory(
+                '${root.directory}/${shortcut.path}',
+              ).exists())
+                {'kind': shortcut.kind, 'path': shortcut.path},
+          ],
+        });
+      }
+      await sender?.call(
+        peerId,
+        message.reply(FileBrowseAction.opened, {
+          'roots': roots,
+          'platform': Platform.operatingSystem,
+          'trash': FsPlatform.hasTrash,
+          if (sendData != null) 'read': FileBrowseRead.version,
+          if (readOnly) 'readOnly': true else 'write': FileBrowseWrite.version,
+        }),
+      );
+    });
   }
 
   Future<void> _remove(
@@ -593,9 +661,11 @@ class FileBrowseHost {
     // knows where each one goes when it arrives.
     await _ok(message, {'transfers': transfers});
     FilesLog.write('host: asked for ${starts.length} item(s)');
+    final policy = files.resolver.policy?.call();
     for (final (real, id, folder) in starts) {
-      final send = folder ? sendFolder : sendFile;
-      final sent = await send?.call(peerId, real, id) ?? false;
+      final sent = folder
+          ? await sendFolder?.call(peerId, real, id, policy: policy) ?? false
+          : await sendFile?.call(peerId, real, id) ?? false;
       if (!sent) {
         // The other side gives up waiting for it after a while.
         FilesLog.write('host: ${FilesLog.id(id)} could not be sent');
@@ -685,34 +755,51 @@ class FileBrowseHost {
     );
   }
 
-  /// A browsing device disconnected: forget its sessions.
+  /// A browsing device disconnected: forget its sessions and pending remote
+  /// upload placements.
   void closePeer(String peerId) {
+    final removedSessions = <String>[];
     for (final MapEntry(key: id, value: session)
         in _sessions.entries.toList()) {
       if (session.peerId == peerId) {
         _sessions.remove(id);
-        unawaited(uploads.discardOwner(id));
+        removedSessions.add(id);
       }
     }
     _allowedThisConnection.remove(peerId);
+    placements.clearPeer(peerId, onlyFromRemote: true);
     for (final entry in _asking.entries.toList()) {
       if (entry.value.peerId == peerId) {
         _asking.remove(entry.key);
         gate.withdraw(entry.value);
       }
     }
+    if (removedSessions.isNotEmpty) {
+      unawaited(
+        _enqueuePeer(peerId, () async {
+          for (final id in removedSessions) {
+            await uploads.discardOwner(id);
+          }
+        }),
+      );
+    }
   }
 
-  /// "允许修改我的文件" for [peerId]: off, what it was writing is dropped at
-  /// once, and every change it asks for is refused from now on.
+  /// "允许修改我的文件" for [peerId]: off, what it was writing and any
+  /// pending incoming placements are dropped at once, and every change it
+  /// asks for is refused from now on.
   Future<void> setReadOnly(String peerId, bool readOnly) async {
     await permissions.setReadOnly(peerId, readOnly);
     if (readOnly) {
-      for (final MapEntry(key: id, value: session) in _sessions.entries) {
-        if (session.peerId == peerId) {
-          await uploads.discardOwner(id);
+      placements.clearPeer(peerId, onlyFromRemote: true);
+      await _enqueuePeer(peerId, () async {
+        for (final MapEntry(key: id, value: session)
+            in _sessions.entries.toList()) {
+          if (session.peerId == peerId) {
+            await uploads.discardOwner(id);
+          }
         }
-      }
+      });
     }
   }
 

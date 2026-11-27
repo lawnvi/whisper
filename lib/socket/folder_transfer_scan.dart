@@ -7,6 +7,7 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 import 'package:whisper/helper/app_private_paths.dart';
+import 'package:whisper/remote_files/fs_share_policy.dart';
 import 'package:whisper/socket/folder_transfer_manifest.dart';
 import 'package:whisper/socket/transfer_file_name.dart';
 
@@ -64,9 +65,21 @@ final class FolderScanResult {
 /// [scanFolderForTransfer] in a worker isolate. Whisper's own files
 /// ([AppPrivatePaths], such as its database in Documents on Linux and
 /// Windows) are left out like the system's: they never leave in a folder.
-Future<FolderScanResult> scanFolderInBackground(String path) {
+/// When [sharePolicy] is given, entries excluded or protected by it are
+/// skipped and counted in [FolderScanResult.skippedCount].
+Future<FolderScanResult> scanFolderInBackground(
+  String path, {
+  FsSharePolicy? sharePolicy,
+}) {
   final leaveOut = AppPrivatePaths.all.toList();
-  return Isolate.run(() => scanFolderForTransfer(path, leaveOut: leaveOut));
+  final policySnapshot = sharePolicy?.snapshot();
+  return Isolate.run(
+    () => scanFolderForTransfer(
+      path,
+      leaveOut: leaveOut,
+      sharePolicy: policySnapshot,
+    ),
+  );
 }
 
 /// Walks [rootPath] and writes the manifest for sending it, without the
@@ -79,9 +92,14 @@ FolderScanResult scanFolderForTransfer(
   int maxEntries = folderManifestMaxEntries,
   int maxStreamSize = folderStreamMaxSize,
   Iterable<String> leaveOut = const [],
+  FsSharePolicy? sharePolicy,
 }) {
   final root = Directory(_listablePath(rootPath));
-  final leftOut = _leftOut(rootPath, leaveOut);
+  final rootReal = _resolveRealPath(rootPath);
+  if (sharePolicy != null && !sharePolicy.allows(rootReal, FsUse.read)) {
+    return FolderScanResult.failed(FolderScanFailure.unreadable);
+  }
+  final leftOut = _leftOut(rootReal, leaveOut);
   final builder = FolderManifestBuilder();
   final skipped = <FolderSkippedEntry>[];
   var skippedCount = 0;
@@ -96,6 +114,7 @@ FolderScanResult scanFolderForTransfer(
     ..add(
       _PendingDirectory(
         directory: root,
+        realPath: rootReal,
         entry: folderManifestRootParent,
         portablePath: '',
         depth: 0,
@@ -125,6 +144,11 @@ FolderScanResult scanFolderForTransfer(
       if (_ignoredNames.contains(name) || leftOut.contains(portablePath)) {
         continue;
       }
+      final childReal = p.join(current.realPath, name);
+      if (sharePolicy != null && !sharePolicy.allows(childReal, FsUse.read)) {
+        skip(portablePath, FolderSkipReason.unreadable);
+        continue;
+      }
       if (child is Link) {
         skip(portablePath, FolderSkipReason.symlink);
         continue;
@@ -147,6 +171,7 @@ FolderScanResult scanFolderForTransfer(
           _ScannedItem(
             name: nameBytes,
             portablePath: portablePath,
+            realPath: childReal,
             pathBytes: pathBytes,
             directory: child,
           ),
@@ -171,6 +196,7 @@ FolderScanResult scanFolderForTransfer(
         _ScannedItem(
           name: nameBytes,
           portablePath: portablePath,
+          realPath: childReal,
           pathBytes: pathBytes,
           size: stat.size,
           modifiedMs: stat.modified.millisecondsSinceEpoch,
@@ -192,6 +218,7 @@ FolderScanResult scanFolderForTransfer(
         pending.add(
           _PendingDirectory(
             directory: directory,
+            realPath: item.realPath,
             entry: entry,
             portablePath: item.portablePath,
             depth: current.depth + 1,
@@ -232,23 +259,22 @@ FolderScanResult scanFolderForTransfer(
   );
 }
 
-/// The paths of [leaveOut] that are in the folder at [rootPath], relative to
-/// it and '/'-separated, both with their symlinks followed.
-Set<String> _leftOut(String rootPath, Iterable<String> leaveOut) {
-  if (leaveOut.isEmpty) return const {};
-  String real(String path) {
-    try {
-      return File(path).resolveSymbolicLinksSync();
-    } on FileSystemException {
-      return p.normalize(p.absolute(path));
-    }
+String _resolveRealPath(String path) {
+  try {
+    return File(path).resolveSymbolicLinksSync();
+  } on FileSystemException {
+    return p.normalize(p.absolute(path));
   }
+}
 
-  final root = real(rootPath);
+/// The paths of [leaveOut] that are in the folder at [rootReal], relative to
+/// it and '/'-separated, both with their symlinks followed.
+Set<String> _leftOut(String rootReal, Iterable<String> leaveOut) {
+  if (leaveOut.isEmpty) return const {};
   return {
-    for (final path in leaveOut.map(real))
-      if (p.isWithin(root, path))
-        p.split(p.relative(path, from: root)).join('/'),
+    for (final path in leaveOut.map(_resolveRealPath))
+      if (p.isWithin(rootReal, path))
+        p.split(p.relative(path, from: rootReal)).join('/'),
   };
 }
 
@@ -267,6 +293,7 @@ String _listablePath(String path) {
 final class _PendingDirectory {
   const _PendingDirectory({
     required this.directory,
+    required this.realPath,
     required this.entry,
     required this.portablePath,
     required this.depth,
@@ -274,6 +301,7 @@ final class _PendingDirectory {
   });
 
   final Directory directory;
+  final String realPath;
   final int entry;
   final String portablePath;
   final int depth;
@@ -284,6 +312,7 @@ final class _ScannedItem {
   const _ScannedItem({
     required this.name,
     required this.portablePath,
+    required this.realPath,
     required this.pathBytes,
     this.directory,
     this.size = 0,
@@ -292,6 +321,7 @@ final class _ScannedItem {
 
   final Uint8List name;
   final String portablePath;
+  final String realPath;
   final int pathBytes;
   final Directory? directory;
   final int size;

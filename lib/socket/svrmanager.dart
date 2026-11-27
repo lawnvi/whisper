@@ -31,6 +31,7 @@ import 'package:whisper/socket/auth_transcript.dart';
 import 'package:whisper/socket/authenticated_frame.dart';
 import 'package:whisper/socket/device_identity.dart';
 import 'package:whisper/socket/dial_tiebreaker.dart';
+import 'package:whisper/socket/file_browse_trust_cache.dart';
 import 'package:whisper/socket/file_transfer_engine.dart';
 import 'package:whisper/socket/file_transfer_v3.dart';
 import 'package:whisper/socket/media_upgrade_proof.dart';
@@ -41,6 +42,8 @@ import 'package:whisper/socket/peer_connection.dart';
 import 'package:whisper/socket/peer_socket_session.dart';
 import 'package:whisper/socket/quick_send_identity_gate.dart';
 import 'package:whisper/socket/socket_admission.dart';
+import 'package:whisper/socket/socket_events.dart';
+export 'package:whisper/socket/socket_events.dart';
 import 'package:whisper/socket/session_upgrade_token_registry.dart';
 import 'package:whisper/remote_files/fs_client.dart';
 import 'package:whisper/remote_files/mount/remote_mounts.dart';
@@ -50,6 +53,7 @@ import 'package:whisper/remote_files/fs_copies.dart';
 import 'package:whisper/remote_files/fs_placement.dart';
 import 'package:whisper/remote_files/fs_platform.dart';
 import 'package:whisper/remote_files/fs_protocol.dart';
+import 'package:whisper/remote_files/fs_share_policy.dart';
 import 'package:whisper/window_stream/remote/remote_peer_source.dart';
 import 'package:whisper/window_stream/remote/window_stream_control.dart';
 import 'package:whisper/window_stream/remote/window_stream_host.dart';
@@ -77,24 +81,6 @@ import 'package:whisper/state/peer_traits.dart';
 import '../helper/notification.dart';
 import 'package:whisper/socket/direct_peer_http_client.dart';
 
-abstract class ISocketEvent {
-  void onError(String message);
-
-  void onNotice(String message);
-
-  void onMessage(MessageData messageData);
-
-  void onTransferUpdated(TransferSnapshot snapshot);
-
-  void onClose();
-
-  void onConnect();
-
-  void onPairing(PairingRequest request, void Function(bool) resolve);
-
-  void afterAuth(bool allow, DeviceData? device);
-}
-
 final class _SocketAuthResult {
   const _SocketAuthResult(this.allow, this.message);
 
@@ -104,45 +90,11 @@ final class _SocketAuthResult {
 
 typedef _IdentityPinPlan = ({PairingReason? reason, String expectedPublicKey});
 
-typedef PeerReconnectControllerFactory =
-    PeerReconnectController Function({
-      required ReconnectAttempt attempt,
-      required ReconnectEligibility eligibility,
-    });
-
 Uint8List _secureMediaProofRandomBytes(int length) {
   final random = math.Random.secure();
   return Uint8List.fromList(
     List<int>.generate(length, (_) => random.nextInt(256)),
   );
-}
-
-typedef LocalPeerProfileLoader = Future<PeerProfile> Function();
-
-enum ConnectionAuthCommitStage {
-  beforePersistence,
-  afterPersistence,
-  beforeRegistration,
-  afterRegistration,
-}
-
-typedef ConnectionAuthCommitBarrier =
-    Future<void> Function(ConnectionAuthCommitStage stage, String peerId);
-
-typedef AuthEnvelopeObserver =
-    void Function(PeerSocketRole role, AuthEnvelope envelope);
-
-enum PeerDisconnectCause {
-  network,
-  watchdog,
-  manual,
-  trustRevoked,
-  deviceDeleted,
-  superseded,
-  protocolFailure,
-  localFailure,
-  managerClose,
-  systemSleep,
 }
 
 enum _PeerPolicyDisposition { manualDisconnect, trustRevoked, deviceDeleted }
@@ -154,16 +106,6 @@ enum _PeerAuthSuppressionReason {
 }
 
 const Duration _outgoingConnectionTimeout = Duration(seconds: 8);
-
-final class ServerStartResult {
-  const ServerStartResult.success(this.port) : isSuccess = true, error = null;
-
-  const ServerStartResult.failure(this.error) : isSuccess = false, port = 0;
-
-  final bool isSuccess;
-  final int port;
-  final Object? error;
-}
 
 final class _PendingOutgoingConnection {
   _PendingOutgoingConnection(
@@ -481,6 +423,7 @@ class WsSvrManager {
       WireMessageReplayGuard();
   final WireControlSessionRegistry _wireControlSessions =
       WireControlSessionRegistry();
+  final FileBrowseTrustCache _fileBrowseTrustCache = FileBrowseTrustCache();
   final SocketAdmissionController _admission;
   final AudioShareManager _audioManager;
   final RemoteInputManager _remoteInputManager;
@@ -2081,6 +2024,7 @@ class WsSvrManager {
     String peerId,
     _PeerPolicyDisposition disposition,
   ) {
+    _fileBrowseTrustCache.invalidate(peerId);
     _policyRevision += 1;
     _peerInvalidationRevisions[peerId] = _policyRevision;
     _peerPolicyDispositions[peerId] = disposition;
@@ -2386,6 +2330,7 @@ class WsSvrManager {
       stored.identityPublicKey,
     );
     if (updated) {
+      _fileBrowseTrustCache.invalidate(peerId);
       _removePeerAuthSuppression(
         peerId,
         _PeerAuthSuppressionReason.trustRevoked,
@@ -3426,6 +3371,7 @@ class WsSvrManager {
       WindowStreamHost.shared.closePeer(peerId),
     ]);
     WindowStreamViewer.shared.peerDisconnected(peerId);
+    _fileBrowseTrustCache.invalidate(peerId);
     FileBrowseHost.shared.closePeer(peerId);
     RemoteFilesClient.peerGone(peerId);
     if (!ownsCleanup()) {
@@ -5064,14 +5010,11 @@ class WsSvrManager {
           final remoteDevice = _requireRemoteProfileForSession(session).device;
           final remotePeerId = session.remotePeerId;
           if (weAreHost) {
-            final storedRemote = await _database.fetchDevice(remoteDevice.uid);
+            final trusted = await _fileBrowseTrustCache.isTrusted(
+              session,
+              _database.fetchDevice,
+            );
             requireCurrentBusiness();
-            final trusted =
-                storedRemote?.auth == true &&
-                storedRemote?.identityPublicKey.isNotEmpty == true &&
-                storedRemote?.identityPublicKey ==
-                    session.remoteIdentityPublicKey &&
-                session.isAuthenticated;
             if (!trusted) {
               if (control.isInitial) {
                 await sendFileBrowseControlTo(
@@ -5907,9 +5850,19 @@ class WsSvrManager {
     return sendFileTo(peerId, path, messageId: id);
   }
 
-  Future<bool> _sendCopiedFolder(String peerId, String path, String id) async {
+  Future<bool> _sendCopiedFolder(
+    String peerId,
+    String path,
+    String id, {
+    FsSharePolicy? policy,
+  }) async {
     TransferPlacements.shared.markQuiet(id);
-    return await sendFolderTo(peerId, path, messageId: id) ==
+    return await sendFolderTo(
+          peerId,
+          path,
+          messageId: id,
+          sharePolicy: policy,
+        ) ==
         FolderSendOutcome.sent;
   }
 
@@ -6814,7 +6767,13 @@ class WsSvrManager {
     String peerId,
     String path, {
     String? messageId,
-  }) => _transferEngine.sendFolderTo(peerId, path, messageId: messageId);
+    FsSharePolicy? sharePolicy,
+  }) => _transferEngine.sendFolderTo(
+    peerId,
+    path,
+    messageId: messageId,
+    sharePolicy: sharePolicy,
+  );
 
   Future<bool> sendQuickFileToDurably(
     String peerId,

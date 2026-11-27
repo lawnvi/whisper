@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -378,5 +379,135 @@ void main() {
     // Leaving out a whole disk switches it off.
     expect(await folders.exclude(data.path), FsExcluded.disk);
     expect(folders.sharedDisks, isEmpty);
+  });
+
+  test('F21: placements bind to peer, clear on disconnect/revocation, and '
+      'browseWrite serializes with control checks', () async {
+    final placements = TransferPlacements();
+    final hostReplies = <FileBrowseMessage>[];
+    final testHost =
+        FileBrowseHost(
+            files: FsHostFiles(
+              resolver: FsPathResolver([
+                FsRoot(id: 'home', directory: sandbox.path),
+              ]),
+            ),
+            gate: _AutoGate(FileBrowseDecision.once),
+            placements: placements,
+          )
+          ..sender = (peerId, msg) async {
+            hostReplies.add(msg);
+            return true;
+          };
+
+    const sid = '5a4f1f0e-1c2b-4d3e-8f9a-0b1c2d3e4f51';
+    Future<void> sendControl(
+      FileBrowseAction action, [
+      Map<String, Object?> payload = const {},
+      int requestId = 1,
+    ]) => testHost.handle(
+      FileBrowseMessage(
+        action: action,
+        sessionId: sid,
+        clientPeerId: 'peer-a',
+        hostPeerId: 'host',
+        requestId: requestId,
+        payload: payload,
+      ),
+      remotePeerId: 'peer-a',
+      deviceName: 'Peer A',
+    );
+
+    await sendControl(FileBrowseAction.open);
+    await sendControl(FileBrowseAction.incoming, {
+      'transferId': 't-bind',
+      'root': 'home',
+      'folder': 'Documents',
+    }, 2);
+    expect(placements.isExpected('t-bind'), isTrue);
+
+    // Another peer sending the same transferId must not place into peer-a's
+    // target folder.
+    final downloads = await Directory(p.join(sandbox.path, 'dl')).create();
+    final foreign = File(p.join(downloads.path, 'evil.txt'))
+      ..writeAsStringSync('x');
+    await placements.onTransferUpdated(
+      TransferSnapshot(
+        transferId: 't-bind',
+        messageUuid: 't-bind',
+        peerUid: 'peer-b',
+        direction: FileTransferDirection.incoming,
+        state: FileTransferState.completed,
+        finalPath: foreign.path,
+        tempPath: '',
+        size: 1,
+        committedBytes: 1,
+        lastError: '',
+        updatedAt: 0,
+      ),
+    );
+    expect(foreign.existsSync(), isTrue);
+    expect(placements.isExpected('t-bind'), isTrue);
+
+    // Revoking write permission clears host-side incoming placements while
+    // sparing a local fetch placement from the same peer.
+    placements.expect('t-local-fetch', downloads.path, peerId: 'peer-a');
+    await testHost.setReadOnly('peer-a', true);
+    expect(placements.isExpected('t-bind'), isFalse);
+    expect(placements.isExpected('t-local-fetch'), isTrue);
+
+    // Re-enabling write, registering another incoming placement, then
+    // disconnecting clears it too.
+    await testHost.setReadOnly('peer-a', false);
+    await sendControl(FileBrowseAction.incoming, {
+      'transferId': 't-disc',
+      'root': 'home',
+      'folder': 'Documents',
+    }, 3);
+    expect(placements.isExpected('t-disc'), isTrue);
+    testHost.closePeer('peer-a');
+    expect(placements.isExpected('t-disc'), isFalse);
+
+    // Serial path: writeOpen -> browseWrite -> writeClose (all dispatched
+    // back-to-back without awaiting) execute in strict arrival order.
+    await sendControl(FileBrowseAction.open);
+    hostReplies.clear();
+    final openFuture = sendControl(FileBrowseAction.writeOpen, {
+      'root': 'home',
+      'path': 'Documents/a.txt',
+      'truncate': true,
+    }, 10);
+    await openFuture;
+    final uploadId = hostReplies.last.payload['upload'] as String;
+    hostReplies.clear();
+
+    final w1 = testHost.handleWrite(
+      remotePeerId: 'peer-a',
+      transferId: '$sid/$uploadId',
+      requestId: 11,
+      offset: 0,
+      data: Uint8List.fromList(utf8.encode('hello ')),
+    );
+    final w2 = testHost.handleWrite(
+      remotePeerId: 'peer-a',
+      transferId: '$sid/$uploadId',
+      requestId: 12,
+      offset: 6,
+      data: Uint8List.fromList(utf8.encode('world')),
+    );
+    final closeFuture = sendControl(FileBrowseAction.writeClose, {
+      'upload': uploadId,
+      'commit': true,
+    }, 13);
+    await Future.wait([w1, w2, closeFuture]);
+    expect(hostReplies.map((m) => (m.requestId, m.action)).toList(), [
+      (11, FileBrowseAction.result),
+      (12, FileBrowseAction.result),
+      (13, FileBrowseAction.result),
+    ]);
+    expect(
+      File(p.join(sandbox.path, 'Documents', 'a.txt')).readAsStringSync(),
+      'hello world',
+    );
   });
 }

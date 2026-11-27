@@ -617,7 +617,7 @@ class RemoteFilesClient {
     for (final transfer in (result['transfers'] as List? ?? const [])) {
       final id = transfer is Map ? transfer['id'] : null;
       if (id is String && isCanonicalTransferId(id) && ids.add(id)) {
-        TransferPlacements.shared.expect(id, localFolder);
+        TransferPlacements.shared.expect(id, localFolder, peerId: peerId);
         if (ids.length == items.length) break;
       }
     }

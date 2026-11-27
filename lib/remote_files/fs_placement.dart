@@ -28,7 +28,16 @@ class TransferPlacements extends ChangeNotifier {
   static final TransferPlacements shared = TransferPlacements();
 
   final _pending =
-      <String, ({String directory, DateTime until, PlacementGuard? guard})>{};
+      <
+        String,
+        ({
+          String directory,
+          String? peerId,
+          bool fromRemote,
+          DateTime until,
+          PlacementGuard? guard,
+        })
+      >{};
   final _placed = StreamController<PlacedTransfer>.broadcast();
 
   /// Copies made in the file manager, sent or received. Like clipboard
@@ -91,9 +100,12 @@ class TransferPlacements extends ChangeNotifier {
 
   /// The next incoming transfer [transferId] goes into [directory], if
   /// [guard] says it may once it is there; else it stays where it landed.
+  /// When [peerId] is set, only a transfer from that device matches it.
   void expect(
     String transferId,
     String directory, {
+    String? peerId,
+    bool fromRemote = false,
     Duration lifetime = const Duration(days: 2),
     bool ephemeral = false,
     PlacementGuard? guard,
@@ -102,10 +114,33 @@ class TransferPlacements extends ChangeNotifier {
     if (ephemeral) _ephemeral.add(transferId);
     _pending[transferId] = (
       directory: directory,
+      peerId: peerId,
+      fromRemote: fromRemote,
       until: DateTime.now().add(lifetime),
       guard: guard,
     );
     _pending.removeWhere((_, value) => value.until.isBefore(DateTime.now()));
+  }
+
+  /// Drops pending placements bound to [peerId] (disconnect or permission
+  /// revoked). Set [onlyFromRemote] to spare local fetches from that peer.
+  void clearPeer(String peerId, {bool onlyFromRemote = false}) {
+    if (peerId.isEmpty) {
+      return;
+    }
+    final removed = <String>[];
+    _pending.removeWhere((id, value) {
+      final matches =
+          value.peerId == peerId && (!onlyFromRemote || value.fromRemote);
+      if (matches) {
+        removed.add(id);
+      }
+      return matches;
+    });
+    for (final id in removed) {
+      _quiet.remove(id);
+      _ephemeral.remove(id);
+    }
   }
 
   /// Sends [transferId], still on its way, into [directory] instead.
@@ -117,6 +152,8 @@ class TransferPlacements extends ChangeNotifier {
     }
     _pending[transferId] = (
       directory: directory,
+      peerId: pending.peerId,
+      fromRemote: pending.fromRemote,
       until: pending.until,
       guard: pending.guard,
     );
@@ -187,7 +224,8 @@ class TransferPlacements extends ChangeNotifier {
   Future<void> _place(TransferSnapshot snapshot) async {
     final pending = _pending[snapshot.transferId];
     if (pending == null ||
-        snapshot.direction != FileTransferDirection.incoming) {
+        snapshot.direction != FileTransferDirection.incoming ||
+        (pending.peerId != null && pending.peerId != snapshot.peerUid)) {
       return;
     }
     switch (snapshot.state) {
