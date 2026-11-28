@@ -496,6 +496,91 @@ void main() {
     },
   );
 
+  // The receiver can answer a frame before the sender's hand-over of it
+  // returns: a /transfer write waits for the worker. Two shapes of that closed
+  // /chat as a protocol failure and paused the transfer: an ACK in the gap
+  // after its window was answered (refused as a stale session, on a slow
+  // link), and an ACK past the window for the frame still being handed over
+  // (refused as an invalid offset, at about 12 MB/s).
+  test('an ACK for a frame still being handed over is progress', () async {
+    final directory = await Directory.systemTemp.createTemp('whisper-send-');
+    addTearDown(() => directory.delete(recursive: true));
+    const frame = fileTransferV3EmitFramePayloadSize;
+    const size = 5 * frame;
+    final source = File('${directory.path}/payload.bin');
+    await source.writeAsBytes(Uint8List(size));
+    final database = LocalDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    final frames = <WhisperFrameV3>[];
+    final held = <Completer<bool>>[];
+    var holding = true;
+    final engine = _engine(
+      database: database,
+      supportsV3: true,
+      buildMessage: _messageBuilder(),
+      sendBytesToPeer: (_, value) {
+        final decoded = WhisperFrameV3.decode(value as Uint8List);
+        frames.add(decoded);
+        if (decoded.type != WhisperFrameType.fileData || !holding) return true;
+        return (held..add(Completer<bool>())).last.future;
+      },
+    );
+
+    expect(await engine.sendFileTo('peer-a', source.path), isTrue);
+    final transferId = frames.single.transferId;
+    Future<void> control(FileTransferV3Action action, int offset) {
+      final type = action == FileTransferV3Action.ready
+          ? WhisperFrameType.fileReady
+          : WhisperFrameType.fileAck;
+      final payload = FileTransferV3Control(
+        action: action,
+        transferId: transferId,
+        durableOffset: offset,
+        size: size,
+        failureReason: FileTransferFailureReason.none,
+      ).toJson();
+      return engine.handleFrame(
+        const TransferConnectionBinding(peerId: 'peer-a', generation: 1),
+        WhisperFrameV3(
+          type: type,
+          transferId: transferId,
+          offset: offset,
+          sequence: 0,
+          payload: Uint8List.fromList(utf8.encode(jsonEncode(payload))),
+        ),
+        requireCurrent: () {},
+      );
+    }
+
+    Future<void> heldUntil(int count) async {
+      while (held.length < count) {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
+    }
+
+    await control(FileTransferV3Action.ready, 0);
+    await heldUntil(1);
+    held[0].complete(true);
+    await heldUntil(2);
+    // The first frame's window is answered while the second is going out.
+    await control(FileTransferV3Action.ack, frame);
+    held[1].complete(true);
+    await heldUntil(3);
+    // The third frame, still being handed over, is answered past the window.
+    await control(FileTransferV3Action.ack, 3 * frame);
+    held[2].complete(true);
+    await heldUntil(4);
+    // The next round's first frame is answered before it has a window.
+    await control(FileTransferV3Action.ack, 4 * frame);
+
+    final transfer = await database.fetchFileTransfer(transferId);
+    expect(transfer?.state, FileTransferState.transferring);
+    expect(transfer?.committedBytes, 4 * frame);
+    holding = false;
+    held[3].complete(true);
+    await engine.waitUntilOutgoingIdle();
+  });
+
   test('durable admission survives an initial offer send failure', () async {
     final directory = await Directory.systemTemp.createTemp('whisper-send-');
     addTearDown(() => directory.delete(recursive: true));

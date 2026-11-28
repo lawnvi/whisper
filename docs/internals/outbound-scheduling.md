@@ -17,7 +17,7 @@
 
 有了真实背压后，一旦两端同时打满发送与接收缓冲，如果任何入站回调（运行在 `BoundedReceiveQueue` 内）反过来等待出站空位或等 socket 写完，就会形成环形等待死锁。为此拆成两层隔离：
 
-1. **大块发送移出入站处理链**：`FileTransferEngine` 处理 `fileReady`/`fileAck` 时只更新状态与窗口边界（并同步续期 `TransferAckWatchdog`），随后通过 `lib/socket/outgoing_window_pump.dart` 的 `OutgoingWindowPump` 唤醒按传输串行执行的后台发送循环，把限速等待、读盘和等队列空位全部移出 `BoundedReceiveQueue`。
+1. **大块发送移出入站处理链**：`FileTransferEngine` 处理 `fileReady`/`fileAck` 时只更新状态与窗口边界（并同步续期 `TransferAckWatchdog`），随后通过 `lib/socket/outgoing_window_pump.dart` 的 `OutgoingWindowPump` 唤醒按传输串行执行的后台发送循环，把限速等待、读盘和等队列空位全部移出 `BoundedReceiveQueue`。确认的处理在 `lib/socket/file_transfer_outgoing_ack.dart`。一帧交给连接时就算已发出，交出失败才退回：走 `/transfer` 时要等 worker 回执，接收方可能在这之前就收到并确认了这一帧。所以确认只要来自当前连接、不超过已交出的末尾，就按进度收下，不管窗口有没有覆盖到它，不会被当成过期会话或越界而断开 `/chat`。发送途中窗口变了（包括从无到有），这一轮就退出，由那次确认排好的下一轮接着发。
 2. **控制消息入队即返回，大块与挂载满时等待**：`BoundedOutboundQueue.chat`（`lib/socket/bounded_outbound_queue.dart`）提供 `enqueueControlLazy` 与 `enqueueWhenSpaceAvailable`：
    - 控制帧经 `enqueueControlLazy` 入队，准入通过即同步返回 `true`，绝不在入站链里等 socket 写出；超限时仍 `failClosed` 触发断开。
    - 挂载与大块帧经 `enqueueWhenSpaceAvailable` 入队，满时挂起等待空位而不触发 `onOverflow`；连接关闭或 `abort()` 时立刻以 `false` 唤醒全部等待者。

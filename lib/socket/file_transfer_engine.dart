@@ -45,6 +45,7 @@ import 'package:whisper/socket/wire_message_replay.dart';
 import 'package:whisper/state/peer_profile.dart';
 
 part 'file_transfer_bulk_recovery.dart';
+part 'file_transfer_outgoing_ack.dart';
 
 enum _IncomingReadyResult { retained, sendFailed, unavailable }
 
@@ -2603,7 +2604,9 @@ class FileTransferEngine {
           _outgoingStopRequests.contains(transfer.transferId)) {
         return cursor;
       }
-      if (expectedWindow != null &&
+      // Answered meanwhile (a window may also have appeared): that answer
+      // has scheduled the next round from where it got to.
+      if (armWatchdog &&
           !identical(
             _ackWatchdog.currentWindow(transfer.transferId),
             expectedWindow,
@@ -2632,12 +2635,15 @@ class FileTransferEngine {
           throw StateError('Outgoing checksum stream is not contiguous');
         }
       }
+      // Sent once handed over: the receiver may answer it first.
+      _outgoingWindowEndOffsets[transfer.transferId] = cursor + payload.length;
       final sent = await _sendPreparedFileTransferV3FrameTo(
         transfer.peerUid,
         buffer,
         connection: connection,
       );
       if (!sent) {
+        _outgoingWindowEndOffsets[transfer.transferId] = cursor;
         if (!isAttemptValid()) return cursor;
         if (_currentConnectionBinding(transfer.peerUid) != connection ||
             !_isConnectedTo(transfer.peerUid)) {
@@ -2650,7 +2656,7 @@ class FileTransferEngine {
       sequence++;
       _outgoingWindowEndOffsets[transfer.transferId] = cursor;
       _outgoingTransferSequences[transfer.transferId] = sequence;
-      if (expectedWindow != null &&
+      if (armWatchdog &&
           !identical(
             _ackWatchdog.currentWindow(transfer.transferId),
             expectedWindow,
@@ -2708,41 +2714,6 @@ class FileTransferEngine {
     );
     _outgoingChecksums[transfer.transferId] = state;
     return state;
-  }
-
-  TransferAckWindow _publishOutgoingAckWindow({
-    required FileTransferData transfer,
-    required MessageData message,
-    required TransferConnectionBinding connection,
-    required int durableOffset,
-    required int sentEnd,
-  }) {
-    return _ackWatchdog.publishWindow(
-      transferId: transfer.transferId,
-      connection: connection,
-      durableOffset: durableOffset,
-      sentEnd: sentEnd,
-      retransmit: (timeout) => _retransmitTimedOutWindow(timeout, message),
-      markUnresponsive: _markTimedOutTransferUnresponsive,
-    );
-  }
-
-  void _armOutgoingAckWatchdog({
-    required FileTransferData transfer,
-    required MessageData message,
-    required TransferConnectionBinding connection,
-    required int durableOffset,
-    required int sentEnd,
-  }) {
-    _ackWatchdog.armWindow(
-      transferId: transfer.transferId,
-      connection: connection,
-      durableOffset: durableOffset,
-      sentEnd: sentEnd,
-      retransmit: (timeout) => _retransmitTimedOutWindow(timeout, message),
-      markUnresponsive: _markTimedOutTransferUnresponsive,
-      quietLimit: _isFolderTransfer(transfer) ? _folderQuietLimit : null,
-    );
   }
 
   Future<int?> _retransmitTimedOutWindow(
@@ -3224,111 +3195,6 @@ class FileTransferEngine {
         lastError: '',
       );
     }
-  }
-
-  Future<void> _handleFileTransferV3Ack(
-    FileTransferV3Control control, {
-    required void Function() requireCurrent,
-  }) async {
-    final connection = _operationConnectionBindings[control.transferId];
-    final transfer = await _database().fetchFileTransfer(control.transferId);
-    requireCurrent();
-    if (transfer == null ||
-        transfer.direction != FileTransferDirection.outgoing ||
-        isTerminalFileTransferState(transfer.state)) {
-      return;
-    }
-    final currentWindow = _ackWatchdog.currentWindow(control.transferId);
-    if (currentWindow == null &&
-        connection != null &&
-        connection.peerId == transfer.peerUid &&
-        (transfer.state == FileTransferState.waitingReconnect ||
-            transfer.state == FileTransferState.negotiating)) {
-      // Late in-flight ACK (e.g. a folder receiver's keep-alive) arriving
-      // while this transfer is backing off or re-negotiating; ignore without
-      // tearing down the peer connection.
-      return;
-    }
-    if (currentWindow == null &&
-        transfer.state == FileTransferState.verifying &&
-        control.durableOffset == transfer.committedBytes) {
-      return;
-    }
-    if (connection == null ||
-        currentWindow == null ||
-        currentWindow.transferId != transfer.transferId ||
-        currentWindow.connection != connection ||
-        currentWindow.connection.peerId != transfer.peerUid) {
-      throw const WireInputRejected(WireInputReason.sessionNotCurrent);
-    }
-    if (control.durableOffset < transfer.committedBytes ||
-        control.durableOffset > currentWindow.sentEnd) {
-      throw const WireInputRejected(WireInputReason.transferOffsetInvalid);
-    }
-    if (!_ackWatchdog.acknowledge(currentWindow)) {
-      throw const WireInputRejected(WireInputReason.sessionNotCurrent);
-    }
-    final durableOffset = control.durableOffset;
-    _timeoutRetries.noteProgress(transfer.transferId, durableOffset);
-    _outgoingProgress.onAck(transfer.transferId, durableOffset);
-    final pacer = _outgoingPacerFor?.call(transfer.transferId);
-    pacer?.acknowledged(
-      transfer.transferId,
-      durableOffset,
-      interval: _isFolderTransfer(transfer)
-          ? null
-          : _outgoingFlows[transfer.transferId]?.ackIntervalSize,
-      size: transfer.size,
-      since: transfer.committedBytes,
-    );
-    if (durableOffset >= transfer.size) {
-      pacer?.forget(transfer.transferId);
-      _outgoingProgress.untrack(transfer.transferId);
-    }
-    final updated = await _updateTransfer(
-      transfer.transferId,
-      state: durableOffset >= transfer.size
-          ? FileTransferState.verifying
-          : FileTransferState.transferring,
-      committedBytes: durableOffset,
-      lastError: '',
-    );
-    if (updated == null) {
-      return;
-    }
-    if (durableOffset >= updated.size) {
-      _outgoingWindowEndOffsets.remove(control.transferId);
-      _outgoingProgress.untrack(control.transferId);
-      final message = await _database().fetchAssociatedFileTransferMessage(
-        updated,
-      );
-      requireCurrent();
-      if (message != null) {
-        await _sendOutgoingFileVerification(updated, message);
-      }
-      return;
-    }
-    final message = await _database().fetchAssociatedFileTransferMessage(
-      updated,
-    );
-    if (message == null) {
-      return;
-    }
-    final sentEnd = _outgoingWindowEndOffsets[updated.transferId] ?? durableOffset;
-    if (sentEnd > durableOffset) {
-      _armOutgoingAckWatchdog(
-        transfer: updated,
-        message: message,
-        connection: connection,
-        durableOffset: durableOffset,
-        sentEnd: sentEnd,
-      );
-    }
-    _outgoingWindowPump.schedule((
-      transfer: updated,
-      message: message,
-      offset: durableOffset,
-    ));
   }
 
   Future<void> _handleFileTransferV3Verify(
